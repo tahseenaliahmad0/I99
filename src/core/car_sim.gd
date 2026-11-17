@@ -206,6 +206,7 @@ func step(dt: float, steer: float, gear: int, braking: bool, extra_drift: float)
 
 
 func _step_speed(dt: float, gear: int, braking: bool) -> void:
+	var before: float = speed
 	var target: float = cruise_speed(gear)
 	if on_shoulder:
 		target = minf(target, _shoulder_cap)
@@ -217,6 +218,11 @@ func _step_speed(dt: float, gear: int, braking: bool) -> void:
 		speed = minf(speed + _accel * dt, target)
 	elif speed > target:
 		speed = maxf(speed - _engine_brake * dt, target)
+	# The shoulder's cap belongs to the surface, not to the lever or the foot:
+	# above it the car slows at engine_brake at least, down to the cap, also in
+	# neutral and under a brake weaker than that. The rumble strip slows nothing.
+	if on_shoulder and before > _shoulder_cap:
+		speed = minf(speed, maxf(before - _engine_brake * dt, _shoulder_cap))
 
 
 func _step_edges() -> void:

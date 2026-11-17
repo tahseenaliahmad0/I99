@@ -191,6 +191,7 @@ func test_car_05() -> void:
 	_check_speed_changes()
 	_check_edges()
 	_check_edges_in_sim()
+	_check_strip_and_shoulder_in_sim()
 	_check_drifts()
 	_check_curve_in_sim()
 	_check_drift_at_low_speed()
@@ -280,6 +281,42 @@ func _check_edges() -> void:
 	check_near(_car.speed, cap, 0.000001, "the shoulder caps speed at shoulder_speed_cap")
 	check(third > cap, "which is below third gear's cruise speed")
 
+	# The cap is reached at engine_brake (DECISIONS D-023), and then held.
+	var shoulder_x: float = road_right + strip + tuning.f("shoulder_width") * 0.5
+	var to_cap: float = (fourth - cap) / tuning.f("engine_brake")
+	_put_on_shoulder(shoulder_x, fourth)
+	check(_car.on_shoulder and not _car.on_rumble, "wholly beyond the strip the car is on the shoulder and off the strip")
+	_hold_on_shoulder(to_cap * 0.5, 4, false)
+	check_near(_car.speed, (fourth + cap) * 0.5, 0.01, "in gear on the shoulder the car slows at engine_brake while it is above the cap")
+	_hold_on_shoulder(to_cap * 0.5 + 1.0, 4, false)
+	check_near(_car.speed, cap, 0.000001, "and holds shoulder_speed_cap from then on")
+
+	# The cap belongs to the surface, not to the lever: out of gear the car is
+	# brought down to it at engine_brake all the same, and coasts on from there.
+	_put_on_shoulder(shoulder_x, fourth)
+	_hold_on_shoulder(to_cap * 0.5, CarSim.NEUTRAL, false)
+	check_near(_car.speed, (fourth + cap) * 0.5, 0.01, "in neutral on the shoulder the car slows at engine_brake while it is above the cap")
+	_hold_on_shoulder(to_cap * 0.5, CarSim.NEUTRAL, false)
+	check_near(_car.speed, cap, 0.000001, "and is down to shoulder_speed_cap after (fourth - cap) / engine_brake seconds, lever in neutral")
+	_hold_on_shoulder(1.0, CarSim.NEUTRAL, false)
+	check_near(_car.speed, cap - tuning.f("neutral_coast"), 0.01, "from the cap down it only coasts, at neutral_coast")
+	check(_car.on_shoulder and not _car.on_rumble, "(it was on the shoulder throughout)")
+	_put_on_shoulder(shoulder_x, cap + tuning.f("engine_brake") * DT * 0.5)
+	_hold_on_shoulder(DT, CarSim.NEUTRAL, false)
+	check_near(_car.speed, cap, 0.000001, "half a tick of engine_brake above the cap, the next tick ends at the cap: the shoulder slows the car down to it, not below")
+
+	# The foot: a brake stronger than engine_brake is not helped by the
+	# shoulder, and one weaker than engine_brake does not hold the car above
+	# the cap any longer than no brake at all would.
+	_put_on_shoulder(shoulder_x, fourth)
+	_hold_on_shoulder(1.0, 4, true)
+	check_near(_car.speed, fourth - tuning.f("brake_decel"), 0.01, "braking on the shoulder sheds brake_decel per second, not engine_brake on top")
+	_put_on_shoulder(shoulder_x, fourth)
+	_car.brake_mult = tuning.f("engine_brake") / tuning.f("brake_decel") * 0.5
+	_hold_on_shoulder(1.0, 4, true)
+	check_near(_car.speed, fourth - tuning.f("engine_brake"), 0.01, "with a brake weaker than engine_brake the car above the cap still slows at engine_brake")
+	_car.brake_mult = 1.0
+
 	# The guardrail: a touch pushes the car hit_pushback back; Collision calls it a scrape.
 	var collision: Collision = Collision.new()
 	collision.configure(tuning)
@@ -366,6 +403,54 @@ func _check_edges_in_sim() -> void:
 	_scrape_edge_in_sim("the median barrier", 3, true, 0, -1.0)
 	_scrape_edge_in_sim("the rail left of the oncoming lane", 1, false, 0, -1.0)
 	_scrape_edge_in_sim("the guardrail", 3, true, 2, 1.0)
+
+
+## The right side of GDD 5.1 through the whole simulation: the rumble strip is
+## sound only; the rough shoulder caps the speed, whatever the lever, and
+## frays him. An encounter silences the empty road's calm (GDD 6.1), so Nerves
+## show the surface alone, as tests/test_nerves.gd does.
+func _check_strip_and_shoulder_in_sim() -> void:
+	var third: float = tuning.fi("gear_speeds", 2)
+	var fourth: float = tuning.fi("gear_speeds", 3)
+	var cap: float = tuning.f("shoulder_speed_cap")
+	var strip: float = tuning.f("rumble_strip_width")
+	var input: DriveInput = DriveInput.new()
+
+	var sim: DriveSim = DriveSim.new(fresh_data())
+	sim.in_encounter = true
+	sim.gate.reset(3)
+	sim.car.reset(2, 3)
+	var strip_x: float = sim.car.road_right() - sim.car.half_width() + strip * 0.5
+	var nerves_start: float = sim.nerves.value
+	for _tick: int in int(3.0 / DT):
+		sim.car.x = strip_x
+		sim.step(input)
+	check(sim.car.on_rumble and not sim.car.on_shoulder, "the whole simulation: the car is held with its right edge on the rumble strip")
+	check_near(sim.car.speed, third, 0.000001, "3 s on the rumble strip have not slowed it")
+	check_near(sim.nerves.value - nerves_start, 0.0, 0.000001, "nor frayed him: the strip is sound only")
+	check_eq(sim.faults.lamps, 0, "and no lamp is lit")
+
+	# The shoulder, with the lever out of gear and the car at fourth's speed.
+	sim = DriveSim.new(fresh_data())
+	sim.in_encounter = true
+	sim.gate.reset(GearGate.NEUTRAL)
+	sim.car.reset(2, 4)
+	var shoulder_x: float = sim.car.road_right() + strip + tuning.f("shoulder_width") * 0.5
+	sim.car.x = shoulder_x
+	sim.step(input)
+	sim.car.speed = fourth
+	nerves_start = sim.nerves.value
+	var to_cap: float = (fourth - cap) / tuning.f("engine_brake")
+	var covered: float = sim.car.s
+	for _tick: int in roundi(to_cap / DT):
+		sim.car.x = shoulder_x
+		sim.step(input)
+	covered = sim.car.s - covered
+	check(sim.car.on_shoulder and not sim.car.on_rumble, "the whole simulation: the car is held on the rough shoulder")
+	check_eq(sim.gate.gear, GearGate.NEUTRAL, "with the lever in neutral")
+	check_near(sim.car.speed, cap, 0.000001, "it is down to shoulder_speed_cap after (fourth - cap) / engine_brake seconds")
+	check_near(covered, (fourth + cap) * 0.5 * KMH_TO_MS * to_cap, fourth * KMH_TO_MS * DT, "having covered the ground of a car slowing at engine_brake, not of one coasting")
+	check_near(sim.nerves.value - nerves_start, tuning.f("shoulder_nerves_rate") * to_cap, 0.001, "the rough shoulder adds shoulder_nerves_rate per second")
 
 
 func _check_drifts() -> void:
@@ -697,6 +782,20 @@ func _drag(sim: DriveSim, input: DriveInput, px: float) -> void:
 	input.pointer_delta = Vector2(px, 0.0)
 	sim.step(input)
 	input.pointer_delta = Vector2.ZERO
+
+
+## Puts the bare car on the rough shoulder at `x`, knowing it is there, at `speed`.
+func _put_on_shoulder(x: float, speed: float) -> void:
+	_car.reset(2, 4)
+	_car.x = x
+	_car.step(DT, 0.0, CarSim.NEUTRAL, false, -tuning.f("crown_drift"))
+	_car.speed = speed
+
+
+## Steps the bare car for `seconds` where it is: the crown is cancelled.
+func _hold_on_shoulder(seconds: float, gear: int, braking: bool) -> void:
+	for _tick: int in roundi(seconds / DT):
+		_car.step(DT, 0.0, gear, braking, -tuning.f("crown_drift"))
 
 
 ## How many events of one type the simulation queued since the last drain.
