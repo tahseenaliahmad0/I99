@@ -44,7 +44,12 @@ var steer_px: float = 0.0
 
 # --- Inputs set by DriveSim --------------------------------------------------
 ## Grip mode of GDD 17.1: false = hold, true = click to grip, click to release.
-var grip_toggle: bool = false
+## It may change mid-Telling (GDD 17.2); a click latched in the old mode is dropped.
+var grip_toggle: bool = false:
+	set(value):
+		if value != grip_toggle:
+			grip_toggle = value
+			_grip_latched = gripping and value
 ## Eyes-down rituals force the pitch (GDD 4.7).
 var eyes_down: bool = false
 ## False while he can steer and cannot reach for anything (a Snap, GDD 6.1).
@@ -74,6 +79,8 @@ var _grip_angle: float = 0.0
 var _press_pending: bool = false
 var _press_time: float = 0.0
 var _press_anchor: int = NO_ANCHOR
+## Pointer distance to the anchor found by the last _nearest_anchor().
+var _snap_distance: float = 0.0
 
 
 func configure(data: GameData, space: CabinSpace) -> void:
@@ -250,7 +257,7 @@ func step(dt: float, input: DriveInput, wheel_angle_deg: float, speed_mult: floa
 		elif time - _press_time > _buffer:
 			_press_pending = false
 
-	if _wants_grip and not frozen and pos.is_equal_approx(target) and (down or _grip_latched):
+	if _wants_grip and not frozen and pos.is_equal_approx(target) and _wants_wheel(down):
 		gripping = true
 		pinned = true
 		took_grip = true
@@ -272,22 +279,36 @@ func _let_go() -> void:
 
 func _choose_target(down: bool, pressed: bool) -> void:
 	snap_index = _nearest_anchor()
+	var on_rim: bool = _space.pointer_on_rim(pointer)
+	if snap_index != NO_ANCHOR and on_rim:
+		# The rim is a place to point at too. Where the pointer is nearer to
+		# the rim's centre line than to the anchor, the wheel wins: otherwise
+		# an anchor near the wheel (his own face, the stalks) would take a
+		# sector of the rim away, and a press there would not grip.
+		var rim_distance: float = pointer.distance_to(_space.point_to_pointer(_space.rim_point(pointer)))
+		if rim_distance < _snap_distance:
+			snap_index = NO_ANCHOR
 	if snap_index != NO_ANCHOR:
 		target = _anchor_pos[snap_index]
 		_wants_grip = false
 		_grip_latched = false
 		return
-	var on_rim: bool = _space.pointer_on_rim(pointer)
 	if on_rim and grip_toggle and pressed:
 		_grip_latched = true
 	if not on_rim:
 		_grip_latched = false
-	if on_rim and (down or _grip_latched):
+	if on_rim and _wants_wheel(down):
 		target = _space.rim_point(pointer)
 		_wants_grip = true
 	else:
 		target = _space.free_target(pointer)
 		_wants_grip = false
+
+
+## Whether the player is asking for the wheel: the button held (hold mode), or
+## the latch set by a click on the rim (toggle mode, GDD 17.1).
+func _wants_wheel(down: bool) -> bool:
+	return _grip_latched if grip_toggle else down
 
 
 func _nearest_anchor() -> int:
@@ -302,6 +323,7 @@ func _nearest_anchor() -> int:
 		if distance <= best_distance and (best == NO_ANCHOR or distance < best_distance):
 			best = index
 			best_distance = distance
+	_snap_distance = best_distance
 	return best
 
 

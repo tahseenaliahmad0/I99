@@ -269,8 +269,14 @@ Format: `D-NNN (milestone, date) Title` then Context / Decision / Why.
   following a free pointer.
 - **Wheel.** The wheel is a disc in the plane z = 0. "Pointer on the wheel"
   means the pointer's ray meets that plane inside the grip zone
-  (`wheel_radius` plus or minus `grip_zone_half_width`). An anchor in range
-  wins over the rim (the wiper stalk sits inside the zone).
+  (`wheel_radius` plus or minus `grip_zone_half_width`). The rim is a place
+  to point at like an anchor: where the pointer is nearer to the rim's
+  centre line than to an anchor in range, the rim wins. (Amended after the
+  M1 review: with "the anchor always wins", his own face and the stalks took
+  57 of the rim's 360 degrees, and a press there after a right turn was a
+  slap, not a grip.)
+- **Toggle grip.** In toggle mode only a click on the rim asks for the
+  wheel; the click that lets go does not take it again while it is held.
 - **Glance.** The camera turns toward the hand along the shortest arc by
   `glance_gain` of the angle beyond `glance_start`; the result is then
   clamped to `glance_max_yaw` and to `glance_max_pitch` downward. The eyes

@@ -161,10 +161,10 @@ func step(input: DriveInput) -> void:
 		_begin_at(hand.at_index)
 
 	# 4. Wheel.
-	if hand.took_grip:
-		wheel.grip()
 	if hand.let_go:
 		wheel.release()
+	if hand.took_grip:
+		wheel.grip()
 	wheel.tremor = nerves.tremor_offset
 	wheel.step(DT, hand.steer_px, steer_sensitivity)
 
@@ -461,6 +461,8 @@ func _begin_at(anchor: int) -> void:
 	_active_ritual = ritual
 	_active_anchor = anchor
 	gesture.begin(kind, _gesture_amount(ritual, kind), _gesture_dirs(ritual))
+	# Eyes-down rituals pull the eyes off the road while performed (GDD 4.7).
+	hand.eyes_down = GameData.as_bool(ritual.get("eyes_down"))
 	if kind != Gesture.Kind.DRAG_TO:
 		hand.pin()
 
@@ -479,6 +481,7 @@ func _resolve_gesture() -> void:
 		gesture.reset()
 		_active_ritual = {}
 		_active_anchor = HandSim.NO_ANCHOR
+		hand.eyes_down = false
 		hand.unpin()
 		_sync_anchors()
 
