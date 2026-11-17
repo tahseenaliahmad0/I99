@@ -38,6 +38,15 @@
       "flick_dirs": ["up", "down", "left", "right"],
       "eyes_down": false, "requires": ["lit"], "on_complete": ["ash"] },
     { "id": "tea_sip",         "anchor": "@slot", "item": "tea_glass", "gesture": "HOLD", "hold_s": 0.6,
-      "eyes_down": false, "requires": ["supply>0"], "on_complete": ["consume_supply", "give"] }
+      "eyes_down": false, "requires": ["supply>0"], "on_complete": ["consume_supply", "give"] },
+
+    { "id": "beads_count",     "anchor": "@slot", "item": "beads",      "gesture": "BEAD", "perform_s": 0.3,
+      "eyes_down": false, "requires": [], "on_complete": ["give"], "sfx": "bead_click" },
+    { "id": "seeds_chew",      "anchor": "@slot", "item": "seeds",      "gesture": "TAP", "perform_s": 0.3,
+      "eyes_down": false, "requires": ["supply>0"], "on_complete": ["consume_supply", "give"] },
+    { "id": "tissue_wipe",     "anchor": "@slot", "item": "tissue_box", "gesture": "DRAG_TO", "across_m": 0.4, "perform_s": 0.8,
+      "eyes_down": false, "requires": ["supply>0"], "on_complete": ["consume_supply", "clear_haze"] },
+    { "id": "tape_flip",       "anchor": "@slot", "item": "mixtape",    "gesture": "DRAG_TO", "to": "@slot", "out_m": 0.3, "perform_s": 0.8,
+      "eyes_down": false, "requires": [], "on_complete": ["flip"] }
   ]
 }

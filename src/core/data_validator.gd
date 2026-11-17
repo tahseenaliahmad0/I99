@@ -28,11 +28,14 @@ const SLOT_ANCHOR: String = "@slot"
 const RITUAL_OPS: PackedStringArray = [
 	"nerves", "cash", "add_effect", "remove_effect", "consume_supply", "give", "toggle",
 	"horn", "wipe", "photo", "indicate", "window", "ash", "radio_step", "sfx", "line", "pay",
+	"clear_haze", "flip",
 ]
 ## Cabin switches a "toggle:" op may flip and a "flag:" condition may read.
 const CABIN_FLAGS: PackedStringArray = ["hazards", "high_beam", "window_open", "glovebox_open", "passenger"]
 ## Conditions that are not effect ids.
-const CONDITION_WORDS: PackedStringArray = ["supply>0", "hot"]
+const CONDITION_WORDS: PackedStringArray = ["supply>0", "hot", "playing", "warbling"]
+## Sources of Nerves a status can make him immune to (GDD 7.4, the seeds).
+const NERVE_SOURCES: PackedStringArray = ["honk", "tailgater", "doubt"]
 const REACHES: PackedStringArray = ["near", "mid", "far", "none"]
 ## Lanes a beat may name: relative to the lane the player is expected in.
 const BEAT_LANES: PackedStringArray = ["player", "left_of_player", "right_of_player", "shoulder", "oncoming"]
@@ -203,6 +206,8 @@ func _effect_schema() -> Dictionary:
 		"id": _str(),
 		"max_stacks": _opt(_int(1.0)),
 		"implies": _opt(_list(_ref("effects"))),
+		# Sources of Nerves he does not feel while the status is on.
+		"immune": _opt(_list(_enum(NERVE_SOURCES))),
 	})
 
 
@@ -215,7 +220,14 @@ func _ritual_schema() -> Dictionary:
 		"hold_s": _opt(_num(0.0)),
 		"flick_dirs": _opt(_list(_enum(FLICK_DIRS), 1)),
 		"turns": _opt(_num(0.0)),
-		"to": _opt(_ref("anchors")),
+		# A DRAG_TO's destination: an anchor, or "@slot" for back where it was
+		# taken from. `out_m`: how far it must be carried from there first.
+		# `across_m`: how far sideways; with no "to", it is let go anywhere.
+		"to": _opt(_str()),
+		"out_m": _opt(_above()),
+		"across_m": _opt(_above()),
+		# What a practised player takes (GDD 7.4), for the bot.
+		"perform_s": _opt(_above()),
 		"over_items": _opt(_bool()),
 		"eyes_down": _bool(),
 		"blocks_view": _opt(_nullable(_str())),
@@ -414,6 +426,9 @@ func _anchor_schema() -> Dictionary:
 		# Where its marker is drawn, relative to the anchor: for an anchor
 		# that lies inside a prop (the horn in the hub, the glovebox in the dash).
 		"marker_offset": _opt(_t("vec3")),
+		# The anchor whose place this one takes while something sits here (the
+		# tape deck is the radio: GDD 16.2 gives both one position).
+		"over": _opt(_ref("anchors")),
 	})
 
 
@@ -702,7 +717,13 @@ func _check_cross_rules() -> void:
 			"CRANK":
 				needs = "turns"
 			"DRAG_TO":
-				needs = "to"
+				if not ritual.has("across_m"):
+					needs = "to"
+		var to: String = GameData.as_string(ritual.get("to"))
+		if ritual.has("to") and ritual["to"] is String and to != SLOT_ANCHOR and not _data.has_record("anchors", to):
+			_err("E_REF", "rituals.json", ritual_label + ".to", "unknown anchors id '%s'" % to)
+		if to == SLOT_ANCHOR and anchor != SLOT_ANCHOR:
+			_err("E_RULE", "rituals.json", ritual_label + ".to", "\"@slot\" is where an item's own ritual began: the ritual must be at \"@slot\" too")
 		if not needs.is_empty() and not ritual.has(needs):
 			_err("E_RULE", "rituals.json", "rituals[%s]" % GameData.as_string(ritual.get("id"), "?"),
 					"a %s ritual needs \"%s\"" % [GameData.as_string(ritual.get("gesture")), needs])
@@ -735,6 +756,10 @@ func _check_cross_rules() -> void:
 				if not owner.is_empty() and owner != item_id:
 					_err("E_RULE", "items.json", "items[%s].rituals" % item_id,
 							"ritual '%s' belongs to item '%s'" % [listed, owner])
+		for list: String in ["gives", "takes"]:
+			var entries: Array = GameData.as_array(item.get(list))
+			for index: int in entries.size():
+				_check_entry(item, GameData.as_dict(entries[index]), "items[%s].%s[%d]" % [item_id, list, index])
 		var synergies: Array = GameData.as_array(item.get("synergies"))
 		for index: int in synergies.size():
 			var synergy: Dictionary = GameData.as_dict(synergies[index])
@@ -802,6 +827,43 @@ func _check_beats() -> void:
 		for type: String in BEAT_TYPES:
 			if type != "SPECIAL" and not typed.has(type):
 				_err("E_MISSING", "beats.json", "beats", "no beat of type %s" % type)
+
+
+## One entry of an item's "gives" or "takes" (see ItemSim): a status, or a
+## change to a resource, with the keys that kind of entry has.
+func _check_entry(item: Dictionary, entry: Dictionary, where: String) -> void:
+	const ENTRY_KEYS: PackedStringArray = ["effect", "duration", "resource", "amount", "over", "per_s", "while", "synergy"]
+	for key: Variant in entry:
+		if not ENTRY_KEYS.has(str(key)):
+			_err("E_UNKNOWN_KEY", "items.json", where, "unknown key '%s' (%s)" % [str(key), ", ".join(ENTRY_KEYS)])
+	for key: String in ["duration", "amount", "over", "per_s"]:
+		if entry.has(key) and not GameData.is_number(entry[key]):
+			_err("E_TYPE", "items.json", "%s.%s" % [where, key], "must be a number")
+	if entry.has("effect") == entry.has("resource"):
+		_err("E_RULE", "items.json", where, "needs exactly one of \"effect\" and \"resource\"")
+	if entry.has("effect"):
+		var effect: String = GameData.as_string(entry.get("effect"))
+		if effect == ItemSim.HAZE_RATE:
+			if not entry.has("amount"):
+				_err("E_RULE", "items.json", where, "a haze_rate entry needs \"amount\" (share per second)")
+		elif not _data.has_record("effects", effect):
+			_err("E_REF", "items.json", where + ".effect", "unknown effects id '%s'" % effect)
+	if entry.has("resource"):
+		var resource: String = GameData.as_string(entry.get("resource"))
+		if resource != "nerves" and resource != "cash":
+			_err("E_ENUM", "items.json", where + ".resource", "must be nerves or cash, not '%s'" % resource)
+		if entry.has("amount") == entry.has("per_s"):
+			_err("E_RULE", "items.json", where, "a resource entry needs exactly one of \"amount\" and \"per_s\"")
+	if entry.has("while"):
+		_check_condition(GameData.as_string(entry.get("while")), "items.json", where + ".while")
+	if entry.has("synergy"):
+		var rule: String = GameData.as_string(entry.get("synergy"))
+		var found: bool = false
+		for synergy: Variant in GameData.as_array(item.get("synergies")):
+			if GameData.as_string(GameData.as_dict(synergy).get("rule")) == rule:
+				found = true
+		if not found:
+			_err("E_REF", "items.json", where + ".synergy", "the item has no synergy with the rule '%s'" % rule)
 
 
 ## One ritual op: "op" or "op:arg:arg". The op must be known, and the ids it

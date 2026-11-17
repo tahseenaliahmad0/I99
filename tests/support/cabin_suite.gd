@@ -138,6 +138,48 @@ func _drag(from: String, to: String) -> void:
 	_input.clear()
 
 
+## Pressed at an anchor, carried to each point in turn (free points of the
+## cabin, where no anchor is), then to an anchor if one is named, and let go.
+func _carry(from: String, points: Array[Vector3], to: String = "") -> void:
+	_reach(from)
+	_input.lmb = true
+	_ticks(_ticks_in(0.1))
+	for point: Vector3 in points:
+		_input.pointer = _sim.space.point_to_pointer(point)
+		_tick()
+		var guard: int = _ticks_in(3.0)
+		while _sim.hand.pos.distance_to(_sim.hand.target) > 0.001 and guard > 0:
+			guard -= 1
+			_tick()
+		_ticks(SETTLE)
+	if not to.is_empty():
+		_input.pointer = _sim.hand.anchor_pointer(_sim.hand.anchor_index(StringName(to)))
+		_tick()
+		var guard: int = _ticks_in(3.0)
+		while _sim.hand.at_id() != StringName(to) and guard > 0:
+			guard -= 1
+			_tick()
+		_ticks(SETTLE)
+	_input.lmb = false
+	_ticks(SETTLE)
+
+
+## A quiet leg outside a Telling: the leg's own encounter, and nothing else
+## on the road. The car is in third gear in the plan's start lane.
+func _begin_quiet_leg(leg_id: String, act: int, leg_seed: int) -> Dictionary:
+	_sim = DriveSim.new(fresh_data())
+	_events = []
+	_keep_lane = true
+	_input.clear()
+	var plan: Dictionary = LegGenerator.generate(data, leg_id, act, leg_seed, "")
+	for key: String in ["spawns", "hazards", "curves", "gusts", "zones"]:
+		plan[key] = []
+	_sim.gate.reset(3)
+	_sim.begin_leg(plan)
+	_sim.drain_events()
+	return plan
+
+
 ## The hand on the wheel, gripping, with the button held.
 func _grip() -> void:
 	_input.clear()

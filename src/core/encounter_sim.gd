@@ -63,6 +63,8 @@ var watch_began: bool = false
 var watch_ended: bool = false
 ## Nerves per second the encounter adds this tick.
 var nerves_rate: float = 0.0
+## The part of nerves_rate that is the tailgater on his bumper.
+var tail_nerves_rate: float = 0.0
 ## He was cut off (the Tailgater's stab at the brake in front of him).
 var cut_off: bool = false
 ## The road under the car changed (a slip lane opened or closed, the side
@@ -181,6 +183,7 @@ func begin_tick() -> void:
 	watch_began = false
 	watch_ended = false
 	nerves_rate = 0.0
+	tail_nerves_rate = 0.0
 	cut_off = false
 	road_changed = false
 
@@ -413,7 +416,8 @@ func _tail_on_bumper(dt: float, driver: TrafficSim.Vehicle, car_lane: int, braki
 	var at: float = GameData.as_float(_special.get("at_s"))
 	if car_lane == _tail_lane:
 		_tail_away = 0.0
-		nerves_rate += GameData.as_float(_special.get("nerves_per_s"))
+		tail_nerves_rate = GameData.as_float(_special.get("nerves_per_s"))
+		nerves_rate += tail_nerves_rate
 		if braking and not _was_braking and time >= _ram_ready:
 			# He brakes: the driver behind does not. A scrape from behind.
 			driver.s = _car.s - _car_half_length - driver.half_length + RAM_OVERLAP

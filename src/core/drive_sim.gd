@@ -34,6 +34,10 @@ const FAULT_MIRROR: StringName = &"cracked_mirror"
 const FLAG_HIGH_BEAM: StringName = &"high_beam"
 const PULLED_OVER: StringName = &"pulled_over"
 const LAW: StringName = &"law"
+## Sources of Nerves a status can make him immune to (GDD 7.4).
+const SOURCE_HONK: StringName = &"honk"
+const SOURCE_TAILGATER: StringName = &"tailgater"
+const SOURCE_DOUBT: StringName = &"doubt"
 
 const EXIT_NONE: int = 0
 const EXIT_AHEAD: int = 1
@@ -117,6 +121,13 @@ var _lever_in_hand: bool = false
 var _pinned_until_release: bool = false
 ## While something is carried: the anchors it may be released on.
 var _drag_destinations: Array[int] = []
+## A DRAG_TO in progress: where the object was taken up, how far from there
+## it has been carried (in all, and sideways), and how far its ritual wants.
+var _carry_from: Vector3 = Vector3.ZERO
+var _carry_out: float = 0.0
+var _carry_across: float = 0.0
+var _carry_out_needed: float = 0.0
+var _carry_across_needed: float = 0.0
 ## Ticks the gust still has to push: a gust lasts a whole number of ticks.
 var _gust_ticks_left: int = 0
 var _gust_push: float = 0.0
@@ -835,7 +846,8 @@ func _step_encounter() -> void:
 	if _standing() or not leg.active:
 		return
 	encounter.step(DT, _braking, gate.gear)
-	nerves.add_rate(encounter.nerves_rate)
+	nerves.add_rate(encounter.nerves_rate - encounter.tail_nerves_rate)
+	fray_rate(SOURCE_TAILGATER, encounter.tail_nerves_rate)
 	if encounter.cut_off:
 		nerves.add(tuning.f("cut_off_nerves"))
 	if encounter.road_changed:
@@ -1056,6 +1068,7 @@ func snapshot() -> Dictionary:
 		"gesture_kind": gesture.kind,
 		"gesture_progress": gesture.progress,
 		"gesture_anchor": hand.anchor_id(_active_anchor),
+		"carrying": _carried(),
 		"car_x": car.x,
 		"car_s": car.s,
 		"speed": car.speed,
@@ -1132,6 +1145,19 @@ func snapshot() -> Dictionary:
 		"anchors_in_use": _anchors_in_use(),
 		"vehicles": _vehicle_snapshots(),
 	}
+
+
+## What the hand is carrying in a DRAG_TO: an item's id, or the ritual's
+## (his licence, banknotes); "" with an empty hand.
+func _carried() -> String:
+	if not hand.carrying:
+		return ""
+	if GameData.as_string(_active_ritual.get("id")) == StopSim.PLACE:
+		var offer: StopSim.Offer = stop.offer_at(String(hand.anchor_id(_active_anchor)))
+		return offer.id if offer != null else ""
+	if _active_ritual.has("item"):
+		return GameData.as_string(_active_ritual.get("item"))
+	return GameData.as_string(_active_ritual.get("id"))
 
 
 ## One small dictionary per vehicle, positions relative to the car.
@@ -1213,6 +1239,7 @@ func _item_snapshots() -> Array[Dictionary]:
 			"burning": item.burning,
 			"ash_fell": item.ash_fell,
 			"craving": item.lapse_left >= 0.0,
+			"warbling": items.warbling(item),
 		})
 	return out
 
@@ -1271,7 +1298,8 @@ func _apply_collisions() -> void:
 			_emit("wreck", {"table": run.table, "act": run.act, "retellings": run.retellings})
 	# A vehicle passed closely honks (a taxi), close call or not (GDD 5.5).
 	if not collision.honk_vehicle_ids.is_empty():
-		nerves.add(collision.honk_nerves)
+		nerves.add(collision.honk_nerves - collision.honk_frights)
+		fray(SOURCE_HONK, collision.honk_frights)
 		for vehicle_id: int in collision.honk_vehicle_ids:
 			_emit("sfx_requested", {"id": "horn", "vehicle": vehicle_id})
 	if collision.close_calls > 0:
@@ -1307,6 +1335,21 @@ func _feed_nerves() -> void:
 	nerves.add_rate(faults.param(FAULT_RATTLE, "nerves_per_s", 0.0))
 	if car.on_rumble:
 		nerves.jolt()
+
+
+## Nerves from a named source (a honk, a tailgater, a Doubt): a gain is not
+## felt while a status makes him immune to that source (GDD 7.4).
+func fray(source: StringName, amount: float) -> void:
+	if amount > 0.0 and effects.immune_to(source):
+		return
+	nerves.add(amount)
+
+
+## The same for a source that works by the second.
+func fray_rate(source: StringName, per_second: float) -> void:
+	if per_second > 0.0 and effects.immune_to(source):
+		return
+	nerves.add_rate(per_second)
 
 
 func _report_nerves() -> void:
@@ -1371,7 +1414,15 @@ func _begin_at(anchor: int, button_down: bool) -> void:
 		# any of several (the slots a bought item can go in).
 		hand.carrying = true
 		_drag_destinations = []
-		if ritual.has("to"):
+		_carry_from = hand.anchor_position(anchor)
+		_carry_out = 0.0
+		_carry_across = 0.0
+		_carry_out_needed = GameData.as_float(ritual.get("out_m"))
+		_carry_across_needed = GameData.as_float(ritual.get("across_m"))
+		if GameData.as_string(ritual.get("to")) == ItemSim.SLOT_ANCHOR:
+			# Out and back in: it goes back where it was taken from.
+			_drag_destinations.append(anchor)
+		elif ritual.has("to"):
 			_drag_destinations.append(hand.anchor_index(StringName(GameData.as_string(ritual.get("to")))))
 		for to: Variant in GameData.as_array(ritual.get("to_any")):
 			var index: int = hand.anchor_index(StringName(GameData.as_string(to)))
@@ -1388,8 +1439,14 @@ func _resolve_gesture(button_down: bool) -> void:
 		hand.unpin()
 	if gesture.phase == Gesture.Phase.ACTIVE:
 		if gesture.kind == Gesture.Kind.DRAG_TO:
-			# Released with the hand resting on the destination, the object is handed over.
-			gesture.over_destination = hand.at_index != HandSim.NO_ANCHOR and _drag_destinations.has(hand.at_index)
+			# Released with the hand resting on the destination, the object is
+			# handed over: once it has been carried as far as its ritual wants
+			# (a tape out of the deck, a tissue across the glass). A ritual
+			# with no destination is done wherever the hand lets go.
+			_carry_out = maxf(_carry_out, hand.pos.distance_to(_carry_from))
+			_carry_across = maxf(_carry_across, absf(hand.pos.x - _carry_from.x))
+			var there: bool = _drag_destinations.is_empty() or (hand.at_index != HandSim.NO_ANCHOR and _drag_destinations.has(hand.at_index))
+			gesture.over_destination = there and _carry_out >= _carry_out_needed and _carry_across >= _carry_across_needed
 			return
 		if hand.at_index != _active_anchor:
 			gesture.cancel()

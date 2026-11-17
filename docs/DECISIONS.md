@@ -926,3 +926,44 @@ Format: `D-NNN (milestone, date) Title` then Context / Decision / Why.
   sleeve hangs where the resting eye sees it; the Cabin has the nodes
   Mirror, Visor, Seat and Glovebox of GDD 13.5.
 
+
+## D-040 (M6, 2026-11-17) How items say what they do; beads, seeds, tissues, the tape
+
+- **Gives and takes are entries of five shapes** (items.json, read by
+  `ItemSim` and checked by the validator): a timed status on use
+  (`effect` + `duration`); a resource on use (`resource` + `amount`,
+  optionally `over` a time); a status held on while the item is in the
+  cabin (`effect` alone); Nerves by the second (`resource` + `per_s`); haze
+  by the second (`effect: haze_rate` + `amount`, as GDD 14 writes it). Each
+  may have a `while` condition. A resource entry may name a `synergy` rule
+  of the same item: when that synergy's partner is there, the synergy's
+  amount is used instead (beads: -2, with music -4).
+- **Statuses carry numbers and immunities** in the effects registry
+  (`immune: [honk, tailgater, doubt]` on `chewing`). Nerves from such a
+  source go through `DriveSim.fray(source, amount)`; a gain is dropped
+  while he is immune to its source. Only gains: a wedding car's happy honk
+  still calms a man who chews. Being cut off is not a honk and still
+  frays him. Doubts do not exist until M9; their Nerves will come through
+  `fray(&"doubt", ...)`, and T-ITEM-SEEDS checks that path now.
+- **Perform times** in GDD 7.4 ("TAP 0.3 s", "DRAG ... 0.8 s") are what a
+  practised player takes, not rules: they are stored as `perform_s` on the
+  ritual for the bot. Rules are `hold_s`, `out_m`, `across_m`.
+- **Carrying.** A DRAG_TO may now end where it began (`"to": "@slot"`) once
+  the object has been `out_m` away from there (the tape: out of the deck and
+  in again), or anywhere at all once it has been carried `across_m`
+  sideways (a tissue across the glass; no `to`). While the hand carries
+  something it cannot take the wheel, as before.
+- **The tape deck is the radio.** GDD 16.2 gives `radio` and `tape` one
+  position. With a tape in the slot the `tape` anchor takes the radio's
+  place (`"over": "radio"` in anchors.json): the dial is not offered, the
+  radio falls silent, and the deck plays the tape. The tape is the `music`
+  status while it plays (so the beads answer to it) and stops being music
+  when it warbles. An open window halves what the tape does to his Nerves,
+  as it does the radio's. A flip at any time starts the side's 60 s again.
+  At a stop the side starts again too (every timer ends there, D-038).
+- **Tea.** A fuel station also offers the 2-cash refill for a full glass
+  that has gone cold: hot tea is what he is paying for.
+- **Timed statuses are counted in whole ticks** like every other countdown
+  (the review's rule): a 25 s status is on for exactly 3,000 ticks.
+- **`DriveSim.give_item`** puts an item in the cabin outside a stop (debug
+  key F5 will use it; the tests do).

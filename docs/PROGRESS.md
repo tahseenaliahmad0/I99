@@ -27,10 +27,10 @@ Useful commands:
 
 ## Current state
 
-- **Milestone:** M5 (a whole Telling) is complete but for its review and the debug keys; M6 (all items) is next.
-- **Tests:** 46 of 114 passing (M0: 2, M1: 8, M2: 10, M3: 7, M4: 13, M5: 6). All six M5 tests pass.
+- **Milestone:** M6 (all items) is in progress: Habits first.
+- **Tests:** 52 of 114 passing (M0: 2, M1: 8, M2: 10, M3: 7, M4: 13, M5: 6, M6: 6 of 42).
 - **Reviews:** `m1-review` and `m2-review` reported on every lens (run ids wf_53ae3899-d40 and wf_d8c835c4-884; findings saved as JSON under the scratchpad `fixes/` folder, which does not survive the container: the lists below are what is left). Applied: M1 hand, wheel and gate; M2 car (D-028), traffic and collisions (D-029); M1 gesture pipeline code (D-030); M1 rules and the M2 view findings on indicators, vehicle ids, dashes, bend (D-035). **Still open:** (a) M2 views: pointer ring drawn at the hand's clamped target; the hand does not follow the gear knob; forearm stretches beyond 0.30 m for five far anchors (decision not recorded); `scene` in placeholders ignored for road strips, arm and pointer. (b) M1 test honesty (18): no test moves the pointer with relative motion; T-WHEEL-01 never releases a turned wheel; grip and ride on an off-centre wheel; gate engage radius and grind band probed from one side; FLICK time and direction limits; CRANK angle-not-distance; gate channel width; camera pitch and glance following the hand; pointer pixels to screen; steering sensitivity wiring; loose brackets on timing limits; literals standing in for tuning values. (c) M1 gesture: rituals.json is not checked against the table of GDD 4.6. (d) M2 test honesty leftovers (see D-028 and D-029 for what was done). M3 and M4 have not been reviewed. Background agents hit the usage limit on 2026-11-17 (resets 2026-11-20 01:00 UTC): until then work without workflows.
-- **Next step:** M6 (all items): the nine remaining Habits first (beads, seeds, phone, energy drink, painkillers, mixtape, tissue box, breath mints, arak flask with Courage, Sway and Lag), then Keepsakes, Adaptations, Deals, the nine synergies and the Phantom. One test per item; the registry texts are the definitions. The open review items above are to be worked off alongside.
+- **Next step:** M6, in this order: energy drink (Focus) and painkillers (at `face`, with the slap as the TAP there); arak flask (Courage, Sway, Lag) and breath mints; the phone (calls); then Keepsakes, Adaptations, Deals, the remaining synergies, the Phantom; then the M6 views (a placeholder per item, the magenta contraband tag, what the hand carries, the ringing phone). One test per item; the registry texts are the definitions. Tests for the cabin extend `CabinSuite` (tests/support): use its `_reach`, `_hold_at`, `_tap_at`, `_flick`, `_carry`, `_to_quiet_leg`, `_into_stall`, `_leave_stop`. How items say what they do is D-040. Owed to M9: a check in T-ITEM-SEEDS with a real unanswered Doubt (it now checks the path Doubts will use, `DriveSim.fray`). The open review items above are to be worked off alongside.
 
 ## Milestones
 
@@ -102,7 +102,16 @@ Do not start a milestone until every test of the previous one passes (GDD 18).
 - [ ] Debug keys F3 to F8 of GDD 13.9 (left for M10)
 
 ### M6 All items: T-ITEM-* (32), T-SYN-* (9), T-PHANTOM-01
-- [ ] not started
+- [x] `CabinSuite` (tests/support): the shared rig of the cabin suites; `DriveSim.give_item`
+- [x] Cigarettes and tea through the hand, restock and refill at stops (T-ITEM-CIGARETTES, T-ITEM-TEA-GLASS)
+- [x] How items say what they do (D-040): entries of gives and takes, statuses with numbers and immunities, synergy amounts, carried-object rituals
+- [x] Worry beads, sunflower seeds, tissue box, mixtape (T-ITEM-BEADS, -SEEDS, -TISSUE-BOX, -MIXTAPE)
+- [ ] Energy drink (Focus), painkillers
+- [ ] Arak flask (Courage, Sway, Lag), breath mints
+- [ ] Phone (calls)
+- [ ] Keepsakes (7), Adaptations (10), Deals (4)
+- [ ] Synergies (9), the Phantom
+- [ ] Views: a placeholder per item, contraband tag, the carried object, the ringing phone
 
 ### M7 Bosses: T-BOSS-01..03, T-CALL-01
 - [ ] not started
@@ -166,3 +175,5 @@ Two lines per slice, newest last.
   This engine's JSON reader loses the last bit of some floats: saves carry exact bits beside the readable numbers. 46 of 114.
 - 2026-11-17 M5: what a Telling looks like (fork sign, gore, Exit, the vendor's tray, dashboard clock, sky by the Clock); `--table=`, `--continue`; the game saves at stops (D-039).
   A clean leg now also gives the -10 Nerves of GDD 6.1 (it was missing). Smoke runs a Telling through its first stop. M5 done: 46 of 114.
+- 2026-11-17 M6: a shared rig for the cabin tests (`CabinSuite`); cigarettes and tea driven through the hand, with restock and refill at stops. 48 of 114.
+  Items now say what they do in five entry shapes; statuses carry immunities; a DRAG_TO can go out and back in or across (D-040). Beads, seeds, tissue box and mixtape pass: 52 of 114.

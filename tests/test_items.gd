@@ -331,7 +331,435 @@ func test_item_tea_glass() -> void:
 	check(_offer(StopSim.RESTOCK, "tea_glass").is_empty(), "there is nothing left to pay for")
 
 
+# --- T-ITEM-BEADS ------------------------------------------------------------
+
+## T-ITEM-BEADS: Worry beads (7.4): at the mirror, each BEAD tap is -2
+## Nerves, at most 3 per second; no supply; price 30.
+func test_item_beads() -> void:
+	var record: Dictionary = _record("beads")
+	var calm: float = _give_amount("beads", "nerves")
+	var rate: int = tuning.i("bead_max_rate")
+
+	# The numbers of GDD 7.4.
+	check_eq(GameData.as_string(record.get("kind")), "habit", "worry beads are a Habit")
+	check_eq(GameData.as_array(record.get("slots")), ["mirror"], "that hangs at the mirror")
+	check_eq(GameData.as_string(_ritual("beads_count").get("gesture")), "BEAD", "counted by BEAD taps")
+	check_near(calm, -2.0, 0.000001, "each bead is -2 Nerves")
+	check_eq(rate, 3, "at most 3 per second")
+	check(not record.has("supply"), "no supply")
+	check_near(GameData.as_float(record.get("price")), 30.0, 0.000001, "price 30")
+
+	# At the mirror, each tap is one bead: -2 Nerves.
+	_new_sim()
+	check(not _sim.hand.is_anchor_active(_sim.hand.anchor_index(&"mirror")), "(without beads the hand has nothing to do at the mirror)")
+	var beads: ItemSim.Item = _give("beads")
+	check_eq(_anchor_of("beads"), "mirror", "the beads hang at the mirror")
+	check_eq(beads.supply, -1, "and are never used up")
+	_sim.nerves.set_value(90.0)
+	check(_reach("mirror"), "the hand reaches them")
+	check(not _sim.hand.gripping, "with the beads in his hand he is not holding the wheel")
+	_tap()
+	check_near(_sim.nerves.value, 90.0 + calm, 0.000001, "one tap, one bead: -2 Nerves")
+	check_eq(_count_events("ritual_completed", "ritual", "beads_count"), 1, "counted once")
+	_run(1.0)
+	for _bead: int in 3:
+		_tap()
+		_run(0.4)
+	check_near(_sim.nerves.value, 90.0 + calm * 4.0, 0.000001, "taps a little apart: every one counts")
+	_press(_ticks_in(tuning.f("tap_max_time")) + 6)
+	check_near(_sim.nerves.value, 90.0 + calm * 4.0, 0.000001, "a press longer than a TAP is no bead")
+
+	# At most 3 per second, however fast he taps: eight taps a second for 3 s.
+	_new_sim()
+	_give("beads")
+	_sim.nerves.set_value(90.0)
+	_reach("mirror")
+	var counted_at: PackedInt32Array = PackedInt32Array()
+	var taps: int = 0
+	var gap: int = DriveSim.TICKS_PER_SECOND / 8
+	for _tap_index: int in 24:
+		var before: float = _sim.nerves.value
+		_input.lmb = true
+		_ticks(TAP_TICKS)
+		_input.lmb = false
+		_ticks(gap - TAP_TICKS)
+		taps += 1
+		if _sim.nerves.value < before:
+			counted_at.append(_sim.tick)
+	check_eq(taps, 24, "(24 taps in 3 s)")
+	check_eq(counted_at.size(), rate * 3, "3 beads a second count, the rest do not")
+	check_near(_sim.nerves.value, 90.0 + calm * float(rate * 3), 0.000001, "each of them -2 Nerves")
+	var worst: int = 0
+	for index: int in counted_at.size():
+		var within: int = 0
+		for other: int in counted_at.size():
+			if counted_at[other] >= counted_at[index] and counted_at[other] - counted_at[index] < DriveSim.TICKS_PER_SECOND - gap:
+				within += 1
+		worst = maxi(worst, within)
+	check(worst <= rate, "never more than 3 inside any one second (%d)" % worst)
+
+	# No supply: he can go on all night. And calm leads to Heavy.
+	_new_sim()
+	_give("beads")
+	_sim.act = 2
+	_sim.nerves.set_value(_sim.heavy_floor() + 9.0)
+	_reach("mirror")
+	for _bead: int in 20:
+		_tap()
+		_run(0.4)
+	check_near(_sim.nerves.value, 0.0, 0.000001, "twenty beads later they still calm him: all the way down")
+	check(_sim.nerves.heavy, "and calm leads to Heavy")
+
+
+# --- T-ITEM-SEEDS ------------------------------------------------------------
+
+## T-ITEM-SEEDS: Sunflower seeds (7.4): TAP 0.3 s starts 20 s of chewing:
+## Awake, and immune to Nerves from honks, tailgaters and Doubts; 12
+## handfuls, restock 5; price 10.
+func test_item_seeds() -> void:
+	var record: Dictionary = _record("seeds")
+	var chew: Dictionary = _ritual("seeds_chew")
+	var chew_for: float = _give_duration("seeds", "chewing")
+	var uses: int = GameData.as_int(_supply_spec("seeds").get("uses"))
+	var chewing: Dictionary = data.record("effects", "chewing")
+	# GDD 6.1: an unanswered Doubt is +10 Nerves (heckles are M9).
+	var doubt_nerves: float = 10.0
+
+	# The numbers of GDD 7.4.
+	check_eq(GameData.as_string(record.get("kind")), "habit", "sunflower seeds are a Habit")
+	check_eq(GameData.as_array(record.get("slots")), ["dash_1", "dash_2"], "kept on the dash")
+	check_eq(GameData.as_string(chew.get("gesture")), "TAP", "a handful is a TAP")
+	check_near(GameData.as_float(chew.get("perform_s")), 0.3, 0.000001, "of 0.3 s")
+	check_near(chew_for, 20.0, 0.000001, "chewing lasts 20 s")
+	check(GameData.as_array(chewing.get("implies")).has("awake"), "chewing is Awake")
+	for source: String in ["honk", "tailgater", "doubt"]:
+		check(GameData.as_array(chewing.get("immune")).has(source), "chewing is immune to Nerves from a %s" % source)
+	check_eq(uses, 12, "12 handfuls")
+	check_near(GameData.as_float(_supply_spec("seeds").get("restock")), 5.0, 0.000001, "restock 5")
+	check_near(GameData.as_float(record.get("price")), 10.0, 0.000001, "price 10")
+
+	# A TAP starts 20 s of chewing.
+	_new_sim()
+	var seeds: ItemSim.Item = _give("seeds")
+	var anchor: String = _anchor_of("seeds")
+	check_eq(seeds.supply, uses, "a new bag is full")
+	check(_reach(anchor), "the hand reaches the bag on the dash")
+	_press(_ticks_in(tuning.f("tap_max_time")) + 6)
+	check(not _sim.effects.has(&"chewing") and seeds.supply == uses, "a press longer than a TAP takes nothing")
+	_tap()
+	check(_sim.effects.has(&"chewing"), "a TAP and he is chewing")
+	check_eq(seeds.supply, uses - 1, "one handful gone")
+	check_near(_sim.effects.time_left(&"chewing"), chew_for - float(SETTLE) * DT, 0.000001, "for 20 s")
+	_run(chew_for - float(SETTLE) * DT - 0.5)
+	check(_sim.effects.has(&"chewing"), "just short of 20 s he still chews")
+	_run(1.0)
+	check(not _sim.effects.has(&"chewing"), "after 20 s no longer")
+
+	# Awake.
+	_new_sim()
+	_give("seeds")
+	_sim.act = 2
+	_sim.nerves.set_value(2.0)
+	_run(1.0)
+	check(_sim.nerves.heavy, "(with Nerves at the bottom he is Heavy)")
+	_tap_at(anchor)
+	_run(0.1)
+	check(not _sim.nerves.heavy, "chewing keeps him Awake")
+	_run(chew_for)
+	check(_sim.nerves.heavy, "until the handful is gone")
+
+	# Immune to Nerves from honks: a taxi passed closely honks.
+	var honk: float = GameData.as_float(data.record("vehicles", "taxi").get("honk_nerves"))
+	check_near(honk, 5.0, 0.000001, "(GDD 6.1: honked at is +5 Nerves)")
+	_new_sim()
+	_give("seeds")
+	var plain: float = _pass_a_taxi_closely()
+	check_eq(_count_events("sfx_requested", "id", "horn"), 1, "(the taxi honks)")
+	_new_sim()
+	_give("seeds")
+	_tap_at(anchor)
+	var chewed: float = _pass_a_taxi_closely()
+	check(_sim.effects.has(&"chewing"), "(he chews all through the pass)")
+	check_eq(_count_events("sfx_requested", "id", "horn"), 1, "chewing, the taxi honks all the same")
+	check_near(plain - chewed, honk, 0.000001, "but the honk's +5 Nerves do not reach him")
+	check(plain > honk, "(not chewing, they do)")
+
+	# Immune to Nerves from a tailgater.
+	var special: Dictionary = GameData.as_dict(data.record("legs", "tailgater").get("special"))
+	var tail_rate: float = GameData.as_float(special.get("nerves_per_s"))
+	_begin_quiet_leg("tailgater", 2, 71)
+	_give("seeds")
+	var guard: int = _ticks_in(60.0)
+	while _sim.encounter.tail_phase != EncounterSim.TAIL_ON_BUMPER and guard > 0:
+		guard -= 1
+		_tick()
+	_run(1.0)
+	_sim.nerves.set_value(40.0)
+	_run(4.0)
+	var bare_rate: float = (_sim.nerves.value - 40.0) / 4.0
+	check_near(bare_rate, tail_rate + tuning.f("traffic_rate"), 0.001, "(a tailgater on his bumper: +1 Nerves a second, and what any vehicle so near adds)")
+	_tap_at(anchor)
+	_sim.nerves.set_value(40.0)
+	_run(4.0)
+	check(_sim.encounter.tail_phase == EncounterSim.TAIL_ON_BUMPER and _sim.effects.has(&"chewing"), "(still there, and he chews)")
+	check_near((_sim.nerves.value - 40.0) / 4.0, tuning.f("traffic_rate"), 0.001, "chewing, the tailgater's +1 a second is gone; the traffic's is not")
+	_run(chew_for)
+	if _sim.encounter.tail_phase == EncounterSim.TAIL_ON_BUMPER:
+		_sim.nerves.set_value(40.0)
+		_run(2.0)
+		check_near((_sim.nerves.value - 40.0) / 2.0, tail_rate + tuning.f("traffic_rate"), 0.001, "when the handful is gone the tailgater is felt again")
+	else:
+		fail("the tailgater left before the chewing ended")
+
+	# Immune to Nerves from Doubts; other frights still reach him, and so does calm.
+	_new_sim()
+	_give("seeds")
+	_sim.nerves.set_value(40.0)
+	_sim.fray(DriveSim.SOURCE_DOUBT, doubt_nerves)
+	check_near(_sim.nerves.value, 40.0 + doubt_nerves, 0.000001, "(not chewing, a Doubt's Nerves reach him)")
+	_tap_at(anchor)
+	_sim.nerves.set_value(40.0)
+	_sim.fray(DriveSim.SOURCE_DOUBT, doubt_nerves)
+	check_near(_sim.nerves.value, 40.0, 0.000001, "chewing, a Doubt's Nerves do not")
+	_sim.fray(DriveSim.SOURCE_HONK, -honk)
+	check_near(_sim.nerves.value, 40.0 - honk, 0.000001, "a happy honk still calms him")
+	_sim.nerves.set_value(40.0)
+	_sim.nerves.add(tuning.f("cut_off_nerves"))
+	check_near(_sim.nerves.value, 40.0 + tuning.f("cut_off_nerves"), 0.000001, "and being cut off still frays him")
+
+	# 12 handfuls.
+	_new_sim()
+	seeds = _give("seeds")
+	_reach(anchor)
+	for _handful: int in uses:
+		_tap()
+	check_eq(seeds.supply, 0, "12 handfuls empty the bag")
+	_run(chew_for + 1.0)
+	_tap()
+	check(not _sim.effects.has(&"chewing"), "an empty bag gives nothing")
+
+	# Restock 5, at a fuel station.
+	_to_quiet_leg("fuel_station")
+	_scrape()
+	_give("seeds")
+	_tap_at(anchor)
+	_into_stall()
+	var refill: Dictionary = _offer(StopSim.RESTOCK, "seeds")
+	if check(not refill.is_empty(), "the fuel station offers to restock the seeds"):
+		check_near(GameData.as_float(refill["price"]), 5.0, 0.000001, "for 5")
+		var cash: float = _sim.cash
+		_tap_at(GameData.as_string(refill["anchor"]))
+		check_near(cash - _sim.cash, 5.0, 0.000001, "a TAP pays 5")
+		check_eq(_item("seeds").supply, uses, "for a full bag")
+
+
+# --- T-ITEM-TISSUE-BOX -------------------------------------------------------
+
+## T-ITEM-TISSUE-BOX: Tissue box (7.4): one wipe (DRAG across the glass,
+## 0.8 s) clears all Haze; 6 tissues, restock 5; price 15.
+func test_item_tissue_box() -> void:
+	var record: Dictionary = _record("tissue_box")
+	var wipe: Dictionary = _ritual("tissue_wipe")
+	var across: float = GameData.as_float(wipe.get("across_m"))
+	var uses: int = GameData.as_int(_supply_spec("tissue_box").get("uses"))
+
+	# The numbers of GDD 7.4.
+	check_eq(GameData.as_string(record.get("kind")), "habit", "the tissue box is a Habit")
+	check_eq(GameData.as_array(record.get("slots")), ["dash_1", "dash_2"], "kept on the dash")
+	check_eq(GameData.as_string(wipe.get("gesture")), "DRAG_TO", "a wipe is a drag")
+	check(across > 0.0 and not wipe.has("to"), "across the glass: a way sideways, to nowhere in particular")
+	check_near(GameData.as_float(wipe.get("perform_s")), 0.8, 0.000001, "of 0.8 s")
+	check_eq(uses, 6, "6 tissues")
+	check_near(GameData.as_float(_supply_spec("tissue_box").get("restock")), 5.0, 0.000001, "restock 5")
+	check_near(GameData.as_float(record.get("price")), 15.0, 0.000001, "price 15")
+
+	# One wipe clears all Haze.
+	_new_sim()
+	var box: ItemSim.Item = _give("tissue_box")
+	var anchor: String = _anchor_of("tissue_box")
+	var from: Vector3 = _sim.hand.anchor_position(_sim.hand.anchor_index(StringName(anchor)))
+	# Points in front of the glass: one a full wipe away, one short of it.
+	var far: Vector3 = Vector3(from.x - across - 0.05, 0.25, 0.05)
+	var near: Vector3 = Vector3(from.x - across * 0.6, 0.35, 0.05)
+	_sim.items.haze = tuning.f("haze_cap")
+	_carry(anchor, [near])
+	check(_sim.items.haze > tuning.f("haze_cap") * 0.5, "a tissue carried only part of the way wipes nothing")
+	check_eq(box.supply, uses, "and is not used up")
+	_sim.items.haze = tuning.f("haze_cap")
+	_carry(anchor, [far])
+	check_near(_sim.items.haze, 0.0, 0.000001, "one wipe across the glass clears all Haze")
+	check_eq(box.supply, uses - 1, "and uses one tissue")
+	check_eq(_count_events("ritual_completed", "ritual", "tissue_wipe"), 1, "(one wipe)")
+	check(not _sim.hand.gripping, "the wipe is the hand's: it is not on the wheel")
+
+	# The smoke comes back: a wipe clears what is there, no more.
+	var light_s: float = GameData.as_float(_ritual("cig_light").get("hold_s"))
+	_hold_at("ashtray", light_s)
+	_run(10.0)
+	check(_sim.items.haze > 0.15, "(he smokes: Haze again)")
+	_carry(anchor, [far])
+	check_near(_sim.items.haze, 0.0, 0.01, "a wipe clears it")
+	_run(2.0)
+	check(_sim.items.haze > 0.0, "and the cigarette goes on clouding the glass")
+
+	# 6 tissues.
+	_new_sim()
+	box = _give("tissue_box")
+	for _tissue: int in uses:
+		_carry(anchor, [far])
+	check_eq(box.supply, 0, "6 wipes empty the box")
+	_sim.items.haze = tuning.f("haze_cap")
+	_carry(anchor, [far])
+	check(_sim.items.haze > tuning.f("haze_cap") * 0.5, "an empty box wipes nothing")
+	check_eq(_count_events("ritual_completed", "ritual", "tissue_wipe"), uses, "(6 wipes, no more)")
+
+	# Restock 5, at a fuel station.
+	_to_quiet_leg("fuel_station")
+	_scrape()
+	_give("tissue_box")
+	_carry(anchor, [far])
+	check_eq(_item("tissue_box").supply, uses - 1, "(a tissue used on the way)")
+	_into_stall()
+	var refill: Dictionary = _offer(StopSim.RESTOCK, "tissue_box")
+	if check(not refill.is_empty(), "the fuel station offers to restock the tissues"):
+		check_near(GameData.as_float(refill["price"]), 5.0, 0.000001, "for 5")
+		var cash: float = _sim.cash
+		_tap_at(GameData.as_string(refill["anchor"]))
+		check_near(cash - _sim.cash, 5.0, 0.000001, "a TAP pays 5")
+		check_eq(_item("tissue_box").supply, uses, "for a full box")
+
+
+# --- T-ITEM-MIXTAPE ----------------------------------------------------------
+
+## T-ITEM-MIXTAPE: Mixtape (7.4): music that never drifts, -1 Nerves per
+## second; it must be flipped every 60 s (DRAG out and in, 0.8 s) or it
+## warbles, +0.5 Nerves per second; price 25.
+func test_item_mixtape() -> void:
+	var record: Dictionary = _record("mixtape")
+	var flip: Dictionary = _ritual("tape_flip")
+	var side: float = GameData.as_float(_params("mixtape").get("side_s"))
+	var out: float = GameData.as_float(flip.get("out_m"))
+	var play_rate: float = 0.0
+	var warble_rate: float = 0.0
+	for list: String in ["gives", "takes"]:
+		for listed: Variant in GameData.as_array(record.get(list)):
+			var entry: Dictionary = GameData.as_dict(listed)
+			if entry.has("per_s") and GameData.as_string(entry.get("while")) == "playing":
+				play_rate = GameData.as_float(entry.get("per_s"))
+			if entry.has("per_s") and GameData.as_string(entry.get("while")) == "warbling":
+				warble_rate = GameData.as_float(entry.get("per_s"))
+
+	# The numbers of GDD 7.4.
+	check_eq(GameData.as_string(record.get("kind")), "habit", "the mixtape is a Habit")
+	check_eq(GameData.as_array(record.get("slots")), ["tape"], "that goes in the deck")
+	check_near(play_rate, -1.0, 0.000001, "-1 Nerves per second")
+	check_near(side, 60.0, 0.000001, "a side lasts 60 s")
+	check_near(warble_rate, 0.5, 0.000001, "then it warbles: +0.5 Nerves per second")
+	check_eq(GameData.as_string(flip.get("gesture")), "DRAG_TO", "flipping is a drag")
+	check(GameData.as_string(flip.get("to")) == "@slot" and out > 0.0, "out of the deck and in again")
+	check_near(GameData.as_float(flip.get("perform_s")), 0.8, 0.000001, "of 0.8 s")
+	check(not record.has("supply"), "no supply")
+	check_near(GameData.as_float(record.get("price")), 25.0, 0.000001, "price 25")
+
+	# Music at -1 Nerves per second that never drifts.
+	_new_sim()
+	var tape: ItemSim.Item = _give("mixtape")
+	check_eq(_anchor_of("mixtape"), "tape", "the tape is in the deck")
+	_sim.nerves.set_value(90.0)
+	_run(10.0)
+	check_near(_sim.nerves.value, 90.0 + play_rate * 10.0, 0.000001, "it plays: -1 Nerves per second")
+	check(_sim.effects.has(&"music"), "and it is music")
+	check(side > tuning.f("radio_drift_time") + 5.0, "(a side is longer than the radio holds a station)")
+	_run(tuning.f("radio_drift_time") - 10.0 + 5.0)
+	check(_sim.effects.has(&"music"), "after the time a station takes to drift it still plays")
+	_sim.nerves.set_value(90.0)
+	_run(5.0)
+	check_near(_sim.nerves.value, 90.0 + play_rate * 5.0, 0.000001, "as calming as ever")
+
+	# Unflipped after 60 s it warbles.
+	_run(side - tape.side_time - 0.5)
+	check(_sim.effects.has(&"music"), "just short of 60 s it still plays")
+	_run(1.0)
+	check(not _sim.effects.has(&"music"), "after 60 s unflipped it is music no longer")
+	_sim.nerves.set_value(50.0)
+	_run(10.0)
+	check_near(_sim.nerves.value, 50.0 + warble_rate * 10.0, 0.000001, "it warbles: +0.5 Nerves per second")
+	var shown: Array[Dictionary] = _sim.snapshot()["items"]
+	check(GameData.as_bool(shown[shown.size() - 1].get("warbling")), "(the snapshot says so)")
+
+	# Flipped: out of the deck and in again.
+	var deck: Vector3 = _sim.hand.anchor_position(_sim.hand.anchor_index(&"tape"))
+	var out_far: Vector3 = Vector3(deck.x, 0.35, 0.05)
+	var out_near: Vector3 = Vector3(deck.x, 0.12, 0.05)
+	check(out_far.distance_to(deck) > out and out_near.distance_to(deck) < out, "(one point far enough out of the deck, one not)")
+	_carry("tape", [out_far])
+	check(not _sim.effects.has(&"music"), "taken out and let go in mid-air, it is not flipped")
+	_carry("tape", [out_near], "tape")
+	check(not _sim.effects.has(&"music"), "nor pulled only part of the way out")
+	_carry("tape", [out_far], "tape")
+	check_eq(_count_events("ritual_completed", "ritual", "tape_flip"), 1, "out and in again: flipped")
+	_run(0.1)
+	check(_sim.effects.has(&"music"), "and it plays again")
+	_sim.nerves.set_value(90.0)
+	_run(10.0)
+	check_near(_sim.nerves.value, 90.0 + play_rate * 10.0, 0.000001, "-1 Nerves per second")
+	_run(side - tape.side_time - 0.5)
+	check(_sim.effects.has(&"music"), "for another 60 s")
+	_run(1.0)
+	check(not _sim.effects.has(&"music"), "and then it wants flipping again")
+
+	# A flip before the side is out starts the 60 s again.
+	_new_sim()
+	tape = _give("mixtape")
+	_run(side * 0.5)
+	_carry("tape", [out_far], "tape")
+	check(tape.side_time < 1.0, "flipped early, the side starts again")
+	_run(side - 2.0)
+	check(_sim.effects.has(&"music"), "and plays its 60 s from there")
+
+	# The deck plays the tape, not the radio.
+	_new_sim()
+	_sim.items.drag_step(_ritual("radio_tune"), 1)
+	_sim.items.drag_step(_ritual("radio_tune"), 1)
+	_run(0.1)
+	check(_sim.items.radio == &"news" and _sim.effects.has(&"news"), "(the radio is on the news)")
+	_give("mixtape")
+	_run(0.1)
+	check_eq(_sim.items.radio, ItemSim.STATIC, "with a tape in the deck the radio is silent")
+	check(not _sim.effects.has(&"news"), "and its station's effect is gone")
+	check(not _sim.hand.is_anchor_active(_sim.hand.anchor_index(&"radio")), "the dial is not offered to the hand")
+	check(_reach("tape"), "the tape is, at the same place")
+	_sim.nerves.set_value(90.0)
+	_run(10.0)
+	check_near(_sim.nerves.value, 90.0 + play_rate * 10.0, 0.000001, "the tape alone plays: -1 a second, not the radio's too")
+
+	# An open window halves what comes out of the deck.
+	_sim.items.flags[&"window_open"] = true
+	_sim.nerves.set_value(90.0)
+	_run(10.0)
+	check_near(_sim.nerves.value, 90.0 + play_rate * tuning.f("window_radio_mult") * 10.0, 0.000001, "with the window open the tape calms half as much")
+
+
 # --- Helpers -----------------------------------------------------------------
+
+## A taxi passed closely, too slowly for a close call: the change in his
+## Nerves over the pass.
+func _pass_a_taxi_closely() -> float:
+	_cruise(3, 1)
+	_keep_lane = false
+	var speed: float = tuning.fi("gear_speeds", 2)
+	var taxi: TrafficSim.Vehicle = _sim.traffic.spawn(&"taxi", 0, _sim.car.s + 12.0, speed - tuning.f("close_call_min_closing") * 0.6)
+	var beside: float = taxi.x + taxi.half_width + _sim.car.half_width() + tuning.f("close_call_gap") * 0.5
+	_events = []
+	var before: float = _sim.nerves.value
+	var guard: int = _ticks_in(20.0)
+	while _sim.car.s < taxi.s + 12.0 and guard > 0:
+		guard -= 1
+		_sim.car.x = beside
+		_tick()
+	_keep_lane = true
+	return _sim.nerves.value - before
+
 
 ## The supply an item has in the starting cabin (GDD 7.3).
 func _starting_supply(item_id: String) -> int:

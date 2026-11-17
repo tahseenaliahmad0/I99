@@ -21,6 +21,12 @@ var _holds: Dictionary = {}
 var _implied_by: Dictionary = {}
 ## id -> most stacks it can have.
 var _max_stacks: Dictionary = {}
+## Numbers a status carries in the registry ("tremor_scale", "road_speed",
+## "heavy_floor"...): key -> { id: value }.
+var _numbers: Dictionary = {}
+## source of Nerves ("honk", "tailgater", "doubt") -> Array[StringName] of the
+## statuses that make him immune to it.
+var _immune: Dictionary = {}
 
 
 ## Reads the effect registry of items.json: which statuses imply which, and
@@ -28,6 +34,8 @@ var _max_stacks: Dictionary = {}
 func configure(data: GameData) -> void:
 	_implied_by.clear()
 	_max_stacks.clear()
+	_numbers.clear()
+	_immune.clear()
 	for record: Dictionary in data.records("effects"):
 		var id: StringName = StringName(GameData.as_string(record.get("id")))
 		_max_stacks[id] = maxi(GameData.as_int(record.get("max_stacks"), 1), 1)
@@ -36,6 +44,16 @@ func configure(data: GameData) -> void:
 			var sources: Array = _implied_by.get(target, [])
 			sources.append(id)
 			_implied_by[target] = sources
+		for source: Variant in GameData.as_array(record.get("immune")):
+			var source_id: StringName = StringName(GameData.as_string(source))
+			var shields: Array = _immune.get(source_id, [])
+			shields.append(id)
+			_immune[source_id] = shields
+		for key: Variant in record:
+			if GameData.is_number(record[key]) and str(key) != "max_stacks":
+				var carriers: Dictionary = _numbers.get(str(key), {})
+				carriers[id] = GameData.as_float(record[key])
+				_numbers[str(key)] = carriers
 
 
 func max_stacks(id: StringName) -> int:
@@ -143,6 +161,47 @@ func has_own(id: StringName) -> bool:
 	return false
 
 
+## The product of a number the registry gives statuses ("tremor_scale"),
+## over the statuses that are on in their own right; 1 when none carries it.
+func product(key: String) -> float:
+	var out: float = 1.0
+	if not _numbers.has(key):
+		return out
+	var carriers: Dictionary = _numbers[key]
+	for id: Variant in carriers:
+		var name: StringName = id
+		if has_own(name):
+			out *= GameData.as_float(carriers[id])
+	return out
+
+
+## The sum of such a number ("heavy_floor"); with `per_stack`, each stack of
+## a status counts ("nerves_gain_per_stack").
+func total(key: String, per_stack: bool = false) -> float:
+	var out: float = 0.0
+	if not _numbers.has(key):
+		return out
+	var carriers: Dictionary = _numbers[key]
+	for id: Variant in carriers:
+		var name: StringName = id
+		if has_own(name):
+			out += GameData.as_float(carriers[id]) * (float(stacks(name)) if per_stack else 1.0)
+	return out
+
+
+## True while a status that is on makes him immune to Nerves from `source`
+## (GDD 7.4: chewing seeds, to honks, tailgaters and Doubts).
+func immune_to(source: StringName) -> bool:
+	if not _immune.has(source):
+		return false
+	var shields: Array = _immune[source]
+	for shield: Variant in shields:
+		var name: StringName = shield
+		if has_own(name):
+			return true
+	return false
+
+
 ## Number of timed stacks (a held status with no timer counts as one).
 func stacks(id: StringName) -> int:
 	var count: int = 0
@@ -187,7 +246,9 @@ func step(dt: float) -> void:
 		var timers: PackedFloat64Array = _timers[name]
 		var left: PackedFloat64Array = PackedFloat64Array()
 		for seconds: float in timers:
-			if seconds - dt > 0.0:
+			# Counted in whole ticks: a timer is over when less than half a
+			# tick of it would be left, whatever rounding did to the rest.
+			if seconds - dt >= dt * 0.5:
 				left.append(seconds - dt)
 		if left.is_empty():
 			_timers.erase(name)
