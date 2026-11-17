@@ -52,6 +52,7 @@ var items: ItemSim = ItemSim.new()
 var leg: LegSim = LegSim.new()
 var encounter: EncounterSim = EncounterSim.new()
 var suspicion: SuspicionSim = SuspicionSim.new()
+var clock: ClockSim = ClockSim.new()
 var rng: Rng = Rng.new()
 
 var tick: int = 0
@@ -132,6 +133,7 @@ func _init(game_data: GameData) -> void:
 	leg.configure(data, car, traffic)
 	encounter.configure(data, car, traffic, leg)
 	suspicion.configure(tuning)
+	clock.configure(tuning)
 
 	cash = tuning.f("cash_start")
 	_gust_strength = tuning.f("gust_push")
@@ -247,6 +249,10 @@ func step(input: DriveInput) -> void:
 	for event: Dictionary in items.events:
 		_announce(event)
 	items.events.clear()
+
+	# 10. Clock: it runs while he drives, not while he stands (GDD 6.4).
+	if not pulled_over:
+		clock.step(DT)
 
 	# 12. Leg progress.
 	if leg.step_progress():
@@ -417,6 +423,7 @@ func _pay_the_officer(how: StringName) -> void:
 		taken = items.take_visible_contraband()
 	cash = maxf(cash - cost, 0.0)
 	clock_minutes_owed += minutes
+	clock.add_minutes(minutes)
 	suspicion.end_watch()
 	encounter.end_patrol()
 	_release_from_pull_over()
@@ -550,6 +557,10 @@ func snapshot() -> Dictionary:
 		"headlight_cone": headlight_cone(),
 		"mirror_delay": faults.param(FAULT_MIRROR, "mirror_tell_delay_s", 0.0),
 		"cash": cash,
+		"clock": clock.text(),
+		"clock_minutes": clock.minutes,
+		"night_share": clock.night_share(),
+		"late": clock.late(),
 		"chain": collision.chain,
 		"wrecked": wrecked,
 		"curve_k": curve_k,

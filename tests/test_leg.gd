@@ -683,11 +683,13 @@ func test_leg_07() -> void:
 	# Nothing moves on while the officer waits.
 	var leg_time: float = _sim.leg.time
 	var s_before: float = _sim.car.s
+	var clock_before: float = _sim.clock.minutes
 	_input.clear()
 	_input.rmb = false
 	for _tick: int in int(3.0 / DT):
 		_sim.step(_input)
 	check_near(_sim.leg.time, leg_time, 0.000001, "the leg's clock stands while he is pulled over")
+	check_near(_sim.clock.minutes, clock_before, 0.000001, "and so does the Clock: he is not driving")
 	check_near(_sim.car.s, s_before, 0.000001, "and so does the car, whatever gear it is in")
 	check(_sim.pulled_over, "waiting changes nothing")
 
@@ -699,6 +701,8 @@ func test_leg_07() -> void:
 	check_eq(GameData.as_string(released.get("paid")), "fine", "as a fine")
 	check_near(_sim.cash, 75.0, 0.000001, "the fine is 25% of his cash")
 	check_near(_sim.clock_minutes_owed, tuning.f("fine_minutes"), 0.000001, "and 20 game minutes")
+	check(_sim.clock.minutes - clock_before >= tuning.f("fine_minutes") and _sim.clock.minutes - clock_before < tuning.f("fine_minutes") + 0.5,
+			"which the Clock takes at once (%s min)" % str(snappedf(_sim.clock.minutes - clock_before, 0.01)))
 	check(not _sim.suspicion.watching and not _sim.encounter.police_lights, "the Patrol is over")
 	check_near(_sim.suspicion.value, 0.0, 0.000001, "Suspicion is gone")
 	check(_has_event_named("ritual_completed"), "the hand did it: a ritual was completed")
