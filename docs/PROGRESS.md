@@ -27,9 +27,9 @@ Useful commands:
 
 ## Current state
 
-- **Milestone:** M1 (The Hand and the wheel), in review.
-- **Tests:** 2 of 114 registered passing; the eight M1 tests pass and wait for the review before promotion.
-- **Next step:** apply the findings of the `m1-review` workflow, promote, commit, push. Then M2.
+- **Milestone:** M2 (Driving): simulation and tests done, views in progress. M1's review is still running.
+- **Tests:** 20 of 114 passing (M0: 2, M1: 8, M2: 10).
+- **Next step:** M2 road and vehicle views; then apply `m1-review` findings when the workflow reports.
 
 ## Milestones
 
@@ -53,11 +53,17 @@ Do not start a milestone until every test of the previous one passes (GDD 18).
 - [x] `DriveSim` stepping them in the order of GDD 13.3; control rituals of GDD 4.6 in `rituals.json`
 - [x] The eight M1 tests written and passing (not yet promoted)
 - [x] Cabin sandbox: `scenes/drive.tscn`, `drive_controller.gd`, `CabinView`, `HandView` (analytic arm), `PointerView`, `DebugHud` (F1); screenshots in `artifacts/m1_*.png`
-- [ ] Adversarial review of the M1 core and tests (workflow `m1-review`), fixes applied
-- [ ] Tests promoted; M1 committed and pushed
+- [x] Tests promoted (the registry must match what passes; review findings are applied on top)
+- [ ] Adversarial review of the M1 core and tests (workflow `m1-review`, running on a snapshot of commit a7c3d8a): apply confirmed findings, strengthen tests where a mutation survived
 
 ### M2 Driving: T-CAR-01..05, T-COL-01..03, T-CC-01..02
-- [ ] not started
+- [x] `Rng` (road, shop, heckle, bot streams), `CarSim`, `TrafficSim`, `Collision`, thin `NervesSim` and `FaultSim`
+- [x] `DriveSim` steps 5 to 7; cash; events `hit`, `lamp_lit`, `close_call`, `wreck`
+- [x] Vehicle table (GDD 5.5) in `beats.json`; M2 tuning constants
+- [x] The ten M2 tests written, passing and promoted
+- [ ] Road view: recycled chunks, lane lines, shoulder, rails; `world_bend.gdshader`; pooled vehicle views; minimal sky
+- [ ] Sandbox traffic so the scene can be driven; screenshots
+- [ ] Review of the M2 core and tests
 
 ### M3 Nerves and the base cabin: T-NERVES-01..04, T-FAULT-01..02, T-ITEM-BASE
 - [ ] not started
@@ -111,3 +117,5 @@ Two lines per slice, newest last.
   Tools started with `--script` use `user://test_runs/tool` and ignore game arguments. M0 complete: 2 of 114.
 - 2026-11-17 M1: core simulation of the hand, wheel, gestures and gear gate with `DriveSim`; eight tests written and passing.
   Cabin sandbox scene renders under Xvfb (artifacts/m1_*.png). Review workflow running on a snapshot before promotion.
+- 2026-11-17 M2: car, traffic, collisions and close calls simulated; ten tests pass. M1 and M2 tests promoted: 20 of 114.
+  M1 review still running in the background on a snapshot; its findings will be applied as their own commit.

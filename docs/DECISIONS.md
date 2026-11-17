@@ -312,3 +312,33 @@ Format: `D-NNN (milestone, date) Title` then Context / Decision / Why.
   draw nothing (his own face).
 - **Why.** GDD 1.3 (content and numbers in data), GDD 1.1 (an artist changes
   a registry file, not code).
+
+## D-023 (M2, 2026-11-17) Details of driving the GDD leaves open
+
+- **Chain.** "Each close call within 4 s of the last adds 25% to the chain,
+  up to x3" is read as additive: x1, x1.25, x1.5 ... x3, which takes eight
+  links, matching the eight squeal sounds of GDD 16.5.
+- **Pushed clear.** After a hit the car is moved along the shallower overlap
+  until there is `hit_pushback` of air: sideways for a sideswipe, backward
+  along the road when he runs into a vehicle's back. Running into a back also
+  caps his speed at that vehicle's speed (otherwise he would hit it again the
+  moment the immunity ends). An oncoming head-on stops the car.
+- **Close call = a pass.** It counts only if the vehicle is behind him when
+  the two stop overlapping along the road. Dropping back from beside a truck
+  is not a close call. Closing speed is read at that moment.
+- **Traffic never rams.** GDD 5.5 says vehicles hold a lane at a set speed.
+  A vehicle that catches another in its lane, or the player from behind,
+  follows at that speed within `traffic_follow_gap` instead of driving
+  through. Ramming is reserved for the Tailgater and the Storm (GDD 9.3,
+  10.3), in line with GDD 12.4 rule 5.
+- **Undivided roads.** Left of the oncoming lane stands a rail
+  `undivided_left_rail_margin` beyond its edge, so the oncoming lane has no
+  escape shoulder.
+- **Edges.** The car is "on the rumble strip" when any part of it overlaps
+  the strip, and "on the shoulder" when its right edge is beyond the strip.
+  The shoulder cap is reached at `engine_brake`.
+- **Honks.** A taxi passed as a close call adds its `honk_nerves` (GDD 5.5).
+- **Horn yields for pickups and tuk-tuks.** GDD 4.6 names "cars and taxis"
+  as yielding and "trucks and buses" as ignoring the base horn. Pickups and
+  tuk-tuks are set not to yield; the Loud horn moves everything.
+- **Cash** is a float (a close call in second gear pays 1, chained 1.25).
