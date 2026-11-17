@@ -1,0 +1,561 @@
+[
+ {
+  "covered": "Reviewed commit cf5650b (\"M6: the phone, the seven Keepsakes, seven synergies\"): my worktree was cut from `main`, which holds only docs, so I detached it there; the shared checkout's uncommitted Adaptation edits (wheel_sim.gd, encounter_sim.gd) were not reviewed, and all line numbers below are as of cf5650b. I read GDD 7.5 and the seven built rows of 7.8 against item_sim.gd, the hooks in drive_sim.gd (capture/restore, _retell, _set_stretch/begin_leg/begin_act, _apply_collisions, _apply_statuses), stop_sim.gd, the data and the three test suites, then drove the seams with probes (all in /tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/wf2/, run as `godot --headless --path . --script <probe> -- <function names>`), six mutants (four survived) and a fuzz of 30 random Tellings (136 stops, 58 Wrecks: no script error, no broken invariant). What held: every row of 7.5 and 7.8 does what the GDD and D-042 say on the road; the charm's spent scrape, the tape's spent flag, leg-held statuses, call counters, supply and heat pass through leg stops; a save taken at each of the 12 stops of a Telling (all three acts, leg and boss stops) loaded from its text matches the uninterrupted simulation to the state hash, also 3 s later; a mend in progress is finished on entering either kind of stop; a Wreck resets all item state.",
+  "findings": [
+   {
+    "title": "Pulled over, the Clock stands but the phone keeps ringing: unlimited cash (and calm) while the officer waits",
+    "kind": "bug",
+    "file": "/home/user/I99/src/core/drive_sim.gd",
+    "line": 388,
+    "evidence": "probe_pullover.gd (Patrol leg, Act 2, phone + taxi sign + beads, fourth gear once the police watch): pulled over at t=26.7 s; then 40 calls answered during 663 s of waiting: cash +710, clock.minutes +0.0, leg.time +0.0, still pulled over, Nerves 34. probe_pullover2.gd: phone alone, 18 calls in 600 s: +140 cash, Clock +0 (the bribe to drive on is 60 and 5 min); a tape alone calms at its -1/s with the Clock at +0; for contrast 60 s braked to rest on the shoulder cost 20 Clock minutes. Cause: step 9 (effects.step, items.step, _feed_nerves, nerves.step) is gated on `not stopped` (line 388), while the car, collisions, the leg's and the encounter's clocks and the Clock (line 404) are gated on `not _standing()` (pulled_over or stopped). _step_suspicion returns while pulled_over, so even a Snap there costs nothing.",
+    "failure_scenario": "Any Patrol leg (Acts 2-3; every act at the Uncles' Table) with a phone on the mount: hold fourth gear about 7 s until Suspicion is 100, then stay at the officer and answer every call. Each dispatcher call pays 10 (15 with the taxi sign, +20 every third); the Clock, the leg's par clock and Suspicion do not move and nothing can hit him, for as long as the player likes. Then hand over the banknotes (60 in Act 2, 5 minutes). Beads, the radio or a tape likewise bring Nerves anywhere for no time.",
+    "gdd_reference": "GDD 12.1 'Phone, if owned: 10 per answered call ... typical 25 [a leg]' and 12 'A competent Telling earns 350 to 600 cash'; 6.4 (the Clock is the price of standing still); 2.2 pillar 3 'Everything that helps also costs'. DECISIONS D-031: 'Nothing moves on while the officer waits: the leg's clock and the encounter stop, the car does not move, nothing can hit him' - items, statuses and Nerves do move on.",
+    "suggested_fix": "Gate step 9 on `not _standing()` as the Clock is (nothing burns, rings or calms while the officer waits), or keep it running and let the Clock run with it.",
+    "confidence": "high"
+   },
+   {
+    "title": "After a Wreck the save still holds the Telling that wrecked: continuing undoes the Wreck",
+    "kind": "bug",
+    "file": "/home/user/I99/src/game/drive_controller.gd",
+    "line": 120,
+    "evidence": "probe_wreck_save.gd drives the real scenes/drive.tscn: at the first stop save.json holds stage=stop, seed=1, retellings=0, 22:10; he leaves, five scrapes, Wreck, told again (seed 1329599597722160173, retellings 1, 22:00); two seconds into the new Telling save.json still holds stage=stop, seed=1, retellings=0, and Game.read_save() + DriveSim.restore() (what --continue does, drive_controller.gd:62) returns true: he stands at that fuel station with 0 lamps at 22:10. The controller writes only on `stop_entered` (line 120) and clears only on `arrived` (line 124); DriveSim._retell() (drive_sim.gd:719) leaves `checkpoint` as it was (probe_seams1.gd wreck_checkpoint: not empty, seed 1, retellings 0, restores with the beads he had). This is M5 code, seen through the Wreck seam.",
+    "failure_scenario": "He wrecks on the second leg of Act 2 with a full cabin. The player quits before the retold Telling reaches its first stop and continues: the wrecked Telling is back at its last stop with its items, cash and the lamps it had there. Repeatable after every Wreck, at every Table.",
+    "gdd_reference": "GDD 3.2 'On a Wreck ... the Telling restarts from Baghdad within 3 s'; 11.4 Wreck: 'the Telling restarts in 3 s'; 11.2 The Children: 'One free rewind: the first Wreck returns to the start of that leg' (a rule only if the other Tables have none); 2.1 'Carried between Tellings: ... Never power.'",
+    "suggested_fix": "When the Telling is told again, clear DriveSim.checkpoint in _retell() and have the controller write a save with no Telling on `wreck`, as it does on `arrived`.",
+    "confidence": "medium"
+   },
+   {
+    "title": "The photo's once-per-leg and the charm's first scrape are renewed by the boss stop and by the 170 m approach: the photo calms four times in a row around every boss",
+    "kind": "spec_mismatch",
+    "file": "/home/user/I99/src/core/drive_sim.gd",
+    "line": 461,
+    "evidence": "probe_seams1.gd photo (Nerves set to 95 before each look, by hand at the visor): in the boss 95 -> 75 (a second look: nothing); at the boss stop photo_used=false and 95 -> 75 with the Clock unchanged; on the approach of Act 2 (s=0.5 of 170 m) 95 -> 75; 0.4 m past the gore 95 -> 75. probe_flask_photo.gd: with the flask each look after a sip is -45: 99 -> 54 in the boss, 54 -> 9 at the boss stop, 9 -> 0 on the approach. probe_seams2.gd charm_approach: the first scrape on the approach is spared, and so is one 12 m into the leg. probe_acts.gd: at every boss stop leg_state reads {photo:false, spared:false, held:[]} though it was true before the stop. Cause: _set_stretch() calls items.begin_leg() for every stretch (line 461: _enter_approach, _begin_boss, restore), and restore()'s boss branch (lines 845-851) never calls items.set_leg_state() although capture() saves leg_state at boss stops too.",
+    "failure_scenario": "Nerves 95 at the end of the Checkpoint: look at the photo in the boss's last metres, again while parked at the boss stop, again while rolling to the fork, again past the gore: 95 -> 15 in under half a minute of play, with no hand cost for the look at the stop. The charm likewise gives a free scrape on each approach on top of the one in the leg behind it.",
+    "gdd_reference": "GDD 4.6 and 6.1: 'Visor photo: -20, once per leg'; 7.5 'The first scrape each leg lights no lamp'; 1.6 'An act is 3 legs and a boss' (the approach is neither). D-041: the save holds 'whether the photo has been looked at this leg, which until now a stop forgot' - a boss stop still forgets it. (D-041 also reads 'for the leg' as 'until the next stretch of road begins'; whether the approach is a leg of its own for once-per-leg things is the part that rests on reading.)",
+    "suggested_fix": "Put leg_state back at a boss stop as at a leg's stop, and do not begin a new leg for the items at the approach (reset there or at the first gore, not at both).",
+    "confidence": "medium"
+   },
+   {
+    "title": "A stop cancels the craving: a cigarette that is burning, or burnt out less than 30 s ago, when he stops never costs its +8",
+    "kind": "spec_mismatch",
+    "file": "/home/user/I99/src/core/drive_sim.gd",
+    "line": 746,
+    "evidence": "probe_seams1.gd craving. No stop: 30 s after burn-out Nerves step 12.34 -> 20.34 (+8). Lit, then into the stall: at the stop lit=false, burning=false, lapse_left=-1.0, and in the 75 s after leaving no step of more than 5 Nerves. Burnt out and 20 s into the 30 (lapse_left=8.83), then into the stall: at the stop lapse_left=-1.0, and no step afterwards. Cause: capture() saves id, slot, supply and heat of an item (line 746) and _build() makes the Item anew; `burning` and `lapse_left` (item_sim.gd:1199-1203, 1207) are in no save and not in leg_state.",
+    "failure_scenario": "He lights one cigarette on each leg within about 55 s of the stall (the second half of a par leg) and pulls in: full 25 s burn, -10 Nerves, and the craving never comes, on every leg of the Telling. A chain-smoker's last cigarette before each stop is free of it too.",
+    "gdd_reference": "GDD 7.4 Cigarettes, Takes: 'Craving: +8 Nerves once if another is not lit within 30 s.' D-038 lists what a stop ends ('every timed effect ends, the haze is gone ... items keep their supply and a drink its heat'); the craving is not a status but the cigarette's upkeep, and is not in that list. D-025: 'The craving timer starts when a cigarette burns out'.",
+    "suggested_fix": "Carry the craving through the stop: save the seconds left with the item (and arm it when the stop puts a burning cigarette out), as leg_state carries the photo.",
+    "confidence": "medium"
+   },
+   {
+    "title": "T-ITEM-DUCT-TAPE passes when the tape renews with every leg, and when a boss stop forgets the mend",
+    "kind": "test_gap",
+    "file": "/home/user/I99/tests/test_keepsakes.gd",
+    "line": 212,
+    "evidence": "Mutant 1: `tape_spent = false` added to ItemSim.begin_leg() (item_sim.gd:331), so the tape takes the first fault of every leg: T-ITEM-DUCT-TAPE, T-ITEM-CHARM, T-SAVE-01 and T-RUN-02 all PASS. The test's 'second fault of the act' (lines 212-216 and 226-232) is always lit on the same leg as the first, before or after that leg's stop. Mutant 2: `items.finish_mending()` removed from _end_boss() (drive_sim.gd:701): T-ITEM-DUCT-TAPE, T-SAVE-01, T-RUN-01, T-RUN-02 PASS; with it a fault lit in the last 10 s of a boss is never mended (the rebuild at the boss stop drops `mending`, tape_spent stays true). Only the leg's stop is tested (lines 250-257).",
+    "failure_scenario": "A regression that gives nine self-repairs a Telling instead of three, or one that leaves the boss's last fault lit for good with the tape spent, ships with the test green.",
+    "gdd_reference": "tests.json T-ITEM-DUCT-TAPE: 'Duct tape (7.5): the first fault each act repairs itself after 10 s'; D-042: 'that fault mends itself 10 s later, or the moment he stands at a stop'.",
+    "suggested_fix": "After the first mend drive into the next leg of the same act (_into_next_quiet_leg) and check that a fault lit there stays; repeat the 'reaching a stop before the 10 s are up' check at a boss stop.",
+    "confidence": "high"
+   },
+   {
+    "title": "Nothing tests that the call count, the answered row or the photo pass through a stop (two mutants survive)",
+    "kind": "test_gap",
+    "file": "/home/user/I99/tests/test_items.gd",
+    "line": 1288,
+    "evidence": "Mutant A: ItemSim.set_telling_state() (item_sim.gd:359) puts back calls and answered_run as 0: T-ITEM-PHONE, T-ITEM-TAXI-SIGN, T-SYN-PHONE-TAXI-SIGN, T-SAVE-01, T-STOP-01, T-RUN-01, T-RUN-02, T-REPLAY-01 all PASS. Mutant B: set_leg_state() (item_sim.gd:365) puts back photo as false: all 27 implemented T-ITEM/T-SYN tests and T-SAVE-01 PASS. No phone test, no synergy test and no photo check (tests/test_item_base.gd:342, tests/test_synergies.gd:151 and 265) crosses a stop; T-SAVE-01 compares two simulations that both went through restore().",
+    "failure_scenario": "With A the count starts again at every stop: between two stops there are two or three calls, so the fourth call never comes and Um Noor never rings, and three answered in a row can only happen inside one leg. With B the photo calms twice a leg, before and after its stop. Both are what D-041 and D-042 say must not happen.",
+    "gdd_reference": "tests.json T-ITEM-PHONE 'one call in four is Um Noor: -8 Nerves'; T-SYN-PHONE-TAXI-SIGN 'three calls answered in a row pay a 20 cash bonus'; T-ITEM-BASE 'visor photo (-20 once per leg ...)'. D-042: 'The count of calls and of calls answered in a row pass through a stop'; D-041: the save holds 'whether the photo has been looked at this leg'.",
+    "suggested_fix": "In T-ITEM-PHONE and T-SYN-PHONE-TAXI-SIGN answer calls on both sides of _into_stall()/_leave_stop() and check the fourth is hers and the third in a row pays; in the photo check look once, pass the leg's stop and look again.",
+    "confidence": "high"
+   },
+   {
+    "title": "At a stop every Habit is free and no timer runs: beads give unlimited calm for nothing, and cigarette, Courage, tea and seeds are loaded at the stall to start when he drives off",
+    "kind": "spec_mismatch",
+    "file": "/home/user/I99/src/core/drive_sim.gd",
+    "line": 1512,
+    "evidence": "probe_seams1.gd beads_at_stop: at a Hitcher stop (2 minutes) 30 beads in 11 s take Nerves 90 -> 30 with the Clock at +0.0. probe_seams3.gd stop_preload: 35 s at a stop: a cigarette lit, three sips of arak, a sip of tea, a handful of seeds; 30 s later still lit left=35.0 (25 + the tea's 10), courage=3 with 45.0 left, awake 40.0, chewing 20.0; Nerves 60 -> 33; Clock +0.0; on the road they start from full. Cause: at a stop _begin_at() offers the cabin's rituals as on the road (lines 1512-1514) while effects and items do not step (line 388).",
+    "failure_scenario": "With beads (30 cash) every stop, even the 2-minute Hitcher, sets Nerves to anything below what he came with, so the tea stall's 20 minutes buy no calm. The 1.6 s off the wheel for a cigarette, the three sips for three Courage stacks and the pill's blocked view cost nothing done at the stall, and their full time is delivered on the road.",
+    "gdd_reference": "GDD 2.2 pillar 1 'Every action competes for the same hand. No action is free.'; pillar 3 'Habits take the hand'; 12.4 rule 3 'Nothing is a free stat'; 7.4 Worry beads, Takes: 'Only the hand. Calm leads to Heavy.'; 9.6 'A stop offers one service ... Tea stall: Sets Nerves to 30 ... 20'. This follows from D-036 ('At a stop the night waits: ... effect timers, items and Nerves do not step; the hand, gestures and rituals do'), taken in M5 before any Habit could be bought; I quote both because the two no longer fit together.",
+    "suggested_fix": "Owner's call: at a stop offer only the tray, the wheel and what the stop needs, or let what he uses there run down there.",
+    "confidence": "low"
+   },
+   {
+    "title": "A Snap at a stop never ends: he cannot reach the tray until he drives off",
+    "kind": "bug",
+    "file": "/home/user/I99/src/core/drive_sim.gd",
+    "line": 326,
+    "evidence": "probe_seams2.gd snap_at_stop: he comes to a fuel station at Nerves 93 and drinks an energy drink there (+10): Snap, Nerves 70, snap_left=2.0, hand.can_reach=false. 10 s later and 70 s later at the stop snap_left is still 2.0 and the snapshot's `snap` is true; the hand does not reach an offer (reach fails, cash unchanged). 2.5 s after he leaves, snap_left=0.0. Cause: hand.can_reach follows nerves.snap_left (line 326), which only NervesSim.step() counts down, and that is not called while stopped (line 388).",
+    "failure_scenario": "Frayed at 90 or more he drinks the can (or slaps himself) before shopping: for the rest of the stop he can buy, restock and repair nothing; only gripping the wheel and leaving works, and the stop cannot be come back to.",
+    "gdd_reference": "GDD 6.1 'Snap: he leans on the horn for 2 s. He can steer and cannot reach.' GDD 17.2 'No time limit at stops'.",
+    "suggested_fix": "Count the Snap's two seconds down at a stop too: they are the hand's time, not the night's.",
+    "confidence": "high"
+   },
+   {
+    "title": "What a stop ends is never announced: the tape's mend, a ringing call, statuses (low severity, no listener yet)",
+    "kind": "bug",
+    "file": "/home/user/I99/src/core/drive_sim.gd",
+    "line": 617,
+    "evidence": "probe_seams1.gd mend_event: duct tape holding a fault, into the stall: lamps 1 -> 0 and 0 `fault_repaired` events (the same mend on the road announces 1). probe_seams2.gd ringing_at_stop: `call_started`, then the stop: caller is '' and there is no `call_resolved`. probe_seams3.gd expired_at_stop: `lit` ends at the stop with no `effect_expired`. Cause: items.finish_mending() (line 617, and 701) queues its event in the ItemSim that _save_point() -> restore() -> _build() replaces before any tick drains items.events; the rebuild itself announces nothing.",
+    "failure_scenario": "Anything that pairs these signals (a ring loop started on call_started, a lamp-out sound on fault_repaired, a burning cigarette drawn from effect_added/effect_expired) is left hanging at every stop.",
+    "gdd_reference": "GDD 13.6 lists `fault_repaired`, `call_resolved`, `effect_expired` on the Events bus; 16.3 (lamps and supplies are read from what the cabin shows).",
+    "suggested_fix": "In _save_point(), announce what is waiting in items.events before _build(), and announce the end of a ringing call and of each status the stop ends.",
+    "confidence": "high"
+   },
+   {
+    "title": "The wait for the next call starts again at every stop",
+    "kind": "spec_mismatch",
+    "file": "/home/user/I99/src/core/item_sim.gd",
+    "line": 912,
+    "evidence": "probe_next_call.gd (four seeds): a call answered, 20 s driven, the leg's stop, on: road time from the end of that call to the next ring is 49.82, 49.56, 60.6 and 50.44 s. `_call_wait` is in no save; after the rebuild it is drawn afresh (25 to 40 s) on the first tick after he leaves.",
+    "failure_scenario": "With a stop on every leg the third call of a leg (due about 100 s after the last stop) never comes before the next stall: two calls a leg where the GDD's 'typical 25' cash means two and a half, and the three-in-a-row bonus comes correspondingly later.",
+    "gdd_reference": "GDD 7.4 Phone: 'A call every 25 to 40 s'; 12.1 'Phone, if owned ... typical 25'. D-042: 'The wait for the next call ... is counted from the end of the last one'. (D-038/D-040 say every timer ends at a stop, so this may be meant; reported because the task names it and the gap is measurable.)",
+    "suggested_fix": "Keep the seconds left of the wait in item_state.",
+    "confidence": "low"
+   },
+   {
+    "title": "Hung up mid-leg or mid-act, the charm and the tape treat the next scrape or fault as the first",
+    "kind": "spec_mismatch",
+    "file": "/home/user/I99/src/core/item_sim.gd",
+    "line": 1065,
+    "evidence": "probe_seams3.gd acquired_late: a leg with one scrape (lamp lit), the charm put in the cabin at that leg's stop, a second scrape in the leg's last 170 m: spared=true. An act with two faults lit, the tape put in at the stop, a third fault: lamps 3, and 2 after 10.5 s. scrape_spared and tape_spent are set only by a scrape or fault the keepsake itself took (absorbs_scrape line 1065, on_faults_lit line 1074).",
+    "failure_scenario": "Bought at a stop, the charm spares the leg's second scrape and the tape mends the act's third fault: one lamp less than the row allows, once per purchase.",
+    "gdd_reference": "GDD 7.5 'The first scrape each leg lights no lamp'; 'The first fault each act repairs itself after 10 s'.",
+    "suggested_fix": "Mark the leg's first scrape and the act's first fault whether or not the keepsake is aboard.",
+    "confidence": "low"
+   },
+   {
+    "title": "The cigarette's calm runs one tick long: -10.0033 over the burn",
+    "kind": "bug",
+    "file": "/home/user/I99/src/core/item_sim.gd",
+    "line": 1138,
+    "evidence": "probe_drip.gd: lit and ashed at Nerves 80, nothing else acting: Nerves fall on 3,001 ticks, 10.00333 in all, while `lit` is on for 3,000. The drip ends on `drip.y <= 0.0` after 3,000 subtractions of 1/120 from 25.0, which leave a positive remainder. T-ITEM-CIGARETTES allows 0.01.",
+    "failure_scenario": "Every cigarette calms by 10.0033 instead of 10; harmless in play, but it is the one countdown in ItemSim/EffectSystem that is not counted in whole ticks.",
+    "gdd_reference": "GDD 7.4 '-10 Nerves over the burn'; D-040 'Timed statuses are counted in whole ticks like every other countdown ... a 25 s status is on for exactly 3,000 ticks'.",
+    "suggested_fix": "End a drip when less than half a tick of it is left (`drip.y < dt * 0.5`), as EffectSystem.step() does.",
+    "confidence": "high"
+   }
+  ]
+ },
+ {
+  "covered": "Every row of GDD 7.4 (cigarettes to arak flask) was traced through data/items.json, data/rituals.json, item_sim.gd, drive_sim.gd, effect_system.gd, wheel_sim.gd and stop_sim.gd, with the pointers into 5.4, 5.8, 6.1, 6.2, 6.5 and 9.6. All of it was read and run at commit cf5650b, checked out detached because this worktree's own branch held only docs/; the branch is restored, so the probes need a checkout of cf5650b. I ran 22 probes driving the hand as cabin_suite.gd does (two drinks, a sip at the stack cap, the phone while pulled over, in a Snap and at a stop, Focus with Patrol and Tailgater, items at a stop, buying and placing everything a first stop sells) and a 10-round random fuzz with invariants, which found no violation. I also ran six mutant batches against the whole suite. Every number in the 7.4 table matches data and behaviour; the defects are in how the rules meet stops, hits and the hand. Not reported because D-040 decides it explicitly: chewing seeds does not shield the Tailgater's cut-off (+5).",
+  "findings": [
+   {
+    "title": "A mixtape bought (or picked free) at a stop can never be put in the deck: the radio dial takes the hand",
+    "kind": "bug",
+    "file": "src/core/drive_sim.gd",
+    "line": 1622,
+    "evidence": "/tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/habits/probe_buy_tape2.gd: the fuel station of the 9th fuel-station seed offers the mixtape; a TAP buys it (cash 100 -> 75); nine drags from the tray to the `tape` anchor (dead on, and 20 px off in eight directions) all end 'snapped to radio, rested at radio (radio active true, tape active true)', stop_place completes 0 times, and on leaving the cash is 100 again with no tape. /tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/habits/probe_buy_all.gd: of 28 item-to-slot placements a first stop can sell, only 'mixtape -> tape' fails. /tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/habits/probe_boss_tape.gd: Telling seed 3 (drivers), the boss stop of act 1 holds out thermos, mixtape, fog_lamps; taking the mixtape as the free pick removes the other two, three drags fail, and 0 services are ever held out. Cause: `radio` (index 3) and `tape` (index 4) share one position (both at pointer (1337, 810)); ItemSim._covered('radio') (item_sim.gd:521) is true only once an item already sits in the tape slot, so during the carry both anchors are active, HandSim._nearest_anchor (hand_sim.gd:342) gives the tie to the first, and _resolve_gesture (drive_sim.gd:1562) never finds hand.at_index among the destinations. T-ITEM-MIXTAPE puts the tape in with give_item; no test buys one. A trial patch in _sync_anchors (while carrying, switch off any anchor that shares its pointer position with a carry destination) made the placement work, and T-STOP-01, T-ITEM-MIXTAPE, T-SYN-BEADS-MUSIC and T-HAND-* still passed; the patch was reverted.",
+    "failure_scenario": "He buys the Mixtape for 25 at a fuel station and drags it to the deck: it cannot be dropped there, stays 'bought' on the tray and is paid back when he leaves, so the Habit cannot be had in a Telling. At a boss stop, choosing the mixtape as the free pick of three loses the pick and, because the pick never leaves the tray, the stop's service as well.",
+    "confidence": "high",
+    "gdd_reference": "GDD 7.4: 'Mixtape | `tape` | Music that never drifts: -1 Nerves per second | ... | None | 25'. GDD 9.6: 'TAP an offered item to buy it, then DRAG it to a slot' and 'After each boss the player takes one free item out of 3 and one service of their choice'. GDD 16.2: '`radio` and `tape` | (0.38, 0.02, -0.14)'. D-040: 'With a tape in the slot the `tape` anchor takes the radio's place'.",
+    "suggested_fix": "While something is carried, let an anchor that shares its place with a carry destination give way (in _sync_anchors, or let ItemSim._covered also be true while the covering anchor is a drag destination). Add to T-ITEM-MIXTAPE a tape bought at a fuel station and placed with _drag, and to T-STOP-01 a boss stop whose free pick is the mixtape."
+   },
+   {
+    "title": "A sip in progress when a crash spills the tea still pays as a full hot sip",
+    "kind": "bug",
+    "file": "src/core/item_sim.gd",
+    "line": 582,
+    "evidence": "/tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/habits/probe_spill.gd: third gear, the hand holding at cup_a, a truck 50 km/h slower ahead in his lane. Output: 'hit kind 2 at hold tick 51; supply now 0; nerves 80.065', then 'after the hold: supply 0, nerves 68.141, awake true (time left 39.96)' and one ritual_completed tea_sip. The crash empties the glass (ItemSim.on_hit, called from drive_sim.gd:1362) but leaves the HOLD running; when it completes, ItemSim.complete runs on_complete without looking at the ritual's `requires` (supply>0) again: consume_supply does nothing at 0 and `give` pays -12 Nerves and Awake 40 s.",
+    "failure_scenario": "He lets go to sip, drifts into a slow truck 0.4 s into the HOLD (the tea's own risk) and keeps the button down: the glass is spilled and empty, and 0.2 s later he is calmed by 12 and Awake for 40 s from it.",
+    "confidence": "high",
+    "gdd_reference": "GDD 7.4, Tea glass, Takes: 'Spills in a crash.' Registry T-ITEM-TEA-GLASS: 'it spills in a crash'.",
+    "suggested_fix": "When a gesture completes, check the ritual's `requires` again against its owner (in DriveSim._complete_ritual or ItemSim.complete) and drop the completion if they no longer hold; or cancel the gesture in progress as soon as its ritual is no longer offered. Add the case to T-ITEM-TEA-GLASS."
+   },
+   {
+    "title": "A TAP that ends just after the phone has rung out counts as a second use of the phone: +30 Suspicion twice for one call",
+    "kind": "bug",
+    "file": "src/core/item_sim.gd",
+    "line": 589,
+    "evidence": "/tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/habits/probe_phone_late.gd on a quiet `patrol` leg (act 2, seed 71) with a call ringing while watched. Variant: first TAP: Suspicion 0.00 -> 29.83; a second TAP pressed with 2 ticks of ring left and released 4 ticks later: 'suspicion 34.92 (was 5.25)', the caller is gone and he is not answered. First scenario (no earlier TAP): the same late TAP gives call_resolved answered=false (+4 Nerves), then ritual_completed phone_answer on a silent phone and Suspicion 0 -> 29.83. Cause: complete() sets phone_used when `not dialling()`; after _miss_call -> _hang_up the caller is empty, so dialling() is false again, and nothing checks `requires: [\"ringing\"]` when the TAP completes. The window is as long as the TAP's press, up to tap_max_time 0.25 s.",
+    "failure_scenario": "In view of a patrol he taps the ringing phone once (+30) and his next TAP straddles the 5 s deadline: the call is missed (+4 Nerves), pays nothing, and Suspicion rises by another 30, 60 for one call.",
+    "confidence": "high",
+    "gdd_reference": "GDD 6.5: 'Using the phone; a Snap | +30'. D-042: 'One call is one use of the phone to whoever watches (+30 once, not per TAP)'. GDD 7.4: 'Three TAPs, 1.2 s, within 5 s of the first ring'.",
+    "suggested_fix": "The same re-check of `requires` at completion as for the spilled tea (a TAP that completes when the phone no longer rings does nothing and announces nothing), and count the use only while a call is open (caller not empty)."
+   },
+   {
+    "title": "A Snap at a stop never ends: the hand cannot reach the tray for the rest of the stop",
+    "kind": "bug",
+    "file": "src/core/drive_sim.gd",
+    "line": 388,
+    "evidence": "/tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/habits/probe_snap_stop.gd: fuel station, Nerves 92, a can drunk at the stop: 'nerves 70.00, snap_left 2.000, snap events 1'; 'after 120 s of waiting at the stop: snap_left 2.000; the hand reaches the tray: false'; a TAP on the first offer: 'cash +0.0'; after leaving 'snap_left 1.992' and the 2 s run on the road. /tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/habits/probe_stop_use.gd shows the same with a slap at 95. Cause: hand.can_reach = nerves.snap_left <= 0.0 (drive_sim.gd:326) is read every tick, but nerves.step, which counts snap_left down, runs only `if not stopped`.",
+    "failure_scenario": "He pulls in at Nerves 90 or more and drinks an energy drink for the road ahead (+10): he Snaps, and for as long as he stays the pointer snaps to nothing, so he cannot buy, restock or place what he has paid for. He can only take the wheel and leave, and the 2 s of the Snap are then served on the road.",
+    "confidence": "high",
+    "gdd_reference": "GDD 6.1: 'Snap: he leans on the horn for 2 s. He can steer and cannot reach.' GDD 17.2: 'No time limit at stops or in menus.' GDD 9.6: 'the hand does the shopping'.",
+    "suggested_fix": "Count snap_left down while stopped as well, or clear the Snap when he stands at a stop."
+   },
+   {
+    "title": "Where the night waits the Habits still work: calm is free at a stop and while pulled over, and a status started at a stop is carried out whole",
+    "kind": "spec_mismatch",
+    "file": "src/core/drive_sim.gd",
+    "line": 1514,
+    "evidence": "/tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/habits/probe_stop_use.gd at a fuel station: '30 bead taps at the stop: nerves 0.01 (from 60.01), clock +0.000 min, 12.3 s'; 'a sip at the stop: nerves 48.00 (from 60), awake left 40.000', still 40.000 after 30 s more and 39.992 on leaving; 'a cigarette lit at the stop, 30 s on: lit left 25.000', 24.992 on leaving; the photo -20. /tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/habits/probe_pulled_calm.gd, pulled over on a Patrol leg with a tape and beads: '30 s with the tape playing: Nerves 90 -> 64.50; Clock +0.000 min; leg clock +0.000 s', then '15 beads more: Nerves 15.32'. /tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/habits/probe_phone_edges.gd: while pulled over the phone's wait runs on and a call rings out for +4 Nerves. This follows from D-036 ('effect timers, items and Nerves do not step; the hand, gestures and rituals do') and from stepping items and Nerves but not the Clock while pulled over. It also undoes D-038 ('at a stop every timed effect ends'; T-ITEM-ENERGY-DRINK asserts 'a stop ends every timer'): a can drunk a second before the stall is wasted, one drunk at the stall lasts its full 30 s on the road.",
+    "failure_scenario": "With beads (30 cash) he arrives at any stop at Nerves 80, taps 25 times and leaves at 30 with the Clock untouched, so the tea stall's service (20 game minutes) is worth nothing to him. He lights a cigarette and drinks a can at the stall and drives off with 25 s of burn and 30 s of Focus that cost no time off the wheel. Pulled over, he lets the tape play until he is calm and only then pays.",
+    "confidence": "medium",
+    "gdd_reference": "GDD 2.5: 'Stop | Untimed | Takes one service with the hand | Calm, repair, power or a passenger, at a price in minutes'. GDD 9.6: 'Tea stall | Sets Nerves to 30; refills the tea ... | 20'. GDD 2.2 pillar 3: 'Everything that helps also costs. Habits take the hand.' GDD 12.4 rule 3: 'Nothing is a free stat.' Against D-036 and D-038 as quoted, and D-031: 'Nothing moves on while the officer waits'.",
+    "suggested_fix": "The owner's call. Either offer only the tray and the wheel while stopped (no item rituals), or let what he starts at a stop run down there; while pulled over, hold items and Nerves still as at a stop, or let the Clock run."
+   },
+   {
+    "title": "No test checks that Courage dulls Nerves gained by the second",
+    "kind": "test_gap",
+    "file": "tests/test_items.gd",
+    "line": 1145,
+    "evidence": "Mutant in NervesSim.add_rate (`per_second *= gain_mult` changed to `*= 1.0`): the whole suite reports as before, 'Ran 114 of 114 tests: PASS 71, FAIL 0', T-ITEM-ARAK-FLASK and both flask synergies included. The only gain T-ITEM-ARAK-FLASK measures per stack is a slap, a one-off through add(). With the real code /tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/habits/probe_numbers.gd shows 2 stacks turning a warbling tape's +5.0 over 10 s into +2.000.",
+    "failure_scenario": "Courage that dulls slaps and hits but not traffic, a tailgater, the shoulder, the news or a warbling tape (most of what frays him in GDD 6.1) would pass every test.",
+    "confidence": "high",
+    "gdd_reference": "GDD 7.4: '-30% Nerves gains per stack'. Registry T-ITEM-ARAK-FLASK: 'per stack +50% close-call cash and -30% Nerves gains'.",
+    "suggested_fix": "In the per-stack loop of T-ITEM-ARAK-FLASK also measure a per-second source (the rough shoulder, the news, a warbling tape or a tailgater) against 1 - 0.3 n."
+   },
+   {
+    "title": "The edge of Focus is pinned only for the car, one truck, the hand and two clocks: seven mutants at it pass the whole suite",
+    "kind": "test_gap",
+    "file": "tests/test_items.gd",
+    "line": 807,
+    "evidence": "In DriveSim.step, applied together: encounter.step(DT, ...), collision.step(DT, ...), leg.step_hazards(DT), leg.step_traffic(DT), leg.step_road(DT, DT): 'Ran 114 of 114: PASS 71, FAIL 0'. Applied together: items.step(_road_dt), nerves.step(_road_dt): 'PASS 71, FAIL 0'. (gesture.step(_road_dt, ...) is caught, by the '3 cans' loop.) What the code does today, unpinned: /tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/habits/probe_focus_patrol.gd: a can at the start of the watch stretches a Patrol from 35.00 s to 39.49 s of his time, and a Tailgater's stay from 40.00 s to 44.49 s.",
+    "failure_scenario": "A change that lets the Patrol, the Tailgater, hit immunity, the chain window, potholes or planned spawns ignore Focus, or that slows the tea's cooling, the phone's ring and every Nerves rate with the road, breaks what D-041 decided for Focus with a tailgater or a patrol and no test notices.",
+    "confidence": "high",
+    "gdd_reference": "Registry T-ITEM-ENERGY-DRINK: 'Focus for 30 s (the road runs at 85% speed while the hand runs at full speed)'. D-041: the tick is shorter for 'the car (its speed and its sideways motion), traffic, hazards, collisions' timers and the leg's encounter' and whole for 'the gesture, the hand, the wheel, the gear gate, every status and item timer, Nerves, the Clock and the leg's own clock'.",
+    "suggested_fix": "Add to T-ITEM-ENERGY-DRINK: under Focus a Patrol's watch and the hit immunity take 1/0.85 as long, while a per-second Nerves source and the tea's 40 s run at full speed."
+   },
+   {
+    "title": "Nothing checks that the count of calls and the row of answered calls pass through a stop",
+    "kind": "test_gap",
+    "file": "tests/test_items.gd",
+    "line": 1396,
+    "evidence": "Mutant in ItemSim.set_telling_state (`calls = 0`, `answered_run = 0` instead of reading the save): the whole suite is unchanged, 'PASS 71, FAIL 0'. T-ITEM-PHONE counts five calls in one unbroken drive, and T-SYN-PHONE-TAXI-SIGN never stops.",
+    "failure_scenario": "With that mutant a driver who pulls in at every Exit (two or three calls a leg) never reaches a fourth call: Um Noor never rings and the taxi sign's three-in-a-row bonus is never paid, and all tests pass.",
+    "confidence": "high",
+    "gdd_reference": "GDD 7.4: 'One call in four is Um Noor: -8 Nerves.' D-042: 'The count of calls and of calls answered in a row pass through a stop.'",
+    "suggested_fix": "T-ITEM-PHONE: three calls, a stop, and the next call is hers. T-SYN-PHONE-TAXI-SIGN: two calls answered, a stop, and the third pays the 20."
+   },
+   {
+    "title": "Under Focus a gust carries the car 15% less far: its second is counted in real ticks, not road time",
+    "kind": "bug",
+    "file": "src/core/drive_sim.gd",
+    "line": 1318,
+    "evidence": "/tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/habits/probe_focus_gust.gd: start_gust(1) in third gear, 200 ticks, crown subtracted: 'focus false: gust carried 1.5000 m', 'focus true: gust carried 1.2750 m'. The gust lasts _gust_ticks_left = 120 ticks whatever _road_dt is, while its push is integrated with _road_dt in car.step; its tell does count down in road time (leg.step_road(_road_dt, DT)), so under Focus the tell lasts 1.18 s of his time and the gust only 0.85 s of road time.",
+    "failure_scenario": "After a can, a gust announced as ever pushes him 1.275 m instead of 1.5 m: Focus weakens the road's hazard instead of only giving him more time to answer it.",
+    "confidence": "medium",
+    "gdd_reference": "GDD 5.4: 'Gust | 1.5 m/s for 1 s'. GDD 7.4: 'the road runs at 85% speed while the hand runs at full speed'. D-041: 'The tick is shorter ... for the car (its speed and its sideways motion), traffic, hazards ...'.",
+    "suggested_fix": "Count the gust down in road time (subtract _road_dt from gust_duration) rather than in ticks."
+   },
+   {
+    "title": "Timed statuses act one tick short, and a cigarette's calm runs one tick long",
+    "kind": "bug",
+    "file": "src/core/item_sim.gd",
+    "line": 785,
+    "evidence": "/tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/habits/probe_cig.gd and /tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/habits/probe_ticks.gd: one cigarette takes Nerves 70 -> 59.996667 (-10.00333 = 3,001 ticks of -0.4/120); Haze peaks at 0.499833, not 0.5; nerves.tremor_muted and nerves.awake are true in 2,999 ticks; a hot sip's Awake 40 s is seen by Nerves for 4,799 ticks. Two causes. The drip (`_drips`, Vector2(rate, seconds)) ends on `drip.y <= 0.0` with no half-tick rule, and 25 - 3000/120 does not land at or below 0 in floating point. A status added by a ritual (step 3) is counted down by effects.step in step 9 of the same tick (drive_sim.gd:389), before items.step and _feed_nerves read it.",
+    "failure_scenario": "Worth 0.03%: nobody will feel it, but D-040's stated rule does not hold for anything that reads a status in step 9, and '-10 Nerves over the burn' is -10.0033.",
+    "confidence": "high",
+    "gdd_reference": "GDD 7.4: 'Lit for 25 s: no Tremor, Awake, -10 Nerves over the burn'; 'Haze +2% per second while lit'. D-040: 'a 25 s status is on for exactly 3,000 ticks'.",
+    "suggested_fix": "Do not count a status down in the tick it was added (or read statuses before counting them down), and count the drip in whole ticks like the other timers."
+   },
+   {
+    "title": "A stop ends statuses and drops a ringing call without telling the Events bus",
+    "kind": "robustness",
+    "file": "src/core/drive_sim.gd",
+    "line": 626,
+    "evidence": "/tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/habits/probe_events_stop.gd: Courage and a playing tape on and the phone ringing as he pulls into the stall. At the stop effects.active_ids() is [] and the caller is empty, but the drained events hold effect_added for 'courage' and 'music' with no effect_expired (the lit and chewing that ran out on the road do have theirs), and 'call_started 1, call_resolved 0'. _save_point -> restore -> _build() replaces EffectSystem and ItemSim silently.",
+    "failure_scenario": "Anything that follows a status or the ring by these signals (a looped sound for the tape or the ring, a subtitle) goes on through the stop and after it.",
+    "confidence": "medium",
+    "gdd_reference": "GDD 13.6 lists `effect_added`, `effect_expired`, `call_started`, `call_resolved`. D-038: 'at a stop every timed effect ends'. D-042: 'A call still ringing when he stops is dropped without penalty'.",
+    "suggested_fix": "Before the rebuild at a stop, announce effect_expired for every active status and a call_resolved (dropped, no penalty) for a call that is ringing."
+   }
+  ]
+ },
+ {
+  "covered": "All 25 passing M6 tests (tests/test_items.gd, tests/test_keepsakes.gd, tests/test_synergies.gd on tests/support/cabin_suite.gd) clause by clause against tests/tests.json, GDD 7.4/7.5/7.8 and D-040 to D-042, plus the M6 code they drive, at commit cf5650b (my worktree's own branch held only docs/, so I checked that commit out there as the sibling review worktrees have it and put the branch back afterwards; test line numbers below are the same in /home/user/I99, production line numbers are cf5650b's). About 95 one-line mutants (35 hand-written, 64 from a small deletion and and/or sweep) were each applied to a private copy of the project, never to the worktree, and run against the tests that own the clause; 21 survivors applied together still give 'Ran 114 of 114 tests in 220.8 s: PASS 71, FAIL 0, NEW 0, TODO 0, PEND 43 / RESULT: OK' on the whole suite. For every finding a probe shows that the mutant really changes behaviour (specs, raw outputs and probes are in /tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/wf3). Not reported: the bead-rate window (T-ITEM-BEADS passes with a 0.9 s window but T-GEST-01 fails), a head-on that does not spill the tea (survives, but 'spills in a crash' does not plainly name a head-on), and the tests for which no mutant survived (mixtape, tissue box, breath mints, air freshener, thermos, sunglasses, taxi sign's own clauses, beads+music, cigarettes+freshener, seeds+tea, flask+painkillers' cash).",
+  "findings": [
+   {
+    "title": "T-ITEM-ARAK-FLASK and T-SYN-FLASK-PAINKILLERS: Lag is checked on the wheel's own read-out, never on the car",
+    "kind": "test_gap",
+    "file": "/home/user/I99/tests/test_items.gd",
+    "line": 1206,
+    "confidence": "high",
+    "evidence": "Mutant, src/core/drive_sim.gd:358 (cf5650b):\n- car.step(_road_dt, wheel.steer(), gate.gear, _braking, _extra_drift())\n+ car.step(_road_dt, wheel.angle / wheel.max_angle(), gate.gear, _braking, _extra_drift())\nRun in a private copy: godot --headless --path <copy> --script res://tests/run_tests.gd -- --only=T-ITEM-ARAK-FLASK,T-SYN-FLASK-PAINKILLERS,T-SYN-FLASK-PHOTO --verbose\n[PASS] T-ITEM-ARAK-FLASK (109 checks, 3634 ms)\n[PASS] T-SYN-FLASK-PHOTO (15 checks, 176 ms)\n[PASS] T-SYN-FLASK-PAINKILLERS (15 checks, 1569 ms)\nWhole suite with the mutant: 'Ran 114 of 114 tests in 241.7 s: PASS 71, FAIL 0, NEW 0, TODO 0, PEND 43 / RESULT: OK'.\nProbe /tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/wf3/probes/probe_lag.gd (three sips, grip, one 100 px pull, read car.v_lat): as committed 'stacks=3 wheel.lag=0.120 s: the car's sideways speed answers the pull after 15 ticks (125 ms)'; with the mutant 'after 1 ticks (8 ms)'.\nWhy it survives: test_items.gd 1187-1211 compares _sim.wheel.steer() with the recorded _sim.wheel.angle history and reads snapshot()['lag']; test_synergies.gd 223, 230, 249 and 260 read _sim.wheel.lag. Nothing reads car.v_lat or car.x (the rig re-centres the car every tick).",
+    "failure_scenario": "Three Courage stacks (120 ms of Lag; 200 ms with a pill working): he turns the wheel. With the mutant the car answers on the next tick, so the flask's Lag and the synergy's doubled Lag do nothing on the road, and all 71 passing tests still pass.",
+    "gdd_reference": "GDD 5.3: 'The wheel angle that feeds this formula includes Tremor and is delayed by Lag (section 5.8).' GDD 5.8: 'Lag | Arak, the good stuff | Steering delayed 40 ms per source, capped at 200 ms'. Registry T-ITEM-ARAK-FLASK: '...with Sway and 40 ms of Lag'; T-SYN-FLASK-PAINKILLERS: 'Lag doubles and close-call cash doubles.'",
+    "suggested_fix": "In the Lag loop read the car as well: after the grip, give one step pull and check that car.v_lat does not move for floor(lag / DT) ticks and moves on the next (0 to 3 stacks); do the same once in T-SYN-FLASK-PAINKILLERS for the doubled and the capped Lag."
+   },
+   {
+    "title": "T-ITEM-PAINKILLERS: 'for the leg' is only established on the first leg a pill is taken",
+    "kind": "test_gap",
+    "file": "/home/user/I99/tests/test_items.gd",
+    "line": 1004,
+    "confidence": "high",
+    "evidence": "Mutant, src/core/item_sim.gd:336 (in begin_leg):\n- _leg_holds.clear()\n+ pass\n--only=T-ITEM-PAINKILLERS: '[PASS] T-ITEM-PAINKILLERS (57 checks, 1800 ms)'. The same deletion run against all 25 M6 tests and T-ITEM-BASE: all pass.\nProbe /tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/wf3/probes/probe_pills_second_leg.gd, as committed:\n  leg 2 before a pill: Heavy floor 0, Phantom muted false\n  leg 2 after a pill:  Heavy floor 15, Phantom muted true (pills left 4)\nwith the mutant:\n  leg 2 after a pill:  Heavy floor 0, Phantom muted false (pills left 4)\n  leg 2 at its stop:   Heavy floor 15, Phantom muted true\nWhy it survives: after the next leg begins the test only checks that the floor is back and the Phantom unmuted (lines 1003-1005); no pill is ever taken on a second leg.",
+    "failure_scenario": "A pill on leg 1 works. On leg 2 he takes another: the pill is used up and the Tremor halves, but the Heavy floor is not raised and the Phantom is not muted; when he then stops at that leg's Exit the stale holds come back out of the save and the floor jumps by 15.",
+    "gdd_reference": "GDD 7.4, Painkillers: 'Tremor halved for 60 s. Mutes the Phantom for the leg.' and 'Heavy floor +15 for the rest of the leg.' Registry: '...the Phantom muted for the leg; Heavy floor +15 for the rest of the leg'.",
+    "suggested_fix": "After line 1005 take a pill on the new leg and check heavy_floor() == floor_before + floor_up and phantom_muted() again; then stop on a leg where no pill was taken and check the floor is unchanged at the stop."
+   },
+   {
+    "title": "T-ITEM-CIGARETTES: the ash rule is only checked on the first cigarette of a fresh simulation",
+    "kind": "test_gap",
+    "file": "/home/user/I99/tests/test_items.gd",
+    "line": 106,
+    "confidence": "high",
+    "evidence": "Two mutants in src/core/item_sim.gd, _start_burn (each alone):\n(a) line 827:  - candidate.burn_time = 0.0   + pass\n(b) line 828:  - candidate.ashed = false     + pass\n--only=T-ITEM-CIGARETTES,T-SYN-TEA-CIGARETTES,T-SYN-CIGARETTES-FRESHENER,T-ITEM-BASE,T-ITEM-TISSUE-BOX, both: '[PASS] T-ITEM-BASE (146 checks) [PASS] T-ITEM-CIGARETTES (65 checks) [PASS] T-ITEM-TISSUE-BOX (26 checks) [PASS] T-SYN-TEA-CIGARETTES (11 checks) [PASS] T-SYN-CIGARETTES-FRESHENER (7 checks)'. Whole suite: (a) 'Ran 114 of 114 tests in 209.7 s: PASS 71, FAIL 0'; (b) 'Ran 114 of 114 tests in 263.0 s: PASS 71, FAIL 0'.\nProbe /tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/wf3/probes/probe_cigs_second.gd (one smoked and ashed, then a second), as committed:\n  second cigarette, ashed at 8 s: Nerves 50 -> 49.98 just after lighting -> 40.00 when it is out (ash_fell=false)\n  second cigarette, never ashed: Nerves 50 -> 49.98 just after lighting -> 45.00 when it is out (ash_fell=true)\nwith (a): 'ashed at 8 s: Nerves 50 -> 54.98 just after lighting -> 45.00 when it is out (ash_fell=true)'\nwith (b): 'never ashed: Nerves 50 -> 49.98 just after lighting -> 40.00 when it is out (ash_fell=false)'\nWhy they survive: every ash scenario (lines 106-137) begins with _new_sim(); the only second cigarette (150-160) is flicked and then checked with 'nerves < before' 30 s later, and 'before' is read after the lighting.",
+    "failure_scenario": "(a) Every cigarette after the first drops its ash the moment it is lit: +5 Nerves that no FLICK can prevent. (b) After the first cigarette no later one ever drops ash, ashed or not. Either way the rule holds for one cigarette per Telling.",
+    "gdd_reference": "GDD 7.4, Cigarettes: 'Must be ashed once mid-burn or ash falls (+5 Nerves).' Registry: 'it must be ashed once mid-burn (FLICK) or ash falls (+5 Nerves)'.",
+    "suggested_fix": "In one simulation smoke three in a row: the second ashed mid-burn (no +5, ash_fell false to its end, and no jump on the tick it is lit), the third left alone (+5 at ash_by_s, once)."
+   },
+   {
+    "title": "T-ITEM-ARAK-FLASK: '-30% Nerves gains per stack' is checked on a slap only; gains that come by the second are not",
+    "kind": "test_gap",
+    "file": "/home/user/I99/tests/test_items.gd",
+    "line": 1145,
+    "confidence": "high",
+    "evidence": "Mutant, src/core/nerves_sim.gd:174 (add_rate):\n- per_second *= gain_mult\n+ per_second *= 1.0\n--only=T-ITEM-ARAK-FLASK: '[PASS] T-ITEM-ARAK-FLASK (109 checks, 3395 ms)'.\nProbe /tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/wf3/probes/probe_gain_rate.gd, as committed:\n  stacks=0 gain_mult=1.00: 5 s on the rough shoulder raise his Nerves by 5.000\n  stacks=3 gain_mult=0.10: 5 s on the rough shoulder raise his Nerves by 0.500\nwith the mutant: 'stacks=3 gain_mult=0.10: 5 s on the rough shoulder raise his Nerves by 5.000'.\nWhy it survives: the per-stack loop (lines 1132-1145) measures the dulling with one TAP at his face (NervesSim.add); nothing with Courage reads a rate (NervesSim.add_rate).",
+    "failure_scenario": "Three stacks, the car on the rough shoulder, beside traffic, with a tailgater, the news or a rattle: with the mutant all of these fray him at full strength while a slap is dulled to 10%. Most of what raises Nerves in play comes by the second.",
+    "gdd_reference": "GDD 7.4, Arak flask: '+50% close-call cash and -30% Nerves gains per stack'. GDD 6.1 lists the gains by the second: 'Vehicles within 25 m | +0.15 per second each', 'Tailgater behind; rough shoulder | +1 per second', 'News on the radio | +0.5 per second', 'Rattle fault | +0.2 per second'. D-041: 'scale every gain of Nerves by (1 - 0.3 n)'.",
+    "suggested_fix": "In the per-stack loop also hold the car on the shoulder (or beside a vehicle within 25 m) for a few seconds and check the rise is the rate times max(1 - 0.3 n, 0)."
+   },
+   {
+    "title": "T-ITEM-DUCT-TAPE: 'each act' - no fault is ever lit on a second leg of the same act",
+    "kind": "test_gap",
+    "file": "/home/user/I99/tests/test_keepsakes.gd",
+    "line": 212,
+    "confidence": "high",
+    "evidence": "Mutant, src/core/drive_sim.gd:458 (_set_stretch), so that items.begin_act() runs at every stretch of road:\n- if act != act_before:\n+ if act >= act_before:\n--only=T-ITEM-DUCT-TAPE: '[PASS] T-ITEM-DUCT-TAPE (26 checks, 1353 ms)'.\nProbe /tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/wf3/probes/probe_duct_tape.gd, as committed:\n  act 1, leg 1: a scrape lights 1 lamp(s) / 10.5 s later: 0 lamp(s) lit (tape_spent=true)\n  act 1, leg 2: tape_spent=true / a scrape lights 1 lamp(s) / 10.5 s later: 1 lamp(s) lit\nwith the mutant: 'act 1, leg 2: tape_spent=false / a scrape lights 1 lamp(s) / 10.5 s later: 0 lamp(s) lit'.\nWhy it survives: 'Only the first fault of the act' (212-216) scrapes twice on the same leg, then the test drives straight to Act 2; after a stop the flag comes back out of the save, so the check at 226-232 passes too.",
+    "failure_scenario": "With the mutant the tape mends the first fault of every leg (three per act, nine per Telling) instead of one per act, and the test passes.",
+    "gdd_reference": "GDD 7.5: 'Duct tape | dash | The first fault each act repairs itself after 10 s'. Registry: 'the first fault each act repairs itself after 10 s'.",
+    "suggested_fix": "After line 216: _into_next_quiet_leg() while run.act is still 1 (no stop between), _scrape_rail(), _run(after + 0.5); the lamp count must not go down."
+   },
+   {
+    "title": "T-ITEM-PHONE: 'one call in four is Um Noor' stops at the fifth call and never passes a stop",
+    "kind": "test_gap",
+    "file": "/home/user/I99/tests/test_items.gd",
+    "line": 1401,
+    "confidence": "high",
+    "evidence": "Two mutants in src/core/item_sim.gd (each alone):\n(a) line 926:  - caller = CALLER_FAMILY if every > 0 and calls % every == 0 else CALLER_DISPATCHER\n               + caller = CALLER_FAMILY if every > 0 and calls == every else CALLER_DISPATCHER\n(b) line 360:  - calls = GameData.as_int(state.get(\"calls\"))   + calls = 0\n(a) --only=T-ITEM-PHONE,T-ITEM-TAXI-SIGN,T-SYN-PHONE-TAXI-SIGN: '[PASS] T-ITEM-PHONE (62 checks, 9674 ms) [PASS] T-ITEM-TAXI-SIGN (18 checks, 1330 ms) [PASS] T-SYN-PHONE-TAXI-SIGN (13 checks, 3218 ms)'.\n(b) the same three plus T-SAVE,T-STOP,T-RUN,T-REPLAY: 'Ran 8 of 114 tests in 48.3 s: PASS 8, FAIL 0'.\nProbes: /tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/wf3/probes/probe_callers.gd, as committed 'callers 1 to 9: dispatcher, dispatcher, dispatcher, um_noor, dispatcher, dispatcher, dispatcher, um_noor, dispatcher'; with (a) the eighth is 'dispatcher'. /tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/wf3/probes/probe_stop_state.gd, as committed '3 calls answered, a stop, one more: ... [stop: calls=3, in a row=3 -> after it: calls=3, in a row=3]; um_noor pays 0'; with (b) '... after it: calls=0, in a row=3]; dispatcher pays 15'.\nWhy they survive: the loop at 1401 runs every + 1 = 5 calls in one simulation; no M6 test takes a phone through a stop, and T-SAVE-01 has no calls to lose.",
+    "failure_scenario": "(a) Only the fourth call of a Telling is hers; calls 8, 12, ... pay 10 cash instead of calming him by 8. (b) The count starts again at every stop: with two or three calls on a 90 s leg and a stop at each Exit it seldom reaches four, so she nearly never calls.",
+    "gdd_reference": "GDD 7.4, Phone: 'A call every 25 to 40 s. Dispatcher: +10 cash. One call in four is Um Noor: -8 Nerves.' D-042: '\"One call in four is Um Noor\" is every fourth call of the Telling ... The count of calls and of calls answered in a row pass through a stop.'",
+    "suggested_fix": "Run the loop to 2 x every + 1 calls (the eighth is hers too); add: answer every - 1 calls on a Telling's leg, _into_stall(), _leave_stop(), the next caller is um_noor."
+   },
+   {
+    "title": "T-ITEM-CHARM: 'the first scrape' is only ever a guardrail",
+    "kind": "test_gap",
+    "file": "/home/user/I99/tests/test_keepsakes.gd",
+    "line": 29,
+    "confidence": "high",
+    "evidence": "Mutant, src/core/drive_sim.gd:1358:\n- var spared: bool = collision.hit == Collision.Hit.SCRAPE and items.absorbs_scrape()\n+ var spared: bool = collision.hit == Collision.Hit.SCRAPE and collision.hit_vehicle_id == 0 and items.absorbs_scrape()\n--only=T-ITEM-CHARM: '[PASS] T-ITEM-CHARM (24 checks, 462 ms)'.\nProbe /tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/wf3/probes/probe_charm_vehicle.gd (a car 20 km/h slower in his lane), as committed 'charm=true: hit kind 1 (1 is a scrape) with vehicle 1: spared=true, lamps lit 0'; with the mutant 'charm=true: hit kind 1 (1 is a scrape) with vehicle 1: spared=false, lamps lit 1'.\nWhy it survives: every scrape in the test is _scrape_rail() (lines 20, 29, 36, 43, 48, 53, 71); the only vehicle is the truck of the crash case.",
+    "failure_scenario": "The first hit of a leg is a slow vehicle touched at 30 km/h or less, or the tailgater's ram: with the mutant a lamp lights although he carries the charm.",
+    "gdd_reference": "GDD 7.5: 'The first scrape each leg lights no lamp.' GDD 5.6: 'Scrape | Guardrail, barrier, or a vehicle at 30 km/h closing speed or less | 1 | +10'. D-042: 'It turns aside scrapes only (rail, barrier, a slow vehicle, the tailgater's ram), the first of each leg.'",
+    "suggested_fix": "Add a leg whose first hit is a car 20 km/h slower in his lane (and one against the median barrier): the hit event has spared true and no lamp lights."
+   },
+   {
+    "title": "T-ITEM-SEEDS: 'being cut off still frays him' and 'a happy honk still calms him' cannot fail for the code that handles them",
+    "kind": "test_gap",
+    "file": "/home/user/I99/tests/test_items.gd",
+    "line": 527,
+    "confidence": "high",
+    "evidence": "Lines 527-528 call _sim.nerves.add(tuning.f(\"cut_off_nerves\")) and then check that Nerves rose by that amount: NervesSim is called directly and DriveSim._step_encounter (drive_sim.gd:892-893), which handles a cut-off, never runs. Lines 524-525 call _sim.fray(SOURCE_HONK, -honk), but the calm of a real honk never goes through fray (drive_sim.gd:1378 adds it with nerves.add).\nMutants (each alone), src/core/drive_sim.gd:\n(a) line 893:   - nerves.add(tuning.f(\"cut_off_nerves\"))   + fray(SOURCE_TAILGATER, tuning.f(\"cut_off_nerves\"))   (SOURCE_HONK survives as well)\n(b) line 1378:  - nerves.add(collision.honk_nerves - collision.honk_frights)\n                + nerves.add((collision.honk_nerves - collision.honk_frights) * (0.0 if effects.immune_to(SOURCE_HONK) else 1.0))\n--only=T-ITEM-SEEDS: (a) '[PASS] T-ITEM-SEEDS (44 checks, 1445 ms)', (b) '[PASS] T-ITEM-SEEDS (44 checks, 2255 ms)'.\nProbe /tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/wf3/probes/probe_cut_off.gd (the test's own tailgater leg; he leaves the lane, the tailgater passes, cuts in and brakes), as committed 'chewing=true (still chewing at the cut-off: true): the tick he is cut off his Nerves change by 5.001'; with (a) '... change by 0.001'.",
+    "failure_scenario": "He chews; the tailgater passes, cuts in and brakes. With mutant (a) the +5 is swallowed by the immunity to tailgaters; with (b) a wedding car's happy honk no longer calms a man who chews. The test states both rules and passes.",
+    "gdd_reference": "GDD 7.4, Seeds: 'immune to Nerves from honks, tailgaters and Doubts' (nothing else). GDD 6.1: 'Honked at or cut off; a missed Exit | +5'. D-040: 'Only gains: a wedding car's happy honk still calms a man who chews. Being cut off is not a honk and still frays him.'",
+    "suggested_fix": "In the tailgater section (lines 490-512) move out of his lane while chewing and check +cut_off_nerves on the tick encounter.cut_off is set; for the happy honk pass a wedding car closely while chewing instead of calling fray()."
+   },
+   {
+    "title": "T-SYN-PHONE-TAXI-SIGN: only the first three answered calls of one stretch of road",
+    "kind": "test_gap",
+    "file": "/home/user/I99/tests/test_synergies.gd",
+    "line": 285,
+    "confidence": "high",
+    "evidence": "Two mutants in src/core/item_sim.gd (each alone):\n(a) line 952:  - if every > 0 and answered_run % every == 0:   + if every > 0 and answered_run == every:\n(b) line 361:  - answered_run = GameData.as_int(state.get(\"answered_run\"))   + answered_run = 0\n(a) --only=T-SYN-PHONE-TAXI-SIGN,T-ITEM-TAXI-SIGN: '[PASS] T-ITEM-TAXI-SIGN (18 checks, 1215 ms) [PASS] T-SYN-PHONE-TAXI-SIGN (13 checks, 2544 ms)'.\n(b) with T-ITEM-PHONE,T-SAVE,T-STOP,T-RUN,T-REPLAY added: 'Ran 8 of 114 tests in 47.5 s: PASS 8, FAIL 0'.\nProbes: /tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/wf3/probes/probe_misc.gd, as committed 'six calls answered in a row pay: 15, 15, 35, 0, 15, 35'; with (a) '15, 15, 35, 0, 15, 15'. /tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/wf3/probes/probe_stop_state.gd, as committed '2 calls answered, a stop, one more: dispatcher pays 15; dispatcher pays 15; [stop: calls=2, in a row=2 -> after it: calls=2, in a row=2]; dispatcher pays 35'; with (b) '... after it: calls=2, in a row=0]; dispatcher pays 15'.\nWhy they survive: the first scenario answers exactly three calls (285-294), the second five with one missed (296-314); none passes a stop.",
+    "failure_scenario": "(a) The sixth, ninth ... call answered in a row pays no bonus: the synergy pays once per row. (b) Two calls answered, a stop at the Exit, the third answered: no bonus, the row began again at the stop.",
+    "gdd_reference": "GDD 7.8: 'Phone + Taxi sign | Three calls answered in a row pay a 20 cash bonus'. D-042: 'every third call answered in a row pays 20 more; a missed call starts the row again; Um Noor's call counts as answered' and 'The count of calls and of calls answered in a row pass through a stop.'",
+    "suggested_fix": "Answer six in a row (bonus on the third and the sixth, Um Noor's fourth counting); answer two, _into_stall(), _leave_stop(), answer a third: bonus."
+   },
+   {
+    "title": "T-ITEM-ENERGY-DRINK: six of the fourteen systems Focus must or must not slow are never read",
+    "kind": "test_gap",
+    "file": "/home/user/I99/tests/test_items.gd",
+    "line": 807,
+    "confidence": "high",
+    "evidence": "Mutants in src/core/drive_sim.gd, each alone, each '[PASS] T-ITEM-ENERGY-DRINK (50 checks)' with --only=T-ITEM-ENERGY-DRINK:\n line 390:  items.step(DT) -> items.step(_road_dt)\n line 392:  nerves.step(DT) -> nerves.step(_road_dt)\n line 351:  gate.step(DT, ... -> gate.step(_road_dt, ...\n line 889:  encounter.step(_road_dt, _braking, gate.gear) -> encounter.step(DT, _braking, gate.gear)\n line 377:  collision.step(_road_dt, car, traffic, gate.gear) -> collision.step(DT, ...)\n line 1006: leg.step_hazards(_road_dt) -> leg.step_hazards(DT)\n line 371:  leg.step_traffic(_road_dt) -> leg.step_traffic(DT)\n line 517:  leg.step_road(_road_dt, DT) -> leg.step_road(DT, DT)\n(Two controls are killed, so the method works: gesture.step(_road_dt, ...) fails '3 cans and they are gone: expected 0, got 2'; effects.step(_road_dt) fails 'for 30 s: expected 29.9583333333333 within 0.000001, got 29.9633333333333'.)\nProbe /tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/wf3/probes/probe_focus.gd, as committed 'one second with Focus (true): the tea cools by 1.000 s; the rough shoulder adds 0.500 Nerves; the encounter's clock runs 0.850 s'; items.step mutant 'the tea cools by 0.850 s'; nerves.step mutant 'adds 0.425 Nerves'; encounter.step mutant 'the encounter's clock runs 1.000 s'.\nWhy they survive: _a_second_of_road() (1517-1558) reads the car, one truck, the sideways drift, the hand's reach, the wheel, the Clock and the leg clock; hazards, collision timers, the encounter, the gear gate, item timers and Nerves are not read.",
+    "failure_scenario": "With nerves.step(_road_dt): under Focus everything Nerves does by the second runs 15% slow (rates, the Snap's 2 s, the Blink and Nod rhythm, the Tremor's 3 Hz). With items.step(_road_dt): a cigarette burns 29.4 s and the phone rings 5.9 s. With encounter.step(DT): the tailgater's, patrol's and motorcade's timeline runs at full speed past a road slowed to 85%.",
+    "gdd_reference": "GDD 7.4, Energy drink: 'Focus for 30 s: the road runs at 85% speed while the hand runs at full speed.' D-041: 'The tick is shorter ... for the car (its speed and its sideways motion), traffic, hazards, collisions' timers and the leg's encounter. It is whole for the gesture, the hand, the wheel, the gear gate, every status and item timer, Nerves, the Clock and the leg's own clock.'",
+    "suggested_fix": "Extend _a_second_of_road(): the tea's hot_left falls by 1.0; a per-second Nerves source adds its full rate; on a leg with an encounter, encounter.time advances by road_speed; a moving hazard (the flock) covers road_speed of its plain distance; the hit immunity lasts hit_immunity / road_speed."
+   },
+   {
+    "title": "T-SYN-TEA-CIGARETTES: nothing checks that only a sip of tea lengthens the burn",
+    "kind": "test_gap",
+    "file": "/home/user/I99/tests/test_synergies.gd",
+    "line": 24,
+    "confidence": "high",
+    "evidence": "Mutant, src/core/item_sim.gd:758 (the partner is no longer compared):\n- if GameData.as_string(synergy.get(\"rule\")) == \"sip_extends_burn\" and GameData.as_string(synergy.get(\"with\")) == String(owner.id):\n+ if GameData.as_string(synergy.get(\"rule\")) == \"sip_extends_burn\":\n--only=T-SYN-TEA-CIGARETTES,T-ITEM-CIGARETTES: '[PASS] T-ITEM-CIGARETTES (65 checks, 5069 ms) [PASS] T-SYN-TEA-CIGARETTES (11 checks, 1266 ms)'. Whole suite: 'Ran 114 of 114 tests in 242.5 s: PASS 71, FAIL 0'.\nProbe /tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/wf3/probes/probe_misc.gd, as committed 'a bead counted while a cigarette is lit: the burn has 0.00 s more than it would'; with the mutant '... has 10.00 s more than it would'.\nWhy it survives: the test only ever uses the tea glass beside the cigarettes (lines 16-58).",
+    "failure_scenario": "With beads at the mirror (or seeds, mints, pills, a can, the flask) every use while a cigarette is lit adds 10 s to it: a cigarette that never goes out, and with it no Tremor and Awake for as long as he counts beads.",
+    "gdd_reference": "GDD 7.8: 'Tea + Cigarettes | A sip while lit makes that cigarette burn 10 s longer'. D-042: synergies work 'only while the partner is in the cabin'; 'every sip while one is lit adds 10 s to that burn'.",
+    "suggested_fix": "Light one, count a bead and chew a handful: effects.time_left(lit) is what it would have been without them."
+   },
+   {
+    "title": "T-ITEM-ARAK-FLASK: Sway 'per stack' is measured at two stacks only",
+    "kind": "test_gap",
+    "file": "/home/user/I99/tests/test_items.gd",
+    "line": 1174,
+    "confidence": "high",
+    "evidence": "Mutant, src/core/drive_sim.gd:1324:\n- _sway = tuning.f(\"sway_per_stack\") * float(stacks) * sin(TAU * tuning.f(\"sway_frequency\") * _sway_time)\n+ _sway = tuning.f(\"sway_per_stack\") * float(mini(stacks, 2)) * sin(TAU * tuning.f(\"sway_frequency\") * _sway_time)\n--only=T-ITEM-ARAK-FLASK: '[PASS] T-ITEM-ARAK-FLASK (109 checks, 2965 ms)'.\nProbe /tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/wf3/probes/probe_misc.gd, as committed 'Sway, the most it pushes: 1 stack(s): 0.300 m/s, 2 stack(s): 0.600 m/s, 3 stack(s): 0.900 m/s'; with the mutant '3 stack(s): 0.600 m/s'.\nWhy it survives: the amplitude is sampled once, with two stacks (1160-1178); one stack is only checked to begin near nothing, three stacks not at all, although cash, the slap and Lag are looped over 0 to 3 stacks.\nRelated, same cause (only one sip is taken at the cap): src/core/effect_system.gd:99 '- shortest = index  + pass' passes T-ITEM-ARAK-FLASK, T-ITEM-BREATH-MINTS, T-SYN-FLASK-PHOTO, T-SYN-FLASK-PAINKILLERS ('Ran 4 of 114 tests in 6.0 s: PASS 4, FAIL 0'): a fifth sip then renews the first stack, not the one that would end first (D-041).",
+    "failure_scenario": "Three Courage stacks: with the mutant the car sways 0.6 m/s instead of 0.9 m/s; the third sip brings its cash and its dulling but no more Sway.",
+    "gdd_reference": "GDD 5.4: 'Sway (arak) | 0.3 m/s per Courage stack, swinging at 0.4 Hz'. GDD 7.4: 'Sway and 40 ms Lag per stack'. Registry: 'per stack ... with Sway and 40 ms of Lag'.",
+    "suggested_fix": "Sample the swing for 1, 2 and 3 stacks as the Lag loop does and check most == sway * stacks; take two sips at the cap and check which stack ends next."
+   },
+   {
+    "title": "No test takes the photo's 'once per leg' through the leg's stop (leg_state.photo, new in M6)",
+    "kind": "test_gap",
+    "file": "/home/user/I99/tests/test_synergies.gd",
+    "line": 182,
+    "confidence": "high",
+    "evidence": "Mutants in src/core/item_sim.gd (each alone):\n(a) line 350:  - return {\"photo\": photo_used, \"spared\": scrape_spared, \"held\": held}   + return {\"photo\": false, \"spared\": scrape_spared, \"held\": held}\n(b) line 366:  - photo_used = GameData.as_bool(state.get(\"photo\"))   + pass\n(a) --only=T-ITEM,T-SYN,T-SAVE,T-STOP,T-RUN,T-REPLAY: 'Ran 47 of 114 tests in 78.8 s: PASS 31, FAIL 0, NEW 0, TODO 0, PEND 16' (T-ITEM-BASE and T-SAVE-01 among them). (b) all 25 M6 tests and T-ITEM-BASE pass.\nProbe /tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/wf3/probes/probe_stop_state.gd, as committed 'the photo: Nerves 90 -> 70.0; after the leg's stop, the same leg: 90 -> 90.0'; with (a) '... after the leg's stop, the same leg: 90 -> 70.0'.\nOf the things the save now carries for the items (held statuses, the charm, the tape, the photo, the two call counts) the first three are tested through a stop; the photo and the call counts (see the phone findings) are not.",
+    "failure_scenario": "He looks at the photo (-20, or -40 with Courage), pulls in at the leg's Exit and drives on: with the mutant the photo calms him again on the same leg, every time he stops.",
+    "gdd_reference": "GDD 4.6: 'Visor photo | ... | -20 Nerves, once per leg.' D-041: 'the save holds them (leg_state), together with whether the photo has been looked at this leg, which until now a stop forgot.' D-042: 'The -40 takes the place of the photo's -20 and is, like it, once per leg.'",
+    "suggested_fix": "In T-SYN-FLASK-PHOTO (the registry text is 'looking at the photo with Courage gives -40'; the once-per-leg check is already at 182-189): look, _into_stall(), _leave_stop(), look again on the same leg: no calm."
+   },
+   {
+    "title": "T-ITEM-LUCKY-NOTE: '+1 per close call' is shown flat against gear and chain, not against Courage",
+    "kind": "test_gap",
+    "file": "/home/user/I99/tests/test_keepsakes.gd",
+    "line": 282,
+    "confidence": "high",
+    "evidence": "Mutant, src/core/drive_sim.gd:1424:\n- collision.cash_bonus = items.passive(\"close_call_bonus\")\n+ collision.cash_bonus = items.passive(\"close_call_bonus\") * collision.cash_mult\n--only=T-ITEM-LUCKY-NOTE,T-ITEM-ARAK-FLASK,T-SYN-FLASK-PAINKILLERS: '[PASS] T-ITEM-ARAK-FLASK (109 checks, 3490 ms) [PASS] T-ITEM-LUCKY-NOTE (12 checks, 250 ms) [PASS] T-SYN-FLASK-PAINKILLERS (15 checks, 1883 ms)'.\nProbe /tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/wf3/probes/probe_note_courage.gd, as committed 'stacks=3: a close call in third gear pays 6.00 (2 x 2.5 for Courage, and the note)'; with the mutant 'stacks=3: ... pays 7.50'.\nWhy it survives: the note is tested with a chain (282-287) and in first gear (288-304) but never with the flask, and the flask tests never carry the note.",
+    "failure_scenario": "Lucky note and three Courage stacks: with the mutant the note pays 2.5 per close call (5 with a pill working) instead of 1.",
+    "gdd_reference": "GDD 7.5: 'Lucky note | dash | +1 cash per close call'. D-042: '1 cash per close call, flat: not multiplied by gear, chain or Courage.'",
+    "suggested_fix": "Give the flask, take a sip or three, pass a truck closely: the pay is base x (1 + 0.5 n) + 1."
+   }
+  ]
+ },
+ {
+  "covered": "Reviewed commit cf5650b (the M6 state the task describes; my worktree's own branch held only docs, so I checked that commit out detached): drive_sim.gd, item_sim.gd, effect_system.gd, wheel_sim.gd, hand_sim.gd, gesture.gd, stop_sim.gd, the validator and items/rituals/anchors.json, read against GDD 4, 5.4, 5.8, 6, 7, 9.6, 13.3, 13.6 and D-036 to D-042. I wrote a dozen probes on the CabinSuite rig, ran 54 one-line mutants against the item, synergy and stop tests (37 killed, 17 survive), measured CPU time per tick on three commits, and re-ran every reproduction on the tip 88a7899: all findings below still hold there; file paths and line numbers are those of cf5650b in this worktree (same relative paths in the repository). No defect found in the tap alternative at his face, the Lag trail, Sway, give_item, eyes-down and _dialling_here, EffectSystem stacks/holds/immunities, or determinism (same seed and inputs, and a replayed input log, gave equal state hashes over 60,000 ticks of scripted input with phone, flask, tape and pills aboard); probes, mutant list and outputs are in /tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/wf4/.",
+  "findings": [
+   {
+    "title": "A mixtape bought at a stop can never be put in the deck: the hand snaps to the radio anchor that shares the tape anchor's position",
+    "kind": "bug",
+    "file": "/home/user/I99/.claude/worktrees/wf_2f6ba2b0-546-4/src/core/drive_sim.gd",
+    "line": 1627,
+    "evidence": "Probe /tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/wf4/probe_tape_place.gd: Telling 'drivers' seed 22, right branch of the first fork, fuel station: the mixtape lies at offer_2 for 25. TAP: bought, cash 40 -> 15. DRAG to the `tape` anchor: snapshot anchors_in_use holds both `tape` and `radio`; the hand rests at 'radio' (hand.at_id()), gesture.over_destination stays false; after the release the mixtape is still 'bought' on the tray and not in the cabin; on leaving he is paid back (15 -> 40). Control in the same probe: beads -> mirror are placed by the same drag. Probe /tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/wf4/probe_boss_tape.gd: Telling 'drivers' seed 3, first boss stop, free picks thermos, mixtape, fog_lamps: TAP the mixtape, DRAG to the deck: not placed, 0 services held out (control: thermos -> seat placed, 5 services). Same output on the tip 88a7899. No test buys a mixtape: T-ITEM-MIXTAPE uses give_item, T-STOP-01 places whatever its seed offers first.",
+    "failure_scenario": "State: a fuel station or boss stop with the mixtape on the tray. Input: TAP the offer, DRAG it to the tape deck. `radio` (anchor index 3) and `tape` (index 4) both lie at (0.38, 0.02, -0.14); the radio is in use for its dial, the tape anchor is active only as the carry's destination, and HandSim._nearest_anchor (hand_sim.gd:351) keeps the first of two equally near anchors. The hand therefore always rests at `radio`, which is not in _drag_destinations, and the drag is cancelled every time. The Mixtape cannot be had in play at all; taken as the free pick after a boss it is lost, and because the services wait until the pick is off the tray (StopSim._fill_tray), that boss stop's service is lost with it.",
+    "gdd_reference": "GDD 9.6: 'TAP an offered item to buy it, then DRAG it to a slot' and 'After each boss the player takes one free item out of 3 and one service of their choice'. GDD 7.4: Mixtape, slot `tape`. GDD 16.2: '`radio` and `tape` | (0.38, 0.02, -0.14)'. D-040: 'With a tape in the slot the `tape` anchor takes the radio's place'.",
+    "suggested_fix": "In DriveSim._sync_anchors, while something is carried, switch off an anchor whose cover (anchors.json `over`, ItemSim._covered_by) is one of _drag_destinations: the deck takes the dial's place as soon as a tape is on its way in. Add a test that every item a stop can sell is put into each of its slots by a DRAG_TO from the tray.",
+    "confidence": "high"
+   },
+   {
+    "title": "A Snap at a stop never ends: the hand cannot reach anything for the rest of the stop",
+    "kind": "robustness",
+    "file": "/home/user/I99/.claude/worktrees/wf_2f6ba2b0-546-4/src/core/drive_sim.gd",
+    "line": 326,
+    "evidence": "Probe /tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/wf4/probe_snap_stop.gd: at a fuel station with Nerves 95, HOLD the energy drink at cup_b (+10 at once): one snap event, Nerves 70, nerves.snap_left 2.0, hand.can_reach false. 30 s (3,600 ticks) later, still at the stop: snap_left 2.0, snapshot 'snap' true; reaching offer_1 fails (the pointer snaps to nothing) and a TAP buys nothing (cash 40 -> 40). After gripping the wheel and leaving, snap_left runs down and can_reach is true 2 s later; the same Snap on the road ends after snap_duration. Same cause, probe /tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/wf4/probe_stop_timers.gd: a visor flicked down at a stop is still down 20 s later (visor_time is 3 s). Same output on the tip 88a7899.",
+    "failure_scenario": "State: standing at a stop with Nerves 90 or more (88 for a slap). Input: drink a can (+10 at once) or slap his face (+12). The Snap's countdown is in NervesSim.step (nerves_sim.gd:207), which DriveSim.step skips while stopped (drive_sim.gd:388-392), so snap_left stays at snap_duration and hand.can_reach stays false: nothing on the tray can be bought or placed and no ritual performed; all he can do is take the wheel and leave.",
+    "gdd_reference": "GDD 6.1: '100 | Snap: he leans on the horn for 2 s. He can steer and cannot reach.' GDD 17.2: 'No time limit at stops or in menus.' D-036 says of a stop that 'Nerves do not step; the hand, gestures and rituals do': a Snap that lasts as long as the stop is not what either text describes.",
+    "suggested_fix": "Count the Snap down while stopped too (step nerves.snap_left in _step_stop, or give NervesSim a countdown step that runs at a stop), and do the same for visor_down; or do not let a ritual at a stop start a Snap's lock-out.",
+    "confidence": "high"
+   },
+   {
+    "title": "A ritual's requirements are checked only when the press is applied: a sip from a glass that spilled during the HOLD still calms and wakes him",
+    "kind": "bug",
+    "file": "/home/user/I99/.claude/worktrees/wf_2f6ba2b0-546-4/src/core/drive_sim.gd",
+    "line": 1611,
+    "evidence": "Probe /tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/wf4/probe_stale.gd, part 1: third gear, hand at cup_a, button held for tea_sip (0.6 s, 73 ticks) with a truck 50 km/h slower ahead in his lane. Crash at hold tick 38 (hit kind 2): the tea's supply goes 3 -> 0 (spills_on_hit), the gesture stays active. The HOLD completes: ritual_completed tea_sip, Nerves 50.05 -> 38.16 (the hot sip's -12), Awake on. Same output on the tip 88a7899.",
+    "failure_scenario": "State: he is sipping the tea, hand off the wheel, and the car crashes. ItemSim.on_hit empties the glass, the HOLD goes on, and _complete_ritual -> ItemSim.complete runs `consume_supply` (skipped, nothing left) and `give` without looking at `supply>0` again: -12 Nerves and Awake 40 s out of a glass that has just spilled.",
+    "gdd_reference": "GDD 7.4, Tea glass: 'Hot sip: -12 Nerves, Awake 40 s. 3 sips.' and 'Spills in a crash.' GDD 14, Ritual: `requires: [\"supply>0\", ...]`. D-025: 'It spills from a crash upward'.",
+    "suggested_fix": "Check the ritual's requirements again when its gesture completes (ItemSim.complete: return if not _requirements_hold(ritual, owner)), or cancel the active gesture in _resolve_gesture as soon as they stop holding. That also closes the phone case below.",
+    "confidence": "high"
+   },
+   {
+    "title": "Phone: a TAP let go just after the ring has ended is booked as a second use of the phone (+30 Suspicion twice for one call, which is also missed)",
+    "kind": "bug",
+    "file": "/home/user/I99/.claude/worktrees/wf_2f6ba2b0-546-4/src/core/item_sim.gd",
+    "line": 589,
+    "evidence": "Probe /tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/wf4/probe_phone.gd, Suspicion watching: control, three TAPs in time: answered, +10 cash, Suspicion 29.17. Then two TAPs (Suspicion 29.5 after them), the third pressed 0.1 s before the ring ends and let go 0.1 s after: call_resolved answered=false, +4 Nerves, no cash, and Suspicion 7.37 -> 36.21; three ritual_completed phone_answer. Probe /tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/wf4/probe_stale.gd, part 2: a single TAP straddling the end of the ring: call already lost, Suspicion 0 -> 29.83. Same output on the tip 88a7899.",
+    "failure_scenario": "State: Patrol watching, phone ringing, the last TAP of the answer is down when ring_left runs out. _miss_call() hangs up at step 9; the TAP (its `ringing` requirement held when the press was applied) completes on release; ItemSim.complete sets phone_used because dialling() is false again after the hang-up. One call costs +30 at the first TAP, +4 Nerves for the miss and +30 again.",
+    "gdd_reference": "GDD 6.5: 'Using the phone; a Snap | +30'. GDD 7.4, Phone: 'A missed call is +4 Nerves. +30 Suspicion in a Patrol.' D-042: 'One call is one use of the phone to whoever watches (+30 once, not per TAP).'",
+    "suggested_fix": "Book the use only while a call is open and none of its TAPs has been made: `caller != &\"\" and call_taps == 0` instead of `not dialling()`; or re-check `requires` on completion as in the tea finding.",
+    "confidence": "high"
+   },
+   {
+    "title": "Events raised during leg progress are dropped: the duct tape's fault_repaired at a stop, and effect_expired for statuses that end at the gore or at a stop",
+    "kind": "bug",
+    "file": "/home/user/I99/.claude/worktrees/wf_2f6ba2b0-546-4/src/core/drive_sim.gd",
+    "line": 617,
+    "evidence": "Probe /tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/wf4/probe_events.gd: (1) duct tape aboard, a scrape before the Exit (items.mending = cracked_windscreen), into the stall: lamps 1 -> 0, events: stop_entered only, no fault_repaired (on the road the same repair is announced; T-ITEM-DUCT-TAPE checks that case only). (2) A pill: effect_added painkillers, phantom_mute, drowsy; through the gore phantom_mute and drowsy end; events: fork_taken, leg_started, no effect_expired. (3) A lit cigarette, into a stop: effects [] and no effect_expired. Same output on the tip 88a7899. Nothing listens to these signals yet (grep of src/), so nothing visible breaks today.",
+    "failure_scenario": "_enter_stop and _end_boss call items.finish_mending() in step 12, after this tick's items.events were drained, and _save_point() then replaces `items` (restore -> _build): the fault_repaired event is thrown away. items.begin_leg() (drive_sim.gd:461) releases the leg's holds in step 12, after _report_effects() ran (line 394), and effects.begin_tick() clears `expired` at the next tick. A stop throws the whole EffectSystem away without a word. A listener that pairs effect_added with effect_expired (audio loops in M10) keeps every such status on for ever.",
+    "gdd_reference": "GDD 13.6 lists `effect_added`, `effect_expired` and `fault_repaired` as signals of the bus. GDD 7.5, Duct tape; D-042: the fault 'mends itself 10 s later, or the moment he stands at a stop'. D-038: 'at a stop every timed effect ends'.",
+    "suggested_fix": "Announce items.events before _save_point() rebuilds the simulation; in _save_point emit effect_expired for every status that was on; report effect changes made after step 9 (call _report_effects() again after leg progress, or keep `expired` until it has been reported).",
+    "confidence": "high"
+   },
+   {
+    "title": "The tick costs about 3 microseconds more per item in the cabin and is already 48% dearer than at the end of M5 with the starting cabin (47 -> 69 -> 102 microseconds)",
+    "kind": "performance",
+    "file": "/home/user/I99/.claude/worktrees/wf_2f6ba2b0-546-4/src/core/item_sim.gd",
+    "line": 1187,
+    "evidence": "CPU time (bash `time`, user) of a godot process stepping 200,000 ticks on the sandbox road with nobody steering, start-up subtracted, median of three interleaved runs, microseconds per tick. End of M5 (4a4dfe9): empty cabin 36.5, starting cabin 46.6. cf5650b: empty 54.7, starting 68.8, 13 items (cigarettes, tea, energy drink, phone, beads, seeds, painkillers, mixtape, thermos, taxi sign, three adaptations) 102.2, the same with Courage, Focus, chewing and lit on 107.3. Tip 88a7899: 59.0 / 71.3 / 107.2 / 115.3. Parts, wall time, best of 7, starting cabin, M5 -> cf5650b: whole step 45.1 -> 65.9; ItemSim.step 6.8 -> 9.7 (48 with 13 items); _apply_statuses new, 4.9; _feed_nerves 3.1 -> 5.1; hand.step 4.9 -> 6.4. Inside ItemSim.step with 13 items: _step_smoke 1.2 per item per tick, of which _param() (record.get('params'), then params.get(key)) is 1.1 and only the cigarettes have the number it asks for; phone() 2.4 per tick (walks every item's tags); _warbles() 1.3, three times a tick for a tape. Probes: /tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/wf4/probe_perf_cpu_any.gd with /tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/wf4/perf_interleaved.sh, /tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/wf4/probe_perf_parts_any.gd and /tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/wf4/probe_perf_items.gd. The machine was busy (load 5 to 9), hence CPU time and interleaving; the ratios are what to trust.",
+    "failure_scenario": "Every tick, for every item: _step_smoke re-reads the item's record for a number most items do not have, _step_phone and _step_radio search the cabin for the phone and the tape, each standing entry of a tape recomputes _warbles; and DriveSim recomputes all status-derived numbers (_apply_statuses, two tuning lookups by name, three effect sums) whether or not a status changed. With a mid-game cabin the simulation runs at less than half the speed a 50 microsecond tick allows; the test suites and the balance runner (144,000 ticks a Telling) pay for it.",
+    "gdd_reference": "GDD 1.3: gameplay 'stepped at a fixed 120 Hz', 'Performance | 60 fps at 1080p on an integrated GPU'. GDD 13.8: the balance runner 'runs 100 seeds per skill per Table headless'. docs/CLAUDE.md code rule: 'read them with tuning.f(\"name\") once, in configure()' (_apply_statuses and _extra_drift read lag_per_source, lag_cap, sway_per_stack and sway_frequency by name every tick).",
+    "suggested_fix": "Read an item's numbers once in add_item (ash_by_s, side_s, spills_on_hit, lapse) and skip _step_smoke and _step_lapse for items that have none; keep the phone and the tape as fields refreshed in _refresh_passives; read the four tuning values in _init; recompute what _apply_statuses sets only when a status began, ended or changed its stacks or the cabin changed.",
+    "confidence": "high"
+   },
+   {
+    "title": "T-ITEM-ENERGY-DRINK does not pin which systems get the short tick under Focus: nine one-line mutants survive it",
+    "kind": "test_gap",
+    "file": "/home/user/I99/.claude/worktrees/wf_2f6ba2b0-546-4/tests/test_items.gd",
+    "line": 806,
+    "evidence": "Each of these single changes in DriveSim.step and its helpers leaves T-ITEM-ENERGY-DRINK passing, on cf5650b and on the tip 88a7899 (runner /tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/wf4/mutate.py, list /tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/wf4/mutants.json, results /tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/wf4/mutants_out.txt). Road side given the whole tick: leg.step_traffic(DT) (planned lane changes, sheep, melons); collision.step(DT, ...) (immunity, chain window); leg.step_hazards(DT); encounter.step(DT, ...) (Patrol, Tailgater, Motorcade); leg.step_road(DT, DT) (the gust's tell). His own side given the short tick: items.step(_road_dt) (tea cooling, tape side, the ring, mending); nerves.step(_road_dt); gate.step(_road_dt, ...); suspicion.step(_road_dt). Killed by the same test: traffic.step, the leg's clock, the Clock, effect timers, the gesture, the hand, the wheel.",
+    "failure_scenario": "The test's helper _a_second_of_road (test_items.gd:1517) measures the car, one truck, the sideways drift, the hand's reach, the wheel, the Clock and the leg's clock. A later change that lets the leg's encounter, its hazards or the collision timers run at full speed under Focus, or slows Nerves, item timers, the gear gate or Suspicion with the road, is not caught.",
+    "gdd_reference": "Registry text of T-ITEM-ENERGY-DRINK: 'Focus for 30 s (the road runs at 85% speed while the hand runs at full speed)'. D-041: the tick is shorter 'for the car (its speed and its sideways motion), traffic, hazards, collisions' timers and the leg's encounter. It is whole for the gesture, the hand, the wheel, the gear gate, every status and item timer, Nerves, the Clock and the leg's own clock.'",
+    "suggested_fix": "Extend the second of road driven with and without Focus: a sheep or melon's travel, the encounter's clock (a Tailgater's arrival), a hit's immunity, a gust's tell; and on his side a tape's side_time or the tea's hot_left, a Nerves rate (the tape's -1 a second), Suspicion's decay and the gate's grind lock.",
+    "confidence": "high"
+   },
+   {
+    "title": "At a stop nothing holds the music status: beads are -2, not -4, with the tape in the deck or the radio on music",
+    "kind": "bug",
+    "file": "/home/user/I99/.claude/worktrees/wf_2f6ba2b0-546-4/src/core/item_sim.gd",
+    "line": 1166,
+    "evidence": "Probe /tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/wf4/probe_misc.gd: beads and mixtape aboard. On the road: effects.has(music) true, one bead -4 (plus the tape's own calm while the hand taps: -4.42 measured). Standing at the leg's fuel station: music false, one bead -2.0, also two seconds later. With the radio tuned to music instead: at the stop the snapshot says radio 'music' but the music status is off and a bead is -2.0. Same output on the tip 88a7899.",
+    "failure_scenario": "State: at any stop, music playing (tape in the deck, or the radio on its station, which a stop keeps). Input: BEAD taps at the mirror. The status that the bead synergy asks for is put on only inside ItemSim.step (the standing entry at line 1164-1167, the radio in _step_radio), and items do not step at a stop; restore() builds a new EffectSystem, so until he drives off there is no music as far as the beads know.",
+    "gdd_reference": "GDD 7.8: 'Beads + music (radio or tape) | Each bead is -4 Nerves'. D-040: 'The tape is the `music` status while it plays (so the beads answer to it)'. D-038: at a stop 'the radio keeps its station'; D-036: at a stop 'the hand, gestures and rituals do' step.",
+    "suggested_fix": "Put the standing statuses on when an item is added or the radio is set (a refresh of holds called from add_item, set_radio and at the end of restore), not only from step().",
+    "confidence": "medium"
+   },
+   {
+    "title": "Under Focus a gust's tell is stretched but the gust is not: it carries the car 1.275 m instead of 1.5 m",
+    "kind": "spec_mismatch",
+    "file": "/home/user/I99/.claude/worktrees/wf_2f6ba2b0-546-4/src/core/drive_sim.gd",
+    "line": 1318,
+    "evidence": "Probe /tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/wf4/probe_focus.gd: hands off in third gear, the same run with and without start_gust(1): the gust adds 1.5000 m over 120 ticks without Focus and 1.2750 m over 120 ticks with Focus. On a leg with one planned gust the tell lasts 121 ticks without Focus and 142 with it, and the gust blows 120 ticks either way. Same output on the tip 88a7899.",
+    "failure_scenario": "State: Focus on (energy drink), a gust announced. leg.step_road(_road_dt, DT) counts the tell in road time (1.18 s of his time), but _extra_drift counts the gust in whole ticks of his time (_gust_ticks_left) while the car integrates it with the short tick. The warning comes 18% earlier and the push is 15% smaller than on the same road without Focus; every other road timer (traffic's lane changes, collisions, the encounter) uses the short tick.",
+    "gdd_reference": "GDD 7.4: 'Focus for 30 s: the road runs at 85% speed while the hand runs at full speed.' GDD 5.4: 'Gust | 1.5 m/s for 1 s | Dust or a flag moving 1 s ahead'. D-041 gives the short tick to 'the car (its speed and its sideways motion), traffic, hazards'; D-028 ('a gust lasts a whole number of ticks: round(gust_duration x 120)') was written before Focus existed.",
+    "suggested_fix": "Count the gust in road time: a countdown in seconds reduced by _road_dt with the half-tick rule, so that under Focus it blows 141 ticks and still carries the car gust_push x gust_duration.",
+    "confidence": "medium"
+   },
+   {
+    "title": "The cigarette's calm runs one tick too long: -10.0033 Nerves over the burn, because the drip's countdown is a 32-bit float tested against zero",
+    "kind": "bug",
+    "file": "/home/user/I99/.claude/worktrees/wf_2f6ba2b0-546-4/src/core/item_sim.gd",
+    "line": 1138,
+    "evidence": "Probe /tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/wf4/probe_drip.gd: light a cigarette at Nerves 60 with nothing else touching his Nerves: the drip changes them in 3,001 ticks (25 s is 3,000) and adds up to -10.00333. T-ITEM-CIGARETTES checks 'having calmed him by 10 in all' within 0.01, which is three ticks of drip. Same output on the tip 88a7899.",
+    "failure_scenario": "_drips is Array[Vector2] (line 207): rate and seconds left are 32-bit floats. After 3,000 subtractions of 1/120 the rounding leaves a little above zero and `if drip.y <= 0.0` lets one more tick through. Every 'over N seconds' resource entry is affected the same way; which side the rounding falls on depends on the duration.",
+    "gdd_reference": "GDD 6.1: 'Cigarette | -10 over its burn'; GDD 7.4: '-10 Nerves over the burn'. D-040: 'Timed statuses are counted in whole ticks like every other countdown (the review's rule)'; D-035: countdowns 'end on their last tick instead of one later'.",
+    "suggested_fix": "Keep the seconds left as a 64-bit float (two PackedFloat64Arrays or a small class) and end the drip with the half-tick rule used elsewhere: `if drip_left < dt * 0.5`.",
+    "confidence": "high"
+   },
+   {
+    "title": "The validator accepts item rules that the simulation then turns into zeros or dead anchors",
+    "kind": "robustness",
+    "file": "/home/user/I99/.claude/worktrees/wf_2f6ba2b0-546-4/src/core/data_validator.gd",
+    "line": 200,
+    "evidence": "Probe /tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/wf4/probe_validator.gd (GameData.from_parts on changed copies of the shipped data, DataValidator.validate): (1) the synergies numb_courage and bead_calm without `amount`: 0 errors; with Courage and a pill working, wheel.lag is 0.0 s and collision.cash_mult is 0.0 (shipped data: 0.08 s and x3). (2) tape_flip, `to: \"@slot\"`, without `out_m`: 0 errors; the flip is then a plain press and release. (3) the tape anchor with `over: \"tape\"`: 0 errors; with a tape in the deck the tape anchor is no longer in use, so its ritual cannot be reached. By reading only: a gives entry {resource: cash, per_s: n} passes _check_entry (line 883) and ItemSim._standing_of applies it to Nerves. Same output on the tip 88a7899.",
+    "failure_scenario": "A content edit that drops a number or mistypes a reference passes T-DATA-01 and tools/check.sh; in play Flask + Painkillers then cancels Lag and pays nothing for close calls, a bead under music calms by 0, or the Mixtape cannot be flipped.",
+    "gdd_reference": "GDD 14: 'The validator checks required keys, types, and that every referenced id exists.' GDD 1.1: 'data validates' is part of the definition of done.",
+    "suggested_fix": "Per synergy rule, require the numbers the rule works with (amount for sip_extends_burn, bead_calm, photo_sobers and numb_courage; every and amount for calls_in_a_row); require out_m on a DRAG_TO whose `to` is \"@slot\"; refuse an anchor that is `over` itself; refuse per_s on a cash entry.",
+    "confidence": "high"
+   },
+   {
+    "title": "No test notices if remove_item stops undoing what an item was doing, or if give_item stops taking out what it replaces",
+    "kind": "test_gap",
+    "file": "/home/user/I99/.claude/worktrees/wf_2f6ba2b0-546-4/src/core/item_sim.gd",
+    "line": 414,
+    "evidence": "Mutants that survive every test they were run against (results in /tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/wf4/mutants_out.txt): remove_item without the loop that releases the item's held statuses (T-ITEM-MIXTAPE, T-SYN-BEADS-MUSIC, T-STOP-01, T-SAVE-01); remove_item without ending `lit` for a burning smoke (T-ITEM-CIGARETTES, T-ITEM-BASE, T-SUS-01, T-STOP-01, both cigarette synergies); _step_phone without the hang-up when the phone is gone (T-ITEM-PHONE, T-ITEM-TAXI-SIGN, T-SYN-PHONE-TAXI-SIGN); give_item without `items.remove_item(items.item(id))` and without `items.remove_item(items.item_in_slot(place))` (drive_sim.gd:1034 and 1036; all of T-ITEM and T-SYN). The code itself is right today: probe /tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/wf4/probe_misc.gd shows music ending when the tape is taken out and `lit` ending when the pack is replaced.",
+    "failure_scenario": "If one of these lines is lost, a status stays held for ever after its holder has left the cabin (music with no tape, a cigarette that burns with no pack, a call that rings with no phone), or one slot holds two items; the suites stay green. These paths are reached through give_item (debug key F5, a Table's starting cabin) and the officer taking contraband.",
+    "gdd_reference": "D-040: 'DriveSim.give_item puts an item in the cabin outside a stop (debug key F5 will use it; the tests do)'. The function's own contract: 'What was in the slot is taken out, and so is one he already has.' GDD 13.3: statuses are held 'with stack counts and expiry'.",
+    "suggested_fix": "One test on the rig: give the mixtape, let it play, take it out or give another item into its place, and check that music is off and the radio's dial is offered again; light a cigarette and replace the pack; let the phone ring and remove it; give an item twice and into a taken slot and count what is in the cabin.",
+    "confidence": "high"
+   }
+  ]
+ }
+]
