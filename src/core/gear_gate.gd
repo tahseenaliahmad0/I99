@@ -12,22 +12,29 @@ extends RefCounted
 ## 2 (-1, -1), 3 (0, +1), 4 (0, -1), 5 (+1, +1). +y is forward, which is
 ## pointer motion toward the top of the screen. One unit is gate_unit pixels.
 ##
-## The lever rides rails: the neutral channel (y = 0) and one vertical channel
-## per column. It can leave a rail for another only within
-## gate_channel_half_width of where they meet. Gear 5's channel is walled off
-## unless Fifth gear is fitted.
+## The lever is a point that moves only inside the channels: the neutral
+## channel along y = 0 and one vertical channel per column, each
+## gate_channel_half_width to either side of its centre line. Each tick the
+## pointer motion is applied sideways and lengthways separately and stopped at
+## the channel walls, so a stroke slides along a wall and turns the corner it
+## leans into. Gear 5's channel is walled off unless Fifth gear is fitted.
 ##
-## Press holds the lever; release engages a gear if the lever is within
-## gate_engage_radius of it, and otherwise springs it back to neutral. A grind
-## (noise, Nerves, a short lock) happens on a release between gate_grind_min
-## and gate_grind_max along a vertical channel, and when the lever is pushed
-## more than gate_wall_push into a wall. The stop at the far end of a gear's
-## own slot is where the lever belongs and is not a wall (DECISIONS D-018).
+## Press holds the lever. On release a gear engages if the lever is within
+## gate_engage_radius of the end of that gear's slot; otherwise it springs
+## back to neutral. A grind (noise, Nerves, a short lock) happens on a release
+## between gate_grind_min and gate_grind_max along a vertical channel, and
+## when the lever is pushed more than gate_wall_push into a wall. Pushing the
+## lever home against the end of a gear's own slot is not pushing into a wall
+## (DECISIONS D-018).
 
 const NEUTRAL: int = 0
 const MAX_GEAR: int = 5
-## Rail the lever is on.
-enum Rail { NEUTRAL_CHANNEL, COLUMN }
+const NO_COLUMN: int = -99
+## A tick counts as a push into a wall when the wall takes more than this
+## share of the motion asked for.
+const PUSH_SHARE: float = 0.75
+## Guards float comparisons at the edges of the bands.
+const EDGE_EPSILON: float = 0.000001
 
 ## Engaged gear: 0 is neutral, 1 to 5.
 var gear: int = NEUTRAL
@@ -53,9 +60,8 @@ var _grind_max: float = 0.0
 var _wall_push: float = 0.0
 var _grind_lock: float = 0.0
 
-var _rail: Rail = Rail.NEUTRAL_CHANNEL
-var _column: int = 0
-var _pushed: float = 0.0
+## What the walls have swallowed of the current push, as a vector.
+var _push: Vector2 = Vector2.ZERO
 
 
 func configure(tuning: Tuning) -> void:
@@ -91,14 +97,14 @@ func reset(gear_number: int = NEUTRAL) -> void:
 	grinds = 0
 	ground = false
 	engaged = false
-	_pushed = 0.0
+	_push = Vector2.ZERO
 	_place(gear_number)
 
 
 ## A hit forces a gear (GDD 5.6): the lever jumps there, out of the hand.
 func force_gear(gear_number: int) -> void:
 	held = false
-	_pushed = 0.0
+	_push = Vector2.ZERO
 	_place(gear_number)
 
 
@@ -119,7 +125,7 @@ func press() -> void:
 	if held:
 		return
 	held = true
-	_pushed = 0.0
+	_push = Vector2.ZERO
 
 
 ## The hand lets the knob go: engage, or spring back to neutral.
@@ -127,15 +133,16 @@ func release() -> void:
 	if not held:
 		return
 	held = false
-	_pushed = 0.0
-	if _rail == Rail.COLUMN:
-		var target_gear: int = _gear_at_column_end(_column, lever.y)
-		var along: float = absf(lever.y)
-		if target_gear != NEUTRAL and lever.distance_to(gear_position(target_gear)) <= _engage_radius:
-			_place(target_gear)
+	_push = Vector2.ZERO
+	var column: int = _column_at(lever.x)
+	var along: float = absf(lever.y)
+	if column != NO_COLUMN and along > _half_width:
+		var slot_gear: int = _gear_at_column_end(column, lever.y)
+		if slot_gear != NEUTRAL and 1.0 - along <= _engage_radius + EDGE_EPSILON:
+			_place(slot_gear)
 			engaged = true
 			return
-		if along >= _grind_min and along <= _grind_max:
+		if along >= _grind_min - EDGE_EPSILON and along <= _grind_max + EDGE_EPSILON:
 			_grind()
 	_place(NEUTRAL)
 
@@ -148,11 +155,6 @@ func begin_tick() -> void:
 
 ## One tick. `pointer_delta` is pointer motion in reference pixels (y down)
 ## while the lever is held; `speed_mult` slows the lever (slipping clutch).
-##
-## The lever follows the stronger component of the motion along its rail. If
-## that way is shut it slides the other way instead, as a real lever slides
-## along a gate wall. Only a push that moves nothing at all counts as pushing
-## into a wall.
 func step(dt: float, pointer_delta: Vector2, speed_mult: float = 1.0) -> void:
 	if lock_left > 0.0:
 		lock_left = maxf(lock_left - dt, 0.0)
@@ -162,89 +164,75 @@ func step(dt: float, pointer_delta: Vector2, speed_mult: float = 1.0) -> void:
 	var move: Vector2 = Vector2(pointer_delta.x, -pointer_delta.y) * (speed_mult / _unit_px)
 	if move == Vector2.ZERO:
 		return
-	var sideways_first: bool = absf(move.x) >= absf(move.y)
-	var moved: float = 0.0
-	if sideways_first:
-		moved = _move_sideways(move.x)
-		if moved <= 0.0:
-			moved = _move_along(move.y)
+	var before: Vector2 = lever
+	# The stronger part goes first, so a stroke turns the corner it leans into.
+	if absf(move.x) >= absf(move.y):
+		lever.x = _stop_x(lever.x + move.x, lever)
+		lever.y = _stop_y(lever.y + move.y, lever)
 	else:
-		moved = _move_along(move.y)
-		if moved <= 0.0:
-			moved = _move_sideways(move.x)
-	if moved > 0.0:
-		_pushed = 0.0
-		if gear != NEUTRAL and lever.distance_to(gear_position(gear)) > _engage_radius:
-			gear = NEUTRAL
+		lever.y = _stop_y(lever.y + move.y, lever)
+		lever.x = _stop_x(lever.x + move.x, lever)
+
+	if gear != NEUTRAL and not _in_slot(gear):
+		gear = NEUTRAL
+
+	# Pushing into a wall. Pushing the lever home at the end of a gear's own
+	# slot does not count; a lever that slides along a wall is forgiven by
+	# as much as it travels.
+	var asked: Vector2 = move
+	if _at_slot_stop(before, move.y):
+		asked.y = 0.0
+	var asked_length: float = asked.length()
+	if asked_length <= 0.0:
 		return
-	if not sideways_first and _at_slot_stop(move.y):
-		return
-	_pushed += maxf(absf(move.x), absf(move.y))
-	if _pushed > _wall_push:
-		_pushed = 0.0
-		_grind()
+	var moved: Vector2 = lever - before
+	if moved.length() < (1.0 - PUSH_SHARE) * asked_length:
+		_push += asked - moved
+		if _push.length() > _wall_push + EDGE_EPSILON:
+			_push = Vector2.ZERO
+			_grind()
+	else:
+		_push = _push.limit_length(maxf(_push.length() - moved.length(), 0.0))
 
 
-# --- Movement on the rails ---------------------------------------------------
+# --- The channels ------------------------------------------------------------
 
-const NO_COLUMN: int = -99
-
-
-## Moves along the neutral channel. Returns the distance moved; 0 means a wall.
-func _move_sideways(dx: float) -> float:
-	if dx == 0.0:
-		return 0.0
-	if _rail == Rail.COLUMN and absf(lever.y) > _half_width:
-		return 0.0
-	var wanted: float = clampf(lever.x + dx, -1.0, _max_x())
-	var moved: float = absf(wanted - lever.x)
-	if moved <= 0.0:
-		return 0.0
-	_rail = Rail.NEUTRAL_CHANNEL
-	lever = Vector2(wanted, 0.0)
-	return moved
-
-
-## Moves along a column. Returns the distance moved; 0 means a wall or a stop.
-func _move_along(dy: float) -> float:
-	if dy == 0.0:
-		return 0.0
-	var column: int = _column if _rail == Rail.COLUMN else _column_near(lever.x)
+## Stops a sideways move at the channel walls. `at` is where the lever is.
+func _stop_x(wanted: float, at: Vector2) -> float:
+	if absf(at.y) <= _half_width + EDGE_EPSILON:
+		# In the neutral channel: free from the first column to the last.
+		return clampf(wanted, -1.0 - _half_width, _max_column() + _half_width)
+	var column: int = _column_at(at.x)
 	if column == NO_COLUMN:
-		return 0.0
-	var wanted: float = clampf(lever.y + dy, _column_min_y(column), 1.0)
-	var moved: float = absf(wanted - lever.y)
-	if moved <= 0.0:
-		return 0.0
-	_column = column
-	lever = Vector2(float(column), wanted)
-	_rail = Rail.NEUTRAL_CHANNEL if wanted == 0.0 else Rail.COLUMN
-	return moved
+		return at.x
+	return clampf(wanted, float(column) - _half_width, float(column) + _half_width)
 
 
-## True when the lever sits at the far end of a gear's slot and is pushed
-## further into it: the place it belongs, not a wall.
-func _at_slot_stop(dy: float) -> bool:
-	if _rail != Rail.COLUMN or absf(lever.y) < 1.0:
-		return false
-	return signf(dy) == signf(lever.y) and _gear_at_column_end(_column, lever.y) != NEUTRAL
+## Stops a lengthways move at the channel walls and the ends of the slots.
+func _stop_y(wanted: float, at: Vector2) -> float:
+	var column: int = _column_at(at.x)
+	if column == NO_COLUMN:
+		# Between two columns there is only the neutral channel.
+		return clampf(wanted, -_half_width, _half_width)
+	return clampf(wanted, _column_min_y(column), 1.0)
 
 
-func _column_near(x: float) -> int:
-	var last: int = 1 if has_fifth else 0
+## The column whose channel holds this x, or NO_COLUMN.
+func _column_at(x: float) -> int:
+	var last: int = int(_max_column())
 	for column: int in range(-1, last + 1):
-		if absf(x - float(column)) <= _half_width:
+		if absf(x - float(column)) <= _half_width + EDGE_EPSILON:
 			return column
 	return NO_COLUMN
 
 
-func _max_x() -> float:
+func _max_column() -> float:
 	return 1.0 if has_fifth else 0.0
 
 
 ## Gear 5's column only goes forward; there is no gear below it.
 func _column_min_y(column: int) -> float:
-	return 0.0 if column == 1 else -1.0
+	return -_half_width if column == 1 else -1.0
 
 
 func _gear_at_column_end(column: int, y: float) -> int:
@@ -265,15 +253,29 @@ func _gear_at_column_end(column: int, y: float) -> int:
 	return NEUTRAL
 
 
+## True while the lever is near enough to the end of this gear's slot to
+## stay in gear.
+func _in_slot(gear_number: int) -> bool:
+	var home: Vector2 = gear_position(gear_number)
+	if _column_at(lever.x) != int(home.x):
+		return false
+	return signf(lever.y) == signf(home.y) and 1.0 - absf(lever.y) <= _engage_radius + EDGE_EPSILON
+
+
+## True when the lever sits at the far end of a gear's slot and is pushed
+## further into it: the place it belongs, not a wall.
+func _at_slot_stop(at: Vector2, dy: float) -> bool:
+	if dy == 0.0 or absf(at.y) < 1.0 - EDGE_EPSILON:
+		return false
+	var column: int = _column_at(at.x)
+	if column == NO_COLUMN:
+		return false
+	return signf(dy) == signf(at.y) and _gear_at_column_end(column, at.y) != NEUTRAL
+
+
 func _place(gear_number: int) -> void:
 	gear = gear_number
 	lever = gear_position(gear_number)
-	if gear_number == NEUTRAL:
-		_rail = Rail.NEUTRAL_CHANNEL
-		_column = 0
-	else:
-		_rail = Rail.COLUMN
-		_column = int(lever.x)
 
 
 func _grind() -> void:

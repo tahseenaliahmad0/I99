@@ -38,6 +38,39 @@ func test_wheel_01() -> void:
 		_wheel.step(DT, 0.0, 1.0)
 	check_eq(_wheel.angle, 0.0, "the released wheel rests at centre")
 
+	# The real thing: grip, steer to full lock, let it settle, let go.
+	var rate: float = tuning.f("wheel_return_rate")
+	_wheel.reset(0.0)
+	_wheel.grip()
+	_wheel.step(DT, 100000.0, 1.0)
+	for _tick: int in int(1.0 / DT):
+		_wheel.step(DT, 0.0, 1.0)
+	check_near(_wheel.angle, max_angle, 0.001, "gripped and steered, the wheel settles at full lock")
+	_wheel.release()
+	check_near(_wheel.angle, max_angle, 0.001, "letting go does not move the wheel by itself")
+	var before: float = _wheel.angle
+	_wheel.step(DT, 0.0, 1.0)
+	check_near(before - _wheel.angle, rate * DT, 0.000001, "the first tick after release moves it by wheel_return_rate x one tick")
+	var seconds: float = DT + _seconds_to_centre()
+	check_near(seconds, expected, DT, "released at full lock by the hand, the wheel reaches centre in 0.675 s")
+
+	# Let go while the wheel is still catching up with the hand: it returns
+	# from where it is, with no jump to the commanded angle or to centre.
+	_wheel.reset(0.0)
+	_wheel.grip()
+	_wheel.step(DT, 200.0, 1.0)
+	_wheel.step(DT, 0.0, 1.0)
+	check(_wheel.angle < _wheel.command - 1.0, "two ticks after a jerk the wheel still lags its command")
+	before = _wheel.angle
+	_wheel.release()
+	_wheel.step(DT, 0.0, 1.0)
+	check_near(before - _wheel.angle, rate * DT, 0.000001, "released mid-lag, it starts back from where it is")
+	check_eq(_wheel.command, _wheel.angle, "and the old command is forgotten")
+
+	# Pointer motion after the release does nothing.
+	_wheel.step(DT, 500.0, 1.0)
+	check(_wheel.angle < before, "a released wheel ignores pointer motion and keeps returning")
+
 
 ## T-WHEEL-02: grip zone, no snap on grip, steering rate, clamp, smoothing.
 func test_wheel_02() -> void:
@@ -135,6 +168,22 @@ func _check_steering_rate() -> void:
 	_wheel.step(DT, 500.0, 1.0)
 	check_eq(_wheel.angle, 0.0, "pointer motion does nothing to a wheel nobody holds")
 
+	# What the car is steered by is the wheel itself, not the hand's command.
+	_wheel.reset(0.0)
+	_wheel.grip()
+	_wheel.step(DT, 200.0, 1.0)
+	check(_wheel.angle < _wheel.command * 0.5, "one tick after a jerk the wheel is well behind its command")
+	check_near(_wheel.steer(), _wheel.angle / max_angle, 0.000001, "steer is the wheel's own angle over wheel_max_angle")
+
+	# Through the whole simulation: only sideways motion steers, and the
+	# sensitivity setting reaches the wheel.
+	var plain: float = _steered_command(Vector2(60.0, 0.0), 1.0)
+	check_near(plain, 60.0 * per_px, 0.000001, "in DriveSim, 60 px sideways while gripping commands 60 x steer_deg_per_px")
+	check_near(_steered_command(Vector2(0.0, 60.0), 1.0), 0.0, 0.000001, "vertical motion does not steer")
+	check_near(_steered_command(Vector2(60.0, 45.0), 1.0), plain, 0.000001, "a diagonal steers by its sideways part only")
+	check_near(_steered_command(Vector2(60.0, 0.0), 2.0), plain * 2.0, 0.000001, "the steering sensitivity setting reaches the wheel")
+	check_near(_steered_command(Vector2(60.0, 0.0), 0.5), plain * 0.5, 0.000001, "at both ends of its range")
+
 
 func _check_smoothing() -> void:
 	var tau: float = tuning.f("wheel_smoothing") * 0.001
@@ -156,6 +205,23 @@ func _check_smoothing() -> void:
 		ticks += 1
 	check(worst < goal * 0.0001, "the wheel follows the commanded angle as a first-order lag (worst error %s degrees)" % str(worst))
 	check_near(_wheel.angle, goal, goal * 0.005, "and settles on it")
+
+
+## Grips the wheel in a whole DriveSim, moves the pointer by `motion` in one
+## tick and returns the wheel's commanded angle.
+func _steered_command(motion: Vector2, sensitivity: float) -> float:
+	var sim: DriveSim = DriveSim.new(fresh_data())
+	sim.steer_sensitivity = sensitivity
+	var input: DriveInput = DriveInput.new()
+	input.pointer_is_absolute = true
+	input.pointer = sim.space.point_to_pointer(sim.space.grip_reference)
+	input.lmb = true
+	for _tick: int in 60:
+		sim.step(input)
+	input.pointer_is_absolute = false
+	input.pointer_delta = motion
+	sim.step(input)
+	return sim.wheel.command
 
 
 func _seconds_to_centre() -> float:

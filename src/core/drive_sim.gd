@@ -158,7 +158,7 @@ func step(input: DriveInput) -> void:
 		_lever_in_hand = false
 		hand.unpin()
 	if hand.press_applied and hand.can_reach:
-		_begin_at(hand.at_index)
+		_begin_at(hand.at_index, input.lmb)
 
 	# 4. Wheel.
 	if hand.let_go:
@@ -455,11 +455,16 @@ func _report_effects() -> void:
 
 # --- Rituals -----------------------------------------------------------------
 
-func _begin_at(anchor: int) -> void:
+## A press was applied at an anchor. `button_down` is false for a buffered
+## click that was already released when the hand arrived.
+func _begin_at(anchor: int, button_down: bool) -> void:
 	if anchor == _lever_anchor and not sequential_shift:
-		gate.press()
-		_lever_in_hand = true
-		hand.pin()
+		# The lever is held only by a button that is still down: a click that
+		# ended during the reach must not take it and knock it out of gear.
+		if button_down:
+			gate.press()
+			_lever_in_hand = true
+			hand.pin()
 		return
 	var ritual: Dictionary = items.ritual_at(String(hand.anchor_id(anchor)))
 	if ritual.is_empty():

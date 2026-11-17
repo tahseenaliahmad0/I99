@@ -225,29 +225,44 @@ Format: `D-NNN (milestone, date) Title` then Context / Decision / Why.
   which a reach is stable while the eyes follow the hand. `CabinSpace` holds
   all of it.
 
-## D-018 (M1, 2026-11-17) How the gear gate reads GDD 4.5
+## D-018 (M1, 2026-11-17; rewritten after the M1 review) How the gear gate reads GDD 4.5
 
 - **Decision.**
-  - The lever rides rails: the neutral channel (y = 0) and one vertical
-    channel per column. `gate_channel_half_width` is how close to a junction
-    the lever must be to change rail.
-  - Per tick the lever follows the stronger component of the pointer motion
-    along its rail. If that way is shut it slides the other way, as a real
-    lever slides along a gate wall.
-  - "Pushes more than 1 unit into a wall" counts only motion that moves the
-    lever not at all. The stop at the far end of a gear's own slot is not a
-    wall: pushing the lever home, however hard, never grinds.
-  - The engaged gear becomes neutral as soon as the held lever leaves
-    `gate_engage_radius` of it; a gear engages only on release.
+  - The lever is a point that moves only inside the channels of GDD 4.5: the
+    neutral channel along y = 0 and one vertical channel per column, each
+    `gate_channel_half_width` to either side of its centre line. Each tick
+    the pointer motion is applied sideways and lengthways separately (the
+    stronger part first) and stopped at the channel walls. So a stroke slides
+    along a wall and turns the corner it leans into; nothing re-centres the
+    lever.
+  - "Pushes more than 1 unit into a wall": a tick counts as a push when the
+    walls take more than three quarters of the motion asked for; what they
+    took is added up as a vector, and a lever that then slides is forgiven by
+    as much as it travels. More than `gate_wall_push` grinds. Pushing the
+    lever home against the end of a gear's own slot is not pushing into a
+    wall, however hard.
+  - "Within 0.2 units of a gear position" is measured along the slot: a lever
+    anywhere across the 0.5-unit channel, within `gate_engage_radius` of the
+    slot's end, is in that gear. The engaged gear becomes neutral as soon as
+    the held lever leaves that zone; a gear engages only on release.
   - A release at 0.3 to 0.8 units along a vertical channel grinds and springs
-    back to neutral; below 0.3 it springs back silently; from 0.8 it engages.
+    back to neutral; nearer the neutral channel it springs back silently;
+    from 0.8 it engages.
   - With the assist setting, FLICK up and FLICK down on the lever shift one
     gear at a time and never grind (`GearGate.shift_sequential`).
-- **Why.** GDD 4.9 asks for the generous reading of the fiddly dials. A
-  literal reading would grind on every enthusiastic shift and on every
-  diagonal stroke, which punishes the player for the mouse, not for a
-  mistake. Mis-aimed shifts (the wrong slot, a push at a wall, a release
-  half-way) still grind, which is what 4.5 describes.
+  - A click on the lever that was released before the hand arrived does not
+    take the lever (it would hold it for one tick with no button down).
+- **Why.** GDD 4.9 asks for the generous reading of the fiddly dials, and
+  GDD 4.5 words the gate as channels with a width. The first build put the
+  lever on rails (centre lines) and moved it along one axis per tick. The
+  review's probes showed what that did to real strokes: a drag from 2nd
+  steeper than 45 degrees went to 1st, a slow slightly crooked pull never
+  arrived, and a push at a wall grinded only when held within 1.4 degrees of
+  the axis. With channels, any stroke from 2nd between about 27 and 63
+  degrees ends in 3rd, slow crooked pulls arrive within a few pixels of the
+  ideal travel, and a push at a wall grinds after one unit as 4.5 says.
+  Fifth gear's "nothing but temptation" is now literal: with the fifth slot
+  open, a flat sloppy stroke from 2nd runs on into 5th.
 
 ## D-019 (M1, 2026-11-17) `--aim=` and `--shot=` for pictures
 
