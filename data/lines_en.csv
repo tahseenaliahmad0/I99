@@ -139,3 +139,10 @@ hud.cramp.hum,,A HUM...,false
 hud.cramp.cramp,,CRAMP,false
 hud.ghost,,His left hand reaches,false
 hud.carrying,,Carrying: %s,false
+sign.boss_modifier.long_queue,,[LONG QUEUE],true
+sign.boss_modifier.thorough,,[THOROUGH],true
+sign.boss_modifier.crosswind,,[CROSSWIND],true
+sign.boss_modifier.night_storm,,[NIGHT STORM],true
+sign.boss_modifier.market_day,,[MARKET DAY],true
+sign.boss_modifier.early_sun,,[EARLY SUN],true
+sign.boss,,[%s / %s],false

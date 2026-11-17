@@ -219,6 +219,7 @@
 
     "traffic_per_act": 2,
     "modifier_chance": [0, 0.3333, 0.6667],
+    "boss_modifier_chance": [0.3333, 0.5, 0.6667],
     "late_signaller_share": [0, 0.15, 0.30],
     "curve_sign_lead": 3,
     "slip_sign_lead": 5,
@@ -571,6 +572,7 @@
     "arrival_length": "m of street before the bay (until the Arrival is built in M7)",
     "traffic_per_act": "vehicles per km added in each act after the first",
     "modifier_chance": "share of legs with a modifier, acts 1 to 3",
+    "boss_modifier_chance": "share of Tellings in which the act's boss has one of its two modifiers, acts 1 to 3",
     "late_signaller_share": "share of lane changes signalled late, acts 1 to 3",
     "curve_sign_lead": "s at par speed",
     "slip_sign_lead": "s at par speed before a slip lane opens (the Exit of GDD 9.5; the Motorcade's side road)",

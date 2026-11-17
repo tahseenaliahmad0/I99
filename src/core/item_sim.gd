@@ -165,6 +165,9 @@ var since_wipe: float = 0.0
 var raining: bool = false
 ## Dust in the air (the leg says so): haze per second while the window is open.
 var dust_rate: float = 0.0
+## Dust on the glass (the road says so): the share of the windscreen that one
+## sweep of the wipers smears.
+var wipe_haze: float = 0.0
 ## -1 signalling left, +1 right, 0 off.
 var indicator: int = 0
 var indicator_left: float = 0.0
@@ -724,6 +727,9 @@ func _run(op: String, owner: Item, direction: int) -> void:
 			_horn()
 		"wipe":
 			since_wipe = 0.0
+			# In a dust storm the wipers smear what is on the glass (GDD 10.3).
+			if wipe_haze > 0.0:
+				haze = minf(haze + wipe_haze, _haze_cap)
 		"photo":
 			_effects.add(VISOR_DOWN, _visor_time)
 			# Flask + Photo (GDD 7.8): looked at with Courage, the photo calms

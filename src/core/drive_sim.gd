@@ -32,6 +32,7 @@ const FAULT_CRACKS: StringName = &"cracked_windscreen"
 const FAULT_HEADLIGHT: StringName = &"dead_headlight"
 const FAULT_MIRROR: StringName = &"cracked_mirror"
 const FLAG_HIGH_BEAM: StringName = &"high_beam"
+const FLAG_HAZARDS: StringName = &"hazards"
 const PULLED_OVER: StringName = &"pulled_over"
 const LAW: StringName = &"law"
 ## Sources of Nerves a status can make him immune to (GDD 7.4).
@@ -74,6 +75,8 @@ var faults: FaultSim = FaultSim.new()
 var items: ItemSim = ItemSim.new()
 var leg: LegSim = LegSim.new()
 var encounter: EncounterSim = EncounterSim.new()
+## The set piece that ends the act, while he is in it (GDD 10).
+var boss: BossSim = BossSim.new()
 var suspicion: SuspicionSim = SuspicionSim.new()
 var clock: ClockSim = ClockSim.new()
 var rng: Rng = Rng.new()
@@ -245,6 +248,7 @@ func _build() -> void:
 	items = ItemSim.new()
 	leg = LegSim.new()
 	encounter = EncounterSim.new()
+	boss = BossSim.new()
 	suspicion = SuspicionSim.new()
 	clock = ClockSim.new()
 	run = RunState.new()
@@ -262,6 +266,7 @@ func _build() -> void:
 	items.configure(data, effects, nerves, traffic, car, faults, rng)
 	leg.configure(data, car, traffic)
 	encounter.configure(data, car, traffic, leg)
+	boss.configure(data, car, rng)
 	suspicion.configure(tuning)
 	clock.configure(tuning)
 	run.configure(data)
@@ -344,6 +349,7 @@ func step(input: DriveInput) -> void:
 	items.begin_tick()
 	leg.begin_tick()
 	encounter.begin_tick()
+	boss.begin_tick()
 	suspicion.begin_tick()
 
 	# Focus (GDD 7.4): the road runs slower, the hand does not.
@@ -423,6 +429,9 @@ func step(input: DriveInput) -> void:
 	var lamps_before: int = faults.lamps
 	if not _standing():
 		collision.step(_road_dt, car, traffic, gate.gear)
+		if boss.rear_end:
+			# What came out of the dust behind his standing car (GDD 10.3).
+			collision.strike(Collision.Hit.CRASH)
 		_apply_collisions()
 		_step_leg_hazards()
 	_leg_lamps_lit += maxi(faults.lamps - lamps_before, 0)
@@ -456,7 +465,12 @@ func step(input: DriveInput) -> void:
 	if run.active:
 		_step_telling(input.lmb)
 	elif leg.step_progress():
-		_end_leg()
+		if boss.active:
+			_emit("boss_ended", {"boss": boss.kind, "act": act, "modifier": boss.modifier, "time": leg.time})
+			boss.stop()
+			_clear_weather()
+		else:
+			_end_leg()
 
 	tick += 1
 
@@ -509,10 +523,12 @@ func _set_stretch(plan: Dictionary) -> void:
 	items.begin_leg()
 	leg.begin(plan)
 	encounter.begin(plan)
+	boss.begin(plan)
 	suspicion.end_watch()
 	_release_from_pull_over()
 	items.raining = leg.raining
 	items.dust_rate = leg.dust_rate
+	items.wipe_haze = leg.wipe_haze
 	car.lat_tau_mult = _rain_response if leg.raining else 1.0
 	_leg_lamps_lit = 0
 	_exit = EXIT_NONE
@@ -539,9 +555,7 @@ func _end_leg() -> void:
 	# A clean leg also lets him breathe (GDD 6.1: -10 Nerves at the leg's end).
 	if clean:
 		nerves.add(tuning.f("clean_leg_nerves"))
-	items.raining = false
-	items.dust_rate = 0.0
-	car.lat_tau_mult = 1.0
+	_clear_weather()
 	curve_k = 0.0
 	encounter.stop()
 	if suspicion.watching:
@@ -558,6 +572,14 @@ func _end_leg() -> void:
 	})
 
 
+## The weather of the road he has left stays behind.
+func _clear_weather() -> void:
+	items.raining = false
+	items.dust_rate = 0.0
+	items.wipe_haze = 0.0
+	car.lat_tau_mult = 1.0
+
+
 ## The leg's bend and gusts, before the car moves.
 func _step_leg_road() -> void:
 	if not leg.active or _standing():
@@ -565,7 +587,11 @@ func _step_leg_road() -> void:
 	leg.step_road(_road_dt, DT)
 	curve_k = leg.curve_k
 	if leg.gust_started != 0:
-		start_gust(leg.gust_started)
+		_blow(leg.gust_started, leg.gust_push)
+	boss.step_road(_road_dt, items.flag(FLAG_HAZARDS))
+	if boss.rear_end_tell:
+		# Its horn, and its lights in the mirror: the tell (GDD 2.2, pillar 4).
+		_emit("sfx_requested", {"id": "horn", "behind": true})
 
 
 # --- A Telling (GDD 9.5, 11.1) -----------------------------------------------
@@ -713,6 +739,9 @@ func _step_stop(button_down: bool) -> void:
 
 func _leave_stop() -> void:
 	_emit("stop_left", {"stop": run.stop})
+	if stop.tea_served:
+		# The next fork's sign also shows the modifier of the boss ahead (GDD 9.6).
+		run.boss_on_sign = true
 	cash = stop.leave(cash)
 	stopped = false
 	_leave_grip = 0.0
@@ -732,18 +761,27 @@ func _leave_stop() -> void:
 	_sync_anchors()
 
 
-## The act's boss. Until the bosses are built (M7) it is an empty road of the
-## boss's length.
+## The act's boss (GDD 10): the road leads into it from the third leg.
 func _begin_boss() -> void:
 	run.begin_boss()
-	var boss: Dictionary = run.boss_record()
-	_roll_into(RunGenerator.blank_plan(run.act, GameData.as_int(boss.get("lanes"), RunGenerator.ROAD_LANES),
-			GameData.as_bool(boss.get("divided"), true), GameData.as_float(boss.get("length_m")), GameData.as_float(boss.get("par_s"))))
-	_emit("boss_started", {"boss": run.boss, "act": run.act})
+	_roll_into(BossSim.plan(data, run.boss, run.boss_modifier, RunGenerator.boss_seed(run.seed, run.act)))
+	_emit("boss_started", {"boss": run.boss, "act": run.act, "modifier": boss.modifier})
+
+
+## Starts a boss by itself, from the start of its road in the middle lane (a
+## test, `--boss=`). In a Telling the end of the act's third leg starts it.
+func begin_boss(boss_id: String, modifier_id: String = "", boss_seed: int = 0) -> void:
+	if not data.has_record("bosses", boss_id):
+		push_error("DriveSim: unknown boss '%s'" % boss_id)
+		return
+	_set_stretch(BossSim.plan(data, boss_id, modifier_id, boss_seed))
+	_emit("boss_started", {"boss": boss.kind, "act": act, "modifier": boss.modifier})
 
 
 func _end_boss() -> void:
-	_emit("boss_ended", {"boss": run.boss, "act": run.act, "time": leg.time})
+	_emit("boss_ended", {"boss": run.boss, "act": run.act, "modifier": boss.modifier, "time": leg.time})
+	boss.stop()
+	_clear_weather()
 	run.enter_boss_stop()
 	_shady_here = false
 	items.finish_mending()
@@ -813,6 +851,7 @@ func capture() -> Dictionary:
 		"leg_state": items.leg_state(),
 		"item_state": items.telling_state(),
 		"shady": _shady_here,
+		"boss_sign": run.boss_on_sign,
 		# For people: rounded. What is loaded are the exact bits below.
 		"clock_min": snappedf(clock.minutes, 0.001),
 		"cash": snappedf(cash, 0.001),
@@ -875,6 +914,7 @@ func restore(telling: Dictionary) -> bool:
 	_shady_here = GameData.as_bool(telling.get("shady"))
 	run.resume(GameData.as_string(telling.get("table")), Save.seed_in(telling.get("seed")), GameData.as_int(telling.get("retellings")),
 			GameData.as_int(telling.get("act"), 1), GameData.as_int(telling.get("leg")), stage, _side)
+	run.boss_on_sign = GameData.as_bool(telling.get("boss_sign"))
 	if run.stage == RunState.Stage.STOP:
 		# At the stall of the leg he is on.
 		_set_stretch(RunGenerator.plan(data, run.branch, run.act))
@@ -1098,8 +1138,13 @@ func set_road(lanes: int, divided: bool) -> void:
 ## whole ticks (a float countdown ran one tick over). `direction` is +1 toward
 ## the right shoulder, -1 toward the left. `strength` scales it.
 func start_gust(direction: int, strength: float = 1.0) -> void:
+	_blow(direction, _gust_strength * strength)
+
+
+## One gust that pushes at `push` m/s.
+func _blow(direction: int, push: float) -> void:
 	_gust_ticks_left = roundi(_gust_duration * float(TICKS_PER_SECOND))
-	_gust_push = _gust_strength * strength * float(direction)
+	_gust_push = push * float(direction)
 
 
 ## The Heavy floor now (GDD 6.1): by act, plus what the Table or a pill adds.
@@ -1113,7 +1158,7 @@ func heavy_floor() -> float:
 func visibility() -> float:
 	if not leg.active:
 		return INF
-	var reach: float = leg.dust_visibility
+	var reach: float = minf(leg.dust_visibility, boss.visibility)
 	if leg.night:
 		# What makes the night darker for him shortens what he sees of it
 		# (GDD 7.5, 7.7: cracked sunglasses, tinted glass).
@@ -1249,7 +1294,12 @@ func snapshot() -> Dictionary:
 		"stopped": stopped,
 		"gore_ahead": leg.length - car.s if run.active and run.fork_ahead() and leg.active else -1.0,
 		"offers": _offers_in_view(),
-		"boss": run.boss,
+		"boss": run.boss if run.active else boss.kind,
+		"boss_modifier": boss.modifier,
+		"boss_time": boss.time,
+		"dust_thick": boss.thick,
+		"dust_change_in": boss.dust_change_in,
+		"rear_end_in": boss.rear_end_in,
 		"pulled_over": pulled_over,
 		"visibility": visibility(),
 		# Unlit things show only inside what he can see: at night they appear late.
@@ -1315,7 +1365,12 @@ func _signs_in_view() -> Array[Dictionary]:
 	if run.fork_ahead():
 		var to_fork: float = maxf(leg.length - tuning.f("fork_sign_lead") * par_ms, 0.0) - car.s
 		if to_fork >= 0.0 and to_fork <= ahead:
-			signs.append({"kind": "fork", "ahead": to_fork, "left": run.branches[RunState.LEFT], "right": run.branches[RunState.RIGHT]})
+			var sign: Dictionary = {"kind": "fork", "ahead": to_fork, "left": run.branches[RunState.LEFT], "right": run.branches[RunState.RIGHT]}
+			if run.boss_on_sign:
+				# After tea the sign also shows what the boss ahead has in store (GDD 9.6).
+				sign["boss"] = GameData.as_string(run.boss_record().get("id"))
+				sign["boss_modifier"] = run.modifier_ahead()
+			signs.append(sign)
 	return signs
 
 
@@ -1424,7 +1479,7 @@ func _apply_collisions() -> void:
 			if _lever_in_hand:
 				_lever_in_hand = false
 				hand.unpin()
-		_emit("hit", {"kind": collision.hit, "lamps": drawn.size(), "vehicle": collision.hit_vehicle_id, "spared": spared})
+		_emit("hit", {"kind": collision.hit, "lamps": drawn.size(), "vehicle": collision.hit_vehicle_id, "spared": spared, "rear_end": boss.rear_end})
 		if not drawn.is_empty():
 			_emit("lamp_lit", {"lamps": faults.lamps, "lit": drawn.size(), "faults": drawn})
 		if faults.is_wrecked() and not wrecked:
@@ -1601,13 +1656,13 @@ func use_forged_papers() -> bool:
 	return true
 
 
-## The weather cramp (GDD 7.9): once in a Rain leg and in a Night leg, as
-## the car passes a fixed point of it. A hum for phantom_cramp_hum, then for
+## The weather cramp (GDD 7.9): once in a Rain leg, in a Night leg and in the
+## Storm, as the car passes a fixed point of it. A hum for phantom_cramp_hum, then for
 ## phantom_cramp_length the hand can neither let go nor take hold, and
 ## phantom_cramp_nerves. Muted or switched off, nothing happens.
 func _step_cramp() -> void:
 	if cramp == "":
-		if not leg.active or not (leg.raining or leg.night) or _standing():
+		if not leg.active or not (leg.raining or leg.night or boss.kind == BossSim.STORM) or _standing():
 			return
 		var point: float = leg.length * tuning.f("phantom_cramp_at")
 		if _car_s_then < point and car.s >= point and phantom_enabled and not phantom_muted():

@@ -604,11 +604,38 @@ func _script_tick() -> void:
 				x = lerpf(from_x, _side_x(_sides[_forks_met_now()]), clampf((car.s - stall_at) / 80.0, 0.0, 1.0))
 			elif decision != STOP:
 				x = _checker.line_x(exit_at)
+		RunState.Stage.BOSS:
+			x = _clear_lane_x()
 		_:
 			x = car.lane_center(car.lanes / 2)
 	if _sim.gate.gear != gear:
 		_sim.gate.reset(gear)
 	car.x = x
+
+
+## In a boss he keeps to a lane with open road ahead: when what is ahead in
+## his lane comes near, he is in the lane with the most room.
+func _clear_lane_x() -> float:
+	var car: CarSim = _sim.car
+	var lane: int = clampi(car.lane_of(car.x), 0, car.lanes - 1)
+	if _room_ahead(lane) < 80.0:
+		for other: int in car.lanes:
+			if _room_ahead(other) > _room_ahead(lane):
+				lane = other
+	return car.lane_center(lane)
+
+
+## Metres of a lane that are free from 15 m behind the car onward.
+func _room_ahead(lane: int) -> float:
+	var car: CarSim = _sim.car
+	var room: float = INF
+	for vehicle: TrafficSim.Vehicle in _sim.traffic.vehicles:
+		if absf(vehicle.x - car.lane_center(lane)) >= car.lane_width() * 0.5 + vehicle.half_width:
+			continue
+		var gap: float = vehicle.s - car.s
+		if gap > -15.0:
+			room = minf(room, gap)
+	return room
 
 
 ## How many forks are behind him: the index of the one ahead.

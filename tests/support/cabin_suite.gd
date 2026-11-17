@@ -200,6 +200,45 @@ func _begin_quiet_leg(leg_id: String, act: int, leg_seed: int) -> Dictionary:
 	return plan
 
 
+## A boss by itself, outside a Telling, with no vehicle of its plan on the
+## road: the car in third gear in the middle lane at the start of its road.
+## Returns the plan.
+func _begin_quiet_boss(boss_id: String, modifier: String = "", boss_seed: int = 1) -> Dictionary:
+	_sim = DriveSim.new(fresh_data())
+	_events = []
+	_keep_lane = true
+	_input.clear()
+	var plan: Dictionary = BossSim.plan(data, boss_id, modifier, boss_seed)
+	plan["spawns"] = []
+	_sim.gate.reset(3)
+	_sim.begin_leg(plan)
+	_sim.in_encounter = true
+	_sim.drain_events()
+	return plan
+
+
+## One sweep of the wipers, through the hand: a FLICK up on the stalk.
+func _wipe() -> void:
+	_reach("wiper_stalk")
+	_flick(Vector2(0.0, -tuning.f("flick_min_distance") * 1.5))
+
+
+## A CRANK where the hand is: the pointer led round in circles, `turns` and a
+## little more, with the button down.
+func _crank(turns: float) -> void:
+	_input.pointer_is_absolute = false
+	_input.lmb = true
+	var heading: float = 0.0
+	var step: float = deg_to_rad(12.0)
+	for _index: int in ceili((turns + 0.6) * TAU / step):
+		heading += step
+		_input.pointer_delta = Vector2(cos(heading), sin(heading)) * 6.5
+		_tick()
+	_input.pointer_delta = Vector2.ZERO
+	_input.lmb = false
+	_ticks(SETTLE)
+
+
 ## A vehicle in the next lane passed with half of close_call_gap to spare, at
 ## `closing_kmh` more than its speed, in third gear with nobody steering.
 ## Returns the change in his Nerves over the pass; what happened is in _events.

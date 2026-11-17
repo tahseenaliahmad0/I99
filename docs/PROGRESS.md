@@ -27,8 +27,8 @@ Useful commands:
 
 ## Current state
 
-- **Milestone:** M6 (all items): all 42 tests pass; its views and its review's findings remain. M7 (bosses) is next.
-- **Tests:** 88 of 114 passing (M0: 2, M1: 8, M2: 10, M3: 7, M4: 13, M5: 6, M6: 42).
+- **Milestone:** M7 (bosses): the framework and the Storm are in; Dawn with the Call and the Arrival, then the Checkpoint, are next. M6's review findings remain to be applied.
+- **Tests:** 89 of 114 passing (M0: 2, M1: 8, M2: 10, M3: 7, M4: 13, M5: 6, M6: 42, M7: 1).
 - **Reviews:** `m1-review` and `m2-review` reported on every lens (run ids wf_53ae3899-d40 and wf_d8c835c4-884; findings saved as JSON under the scratchpad `fixes/` folder, which does not survive the container: the lists below are what is left). Applied: M1 hand, wheel and gate; M2 car (D-028), traffic and collisions (D-029); M1 gesture pipeline code (D-030); M1 rules and the M2 view findings on indicators, vehicle ids, dashes, bend (D-035). **Still open:** (a) M2 views: pointer ring drawn at the hand's clamped target; the hand does not follow the gear knob; forearm stretches beyond 0.30 m for five far anchors (decision not recorded); `scene` in placeholders ignored for road strips, arm and pointer. (b) M1 test honesty (18): no test moves the pointer with relative motion; T-WHEEL-01 never releases a turned wheel; grip and ride on an off-centre wheel; gate engage radius and grind band probed from one side; FLICK time and direction limits; CRANK angle-not-distance; gate channel width; camera pitch and glance following the hand; pointer pixels to screen; steering sensitivity wiring; loose brackets on timing limits; literals standing in for tuning values. (c) M1 gesture: rituals.json is not checked against the table of GDD 4.6. (d) M2 test honesty leftovers (see D-028 and D-029 for what was done). M3 and M4 have not been reviewed. Background agents hit the usage limit on 2026-11-17 (resets 2026-11-20 01:00 UTC): until then work without workflows.
 - **Next step:** (1) Apply the confirmed findings of the review `m6-items-review` (run wf_2f6ba2b0-546, on commit cf5650b). (2) M7: the Checkpoint, the Storm, Dawn and the Call, Arrival. Tests for the cabin extend `CabinSuite` (tests/support): `_reach`, `_hold_at`, `_tap_at`, `_flick`, `_carry`, `_grip`, `_steer`, `_reach_time`, `_scrape_rail`, `_pass_closely`, `_to_quiet_leg`, `_into_stall`, `_leave_stop`, `_begin_quiet_leg`, `_drive_on_to_act`, `_into_next_quiet_leg`. How items say what they do is D-040 to D-044. **Owed checks, to be appended when their systems exist:** T-ITEM-SEEDS with a real unanswered Doubt (M9; it now checks `DriveSim.fray`); T-ITEM-BREATH-MINTS and T-ITEM-FORGED-PAPERS at the real Checkpoint (M7; they now check `courage_noticed()` and `use_forged_papers()`); T-PHANTOM-01 in the Storm (M7). Settings to wire in M10: `steer_sensitivity`, `grip_toggle`, `sequential_shift`, `phantom_enabled`. Workflows work again (the usage limit has lifted): use them for reviews and for independent parts. The open review items above are to be worked off alongside.
 
@@ -117,7 +117,13 @@ Do not start a milestone until every test of the previous one passes (GDD 18).
 - [x] Views: a placeholder per item, the contraband tag, fittings of the Adaptations, moved anchors, the carried object, the ghost hand, the ringing phone, Sway's roll, Lag's trailing hand, HUD rows; `--give=` and `--hud` (D-045; `artifacts/m6_cabin_*.png`)
 
 ### M7 Bosses: T-BOSS-01..03, T-CALL-01
-- [ ] not started
+- [x] Boss framework (D-046): `BossSim` and its plans, boss numbers and `boss_modifiers` in legs.json, the modifier drawn by seed (`boss_modifier_chance`), `DriveSim.begin_boss`, the tea stall's sign
+- [x] The Storm (T-BOSS-02): dust rhythm, gusts, wiper smear and window dust, standing on the shoulder, the weather cramp, Crosswind and Night storm, tail lights
+- [ ] Dawn, the Call and the Arrival (T-BOSS-03, T-CALL-01)
+- [ ] The Checkpoint (T-BOSS-01); the owed checks of T-ITEM-BREATH-MINTS and T-ITEM-FORGED-PAPERS at the real Checkpoint, T-PHANTOM-01 in the Storm
+- [ ] The scripted driver of T-RUN-01 drives each boss for real (it steers round the Storm's tail lights so far)
+- [ ] Views of the bosses; `--boss=`; screenshots
+- [ ] Adversarial review of M7 (workflow)
 
 ### M8 Passengers: T-PASS-* (5)
 - [ ] not started
@@ -189,3 +195,5 @@ Two lines per slice, newest last.
 - 2026-11-17 M6: the four Deals and the Phantom (flinch and weather cramp), D-044. All 42 tests of M6 pass: 88 of 114.
   Left for M6: the views of the items and the findings of the review that is still running.
 - 2026-11-17 M6: the views of the items (D-045): placeholders, contraband tags, fittings, the carried object, the ghost hand; `--give=` and `--hud`; three screenshots.
+- 2026-11-17 M7: bosses are roads with a plan (`BossSim`, D-046); boss modifiers are drawn by the Telling seed; after tea the next fork's sign shows the boss's.
+  The Storm (T-BOSS-02): 8 s thin and 12 s thick dust by the clock, gusts at 2 m/s, wipers that smear, a truck out of the dust behind a car that stands unsafely. 89 of 114.

@@ -162,6 +162,17 @@ func step(dt: float, car: CarSim, traffic: TrafficSim, gear: int) -> void:
 				_hold_behind(car, _move_clear(vehicle, car, traffic.vehicles, false))
 
 
+## A hit from outside the traffic on the road: what comes out of the dust
+## behind a standing car, the wall at the end of a street. Call it after
+## step(). Nothing happens while he cannot be hit, or has been hit this
+## tick already. True when it was a hit.
+func strike(kind: Hit) -> bool:
+	if kind == Hit.NONE or hit != Hit.NONE or immunity_left > 0.0:
+		return false
+	_register_hit(kind, 0)
+	return true
+
+
 func _clear_results() -> void:
 	hit = Hit.NONE
 	hit_lamps = 0

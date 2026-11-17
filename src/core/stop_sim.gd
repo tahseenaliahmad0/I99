@@ -54,6 +54,8 @@ var picks_left: int = 0
 var free_minutes: bool = false
 ## A boss stop's services are held out once his free pick is off the tray.
 var _services_due: bool = false
+## Tea was served at this stop (a tea stall, or a boss stop that became one).
+var tea_served: bool = false
 var shady_used: bool = false
 ## What happened, for DriveSim to announce.
 var events: Array[Dictionary] = []
@@ -90,6 +92,7 @@ func begin(id: String, act: int, shady: bool, price_mult: float = 1.0) -> void:
 	picks_left = 0
 	shady_used = false
 	_services_due = false
+	tea_served = false
 	events = []
 	var record: Dictionary = _data.record("stops", id)
 	service = GameData.as_string(record.get("service"))
@@ -119,6 +122,7 @@ func _lay_out(record: Dictionary) -> void:
 	match GameData.as_string(record.get("service")):
 		"tea":
 			# A tea stall sets his Nerves and fills the glass, hot.
+			tea_served = true
 			_nerves.set_value(GameData.as_float(record.get("nerves_to")))
 			for tea: ItemSim.Item in _items.items:
 				if GameData.as_array(tea.record.get("tags")).has("tea"):

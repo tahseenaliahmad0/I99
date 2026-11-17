@@ -1192,3 +1192,68 @@ Format: `D-NNN (milestone, date) Title` then Context / Decision / Why.
   Rain leg with a cabin full of items.
 - **Three bays** hold at most three Adaptations: `--give` with a fourth
   takes the place of the first.
+
+## D-046 (M7, 2026-11-17) Bosses as roads with a plan; the Storm
+
+- **A boss is a stretch with a plan.** `BossSim.plan(data, boss, modifier,
+  seed)` makes a plan like a leg's (LegSim runs its vehicles and gusts) with
+  the boss's id and what else the road brings: its gusts' push, what a wiper
+  sweep smears, what an open window lets in. `BossSim` keeps what goes by
+  the clock and reports it tick by tick, as `EncounterSim` does. Whatever
+  road `DriveSim._set_stretch` begins, the boss of its plan begins with it,
+  and any other road ends it. `DriveSim.begin_boss(id, modifier, seed)`
+  starts one by itself (tests, `--boss=`).
+- **Numbers.** Each boss's record in legs.json carries its numbers in an
+  object of its own name (`storm`), checked by the validator. GDD 15: "all
+  ... boss numbers in Part II are also tuning values. Store them in their
+  own data files."
+- **Boss modifiers** (GDD 10.2 to 10.4) are the record set `boss_modifiers`
+  in legs.json: `long_queue`, `thorough`, `crosswind`, `night_storm`,
+  `market_day`, `early_sun`, each naming its boss and the one number it
+  changes. The Storm's Crosswind is not the leg modifier of that name (a
+  GUST beat every 15 s): it makes the Storm's own gusts 50% stronger.
+- **Which Telling has which.** The GDD gives every boss two modifiers and no
+  rule for when. `boss_modifier_chance` (new, per act: 1/3, 1/2, 2/3) of
+  Tellings give the act's boss one of its two, each as likely as the other,
+  by the Telling seed (`RunGenerator.boss_modifier`). The shares rise by act
+  like every lever of GDD 12.3, but start above the legs' "none" in Act 1:
+  with that the Checkpoint's two modifiers could never be met.
+- **The tea stall's sign** (GDD 9.6): after tea (a tea stall, or a boss stop
+  that became one) the next fork's sign carries `boss` and `boss_modifier`
+  ("" for none) of the boss ahead of that fork. It is one sign: taking the
+  fork clears it. The save keeps it (`boss_sign`), since the next fork may
+  lie behind a boss stop.
+- **The Storm's dust** goes by the clock of the road: `thin_s` (8 s) of thin
+  dust, then `thick_s` (12 s) of thick, over and over, from the moment he
+  drives in. It opens thin: the first wall of dust has 8 s of tell (pillar
+  4), and the rhythm is the tell of every one after it. Each change falls
+  on the tick nearest its time. Focus slows it with the rest of the road.
+  Standing still does not wait it out and brings the end no nearer.
+- **Gusts** come every `gust_every_s` (9 s) at par, 250 m apart, from either
+  side by the seed, at `gust_push` (2 m/s; 3 with Crosswind), announced
+  `gust_tell` (1 s) ahead with their direction, like a leg's. A leg's tell
+  now lasts a whole number of ticks (it ran one tick over).
+- **Tail lights.** One vehicle at a time, 140 to 220 m apart, at 60 to
+  70 km/h, never two in a row in one lane: there is always something to
+  follow and always a way past.
+- **Haze.** In the Storm each sweep of the wipers (from the stalk or the
+  thumb keypad) adds `wipe_haze` (10%) up to `haze_cap`; an open window adds
+  `window_haze_per_s` (5% a second) and, as in a dust haze, nothing clears
+  while it is open.
+- **Standing.** "Stopped" is at `stopped_kmh` (1 km/h) or less. Safe is
+  wholly off the lanes (the left side of the car right of the road's edge)
+  with the hazard lights on. Otherwise, every `rear_end_every_s` (10 s) of
+  standing, something may come out of the dust behind him: the draw (from
+  the road stream, `rear_end_chance` 0.5) is made `rear_end_tell_s` (1 s)
+  before, and only what will hit him shows itself, by its horn
+  (`sfx_requested` horn, `behind`) and its lights (`rear_end_in` in the
+  snapshot). A car that has moved off or made itself safe within that
+  second is missed. The hit is a crash (two lamps, +20 Nerves, first gear)
+  with `rear_end` in its event. GDD 10.3 says "risks"; the tell is pillar 4.
+- **Night storm** is the Storm's road with the leg condition `night`: the
+  view is the headlight cone, so he sees the nearer of the cone and the
+  dust (with both headlights the dust is always nearer).
+- **The cramp** fires at `phantom_cramp_at` of the Storm's road, as in a
+  Rain or a Night leg, once.
+- **Heavy floor.** The Storm has Act 2's (GDD 6.1) because its plan is of
+  Act 2; an empty road calms him there as on any road that is no encounter.

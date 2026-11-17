@@ -13,6 +13,7 @@ const ROAD_LANES: int = 3
 ## the Telling seed.
 const FORK_SALT: int = 1000
 const LEG_SALT: int = 2000
+const BOSS_SALT: int = 3000
 
 
 ## The leg types an act may draw (GDD 12.3): those whose data lists the act.
@@ -91,8 +92,27 @@ static func boss_of(data: GameData, act: int) -> Dictionary:
 	return {}
 
 
-## A stretch of road with nothing planned on it: the approach to a fork, a
-## boss until it is built, the street of the Arrival.
+## The seed of an act's boss.
+static func boss_seed(telling_seed: int, act: int) -> int:
+	return Rng.derive(telling_seed, BOSS_SALT + act)
+
+
+## The modifier the act's boss has in this Telling (GDD 10.2 to 10.4), or "":
+## in boss_modifier_chance of Tellings one of the boss's own, each as likely
+## as the other.
+static func boss_modifier(data: GameData, telling_seed: int, act: int) -> String:
+	var allowed: Array = GameData.as_array(boss_of(data, act).get("modifiers"))
+	var random: RandomNumberGenerator = Rng.seeded(Rng.derive(boss_seed(telling_seed, act), 1))
+	# Both draws are always made, so the one does not depend on the other.
+	var roll: float = random.randf()
+	var which: int = random.randi_range(0, maxi(allowed.size() - 1, 0))
+	if allowed.is_empty() or roll >= data.tuning.fi("boss_modifier_chance", clampi(act, 1, ACTS) - 1):
+		return ""
+	return GameData.as_string(allowed[which])
+
+
+## A stretch of road with nothing planned on it: the approach to a fork, the
+## street of the Arrival; a boss's road begins as one.
 static func blank_plan(act: int, lanes: int, divided: bool, length: float, par: float = 0.0) -> Dictionary:
 	return {
 		"leg": "", "act": act, "seed": 0, "modifier": "", "lanes": lanes, "divided": divided,

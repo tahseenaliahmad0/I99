@@ -139,3 +139,10 @@ hud.cramp.hum,,,true
 hud.cramp.cramp,,,true
 hud.ghost,,,true
 hud.carrying,,,true
+sign.boss_modifier.long_queue,,,true
+sign.boss_modifier.thorough,,,true
+sign.boss_modifier.crosswind,,,true
+sign.boss_modifier.night_storm,,,true
+sign.boss_modifier.market_day,,,true
+sign.boss_modifier.early_sun,,,true
+sign.boss,,,true
