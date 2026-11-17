@@ -47,6 +47,7 @@ const CASH_PER_STACK: String = "close_call_cash_per_stack"
 const GAIN_PER_STACK: String = "nerves_gain_per_stack"
 const HIDES_COURAGE: String = "hides_courage"
 const COURAGE: StringName = &"courage"
+const PAINKILLERS: StringName = &"painkillers"
 
 const EXIT_NONE: int = 0
 const EXIT_AHEAD: int = 1
@@ -235,7 +236,7 @@ func _build() -> void:
 	effects.configure(data)
 	nerves.configure(tuning)
 	faults.configure(data)
-	items.configure(data, effects, nerves, traffic, car, faults)
+	items.configure(data, effects, nerves, traffic, car, faults, rng)
 	leg.configure(data, car, traffic)
 	encounter.configure(data, car, traffic, leg)
 	suspicion.configure(tuning)
@@ -333,6 +334,9 @@ func step(input: DriveInput) -> void:
 		hand.unpin()
 	if hand.press_applied and hand.can_reach:
 		_begin_at(hand.at_index, input.lmb)
+	# His eyes are down while an eyes-down ritual is performed, and from the
+	# first TAP of an answer for as long as his hand stays on the phone.
+	hand.eyes_down = (gesture.is_active() and GameData.as_bool(_active_ritual.get("eyes_down"))) or _dialling_here()
 
 	# 4. Wheel.
 	if hand.let_go:
@@ -449,7 +453,10 @@ func _set_stretch(plan: Dictionary) -> void:
 	collision.reset()
 	car.reset(GameData.as_int(plan.get("start_lane")), gate.gear)
 	_lane = car.lane_of(car.x)
+	var act_before: int = act
 	act = GameData.as_int(plan.get("act"), act)
+	if act != act_before:
+		items.begin_act()
 	curve_k = 0.0
 	items.begin_leg()
 	leg.begin(plan)
@@ -607,6 +614,7 @@ func _enter_stop() -> void:
 	clock.add_minutes(minutes)
 	# The shady guy is there after a leg that lit no lamp (GDD 9.6).
 	_shady_here = _leg_lamps_lit == 0
+	items.finish_mending()
 	_save_point()
 	_emit("stop_entered", {"stop": run.stop, "minutes": minutes, "act": run.act, "leg_index": run.legs_done,
 			"shady": _shady_here, "offers": stop.offers_view()})
@@ -690,6 +698,7 @@ func _end_boss() -> void:
 	_emit("boss_ended", {"boss": run.boss, "act": run.act, "time": leg.time})
 	run.enter_boss_stop()
 	_shady_here = false
+	items.finish_mending()
 	_save_point()
 	_emit("stop_entered", {"stop": run.stop, "minutes": 0.0, "act": run.act, "leg_index": run.legs_done,
 			"shady": false, "offers": stop.offers_view()})
@@ -754,6 +763,7 @@ func capture() -> Dictionary:
 		"side": _side,
 		"leg_lamps": _leg_lamps_lit,
 		"leg_state": items.leg_state(),
+		"item_state": items.telling_state(),
 		"shady": _shady_here,
 		# For people: rounded. What is loaded are the exact bits below.
 		"clock_min": snappedf(clock.minutes, 0.001),
@@ -839,6 +849,8 @@ func restore(telling: Dictionary) -> bool:
 				GameData.as_bool(boss.get("divided"), true), GameData.as_float(boss.get("length_m")), GameData.as_float(boss.get("par_s"))))
 		car.s = leg.length
 		leg.stop()
+	# (After the stretch is set: a new act would otherwise seem to begin here.)
+	items.set_telling_state(GameData.as_dict(telling.get("item_state")))
 	_park()
 	_open_stop(_shady_here)
 	return true
@@ -1054,8 +1066,15 @@ func visibility() -> float:
 		return INF
 	var reach: float = leg.dust_visibility
 	if leg.night:
-		reach = minf(reach, headlight_cone())
+		# What makes the night darker for him shortens what he sees of it
+		# (GDD 7.5, 7.7: cracked sunglasses, tinted glass).
+		reach = minf(reach, headlight_cone() * maxf(1.0 - items.passive("night_darker"), 0.0))
 	return reach
+
+
+## The Glare on his view now, 0 to 1 (GDD 5.8), after what he wears against it.
+func glare() -> float:
+	return encounter.glare * items.passive("glare_mult")
 
 
 ## How far the headlights reach at night, in metres (GDD 4.6, 6.3).
@@ -1100,6 +1119,9 @@ func snapshot() -> Dictionary:
 		"carrying": _carried(),
 		"view_block": GameData.as_string(_active_ritual.get("blocks_view")) if gesture.is_active() else "",
 		"courage": courage(),
+		"caller": String(items.caller),
+		"ring_left": items.ring_left,
+		"call_taps": items.call_taps,
 		"sway": _sway,
 		"lag": wheel.lag,
 		"steer_angle": wheel.lagged_angle(),
@@ -1156,7 +1178,8 @@ func snapshot() -> Dictionary:
 		"suspicion_watching": suspicion.watching,
 		"police_lights": encounter.police_lights,
 		"tailgater": encounter.tail_phase if encounter.kind == "tailgater" else 0,
-		"glare": encounter.glare,
+		"glare": glare(),
+		"night_darker": items.passive("night_darker") if leg.active and leg.night else 0.0,
 		"side_road": encounter.side_road if encounter.kind == "motorcade" else 0,
 		"slip": _slip_in_view(),
 		"slip_open": _exit == EXIT_OPEN or (encounter.kind == "motorcade" and encounter.side_road == EncounterSim.SIDE_ROAD_OPEN),
@@ -1179,6 +1202,14 @@ func snapshot() -> Dictionary:
 		"anchors_in_use": _anchors_in_use(),
 		"vehicles": _vehicle_snapshots(),
 	}
+
+
+## True while he is answering the phone with his hand on it.
+func _dialling_here() -> bool:
+	if not items.dialling() or hand.at_index == HandSim.NO_ANCHOR:
+		return false
+	var handset: ItemSim.Item = items.phone()
+	return handset != null and String(hand.anchor_id(hand.at_index)) == items.anchor_of(handset)
 
 
 ## What the hand is carrying in a DRAG_TO: an item's id, or the ritual's
@@ -1323,16 +1354,19 @@ func _step_free_traffic() -> void:
 
 func _apply_collisions() -> void:
 	if collision.hit != Collision.Hit.NONE:
-		var drawn: Array[StringName] = faults.light(collision.hit_lamps)
+		# The charm turns the first scrape of a leg aside: no lamp (GDD 7.5).
+		var spared: bool = collision.hit == Collision.Hit.SCRAPE and items.absorbs_scrape()
+		var drawn: Array[StringName] = faults.light(0 if spared else collision.hit_lamps)
 		nerves.jolt()
 		nerves.add(collision.hit_nerves)
 		items.on_hit(collision.hit)
+		items.on_faults_lit(drawn)
 		if collision.hit_forces_gear:
 			gate.force_gear(_forced_gear)
 			if _lever_in_hand:
 				_lever_in_hand = false
 				hand.unpin()
-		_emit("hit", {"kind": collision.hit, "lamps": drawn.size(), "vehicle": collision.hit_vehicle_id})
+		_emit("hit", {"kind": collision.hit, "lamps": drawn.size(), "vehicle": collision.hit_vehicle_id, "spared": spared})
 		if not drawn.is_empty():
 			_emit("lamp_lit", {"lamps": faults.lamps, "lit": drawn.size(), "faults": drawn})
 		if faults.is_wrecked() and not wrecked:
@@ -1387,7 +1421,16 @@ func _feed_nerves() -> void:
 func _apply_statuses() -> void:
 	nerves.gain_mult = maxf(1.0 + effects.total(GAIN_PER_STACK, true), 0.0)
 	collision.cash_mult = 1.0 + effects.total(CASH_PER_STACK, true)
-	wheel.lag = minf(tuning.f("lag_per_source") * float(courage()), tuning.f("lag_cap")) * 0.001
+	collision.cash_bonus = items.passive("close_call_bonus")
+	var lag_ms: float = tuning.f("lag_per_source") * float(courage())
+	# Flask + Painkillers (GDD 7.8): with Courage on top of the pills, Lag
+	# doubles and close-call cash doubles.
+	if courage() > 0 and effects.has_own(PAINKILLERS):
+		var numb: Dictionary = items.pair("numb_courage")
+		if not numb.is_empty():
+			lag_ms *= GameData.as_float(numb.get("amount"))
+			collision.cash_mult *= GameData.as_float(numb.get("amount"))
+	wheel.lag = minf(lag_ms, tuning.f("lag_cap")) * 0.001
 
 
 ## Courage stacks now (GDD 7.4).

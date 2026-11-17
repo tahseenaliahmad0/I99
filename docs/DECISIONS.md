@@ -1008,3 +1008,58 @@ Format: `D-NNN (milestone, date) Title` then Context / Decision / Why.
   above and behind the first row). A fuel station late in a Telling can hold
   out three items, five restocks and two Deals; with five places most of
   that waited unseen until something was bought.
+
+## D-042 (M6, 2026-11-17) The phone, the Keepsakes, seven synergies
+
+- **Calls.** The wait for the next call (25 to 40 s, from the road stream)
+  is counted from the end of the last one, or from when the phone first
+  rides along. "One call in four is Um Noor" is every fourth call of the
+  Telling, not a one-in-four chance: he can learn it. Her call pays no cash
+  (also with the taxi sign). Each of the three TAPs is a ritual; from the
+  first one his eyes are down for as long as his hand stays on the phone
+  and the call is open. One call is one use of the phone to whoever watches
+  (+30 once, not per TAP). A call still ringing when he stops is dropped
+  without penalty. The count of calls and of calls answered in a row pass
+  through a stop.
+- **Standing changes.** A Keepsake, Adaptation or Deal that works by being
+  there says so with `{"passive": key, "amount": n}` entries; `ItemSim`
+  keeps the combined value per key (multipliers multiply, amounts add) and
+  the other systems read it. The keys are `ItemSim.PASSIVES`.
+- **Charm.** It turns aside scrapes only (rail, barrier, a slow vehicle, the
+  tailgater's ram), the first of each leg. The scrape still frays him and
+  costs speed. No lamp lit means the leg can still be a clean one. Spent,
+  it stays spent through the leg's stop.
+- **Thermos.** Offered while there is tea in the cabin to refill; a pour
+  fills the glass and makes it hot, whatever was in it. It has no restock:
+  four refills are what it holds.
+- **Duct tape.** It takes hold of the first fault lit in the act (of
+  several lit by one hit, the first drawn) and that fault mends itself 10 s
+  later, or the moment he stands at a stop. The lamp did light: the leg is
+  not clean. A new act begins when the road of that act does.
+- **Lucky note.** 1 cash per close call, flat: not multiplied by gear,
+  chain or Courage.
+- **Cracked sunglasses.** "Darker" is distance: at night he sees that share
+  less far (the headlight cone times 1 - 0.15), and the snapshot carries the
+  share for the picture. Glare is multiplied by 0.3 on its way to the view;
+  Glare does nothing else.
+- **Synergies** live on one item of the pair (`synergies`: `with`, `rule`,
+  numbers) and work by rule name (`ItemSim.SYNERGY_RULES`), only while the
+  partner is in the cabin (or, for the tokens, music is playing / always
+  for the photo).
+  - Tea + Cigarettes: every sip while one is lit adds 10 s to that burn
+    (no Tremor, Awake, Haze for 10 s more). The -10 Nerves of a cigarette
+    stay -10.
+  - Flask + Photo: a look with Courage ends all Courage, every time. The
+    -40 takes the place of the photo's -20 and is, like it, once per leg.
+  - Flask + Painkillers: while Courage and a pill's 60 s overlap, Lag is
+    doubled (and then capped) and close-call cash doubled. Owning both
+    does nothing by itself.
+  - Phone + Taxi sign: every third call answered in a row pays 20 more; a
+    missed call starts the row again; Um Noor's call counts as answered.
+  - Seeds + Tea: the tea does not cool while he chews.
+- **Tags.** items.json lists the tags there are (`tags`). An item's tags,
+  a `tag:<tag>` condition and a `refill:<tag>` op must name one of them: a
+  misspelt tag is an error whether or not any item carries the right one.
+- **Fixed on the way.** A save made at a stop in Act 2 or 3 would have
+  looked like the start of a new act when loaded; what belongs to the
+  Telling is now put back after the road is.

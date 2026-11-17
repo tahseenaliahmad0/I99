@@ -28,12 +28,12 @@ const SLOT_ANCHOR: String = "@slot"
 const RITUAL_OPS: PackedStringArray = [
 	"nerves", "cash", "add_effect", "remove_effect", "consume_supply", "give", "toggle",
 	"horn", "wipe", "photo", "indicate", "window", "ash", "radio_step", "sfx", "line", "pay",
-	"clear_haze", "flip",
+	"clear_haze", "flip", "answer", "refill",
 ]
 ## Cabin switches a "toggle:" op may flip and a "flag:" condition may read.
 const CABIN_FLAGS: PackedStringArray = ["hazards", "high_beam", "window_open", "glovebox_open", "passenger"]
 ## Conditions that are not effect ids.
-const CONDITION_WORDS: PackedStringArray = ["supply>0", "hot", "playing", "warbling"]
+const CONDITION_WORDS: PackedStringArray = ["supply>0", "hot", "playing", "warbling", "ringing"]
 ## Sources of Nerves a status can make him immune to (GDD 7.4, the seeds).
 const NERVE_SOURCES: PackedStringArray = ["honk", "tailgater", "doubt"]
 const REACHES: PackedStringArray = ["near", "mid", "far", "none"]
@@ -759,6 +759,11 @@ func _check_cross_rules() -> void:
 			_err("E_TYPE", "items.json", where + ".supply", "must be a whole number")
 	for item: Dictionary in _data.records("items"):
 		var item_id: String = GameData.as_string(item.get("id"), "?")
+		var tags: Array = GameData.as_array(item.get("tags"))
+		for index: int in tags.size():
+			if tags[index] is String and not _item_tags().has(GameData.as_string(tags[index])):
+				_err("E_REF", "items.json", "items[%s].tags[%d]" % [item_id, index],
+						"'%s' is not a tag of items.json (%s)" % [GameData.as_string(tags[index]), ", ".join(_item_tags())])
 		for ritual_id: Variant in GameData.as_array(item.get("rituals")):
 			var listed: String = GameData.as_string(ritual_id)
 			if _data.has_record("rituals", listed):
@@ -774,6 +779,10 @@ func _check_cross_rules() -> void:
 		for index: int in synergies.size():
 			var synergy: Dictionary = GameData.as_dict(synergies[index])
 			var with: String = GameData.as_string(synergy.get("with"))
+			var rule: String = GameData.as_string(synergy.get("rule"))
+			if synergy.has("rule") and synergy["rule"] is String and not ItemSim.SYNERGY_RULES.has(rule):
+				_err("E_ENUM", "items.json", "items[%s].synergies[%d].rule" % [item_id, index],
+						"'%s' is not a synergy rule (%s)" % [rule, ", ".join(ItemSim.SYNERGY_RULES)])
 			if with.is_empty():
 				continue
 			if not _data.has_record("items", with) and not _synergy_tokens().has(with):
@@ -842,7 +851,7 @@ func _check_beats() -> void:
 ## One entry of an item's "gives" or "takes" (see ItemSim): a status, or a
 ## change to a resource, with the keys that kind of entry has.
 func _check_entry(item: Dictionary, entry: Dictionary, where: String) -> void:
-	const ENTRY_KEYS: PackedStringArray = ["effect", "duration", "for", "resource", "amount", "over", "per_s", "while", "synergy"]
+	const ENTRY_KEYS: PackedStringArray = ["effect", "duration", "for", "resource", "amount", "over", "per_s", "while", "synergy", "passive"]
 	for key: Variant in entry:
 		if not ENTRY_KEYS.has(str(key)):
 			_err("E_UNKNOWN_KEY", "items.json", where, "unknown key '%s' (%s)" % [str(key), ", ".join(ENTRY_KEYS)])
@@ -851,6 +860,13 @@ func _check_entry(item: Dictionary, entry: Dictionary, where: String) -> void:
 			_err("E_TYPE", "items.json", "%s.%s" % [where, key], "must be a number")
 	if entry.has("for") and (GameData.as_string(entry.get("for")) != "leg" or entry.has("duration") or not entry.has("effect")):
 		_err("E_RULE", "items.json", where + ".for", "\"for\" is \"leg\", on a status with no duration")
+	if entry.has("passive"):
+		var key: String = GameData.as_string(entry.get("passive"))
+		if not ItemSim.PASSIVES.has(key):
+			_err("E_ENUM", "items.json", where + ".passive", "'%s' is not a standing change (%s)" % [key, ", ".join(ItemSim.PASSIVES.keys())])
+		if not entry.has("amount") or entry.size() != 2:
+			_err("E_RULE", "items.json", where, "a passive entry is {\"passive\": key, \"amount\": number}")
+		return
 	if entry.has("effect") == entry.has("resource"):
 		_err("E_RULE", "items.json", where, "needs exactly one of \"effect\" and \"resource\"")
 	if entry.has("effect"):
@@ -899,6 +915,9 @@ func _check_op(op: String, file_label: String, where: String) -> void:
 		"pay":
 			if argument != "fine" and argument != "bribe":
 				_err("E_ENUM", file_label, where, "'pay' takes fine or bribe, not '%s'" % argument)
+		"refill":
+			if not _item_tags().has(argument):
+				_err("E_REF", file_label, where, "'refill' takes an item tag; '%s' is not a tag of items.json" % argument)
 		"toggle":
 			if not CABIN_FLAGS.has(argument):
 				_err("E_ENUM", file_label, where, "'%s' is not a cabin switch (%s)" % [argument, ", ".join(CABIN_FLAGS)])
@@ -920,8 +939,20 @@ func _check_condition(condition: String, file_label: String, where: String) -> v
 		if not CABIN_FLAGS.has(word.substr(5)):
 			_err("E_ENUM", file_label, where, "'%s' is not a cabin switch" % word.substr(5))
 		return
+	if word.begins_with("tag:"):
+		if not _item_tags().has(word.substr(4)):
+			_err("E_REF", file_label, where, "'%s' is not a tag of items.json" % word.substr(4))
+		return
 	if not _data.has_record("effects", word):
 		_err("E_REF", file_label, where, "'%s' is neither a condition word nor an effects id" % word)
+
+
+## The tags an item may carry and a slot may hold (items.json "tags").
+func _item_tags() -> PackedStringArray:
+	var out: PackedStringArray = []
+	for tag: Variant in GameData.as_array(_data.root("items").get("tags")):
+		out.append(str(tag))
+	return out
 
 
 ## Things a synergy can pair with that are not items (GDD 7.8: music, the photo).

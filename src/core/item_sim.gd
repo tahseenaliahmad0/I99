@@ -18,6 +18,8 @@ extends RefCounted
 ##   {"effect": id}                           a status held on while it is there
 ##   {"resource": "nerves", "per_s": r}       Nerves by the second while it is there
 ##   {"effect": "haze_rate", "amount": r}     haze by the second while it is there
+##   {"passive": key, "amount": n}            a standing change to the car or the
+##                                            cabin while it is there (see PASSIVES)
 ## each with an optional "while" condition. A resource entry may name a
 ## "synergy" rule: when that synergy's partner is there, its amount is used.
 
@@ -28,6 +30,8 @@ const VISOR_DOWN: StringName = &"visor_down"
 const HAZE_RATE: String = "haze_rate"
 const FLAG_WINDOW: StringName = &"window_open"
 const MUSIC: StringName = &"music"
+const COURAGE: StringName = &"courage"
+const CHEWING: StringName = &"chewing"
 ## Synergy partners that are not items (GDD 7.8).
 const TOKEN_MUSIC: String = "music"
 const TOKEN_PHOTO: String = "photo"
@@ -35,6 +39,27 @@ const TOKEN_PHOTO: String = "photo"
 const TAG_TAPE: String = "tape"
 ## Who holds a status that lasts for the rest of the leg.
 const LEG: StringName = &"leg"
+## What an item that takes calls is tagged.
+const TAG_PHONE: String = "phone"
+const CALLER_DISPATCHER: StringName = &"dispatcher"
+const CALLER_FAMILY: StringName = &"um_noor"
+## The synergy rules the simulation knows (GDD 7.8).
+const SYNERGY_RULES: PackedStringArray = [
+	"sip_extends_burn", "no_smoke_haze", "bead_calm", "photo_sobers", "numb_courage",
+	"hook_holds_lane", "calls_in_a_row", "chewing_keeps_warm", "auto_indicate",
+]
+## The standing changes an item may make ("passive" entries) and how those of
+## several items combine: true for a multiplier, false for an amount added.
+const PASSIVES: Dictionary = {
+	"call_gap_mult": true,
+	"call_cash_bonus": false,
+	"first_scrape_free": false,
+	"haze_clear_mult": true,
+	"self_repair_s": false,
+	"close_call_bonus": false,
+	"glare_mult": true,
+	"night_darker": false,
+}
 
 ## One thing in the cabin.
 class Item:
@@ -59,6 +84,10 @@ class Item:
 	## A tape (it has a "side_s"): seconds it has played since it was last flipped.
 	var is_tape: bool = false
 	var side_time: float = 0.0
+	## Its smoke makes no haze (GDD 7.8: an air freshener hangs in the car).
+	var smokeless: bool = false
+	## It does not cool while he chews (GDD 7.8: seeds and the tea).
+	var warm_while_chewing: bool = false
 	## What it does by the second while it is in the cabin.
 	var standing: Array[Standing] = []
 
@@ -88,6 +117,8 @@ class Condition:
 	const FLAG: int = 3
 	const PLAYING: int = 4
 	const WARBLING: int = 5
+	const RINGING: int = 6
+	const TAG: int = 7
 	var negated: bool = false
 	var word: int = EFFECT
 	var name: StringName = &""
@@ -123,12 +154,30 @@ var phone_used: bool = false
 ## sfx and line requests, drained by DriveSim.
 var events: Array[Dictionary] = []
 
+## The phone (GDD 7.4): who is calling ("" while it is silent), how long it
+## will go on ringing, and how many of the TAPs that answer it are made.
+var caller: StringName = &""
+var ring_left: float = 0.0
+var call_taps: int = 0
+## Calls so far this Telling (every fourth is Um Noor) and calls answered
+## in a row.
+var calls: int = 0
+var answered_run: int = 0
+## The charm has turned a scrape aside this leg (GDD 7.5).
+var scrape_spared: bool = false
+## The duct tape has held a fault this act; the fault it is holding now and
+## how long until that fault is mended ("" and 0 when it holds none).
+var tape_spent: bool = false
+var mending: StringName = &""
+var mend_left: float = 0.0
+
 var _data: GameData
 var _effects: EffectSystem
 var _nerves: NervesSim
 var _traffic: TrafficSim
 var _car: CarSim
 var _faults: FaultSim
+var _rng: Rng
 
 ## anchor id -> Array of control rituals (no owning item) offered there.
 var _controls: Dictionary = {}
@@ -137,6 +186,10 @@ var _controls: Dictionary = {}
 var _placed: Dictionary = {}
 ## Statuses held until the leg ends.
 var _leg_holds: Array[StringName] = []
+## Standing changes of what is in the cabin, combined: key -> value.
+var _passives: Dictionary = {}
+## Seconds until the phone rings next; negative until it is drawn.
+var _call_wait: float = -1.0
 ## anchor id -> the anchor that takes its place while something sits there
 ## (anchors.json "over": the tape deck is the radio).
 var _covered_by: Dictionary = {}
@@ -174,13 +227,14 @@ var _car_half_length: float = 0.0
 
 
 func configure(data: GameData, effects: EffectSystem, nerves: NervesSim, traffic: TrafficSim,
-		car: CarSim, faults: FaultSim) -> void:
+		car: CarSim, faults: FaultSim, rng: Rng) -> void:
 	_data = data
 	_effects = effects
 	_nerves = nerves
 	_traffic = traffic
 	_car = car
 	_faults = faults
+	_rng = rng
 	var tuning: Tuning = data.tuning
 	_haze_cap = tuning.f("haze_cap")
 	_haze_clear = tuning.f("haze_clear_rate")
@@ -244,6 +298,14 @@ func reset_cabin() -> void:
 	_drips.clear()
 	_leg_holds.clear()
 	events.clear()
+	_hang_up()
+	calls = 0
+	answered_run = 0
+	scrape_spared = false
+	tape_spent = false
+	mending = &""
+	mend_left = 0.0
+	_refresh_passives()
 	for entry: Variant in GameData.as_array(_data.root("items").get("starting_cabin")):
 		var start: Dictionary = GameData.as_dict(entry)
 		add_item(StringName(GameData.as_string(start.get("item"))), StringName(GameData.as_string(start.get("slot"))),
@@ -254,6 +316,7 @@ func reset_cabin() -> void:
 func empty_cabin() -> void:
 	items.clear()
 	flags.clear()
+	_refresh_passives()
 
 
 ## Tunes the radio to a station (or to static) without the dial.
@@ -267,9 +330,15 @@ func set_radio(station: StringName) -> void:
 ## What resets when a new leg begins.
 func begin_leg() -> void:
 	photo_used = false
+	scrape_spared = false
 	for held: StringName in _leg_holds:
 		_effects.hold(held, LEG, false)
 	_leg_holds.clear()
+
+
+## What resets when a new act begins.
+func begin_act() -> void:
+	tape_spent = false
 
 
 ## What of this leg a stop must not forget (the save holds it): the photo
@@ -278,11 +347,24 @@ func leg_state() -> Dictionary:
 	var held: Array = []
 	for status: StringName in _leg_holds:
 		held.append(String(status))
-	return {"photo": photo_used, "held": held}
+	return {"photo": photo_used, "spared": scrape_spared, "held": held}
+
+
+## What of this Telling a stop must not forget: how many calls there have
+## been, and how many were answered in a row.
+func telling_state() -> Dictionary:
+	return {"calls": calls, "answered_run": answered_run, "tape_spent": tape_spent}
+
+
+func set_telling_state(state: Dictionary) -> void:
+	calls = GameData.as_int(state.get("calls"))
+	answered_run = GameData.as_int(state.get("answered_run"))
+	tape_spent = GameData.as_bool(state.get("tape_spent"))
 
 
 func set_leg_state(state: Dictionary) -> void:
 	photo_used = GameData.as_bool(state.get("photo"))
+	scrape_spared = GameData.as_bool(state.get("spared"))
 	for status: Variant in GameData.as_array(state.get("held")):
 		var id: StringName = StringName(GameData.as_string(status))
 		if not _leg_holds.has(id):
@@ -325,6 +407,7 @@ func add_item(id: StringName, slot: StringName, supply: int = -1) -> Item:
 			if standing != null:
 				item.standing.append(standing)
 	items.append(item)
+	_refresh_passives()
 	return item
 
 
@@ -339,11 +422,14 @@ func remove_item(item: Item) -> void:
 			standing.held = false
 			_effects.hold(standing.effect, item.id, false)
 	items.erase(item)
+	_refresh_passives()
 
 
 ## The entry of a "gives" or "takes" list that works all the time the item
 ## is there, or null for one that works when the item is used.
 func _standing_of(entry: Dictionary) -> Standing:
+	if entry.has("passive"):
+		return null
 	var standing: Standing = Standing.new()
 	if GameData.as_string(entry.get("effect")) == HAZE_RATE:
 		standing.kind = Standing.HAZE
@@ -366,6 +452,15 @@ func item(id: StringName) -> Item:
 		if candidate.id == id:
 			return candidate
 	return null
+
+
+## The things in the cabin that carry a tag ("tea", "smoke", "phone").
+func tagged(tag: String) -> Array[Item]:
+	var out: Array[Item] = []
+	for candidate: Item in items:
+		if GameData.as_array(candidate.record.get("tags")).has(tag):
+			out.append(candidate)
+	return out
 
 
 func item_in_slot(slot: StringName) -> Item:
@@ -490,7 +585,8 @@ func complete(ritual: Dictionary, direction: int) -> void:
 		# Using contraband, or the phone, is something a police car sees (GDD 6.5).
 		if GameData.as_bool(owner.record.get("contraband")):
 			contraband_used = true
-		if GameData.as_array(owner.record.get("tags")).has("phone"):
+		# One use for a call, however many TAPs answer it.
+		if GameData.as_array(owner.record.get("tags")).has(TAG_PHONE) and not dialling():
 			phone_used = true
 	for op: Variant in GameData.as_array(ritual.get("on_complete")):
 		_run(GameData.as_string(op), owner, direction)
@@ -529,6 +625,8 @@ func _condition(text: String) -> Condition:
 		word = word.substr(1)
 	if word == "supply>0":
 		condition.word = Condition.SUPPLY
+	elif word == "ringing":
+		condition.word = Condition.RINGING
 	elif word == "hot":
 		condition.word = Condition.HOT
 	elif word == "playing":
@@ -538,6 +636,9 @@ func _condition(text: String) -> Condition:
 	elif word.begins_with("flag:"):
 		condition.word = Condition.FLAG
 		condition.name = StringName(word.substr(5))
+	elif word.begins_with("tag:"):
+		condition.word = Condition.TAG
+		condition.name = StringName(word.substr(4))
 	else:
 		condition.name = StringName(word)
 	_conditions[text] = condition
@@ -557,6 +658,10 @@ func _met(condition: Condition, owner: Item) -> bool:
 			met = owner != null and _is_tape(owner) and _warbles(owner)
 		Condition.FLAG:
 			met = flag(condition.name)
+		Condition.RINGING:
+			met = caller != &""
+		Condition.TAG:
+			met = not tagged(String(condition.name)).is_empty()
 		_:
 			met = _effects.has(condition.name)
 	return met != condition.negated
@@ -589,9 +694,16 @@ func _run(op: String, owner: Item, direction: int) -> void:
 			since_wipe = 0.0
 		"photo":
 			_effects.add(VISOR_DOWN, _visor_time)
+			# Flask + Photo (GDD 7.8): looked at with Courage, the photo calms
+			# him far more, and the Courage is gone.
+			var calm: float = _visor_nerves
+			var sobered: Dictionary = pair("photo_sobers") if _effects.has_own(COURAGE) else {}
+			if not sobered.is_empty():
+				calm = GameData.as_float(sobered.get("amount"))
+				_effects.remove(COURAGE)
 			if not photo_used:
 				photo_used = true
-				_nerves.add(_visor_nerves)
+				_nerves.add(calm)
 		"indicate":
 			# The stalk goes up for right and down for left (GDD 4.6).
 			indicator = 1 if direction == Gesture.DIR_UP else -1
@@ -609,6 +721,12 @@ func _run(op: String, owner: Item, direction: int) -> void:
 		"flip":
 			if owner != null:
 				owner.side_time = 0.0
+		"answer":
+			_answer_tap(owner)
+		"refill":
+			# A full supply again for everything of a kind (the Thermos: the tea, hot).
+			for refilled: Item in tagged(parts[1]):
+				restock(refilled)
 		"radio_step":
 			_radio_step(direction)
 		"pay":
@@ -631,12 +749,20 @@ func _give(owner: Item) -> void:
 			_give_entry(owner, GameData.as_dict(listed))
 	if owner.use_effect != &"" and _effects.has_own(owner.use_effect) and _param(owner, "ash_by_s", 0.0) > 0.0:
 		_start_burn(owner)
+	# Tea + Cigarettes (GDD 7.8): a sip while one is lit makes it burn longer.
+	for smoke: Item in items:
+		if smoke == owner or not smoke.burning:
+			continue
+		for listed: Variant in GameData.as_array(smoke.record.get("synergies")):
+			var synergy: Dictionary = GameData.as_dict(listed)
+			if GameData.as_string(synergy.get("rule")) == "sip_extends_burn" and GameData.as_string(synergy.get("with")) == String(owner.id):
+				_effects.extend(smoke.use_effect, GameData.as_float(synergy.get("amount")))
 
 
 ## One entry of an item's gives or takes, when the item is used. Entries
 ## that work all the time (see Standing) are not for here.
 func _give_entry(owner: Item, entry: Dictionary) -> void:
-	if entry.has("per_s") or GameData.as_string(entry.get("effect")) == HAZE_RATE:
+	if entry.has("per_s") or entry.has("passive") or GameData.as_string(entry.get("effect")) == HAZE_RATE:
 		return
 	if entry.has("while") and not _holds(GameData.as_string(entry.get("while")), owner):
 		return
@@ -664,6 +790,16 @@ func _give_entry(owner: Item, entry: Dictionary) -> void:
 
 
 # --- Synergies (GDD 7.8) -----------------------------------------------------
+
+## The synergy under a rule name of whichever item in the cabin has one whose
+## partner is there now. {} when there is none.
+func pair(rule: String) -> Dictionary:
+	for candidate: Item in items:
+		var synergy: Dictionary = _synergy(candidate, rule)
+		if not synergy.is_empty():
+			return synergy
+	return {}
+
 
 ## The synergy of `owner` under a rule name, if its partner is there now: an
 ## item in the cabin, music playing, the photo on the visor. {} otherwise.
@@ -708,6 +844,132 @@ func _give_duration(owner: Item, id: StringName) -> float:
 func _param(item_instance: Item, key: String, fallback: float) -> float:
 	var params: Dictionary = GameData.as_dict(item_instance.record.get("params"))
 	return GameData.as_float(params.get(key), fallback)
+
+
+# --- Standing changes (GDD 7.5 to 7.7) ---------------------------------------
+
+## What the things in the cabin change just by being there: the product of
+## a multiplier, the sum of an amount (1 or 0 when nothing names the key).
+func passive(key: String) -> float:
+	if _passives.has(key):
+		return GameData.as_float(_passives[key])
+	return 1.0 if GameData.as_bool(PASSIVES.get(key)) else 0.0
+
+
+func _refresh_passives() -> void:
+	_passives.clear()
+	for candidate: Item in items:
+		for list: String in ["gives", "takes"]:
+			for listed: Variant in GameData.as_array(candidate.record.get(list)):
+				var entry: Dictionary = GameData.as_dict(listed)
+				if not entry.has("passive"):
+					continue
+				var key: String = GameData.as_string(entry.get("passive"))
+				var amount: float = GameData.as_float(entry.get("amount"))
+				if GameData.as_bool(PASSIVES.get(key)):
+					_passives[key] = passive(key) * amount
+				else:
+					_passives[key] = passive(key) + amount
+	for candidate: Item in items:
+		candidate.smokeless = not _synergy(candidate, "no_smoke_haze").is_empty()
+		candidate.warm_while_chewing = false
+		for other: Item in items:
+			for listed: Variant in GameData.as_array(other.record.get("synergies")):
+				var synergy: Dictionary = GameData.as_dict(listed)
+				if GameData.as_string(synergy.get("rule")) == "chewing_keeps_warm" and GameData.as_string(synergy.get("with")) == String(candidate.id):
+					candidate.warm_while_chewing = true
+
+
+# --- The phone (GDD 7.4) -----------------------------------------------------
+
+## The phone in the cabin, or null.
+func phone() -> Item:
+	for candidate: Item in items:
+		if GameData.as_array(candidate.record.get("tags")).has(TAG_PHONE):
+			return candidate
+	return null
+
+
+## True from the first TAP of an answer until the call is answered or lost:
+## his eyes are on the phone while his hand is (GDD 4.7).
+func dialling() -> bool:
+	return caller != &"" and call_taps > 0
+
+
+## Calls come call_gap_s apart, counted from the end of the last one (or from
+## when the phone first rides along). A call rings for ring_s.
+func _step_phone(dt: float) -> void:
+	var handset: Item = phone()
+	if handset == null:
+		if caller != &"" or _call_wait >= 0.0:
+			_hang_up()
+		return
+	if caller != &"":
+		ring_left -= dt
+		if ring_left < dt * 0.5:
+			_miss_call(handset)
+		return
+	if _call_wait < 0.0:
+		var gap: Array = GameData.as_array(GameData.as_dict(handset.record.get("params")).get("call_gap_s"))
+		if gap.size() < 2:
+			# A phone nobody calls.
+			return
+		_call_wait = _rng.range_f(Rng.ROAD, GameData.as_float(gap[0]), GameData.as_float(gap[1])) * passive("call_gap_mult")
+	_call_wait -= dt
+	if _call_wait < dt * 0.5:
+		_ring(handset)
+
+
+func _ring(handset: Item) -> void:
+	calls += 1
+	var every: int = int(_param(handset, "family_every", 0.0))
+	caller = CALLER_FAMILY if every > 0 and calls % every == 0 else CALLER_DISPATCHER
+	ring_left = _param(handset, "ring_s", 0.0)
+	call_taps = 0
+	events.append({"type": "call_started", "caller": String(caller), "ring_s": ring_left})
+	events.append({"type": "sfx_requested", "id": "phone_ring"})
+
+
+## One of the TAPs that answer a call; the last answers. (The first has shown
+## the phone in his hand to whoever is watching: see complete().)
+func _answer_tap(handset: Item) -> void:
+	if handset == null or caller == &"":
+		return
+	call_taps += 1
+	if call_taps < int(_param(handset, "answer_taps", 1.0)):
+		return
+	var paid: float = 0.0
+	var calmed: float = 0.0
+	if caller == CALLER_FAMILY:
+		calmed = _param(handset, "family_nerves", 0.0)
+		_nerves.add(calmed)
+	else:
+		paid = _param(handset, "dispatcher_cash", 0.0) + passive("call_cash_bonus")
+	answered_run += 1
+	# Phone + Taxi sign (GDD 7.8): every so many calls answered in a row pay a bonus.
+	var in_a_row: Dictionary = _synergy(handset, "calls_in_a_row")
+	var every: int = GameData.as_int(in_a_row.get("every"))
+	if every > 0 and answered_run % every == 0:
+		paid += GameData.as_float(in_a_row.get("amount"))
+	cash_delta += paid
+	events.append({"type": "call_resolved", "caller": String(caller), "answered": true, "cash": paid, "nerves": calmed, "in_a_row": answered_run})
+	_hang_up()
+
+
+func _miss_call(handset: Item) -> void:
+	var frayed: float = _param(handset, "missed_nerves", 0.0)
+	_nerves.add(frayed)
+	answered_run = 0
+	events.append({"type": "call_resolved", "caller": String(caller), "answered": false, "cash": 0.0, "nerves": frayed, "in_a_row": 0})
+	_hang_up()
+
+
+## The phone is silent, and the wait for the next call has not begun.
+func _hang_up() -> void:
+	caller = &""
+	ring_left = 0.0
+	call_taps = 0
+	_call_wait = -1.0
 
 
 # --- The tape deck -----------------------------------------------------------
@@ -798,6 +1060,45 @@ func on_hit(kind: int) -> void:
 			candidate.supply = 0
 
 
+## The charm (GDD 7.5): the first scrape of a leg lights no lamp. True when
+## this scrape is that one; it is then spent for the leg.
+func absorbs_scrape() -> bool:
+	if scrape_spared or passive("first_scrape_free") <= 0.0:
+		return false
+	scrape_spared = true
+	return true
+
+
+## Lamps have just lit. Duct tape (GDD 7.5) takes hold of the first fault of
+## the act: it mends itself after self_repair_s.
+func on_faults_lit(drawn: Array[StringName]) -> void:
+	var after: float = passive("self_repair_s")
+	if drawn.is_empty() or tape_spent or after <= 0.0:
+		return
+	tape_spent = true
+	mending = drawn[0]
+	mend_left = after
+
+
+## The fault the tape holds is mended now (he has stopped: nothing waits).
+func finish_mending() -> void:
+	if mending == &"":
+		return
+	var fault: StringName = mending
+	mending = &""
+	mend_left = 0.0
+	if _faults.repair(fault):
+		events.append({"type": "fault_repaired", "fault": String(fault), "lamps": _faults.lamps, "price": 0.0, "by": "duct_tape"})
+
+
+func _step_mending(dt: float) -> void:
+	if mending == &"":
+		return
+	mend_left -= dt
+	if mend_left < dt * 0.5:
+		finish_mending()
+
+
 ## The officer takes the contraband he can see (GDD 6.5): everything marked
 ## contraband that is not hidden in the glovebox. Returns what was taken.
 func take_visible_contraband() -> Array[StringName]:
@@ -807,7 +1108,7 @@ func take_visible_contraband() -> Array[StringName]:
 		var candidate: Item = items[index]
 		if GameData.as_bool(candidate.record.get("contraband")) and not String(candidate.slot).begins_with("glovebox"):
 			taken.append(candidate.id)
-			items.remove_at(index)
+			remove_item(candidate)
 		else:
 			index += 1
 	return taken
@@ -842,8 +1143,10 @@ func step(dt: float) -> void:
 
 	var haze_rate: float = 0.0
 	var deck_mult: float = _window_radio_mult if flag(FLAG_WINDOW) else 1.0
+	var chewing: bool = _effects.has_own(CHEWING)
 	for candidate: Item in items:
-		candidate.hot_left -= dt
+		if not (chewing and candidate.warm_while_chewing):
+			candidate.hot_left -= dt
 		if candidate.hot_left < dt * 0.5:
 			candidate.hot_left = 0.0
 		if _is_tape(candidate):
@@ -852,7 +1155,7 @@ func step(dt: float) -> void:
 			var on: bool = standing.condition == null or _met(standing.condition, candidate)
 			match standing.kind:
 				Standing.HAZE:
-					if on:
+					if on and not candidate.smokeless:
 						haze_rate += standing.amount
 				Standing.NERVES:
 					if on:
@@ -870,10 +1173,12 @@ func step(dt: float) -> void:
 	if haze_rate > 0.0:
 		haze = minf(haze + haze_rate * dt, _haze_cap)
 	else:
-		var clear: float = _haze_clear * (_window_haze_mult if flag(FLAG_WINDOW) else 1.0)
+		var clear: float = _haze_clear * passive("haze_clear_mult") * (_window_haze_mult if flag(FLAG_WINDOW) else 1.0)
 		haze = maxf(haze - clear * dt, 0.0)
 
 	_step_radio(dt)
+	_step_phone(dt)
+	_step_mending(dt)
 
 
 ## A smoke burns while its status lasts. It must be ashed once before

@@ -1279,6 +1279,159 @@ func test_item_arak_flask() -> void:
 	check(bought, "in a dozen clean first legs the shady guy has a flask at least once")
 
 
+# --- T-ITEM-PHONE ------------------------------------------------------------
+
+## T-ITEM-PHONE: Phone (7.4): a call every 25 to 40 s; three TAPs within 5 s
+## of the first ring answer it, eyes-down; a dispatcher call pays 10 cash;
+## one call in four is Um Noor: -8 Nerves; a missed call is +4 Nerves; using
+## it in a Patrol is +30 Suspicion; price 35.
+func test_item_phone() -> void:
+	var record: Dictionary = _record("phone")
+	var answer: Dictionary = _ritual("phone_answer")
+	var params: Dictionary = _params("phone")
+	var gap: Array = GameData.as_array(params.get("call_gap_s"))
+	var gap_min: float = GameData.as_float(gap[0])
+	var gap_max: float = GameData.as_float(gap[1])
+	var ring_s: float = GameData.as_float(params.get("ring_s"))
+	var taps: int = GameData.as_int(params.get("answer_taps"))
+	var pay: float = GameData.as_float(params.get("dispatcher_cash"))
+	var every: int = GameData.as_int(params.get("family_every"))
+	var family: float = GameData.as_float(params.get("family_nerves"))
+	var missed: float = GameData.as_float(params.get("missed_nerves"))
+
+	# The numbers of GDD 7.4.
+	check_eq(GameData.as_string(record.get("kind")), "habit", "the phone is a Habit")
+	check_eq(GameData.as_array(record.get("slots")), ["phone_mount"], "on its mount")
+	check_near(gap_min, 25.0, 0.000001, "a call every 25")
+	check_near(gap_max, 40.0, 0.000001, "to 40 s")
+	check_eq(GameData.as_string(answer.get("gesture")), "TAP", "answered with TAPs")
+	check_eq(taps, 3, "three of them")
+	check_near(ring_s, 5.0, 0.000001, "within 5 s of the first ring")
+	check(GameData.as_bool(answer.get("eyes_down")), "eyes-down")
+	check_near(GameData.as_float(answer.get("perform_s")), 1.2, 0.000001, "(1.2 s for a practised hand)")
+	check_near(pay, 10.0, 0.000001, "a dispatcher call pays 10 cash")
+	check_eq(every, 4, "one call in four is Um Noor")
+	check_near(family, -8.0, 0.000001, "-8 Nerves")
+	check_near(missed, 4.0, 0.000001, "a missed call is +4 Nerves")
+	check_near(tuning.f("suspicion_phone"), 30.0, 0.000001, "using it in a Patrol is +30 Suspicion")
+	check(not record.has("supply"), "no supply")
+	check_near(GameData.as_float(record.get("price")), 35.0, 0.000001, "price 35")
+
+	# No phone, no calls.
+	_new_sim()
+	_run(gap_max * 2.5)
+	check_eq(_count_events("call_started"), 0, "without a phone nobody calls")
+
+	# A call every 25 to 40 s: left to ring out, each is +4 Nerves.
+	var gaps: PackedFloat64Array = _call_gaps(0, 6)
+	if check_eq(gaps.size(), 6, "(six calls)"):
+		var shortest: float = gaps[0]
+		var longest: float = gaps[0]
+		for seconds: float in gaps:
+			shortest = minf(shortest, seconds)
+			longest = maxf(longest, seconds)
+		check(shortest >= gap_min - DT and longest <= gap_max + DT, "every call comes 25 to 40 s after the last ended (%s to %s s)" % [str(snappedf(shortest, 0.01)), str(snappedf(longest, 0.01))])
+		check(longest - shortest > 1.0, "and not always after the same time")
+		var rang_out: int = 0
+		for event: Dictionary in _events:
+			if GameData.as_string(event.get("type")) == "call_resolved" and not GameData.as_bool(event.get("answered")):
+				rang_out += 1
+		check_eq(rang_out, 6, "(all six rang out)")
+		check_near(_sim.nerves.value, tuning.f("nerves_start") + missed * 6.0, 0.000001, "each missed call was +4 Nerves")
+		check_eq(_call_gaps(0, 3), gaps.slice(0, 3), "the same Telling seed gives the same calls")
+		check(_call_gaps(77, 3) != gaps.slice(0, 3), "another seed gives others")
+
+	# Three TAPs answer it, eyes-down; a dispatcher call pays 10 cash.
+	_new_sim()
+	_give("phone")
+	var mount: String = _anchor_of("phone")
+	check_eq(mount, "phone_mount", "the phone sits on its mount")
+	check(_reach(mount), "the hand rests on it")
+	_tap()
+	check(_sim.items.call_taps == 0 and _count_events("ritual_completed") == 0, "a silent phone has nothing to answer")
+	check(_await_ring(), "it rings")
+	check_eq(GameData.as_string(_event("call_started").get("caller")), "dispatcher", "the dispatcher")
+	check_eq(_count_events("sfx_requested", "id", "phone_ring"), 1, "(heard as phone_ring)")
+	check_eq(GameData.as_string(_sim.snapshot()["caller"]), "dispatcher", "(and in the snapshot)")
+	check(not _sim.hand.eyes_down, "with his hand on it and no TAP yet his eyes are on the road")
+	var cash: float = _sim.cash
+	_tap()
+	check(_sim.hand.eyes_down, "from the first TAP his eyes are down")
+	_tap()
+	check_eq(_sim.items.call_taps, taps - 1, "two TAPs")
+	check(_sim.items.caller != &"" and _sim.cash == cash, "do not answer it")
+	_ticks(_ticks_in(0.3))
+	check(_sim.hand.eyes_down, "his eyes stay down between the TAPs")
+	check_near(_sim.hand.cam_pitch, -tuning.f("eyes_down_pitch"), 2.0, "the camera pitched down at the phone")
+	_tap()
+	check_eq(_sim.items.caller, &"", "the third answers it")
+	var resolved: Dictionary = _event("call_resolved")
+	check(GameData.as_bool(resolved.get("answered")), "(announced as answered)")
+	check_near(_sim.cash - cash, pay, 0.000001, "a dispatcher call pays 10 cash")
+	_ticks(SETTLE)
+	check(not _sim.hand.eyes_down, "and his eyes come up again")
+	check_eq(_count_events("ritual_completed", "ritual", "phone_answer"), taps, "(three TAPs in all)")
+
+	# Within 5 s of the first ring: just in time, and just too late.
+	_new_sim()
+	_give("phone")
+	_reach(mount)
+	_await_ring()
+	_ticks(_ticks_in(ring_s) - 3 * (TAP_TICKS + SETTLE) - 4)
+	cash = _sim.cash
+	for _index: int in taps:
+		_tap()
+	check_near(_sim.cash - cash, pay, 0.000001, "three TAPs that end just inside 5 s answer it")
+	_await_ring()
+	_ticks(_ticks_in(ring_s) - 2 * (TAP_TICKS + SETTLE) - 2)
+	cash = _sim.cash
+	var nerves: float = _sim.nerves.value
+	for _index: int in taps:
+		_tap()
+	check_near(_sim.cash, cash, 0.000001, "a third TAP after 5 s is too late")
+	check_near(_sim.nerves.value - nerves, missed, 0.000001, "the call is missed: +4 Nerves")
+	check(not GameData.as_bool(_event("call_resolved").get("answered")), "(announced as missed)")
+	check(not _sim.hand.eyes_down, "and his eyes are back on the road")
+
+	# One call in four is Um Noor: -8 Nerves.
+	_new_sim()
+	_give("phone")
+	_reach(mount)
+	var callers: PackedStringArray = PackedStringArray()
+	for call: int in every + 1:
+		if not _await_ring():
+			break
+		callers.append(String(_sim.items.caller))
+		cash = _sim.cash
+		_sim.nerves.set_value(50.0)
+		for _index: int in taps:
+			_tap()
+		if (call + 1) % every == 0:
+			check_near(_sim.nerves.value, 50.0 + family, 0.000001, "call %d is Um Noor: answered, -8 Nerves" % (call + 1))
+			check_near(_sim.cash, cash, 0.000001, "and no cash")
+		else:
+			check_near(_sim.cash - cash, pay, 0.000001, "call %d is the dispatcher: 10 cash" % (call + 1))
+			check_near(_sim.nerves.value, 50.0, 0.000001, "and nothing for his Nerves")
+	var expected: PackedStringArray = PackedStringArray()
+	for call: int in every + 1:
+		expected.append("um_noor" if (call + 1) % every == 0 else "dispatcher")
+	check_eq(callers, expected, "the fourth call is hers; those before and the one after are the dispatcher's")
+
+	# Using it in a Patrol is +30 Suspicion: once for the call, not per TAP.
+	_begin_quiet_leg("patrol", 2, 71)
+	_give("phone")
+	_reach(mount)
+	if check(_await_ring(), "(a call during the patrol leg)"):
+		check(_sim.suspicion.watching, "(the patrol is watching when it rings)")
+		var before: float = _sim.suspicion.value
+		_tap()
+		check_between(_sim.suspicion.value - before, tuning.f("suspicion_phone") - 1.0, tuning.f("suspicion_phone"), "the phone in his hand in view of a patrol: Suspicion +30")
+		before = _sim.suspicion.value
+		_tap()
+		_tap()
+		check(_sim.items.caller == &"" and _sim.suspicion.value <= before, "the other TAPs of the same call add nothing")
+
+
 # --- T-ITEM-BREATH-MINTS -----------------------------------------------------
 
 ## T-ITEM-BREATH-MINTS: Breath mints (7.4): TAP 0.3 s; police ignore Courage
@@ -1403,6 +1556,34 @@ func _a_second_of_road() -> Dictionary:
 	_sim.wheel.reset()
 	_sim.traffic.clear()
 	return out
+
+## Steps until the phone rings (at most a little over the longest gap).
+func _await_ring() -> bool:
+	var guard: int = _ticks_in(GameData.as_float(GameData.as_array(_params("phone").get("call_gap_s"))[1]) + 10.0)
+	while _sim.items.caller == &"" and guard > 0:
+		guard -= 1
+		_tick()
+	return _sim.items.caller != &""
+
+
+## A new simulation on a Telling seed with a phone and nobody answering it:
+## the seconds from the end of each call (or from the start) to the next ring.
+func _call_gaps(telling_seed: int, count: int) -> PackedFloat64Array:
+	_new_sim()
+	_sim.reseed(telling_seed)
+	_give("phone")
+	var gaps: PackedFloat64Array = PackedFloat64Array()
+	var since: int = _sim.tick
+	for _call: int in count:
+		if not _await_ring():
+			break
+		# (The ring is announced on the tick it begins.)
+		gaps.append(float(_sim.tick - since) * DT)
+		while _sim.items.caller != &"":
+			_tick()
+		since = _sim.tick
+	return gaps
+
 
 ## A taxi passed closely, too slowly for a close call: the change in his
 ## Nerves over the pass.

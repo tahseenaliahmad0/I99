@@ -55,6 +55,11 @@
     { "id": "flask_sip",       "anchor": "@slot", "item": "arak_flask", "gesture": "HOLD", "hold_s": 0.7,
       "eyes_down": false, "requires": ["supply>0"], "on_complete": ["consume_supply", "give"] },
     { "id": "mints_take",      "anchor": "@slot", "item": "breath_mints", "gesture": "TAP", "perform_s": 0.3,
-      "eyes_down": false, "requires": ["supply>0"], "on_complete": ["consume_supply", "give"] }
+      "eyes_down": false, "requires": ["supply>0"], "on_complete": ["consume_supply", "give"] },
+    { "id": "phone_answer",    "anchor": "@slot", "item": "phone",      "gesture": "TAP", "perform_s": 1.2,
+      "eyes_down": true, "requires": ["ringing"], "on_complete": ["answer"] },
+
+    { "id": "thermos_pour",    "anchor": "@slot", "item": "thermos",    "gesture": "HOLD", "hold_s": 1.0,
+      "eyes_down": false, "requires": ["supply>0", "tag:tea"], "on_complete": ["consume_supply", "refill:tea"] }
   ]
 }
