@@ -1,0 +1,12 @@
+# Godot 4 cache and imports
+.godot/
+*.translation
+
+# Engine API dump (regenerate: godot --headless --doctool docs_api && touch docs_api/.gdignore)
+docs_api/
+
+# Local scratch
+*.tmp
+*.log
+/build/
+/export/

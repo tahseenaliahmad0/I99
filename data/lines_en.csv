@@ -1,0 +1,13 @@
+id,speaker,text,needs_writer
+title.game_name,,I-99,false
+narrator.start,Abu Noor,"So. Ten at night, and I was still in Baghdad.",true
+wreck.drivers.1,"Guest, then Abu Noor",And then you died? / No. That is not how it went.,true
+wreck.children.1,"Child, then Abu Noor",Then how are you HERE? / ...Good question. Again.,true
+heckle.children.twist.sheep,Child,And then there were SHEEP!,true
+heckle.drivers.dare.gear4,Driver,Fourth gear! Tell them about fourth gear!,true
+heckle.uncles.doubt.1,Uncle,All night? At your age? In that car?,true
+heckle.aunts.order.tea,Aunt,Drink your tea before it goes cold.,true
+passenger.hajjiya.board,Old woman,"God keep you, my son. Not so fast.",true
+radio.news.patrol,Newsreader,Traffic police are out on the southern road tonight.,true
+noor.call.1,Noor,Baba? Are you awake?,true
+finale.proverb,"Noor, then Abu Noor",They say one hand doesn't clap. / No. But it drives.,true

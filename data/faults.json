@@ -1,0 +1,13 @@
+{
+  "version": 1,
+
+  "faults": [
+    { "id": "rattle",             "params": { "nerves_per_s": 0.2 } },
+    { "id": "cracked_windscreen", "params": { "cracks": 0.2 } },
+    { "id": "dead_headlight",     "params": { "night_cone_mult": 0.5, "patrol_suspicion_per_s": 10 } },
+    { "id": "pulling_steering",   "params": { "drift_left": 0.4 } },
+    { "id": "slipping_clutch",    "params": { "lever_speed_mult": 0.5 } },
+    { "id": "stuck_wiper",        "params": { "wiper_clear_s": 3 } },
+    { "id": "cracked_mirror",     "params": { "mirror_tell_delay_s": 2 } }
+  ]
+}
