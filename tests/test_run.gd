@@ -279,6 +279,123 @@ func test_clock_01() -> void:
 	check_near(_sim.clock.minutes, before, 0.000001, "while he stands with the officer the Clock does not run")
 
 
+## T-RUN-02: Wreck and restart: when every lamp is lit the Telling ends in a
+## Wreck; the Telling restarts from Baghdad with the starting cabin, wheel in
+## hand within wreck_to_wheel.
+func test_run_02() -> void:
+	var cut: float = tuning.f("wreck_to_wheel")
+	var capacity: int = tuning.i("lamp_capacity")
+	check_near(cut, 3.0, 0.000001, "GDD 11.4: after a Wreck the Telling restarts in 3 s")
+	check_eq(capacity, 5, "GDD 6.3: five lamps")
+
+	for telling: int in 2:
+		if telling == 0:
+			_begin_quiet_leg()
+		else:
+			# The Telling that followed the first Wreck, driven on by itself into its first leg.
+			_input.clear()
+			var roll: int = int(60.0 / DT)
+			while _sim.run.stage == RunState.Stage.APPROACH and roll > 0:
+				roll -= 1
+				_sim.step(_input)
+			check_eq(_sim.run.stage, RunState.Stage.LEG, "the Telling told again is a Telling like any other: it rolls through its first fork")
+			_sim.gate.reset(3)
+		var first_seed: int = _sim.run.seed
+		var retellings: int = _sim.run.retellings
+		# He has made the night his own: an item, less cash, a later hour, frayed Nerves.
+		_sim.items.add_item(&"beads", &"mirror")
+		_sim.cash = 3.0
+		_sim.clock.add_minutes(120.0)
+		_events = []
+
+		# Lamp by lamp, along the guardrail.
+		for lamp: int in capacity - 1:
+			_scrape()
+		check_eq(_sim.faults.lamps, capacity - 1, "four lamps are lit")
+		check(not _sim.wrecked and not _has_event("wreck"), "four lit lamps are not a Wreck")
+		check_eq(_sim.run.stage, RunState.Stage.LEG, "the leg goes on")
+		var guard: int = int(5.0 / DT)
+		_input.clear()
+		while not _sim.wrecked and guard > 0:
+			guard -= 1
+			_sim.car.x = _sim.car.guardrail_x()
+			_sim.step(_input)
+			_collect()
+		check(_sim.wrecked, "when every lamp is lit the Telling ends in a Wreck")
+		check_eq(_sim.faults.lamps, capacity, "all five are lit")
+		check_eq(_events_named("wreck").size(), 1, "which is announced, once")
+		check_eq(GameData.as_string(_event("wreck").get("table")), "drivers", "to the Table he is telling it to")
+		check(GameData.as_bool(_sim.snapshot()["wrecked"]), "the snapshot says so")
+
+		# From the Wreck on the player asks for the wheel: pointer on the rim, button down.
+		_input.clear()
+		_input.pointer_is_absolute = true
+		_input.pointer = _sim.space.point_to_pointer(_sim.space.rim_point_at(PI * 0.75))
+		_input.lmb = true
+		var s_at_wreck: float = _sim.car.s
+		var clock_at_wreck: float = _sim.clock.minutes
+		var ticks: int = 0
+		var moved: bool = false
+		var early: bool = false
+		while (_sim.wrecked or not _sim.hand.gripping) and ticks < int(10.0 / DT):
+			_sim.step(_input)
+			_collect()
+			ticks += 1
+			if _sim.wrecked and (not is_equal_approx(_sim.car.s, s_at_wreck) or not is_equal_approx(_sim.clock.minutes, clock_at_wreck)):
+				moved = true
+			if not _sim.wrecked and float(ticks) * DT < cut - DT * 1.5:
+				early = true
+		check(not moved, "while the Table objects nothing moves: not the car, not the Clock")
+		check(not early, "the Telling does not restart before wreck_to_wheel")
+		check(not _sim.wrecked and _sim.hand.gripping, "then he has the wheel in his hand again")
+		check(float(ticks) * DT <= cut + DT * 0.5, "within wreck_to_wheel of the Wreck (%s s)" % str(snappedf(float(ticks) * DT, 0.001)))
+
+		# From Baghdad, with the starting cabin.
+		check(_sim.run.active, "a Telling is under way again")
+		check_eq(_sim.run.table, "drivers", "at the same Table")
+		check_eq(_sim.run.stage, RunState.Stage.APPROACH, "from Baghdad: on the road to the first fork")
+		check_eq(_sim.run.act, 1, "in Act 1")
+		check_eq(_sim.run.legs_done, 0, "with no leg behind him")
+		check(_sim.car.s < 1.0, "at its very start")
+		check_eq(_sim.run.retellings, retellings + 1, "told again once more")
+		check(_sim.run.seed != first_seed, "and not the same night twice: another seed")
+		check(_sim.clock.minutes < 0.01, "at 22:00")
+		check_near(_sim.cash, tuning.f("cash_start"), 0.000001, "with cash_start")
+		check_near(_sim.nerves.value, tuning.f("nerves_start"), 0.05, "and Nerves at their start")
+		check_eq(_sim.faults.lamps, 0, "no lamp is lit")
+		check_eq(_sim.faults.deck.size(), data.records("faults").size(), "and the fault deck is whole again")
+		check(_sim.items.item(&"beads") == null, "what he had bought is not in the cabin")
+		var cabin: Array = GameData.as_array(data.root("items").get("starting_cabin"))
+		check_eq(_sim.items.items.size(), cabin.size(), "which is the starting cabin of GDD 7.3")
+		for entry: Variant in cabin:
+			var start: Dictionary = entry
+			var item: ItemSim.Item = _sim.items.item(StringName(GameData.as_string(start.get("item"))))
+			if check(item != null, "%s is there" % str(start.get("item"))):
+				check_eq(item.supply, GameData.as_int(start.get("supply")), "with its starting supply")
+				check_eq(String(item.slot), GameData.as_string(start.get("slot")), "in its place")
+		check_eq(_sim.gate.gear, tuning.i("start_gear"), "the car rolls in first gear")
+		check(_sim.car.speed <= tuning.fi("gear_speeds", 0) + 0.000001 and _sim.car.speed > 0.0, "at first gear's speed")
+		check(not GameData.as_bool(_sim.snapshot()["wrecked"]), "the snapshot shows no Wreck")
+		_input.clear()
+		_sim.step(_input)
+
+	# Outside a Telling a Wreck is the end of the drive: nothing restarts.
+	_sim = DriveSim.new(fresh_data())
+	_events = []
+	_sim.gate.reset(3)
+	_sim.car.reset(1, 3)
+	var plain_guard: int = int(60.0 / DT)
+	_input.clear()
+	while not _sim.wrecked and plain_guard > 0:
+		plain_guard -= 1
+		_sim.car.x = _sim.car.guardrail_x()
+		_sim.step(_input)
+	check(_sim.wrecked, "(on a road that belongs to no Telling the fifth lamp is a Wreck too)")
+	for _tick: int in int((cut + 1.0) / DT):
+		_sim.step(_input)
+	check(_sim.wrecked and _sim.faults.lamps == capacity, "and stays one: there is no Telling to tell again")
+
+
 # --- T-RUN-01, in parts ------------------------------------------------------
 
 ## The Exit on a quiet leg: what stops him and what does not.
@@ -402,7 +519,10 @@ func _check_exit_cases(exit_at: float, stall_at: float, third: float) -> void:
 		_sim.car.x = _sim.car.lane_center(lanes)
 		_sim.car.speed = max_speed
 		_sim.step(_input)
-	check(_sim.stopped and _sim.hand.gripping, "(he drives up to the stall with the wheel in his hand)")
+	check(_sim.stopped, "(he drives up to the stall with the wheel in his hand)")
+	for _tick: int in 3:
+		_sim.step(_input)
+	check(_sim.stopped and _sim.hand.gripping, "(and has it still: the button never came up)")
 	for _tick: int in int(leave * 3.0 / DT):
 		_sim.step(_input)
 	check(_sim.stopped, "the grip he arrived with does not drive him off again")
@@ -556,6 +676,29 @@ func _grip_until_left(seconds: float) -> float:
 	_input.clear()
 	_sim.step(_input)
 	return held
+
+
+## Lights one lamp: a scrape along the guardrail, then back into the lane
+## and past the hit's immunity.
+func _scrape() -> void:
+	var lamps: int = _sim.faults.lamps
+	var lane_x: float = _sim.car.lane_center(1)
+	var guard: int = int(5.0 / DT)
+	_input.clear()
+	while _sim.faults.lamps == lamps and guard > 0:
+		guard -= 1
+		_sim.car.x = _sim.car.guardrail_x()
+		_sim.step(_input)
+	for _tick: int in int((tuning.f("hit_immunity") + 0.2) / DT):
+		_sim.car.x = lane_x
+		_sim.step(_input)
+	_sim.gate.reset(3)
+	_collect()
+
+
+func _collect() -> void:
+	for event: Dictionary in _sim.drain_events():
+		_events.append(event)
 
 
 func _has_sign(kind: String) -> bool:

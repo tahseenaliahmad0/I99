@@ -178,6 +178,20 @@ func reset_cabin() -> void:
 				GameData.as_int(start.get("supply"), -1))
 
 
+## The cabin of a Telling loaded from a save: nothing but what the save lists.
+func empty_cabin() -> void:
+	items.clear()
+	flags.clear()
+
+
+## Tunes the radio to a station (or to static) without the dial.
+func set_radio(station: StringName) -> void:
+	_radio_index = _stations.find(station)
+	radio = station if _radio_index != -1 else STATIC
+	_radio_held = STATIC
+	_radio_time = 0.0
+
+
 ## What resets when a new leg begins.
 func begin_leg() -> void:
 	photo_used = false

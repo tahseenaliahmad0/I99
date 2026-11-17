@@ -93,6 +93,19 @@ var free_traffic_per_km: float = 0.0
 ## Settings the simulation reads (GDD 17.1).
 var steer_sensitivity: float = 1.0
 var sequential_shift: bool = false
+## Grip mode: false = hold, true = click to grip, click to release.
+var grip_toggle: bool = false:
+	set(value):
+		grip_toggle = value
+		hand.grip_toggle = value
+
+## When set, every tick's input is written to it (GDD 13.3): replaying the
+## log into a simulation started the same way gives the same state hash.
+var input_log: InputLog = null
+## What the last stop saved: the Telling as the save file holds it (GDD 13.7).
+## It changes only when the car comes to a stop, never during a leg.
+var checkpoint: Dictionary = {}
+var checkpoints: int = 0
 
 var _events: Array[Dictionary] = []
 var _active_ritual: Dictionary = {}
@@ -134,6 +147,12 @@ var _stall_at: float = 0.0
 var _leave_grip: float = 0.0
 ## The hand has been off the wheel since he stopped: only then can a grip leave.
 var _let_go_at_stop: bool = false
+## The side of the last fork he took (RunState.LEFT or RIGHT).
+var _side: int = RunState.RIGHT
+## The shady guy is at the stop he stands at.
+var _shady_here: bool = false
+## Seconds until a wrecked Telling is told again.
+var _wreck_left: float = 0.0
 
 
 func _init(game_data: GameData) -> void:
@@ -218,6 +237,10 @@ func _build() -> void:
 	_exit = EXIT_NONE
 	_leave_grip = 0.0
 	_let_go_at_stop = false
+	_side = RunState.RIGHT
+	_shady_here = false
+	_wreck_left = 0.0
+	hand.grip_toggle = grip_toggle
 
 	var start_gear: int = tuning.i("start_gear")
 	wheel.reset()
@@ -239,6 +262,17 @@ func seconds() -> float:
 
 
 func step(input: DriveInput) -> void:
+	if input_log != null:
+		input_log.record(input)
+	if wrecked and run.active:
+		# The Wreck (GDD 11.4): nothing moves while the Table objects; then
+		# the Telling is told again from Baghdad.
+		_wreck_left -= DT
+		hand.track_pointer(input)
+		if _wreck_left > DT * 0.5:
+			tick += 1
+			return
+		_retell()
 	gate.begin_tick()
 	nerves.begin_tick()
 	effects.begin_tick()
@@ -331,7 +365,7 @@ func step(input: DriveInput) -> void:
 
 	# 12. Leg progress: Exit, Fork, boss and ending transitions.
 	if run.active:
-		_step_telling()
+		_step_telling(input.lmb)
 	elif leg.step_progress():
 		_end_leg()
 
@@ -456,9 +490,9 @@ func _enter_approach() -> void:
 	_set_stretch(RunGenerator.blank_plan(run.act, RunGenerator.ROAD_LANES, true, length))
 
 
-func _step_telling() -> void:
+func _step_telling(button_down: bool) -> void:
 	if stopped:
-		_step_stop()
+		_step_stop(button_down)
 		return
 	match run.stage:
 		RunState.Stage.APPROACH:
@@ -484,6 +518,7 @@ func _step_telling() -> void:
 ## The gore point (GDD 9.5): the branch is the side of the split the car is on.
 func _take_fork() -> void:
 	var side: int = RunState.LEFT if car.x < car.road_right() * 0.5 else RunState.RIGHT
+	_side = side
 	var branch: Dictionary = run.take_branch(side)
 	var plan: Dictionary = RunGenerator.plan(data, branch, run.act)
 	_emit("fork_taken", {
@@ -528,13 +563,22 @@ func exit_slip() -> Vector2:
 
 func _enter_stop() -> void:
 	run.enter_stop()
-	_park()
 	var minutes: float = GameData.as_float(data.record("stops", run.stop).get("clock_min")) if data.has_record("stops", run.stop) else 0.0
 	clock.add_minutes(minutes)
 	# The shady guy is there after a leg that lit no lamp (GDD 9.6).
-	_open_stop(_leg_lamps_lit == 0)
+	_shady_here = _leg_lamps_lit == 0
+	_save_point()
 	_emit("stop_entered", {"stop": run.stop, "minutes": minutes, "act": run.act, "leg_index": run.legs_done,
-			"shady": _leg_lamps_lit == 0, "offers": stop.offers_view()})
+			"shady": _shady_here, "offers": stop.offers_view()})
+
+
+## A stop is where the game saves (GDD 11.1). What the save holds is taken
+## and at once put back, so that the Telling which goes on from here is,
+## to the bit, the one a player gets who loads that save.
+func _save_point() -> void:
+	checkpoint = capture()
+	checkpoints += 1
+	restore(checkpoint)
 
 
 func _open_stop(shady: bool) -> void:
@@ -556,9 +600,12 @@ func _park() -> void:
 
 ## At a stop: gripping the wheel for stop_leave_grip leaves (GDD 9.6). The
 ## grip he drove in with does not count: the hand must have been off the wheel.
-func _step_stop() -> void:
+func _step_stop(button_down: bool) -> void:
 	if not hand.gripping:
-		_let_go_at_stop = true
+		# Off the wheel, and with the button up: a button held since he drove
+		# in would otherwise take the wheel again and drive him off.
+		if not button_down:
+			_let_go_at_stop = true
 		_leave_grip = 0.0
 		return
 	if not _let_go_at_stop:
@@ -602,8 +649,8 @@ func _begin_boss() -> void:
 func _end_boss() -> void:
 	_emit("boss_ended", {"boss": run.boss, "act": run.act, "time": leg.time})
 	run.enter_boss_stop()
-	_park()
-	_open_stop(false)
+	_shady_here = false
+	_save_point()
 	_emit("stop_entered", {"stop": run.stop, "minutes": 0.0, "act": run.act, "leg_index": run.legs_done,
 			"shady": false, "offers": stop.offers_view()})
 
@@ -613,6 +660,169 @@ func _end_boss() -> void:
 func _arrive() -> void:
 	run.arrive()
 	_emit("arrived", {"table": run.table, "clock": clock.text(), "clock_minutes": clock.minutes, "late": clock.late()})
+
+
+# --- Wreck, save and replay --------------------------------------------------
+
+## The Telling is told again from Baghdad (GDD 11.4): the same Table, another
+## seed, the starting cabin, 22:00. The pointer stays where the player has it,
+## so a hand that is asking for the wheel has it at once.
+func _retell() -> void:
+	var table: String = run.table
+	var telling_seed: int = run.seed
+	var retellings: int = run.retellings
+	var pointer: Vector2 = hand.pointer
+	_build()
+	run.table = table
+	run.seed = telling_seed
+	run.retellings = retellings
+	run.retell()
+	reseed(run.seed)
+	_enter_approach()
+	if space.pointer_on_rim(pointer):
+		hand.place_at(space.rim_point(pointer))
+	else:
+		hand.pointer = pointer
+
+
+## The Telling as the save file holds it (GDD 13.7): where he is, what he
+## has and what the night has cost, and the state of the seeded streams.
+func capture() -> Dictionary:
+	var kept: Array = []
+	var fitted: Array = []
+	for item: ItemSim.Item in items.items:
+		if GameData.as_string(item.record.get("kind")) == "adaptation":
+			fitted.append({"id": String(item.id), "slot": String(item.slot)})
+		else:
+			kept.append({"id": String(item.id), "slot": String(item.slot), "supply": item.supply, "hot": Save.exact(item.hot_left)})
+	var lit: Array = []
+	for fault: StringName in faults.active:
+		lit.append(String(fault))
+	var deck: Array = []
+	for fault: StringName in faults.deck:
+		deck.append(String(fault))
+	var switches: Dictionary = {}
+	for key: Variant in items.flags:
+		switches[str(key)] = GameData.as_bool(items.flags[key])
+	return {
+		"table": run.table,
+		"seed": Save.seed_out(run.seed),
+		"retellings": run.retellings,
+		"act": run.act,
+		"leg": run.legs_done,
+		"stage": run.stage_name(),
+		"side": _side,
+		"leg_lamps": _leg_lamps_lit,
+		"shady": _shady_here,
+		# For people: rounded. What is loaded are the exact bits below.
+		"clock_min": snappedf(clock.minutes, 0.001),
+		"cash": snappedf(cash, 0.001),
+		"nerves": snappedf(nerves.value, 0.001),
+		"exact": {
+			"clock_min": Save.exact(clock.minutes),
+			"cash": Save.exact(cash),
+			"nerves": Save.exact(nerves.value),
+			"leg_time": Save.exact(leg.time),
+		},
+		"faults": lit,
+		"fault_deck": deck,
+		"items": kept,
+		"adaptations": fitted,
+		"passenger": null,
+		"radio": String(items.radio),
+		"switches": switches,
+		"rng_state": rng.get_state(),
+	}
+
+
+## Stands the car at the stop a save was made at. False (and nothing
+## changed) when the save is not one made at a stop.
+func restore(telling: Dictionary) -> bool:
+	var stage: String = GameData.as_string(telling.get("stage"))
+	if stage != RunState.STAGE_NAMES[RunState.Stage.STOP] and stage != RunState.STAGE_NAMES[RunState.Stage.BOSS_STOP]:
+		# A save is made at a stop and nowhere else: this is not one.
+		return false
+	_build()
+	rng.set_state(GameData.as_dict(telling.get("rng_state")))
+	# The exact bits where the save has them; a save written by hand has
+	# only the readable numbers.
+	var bits: Dictionary = GameData.as_dict(telling.get("exact"))
+	clock.minutes = maxf(Save.from_exact(bits.get("clock_min"), GameData.as_float(telling.get("clock_min"))), 0.0)
+	cash = maxf(Save.from_exact(bits.get("cash"), GameData.as_float(telling.get("cash"))), 0.0)
+	nerves.set_value(Save.from_exact(bits.get("nerves"), GameData.as_float(telling.get("nerves"))))
+	faults.active.clear()
+	for fault: Variant in GameData.as_array(telling.get("faults")):
+		faults.active.append(StringName(GameData.as_string(fault)))
+	faults.deck.clear()
+	for fault: Variant in GameData.as_array(telling.get("fault_deck")):
+		faults.deck.append(StringName(GameData.as_string(fault)))
+	faults.lamps = faults.active.size()
+	items.empty_cabin()
+	for entry: Variant in GameData.as_array(telling.get("items")):
+		var kept: Dictionary = GameData.as_dict(entry)
+		var item: ItemSim.Item = items.add_item(StringName(GameData.as_string(kept.get("id"))),
+				StringName(GameData.as_string(kept.get("slot"))), GameData.as_int(kept.get("supply"), -1))
+		if item != null:
+			item.hot_left = Save.from_exact(kept.get("hot"), item.hot_left)
+	for entry: Variant in GameData.as_array(telling.get("adaptations")):
+		var fitted: Dictionary = GameData.as_dict(entry)
+		items.add_item(StringName(GameData.as_string(fitted.get("id"))), StringName(GameData.as_string(fitted.get("slot"))))
+	var switches: Dictionary = GameData.as_dict(telling.get("switches"))
+	for key: Variant in switches:
+		items.flags[StringName(str(key))] = GameData.as_bool(switches[key])
+	items.set_radio(StringName(GameData.as_string(telling.get("radio"), String(ItemSim.STATIC))))
+
+	_side = GameData.as_int(telling.get("side"), RunState.RIGHT)
+	_shady_here = GameData.as_bool(telling.get("shady"))
+	run.resume(GameData.as_string(telling.get("table")), Save.seed_in(telling.get("seed")), GameData.as_int(telling.get("retellings")),
+			GameData.as_int(telling.get("act"), 1), GameData.as_int(telling.get("leg")), stage, _side)
+	if run.stage == RunState.Stage.STOP:
+		# At the stall of the leg he is on.
+		_set_stretch(RunGenerator.plan(data, run.branch, run.act))
+		_exit = EXIT_BEHIND
+		_exit_at = leg.length - tuning.f("leg_tail")
+		_stall_at = _exit_at + tuning.f("exit_slip_length")
+		car.s = _stall_at
+		car.x = car.lane_center(car.lanes - 1)
+		_lane = car.lane_of(car.x)
+		leg.fast_forward(car.s, maxf(Save.from_exact(bits.get("leg_time"), 0.0), 0.0))
+		_leg_lamps_lit = GameData.as_int(telling.get("leg_lamps"))
+		# Whatever the leg's encounter was, it is behind him.
+		encounter.stop()
+	else:
+		# At the end of the act's boss.
+		var boss: Dictionary = run.boss_record()
+		_set_stretch(RunGenerator.blank_plan(run.act, GameData.as_int(boss.get("lanes"), RunGenerator.ROAD_LANES),
+				GameData.as_bool(boss.get("divided"), true), GameData.as_float(boss.get("length_m")), GameData.as_float(boss.get("par_s"))))
+		car.s = leg.length
+		leg.stop()
+	_park()
+	_open_stop(_shady_here)
+	return true
+
+
+## A fingerprint of the whole simulation (GDD 13.3): two simulations that
+## were started the same way and given the same inputs have the same one.
+func state_hash() -> String:
+	var context: HashingContext = HashingContext.new()
+	context.start(HashingContext.HASH_SHA256)
+	context.update(var_to_bytes(state()))
+	return context.finish().hex_encode()
+
+
+## Everything the hash is made of, in a fixed order (for telling two
+## simulations apart when their hashes differ).
+func state() -> Array:
+	var vehicles: Array = []
+	for vehicle: TrafficSim.Vehicle in traffic.vehicles:
+		vehicles.append([vehicle.id, vehicle.type_id, vehicle.s, vehicle.x, vehicle.speed, vehicle.cruise,
+				vehicle.direction, vehicle.lane, vehicle.signalling, vehicle.changing, vehicle.role])
+	return [
+		tick, snapshot(), capture(), effects.get_state(), vehicles,
+		car.s, car.x, car.speed, car.v_lat, car.drift, wheel.angle, gate.gear, gate.lever,
+		hand.pos, hand.target, hand.pointer, hand.gripping, nerves.value, nerves.snap_left,
+		collision.chain, collision.immunity_left, leg.time, clock.minutes, suspicion.value, cash,
+	]
 
 
 # --- Encounters and the law --------------------------------------------------
@@ -1026,7 +1236,8 @@ func _apply_collisions() -> void:
 			_emit("lamp_lit", {"lamps": faults.lamps, "lit": drawn.size(), "faults": drawn})
 		if faults.is_wrecked() and not wrecked:
 			wrecked = true
-			_emit("wreck", {})
+			_wreck_left = tuning.f("wreck_to_wheel")
+			_emit("wreck", {"table": run.table, "act": run.act, "retellings": run.retellings})
 	# A vehicle passed closely honks (a taxi), close call or not (GDD 5.5).
 	if not collision.honk_vehicle_ids.is_empty():
 		nerves.add(collision.honk_nerves)

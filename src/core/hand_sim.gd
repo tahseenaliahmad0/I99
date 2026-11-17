@@ -221,6 +221,15 @@ func unpin() -> void:
 
 ## `wheel_angle_deg` is the wheel's angle (clockwise positive); the gripped
 ## hand rides it. `speed_mult` scales hand speed (Pound, GDD 4.2).
+## Only the pointer follows the player (the cut after a Wreck): the hand
+## stays where it is, but where he points is known when the cut ends.
+func track_pointer(input: DriveInput) -> void:
+	if input.pointer_is_absolute:
+		pointer = _space.clamp_pointer(input.pointer)
+	else:
+		pointer = _space.clamp_pointer(pointer + input.pointer_delta)
+
+
 func step(dt: float, input: DriveInput, wheel_angle_deg: float, speed_mult: float) -> void:
 	time += dt
 	arrived = false

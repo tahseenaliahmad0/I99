@@ -851,3 +851,45 @@ Format: `D-NNN (milestone, date) Title` then Context / Decision / Why.
 - **Hitcher.** Two minutes and nothing to buy until the passengers of M8.
 - **Why.** GDD 9.6, 12.2, 14; GDD 1.5 for the rest.
 
+## D-038 (M5, 2026-11-17) Wreck and restart, the save, the input log
+
+- **Wreck.** In a Telling, the fifth lamp starts a cut of `wreck_to_wheel`
+  seconds in which nothing moves; then the same Table is told again from
+  Baghdad with another seed (derived from the old one and the count of
+  retellings), the starting cabin, 22:00. The pointer follows the player
+  through the cut, and a pointer that is on the rim puts the hand there:
+  with the button down he has the wheel on the very tick the Telling
+  restarts. Outside a Telling a Wreck simply stays one.
+- **A stop is a save point, and goes on from the save.** On entering a stop
+  (the leg's, or a boss stop) `DriveSim` takes what a save holds
+  (`capture()`), keeps it as `checkpoint`, and at once rebuilds itself from
+  it (`restore()`). The uninterrupted Telling and the one loaded from the
+  file are therefore the same code path, and T-SAVE-01 holds them to the
+  same state hash. Consequences, all intended: at a stop every timed
+  effect ends, the haze is gone, the hand is off the wheel at its rest, the
+  leg's encounter is over; items keep their supply and a drink its heat;
+  the radio keeps its station and the switches their state.
+- **The save file** follows GDD 13.7 and adds what standing at a stop needs:
+  `stage` (stop or boss_stop), `side` (the branch he is on), `retellings`,
+  `leg_lamps`, `shady`, `radio`, `switches`, and `exact`. Its readable
+  numbers (`clock_min`, `cash`, `nerves`) are rounded to a thousandth and
+  are for people; `exact` holds the same numbers and the leg's clock as the
+  sixteen hexadecimal digits of their bits, because this engine's JSON
+  reader can lose the last bit of a float. A save without `exact` (written
+  by hand) loads from the readable numbers. Whole numbers are written as
+  whole numbers, so a file read and written again is the same file. Seeds
+  too large for a JSON number are written as their digits.
+- **Who writes.** `Save` (core) only turns the profile and the Telling into
+  text and back; the Game autoload writes `user://save.json` when a stop is
+  entered. Nothing else changes `checkpoint`, so nothing is written during
+  a leg.
+- **Input log.** `InputLog` (core, not in the file list of GDD 13.2) holds
+  each tick's `DriveInput`. `DriveSim.state_hash()` is a SHA-256 over the
+  snapshot, the save's view of the Telling, effect timers, every vehicle
+  and the main numbers of each part. T-REPLAY-01 drives 75 s by real input
+  (horn, two gear changes on the gate, the wheel held and steered, brake)
+  and replays the log to the same hash.
+- **Leaving a stop** needs a grip taken there: the hand off the wheel and
+  the button up at some moment since he arrived.
+- **Why.** GDD 11.1, 11.4, 13.3, 13.7; GDD 1.5.
+
