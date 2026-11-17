@@ -39,6 +39,7 @@
     "flick_max_time": 0.25,
     "bead_max_rate": 3,
     "crank_min_step": 6,
+    "crank_max_turn": 120,
 
     "gate_engage_radius": 0.2,
     "gate_grind_min": 0.3,
@@ -357,6 +358,7 @@
     "flick_max_time": "s",
     "bead_max_rate": "beads per s",
     "crank_min_step": "px of pointer travel per heading sample",
+    "crank_max_turn": "degrees; a larger change of heading between two samples is a change of direction, not turning",
     "gate_engage_radius": "gate units",
     "gate_grind_min": "gate units",
     "gate_grind_max": "gate units",

@@ -76,6 +76,11 @@ var _active_ritual: Dictionary = {}
 var _active_anchor: int = HandSim.NO_ANCHOR
 var _lever_anchor: int = HandSim.NO_ANCHOR
 var _lever_in_hand: bool = false
+## The hand stays on a control after its gesture until the button comes up,
+## so the rest of a long flick does not drag the pointer off it.
+var _pinned_until_release: bool = false
+## While something is carried: the anchor it must be released on.
+var _drag_destination: int = HandSim.NO_ANCHOR
 ## Ticks the gust still has to push: a gust lasts a whole number of ticks.
 var _gust_ticks_left: int = 0
 var _gust_push: float = 0.0
@@ -160,7 +165,7 @@ func step(input: DriveInput) -> void:
 	hand.step(DT, input, wheel.angle, _pound_mult if nerves.pound else 1.0)
 
 	# 3. Rituals.
-	_resolve_gesture()
+	_resolve_gesture(input.lmb)
 	if _lever_in_hand and not input.lmb:
 		gate.release()
 		_lever_in_hand = false
@@ -591,13 +596,25 @@ func _begin_at(anchor: int, button_down: bool) -> void:
 	gesture.begin(kind, _gesture_amount(ritual, kind), _gesture_dirs(ritual))
 	# Eyes-down rituals pull the eyes off the road while performed (GDD 4.7).
 	hand.eyes_down = GameData.as_bool(ritual.get("eyes_down"))
-	if kind != Gesture.Kind.DRAG_TO:
+	if kind == Gesture.Kind.DRAG_TO:
+		# The object goes with the hand to the anchor the ritual names.
+		hand.carrying = true
+		_drag_destination = hand.anchor_index(StringName(GameData.as_string(ritual.get("to"))))
+		_sync_anchors()
+	else:
 		hand.pin()
 
 
-func _resolve_gesture() -> void:
+func _resolve_gesture(button_down: bool) -> void:
+	if _pinned_until_release and not button_down:
+		_pinned_until_release = false
+		hand.unpin()
 	if gesture.phase == Gesture.Phase.ACTIVE:
-		if gesture.kind != Gesture.Kind.DRAG_TO and hand.at_index != _active_anchor:
+		if gesture.kind == Gesture.Kind.DRAG_TO:
+			# Released with the hand resting on the destination, the object is handed over.
+			gesture.over_destination = hand.at_index != HandSim.NO_ANCHOR and hand.at_index == _drag_destination
+			return
+		if hand.at_index != _active_anchor:
 			gesture.cancel()
 		else:
 			_run_drag_steps()
@@ -606,11 +623,17 @@ func _resolve_gesture() -> void:
 		_run_drag_steps()
 		_complete_ritual()
 	if gesture.phase != Gesture.Phase.IDLE:
+		var carried: bool = gesture.kind == Gesture.Kind.DRAG_TO
 		gesture.reset()
 		_active_ritual = {}
 		_active_anchor = HandSim.NO_ANCHOR
 		hand.eyes_down = false
-		hand.unpin()
+		hand.carrying = false
+		_drag_destination = HandSim.NO_ANCHOR
+		if carried or not button_down:
+			hand.unpin()
+		else:
+			_pinned_until_release = true
 		_sync_anchors()
 
 
@@ -638,7 +661,9 @@ func _complete_ritual() -> void:
 ## The hand snaps only to anchors where something can be done now.
 func _sync_anchors() -> void:
 	for index: int in hand.anchor_count():
-		hand.set_anchor_active(index, items.anchor_in_use(String(hand.anchor_id(index))))
+		var in_use: bool = items.anchor_in_use(String(hand.anchor_id(index)))
+		# What is carried can be put down where its ritual says.
+		hand.set_anchor_active(index, in_use or (hand.carrying and index == _drag_destination))
 
 
 func _gesture_kind(ritual: Dictionary) -> Gesture.Kind:

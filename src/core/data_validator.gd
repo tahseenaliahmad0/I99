@@ -198,6 +198,7 @@ func _ritual_schema() -> Dictionary:
 		"hold_s": _opt(_num(0.0)),
 		"flick_dirs": _opt(_list(_enum(FLICK_DIRS), 1)),
 		"turns": _opt(_num(0.0)),
+		"to": _opt(_ref("anchors")),
 		"eyes_down": _bool(),
 		"blocks_view": _opt(_nullable(_str())),
 		"requires": _list(_str()),
@@ -623,6 +624,8 @@ func _check_cross_rules() -> void:
 				needs = "flick_dirs"
 			"CRANK":
 				needs = "turns"
+			"DRAG_TO":
+				needs = "to"
 		if not needs.is_empty() and not ritual.has(needs):
 			_err("E_RULE", "rituals.json", "rituals[%s]" % GameData.as_string(ritual.get("id"), "?"),
 					"a %s ritual needs \"%s\"" % [GameData.as_string(ritual.get("gesture")), needs])

@@ -579,3 +579,21 @@ Format: `D-NNN (milestone, date) Title` then Context / Decision / Why.
   in whole ticks.
 - **Why.** GDD 5.6 ("pushed 0.5 m clear and cannot be hit again for 0.8 s")
   and GDD 6 (five lamps are a Wreck; a head-on is three).
+
+## D-030 (M1 review, 2026-11-17) Gestures: what the review of the pipeline changed
+
+- **FLICK.** The swipe must go more in an allowed direction than across it;
+  with several directions allowed it reports the way it mostly went.
+- **CRANK.** A change of heading of more than `crank_max_turn` (120 degrees)
+  between two samples is a change of direction, not turning: it counts for
+  nothing either way. Before, a reversal was booked as half a turn, forward
+  about as often as back.
+- **BEAD.** A tap counts unless `bead_max_rate` beads were counted within
+  the last second. Tapping faster than the limit gives the limit, not half.
+- **DRAG_TO.** A DRAG_TO ritual names the anchor the object goes to (`to`).
+  While it is carried the hand cannot take the wheel (GDD 4.2), the
+  destination can be pointed at even if nothing else is done there, and the
+  ritual completes when the button is released with the hand resting on it.
+- **After a gesture** the hand stays on the control until the button comes
+  up, so the rest of a long flick does not drag the pointer off it: two
+  flicks in a row both work the wipers, and three assisted shifts are three.

@@ -27,6 +27,7 @@ func test_gest_01() -> void:
 	_check_crank()
 	_check_bead()
 	_check_pipeline()
+	_check_drag_to_pipeline()
 
 
 func _check_tap() -> void:
@@ -94,6 +95,18 @@ func _check_flick() -> void:
 		_move(-along * (_flick_px + 2.0), quick)
 		_run(_flick_max, true)
 		check_eq(_gesture.phase, Gesture.Phase.CANCELLED, "FLICK %s: the opposite direction is not this flick" % names[dir])
+		# Mostly sideways: far enough in the direction, but five times as far across it.
+		var across: Vector2 = Vector2(-along.y, along.x)
+		for side: float in [-1.0, 1.0]:
+			_gesture.begin(Gesture.Kind.FLICK, 0.0, dir)
+			_move(along * (_flick_px + 2.0) + across * side * (_flick_px + 2.0) * 5.0, quick)
+			_run(_flick_max, true)
+			check_eq(_gesture.phase, Gesture.Phase.CANCELLED, "FLICK %s: a swipe that goes mostly sideways is not this flick" % names[dir])
+			# Leaning a little is still the flick.
+			_gesture.begin(Gesture.Kind.FLICK, 0.0, dir)
+			_move(along * (_flick_px + 2.0) + across * side * (_flick_px + 2.0) * 0.4, quick)
+			check_eq(_gesture.phase, Gesture.Phase.DONE, "FLICK %s: a swipe that leans a little to one side still counts" % names[dir])
+			check_eq(_gesture.direction, dir, "FLICK %s: and reports its direction" % names[dir])
 
 	# A ritual that accepts two directions reports which one was made.
 	_gesture.begin(Gesture.Kind.FLICK, 0.0, Gesture.DIR_UP | Gesture.DIR_DOWN)
@@ -102,6 +115,12 @@ func _check_flick() -> void:
 	_gesture.begin(Gesture.Kind.FLICK, 0.0, Gesture.DIR_UP | Gesture.DIR_DOWN)
 	_move(Vector2(0.0, -(_flick_px + 2.0)), quick)
 	check_eq(_gesture.direction, Gesture.DIR_UP, "FLICK up or down: an upward flick reports up")
+
+	# With every direction allowed, a swipe reports the way it mostly went.
+	var every: int = Gesture.DIR_UP | Gesture.DIR_DOWN | Gesture.DIR_LEFT | Gesture.DIR_RIGHT
+	_gesture.begin(Gesture.Kind.FLICK, 0.0, every)
+	_move(Vector2((_flick_px + 2.0) * 5.0, -(_flick_px + 2.0)), quick)
+	check_eq(_gesture.direction, Gesture.DIR_RIGHT, "FLICK any way: a swipe to the right that rises a little reports right, not up")
 
 	# Released before the distance is made.
 	_gesture.begin(Gesture.Kind.FLICK, 0.0, Gesture.DIR_UP)
@@ -159,6 +178,29 @@ func _check_crank() -> void:
 	_move(Vector2(2000.0, 0.0), 200)
 	check_eq(_gesture.phase, Gesture.Phase.ACTIVE, "CRANK: a long straight drag turns nothing")
 
+	# Doubling back is not turning. Short of three turns and then back a
+	# little, at several speeds: never complete.
+	for degrees: float in [7.0, 11.0, 13.0, 17.0, 23.0]:
+		for short: float in [2.55, 2.75, 2.9]:
+			_gesture.begin(Gesture.Kind.CRANK, turns)
+			angle = _circle(radius, deg_to_rad(degrees), short, 1.0, 0.0)
+			_circle(radius, deg_to_rad(degrees), 0.08, -1.0, angle)
+			check_eq(_gesture.phase, Gesture.Phase.ACTIVE, "CRANK: %s turns at %d degrees a tick and a slip back are not three turns" % [str(short), int(degrees)])
+	# A slip back and on again costs what it unwound, no more and no less.
+	_gesture.begin(Gesture.Kind.CRANK, turns)
+	angle = _circle(radius, per_tick, 1.5, 1.0, 0.0)
+	angle = _circle(radius, per_tick, 0.1, -1.0, angle)
+	angle = _circle(radius, per_tick, 1.45, 1.0, angle)
+	check_eq(_gesture.phase, Gesture.Phase.ACTIVE, "CRANK: after a slip back, 2.85 net turns are still not three")
+	_circle(radius, per_tick, 0.3, 1.0, angle)
+	check_eq(_gesture.phase, Gesture.Phase.DONE, "CRANK: and a little over three net turns complete it")
+	# Scrubbing left and right, with a stray pixel sideways on each stroke.
+	_gesture.begin(Gesture.Kind.CRANK, turns)
+	for stroke: int in 60:
+		var way: float = 1.0 if stroke % 2 == 0 else -1.0
+		_move(Vector2(way * 80.0, 1.0 if stroke % 3 == 0 else -1.0), 8)
+	check_eq(_gesture.phase, Gesture.Phase.ACTIVE, "CRANK: scrubbing left and right is not cranking")
+
 	_gesture.begin(Gesture.Kind.CRANK, turns)
 	_circle(radius, per_tick, 2.5, 1.0, 0.0)
 	_run(DT, false)
@@ -180,6 +222,40 @@ func _check_bead() -> void:
 	for _tap: int in 4:
 		counted += 1 if _one_bead_tap(0.5) else 0
 	check_eq(counted, 4, "BEAD: taps slower than the limit each count as one bead")
+
+	# At or above the limit the beads come at the limit, not at half of it.
+	for per_second: float in [4.0, 6.0, 10.0]:
+		_gesture = Gesture.new()
+		_gesture.configure(tuning)
+		counted = 0
+		var taps: int = roundi(per_second * 5.0)
+		for _tap: int in taps:
+			counted += 1 if _one_bead_tap(1.0 / per_second) else 0
+		check_between(float(counted), rate * 5.0 - 1.0, rate * 5.0 + 1.0, "BEAD: %d taps in 5 s (%s a second) give bead_max_rate beads a second (%d)" % [taps, str(per_second), counted])
+	# A hair faster than the limit loses a tap now and then, never half of them.
+	_gesture = Gesture.new()
+	_gesture.configure(tuning)
+	counted = 0
+	for _tap: int in 20:
+		counted += 1 if _one_bead_tap(39.0 * DT) else 0
+	check(counted >= 14 and counted <= 20, "BEAD: 20 taps at 3.08 a second give at least 14 beads (%d)" % counted)
+	# Never more than bead_max_rate in any one second.
+	_gesture = Gesture.new()
+	_gesture.configure(tuning)
+	var stamps: Array[float] = []
+	var clock: float = 0.0
+	for _tap: int in 40:
+		if _one_bead_tap(0.125):
+			stamps.append(clock)
+		clock += 0.125
+	var worst: int = 0
+	for index: int in stamps.size():
+		var within: int = 0
+		for other: float in stamps:
+			if other >= stamps[index] and other < stamps[index] + 1.0 - DT:
+				within += 1
+		worst = maxi(worst, within)
+	check_eq(worst, int(rate), "BEAD: no second ever holds more than bead_max_rate beads")
 
 	# A bead is a TAP: a long press is not one.
 	_gesture.begin(Gesture.Kind.BEAD)
@@ -224,6 +300,24 @@ func _check_pipeline() -> void:
 	_steps(sim, input, 40)
 	check(not _completed(sim, "wipers"), "pipeline: a flick down on the wiper stalk does nothing")
 
+	# A long flick, and a second one without aiming again: the hand stays on
+	# the stalk until the button comes up, so the rest of the swipe does not
+	# drag the pointer off it.
+	for length: float in [150.0, 220.0]:
+		_aim(sim, input, &"wiper_stalk")
+		_steps(sim, input, 40)
+		input.pointer_is_absolute = false
+		for flick: int in 2:
+			sim.drain_events()
+			input.lmb = true
+			input.pointer_delta = Vector2(0.0, -length / 10.0)
+			_steps(sim, input, 10)
+			input.pointer_delta = Vector2.ZERO
+			input.lmb = false
+			_steps(sim, input, 30)
+			check(_completed(sim, "wipers"), "pipeline: flick %d of %d px on the stalk works the wipers" % [flick + 1, int(length)])
+			check_eq(sim.hand.at_id(), &"wiper_stalk", "pipeline: after a flick of %d px the hand is still on the stalk" % int(length))
+
 	# CRANK(3) at the window, across the cabin.
 	_aim(sim, input, &"window_crank")
 	_steps(sim, input, 120)
@@ -264,6 +358,28 @@ func _check_pipeline() -> void:
 	input.lmb = false
 	_steps(sim, input, 5)
 	check_eq(sim.gate.gear, 3, "pipeline: with sequential shifting a flick up goes from second to third")
+	# Three long flicks in a row, without aiming again, are three shifts.
+	sim.gate.has_fifth = true
+	sim.gate.force_gear(1)
+	var gears: Array[int] = []
+	for _flick: int in 3:
+		input.lmb = true
+		input.pointer_delta = Vector2(0.0, -11.0)
+		_steps(sim, input, 10)
+		input.pointer_delta = Vector2.ZERO
+		input.lmb = false
+		_steps(sim, input, 20)
+		gears.append(sim.gate.gear)
+	check_eq(gears, [2, 3, 4] as Array[int], "pipeline: three long flicks up on the assisted lever go through three gears")
+	input.lmb = true
+	input.pointer_delta = Vector2(0.0, 11.0)
+	_steps(sim, input, 10)
+	input.pointer_delta = Vector2.ZERO
+	input.lmb = false
+	_steps(sim, input, 20)
+	check_eq(sim.gate.gear, 3, "pipeline: and a flick down comes back one")
+	sim.gate.has_fifth = false
+	sim.sequential_shift = false
 
 	# Grip and steer.
 	input.clear()
@@ -285,6 +401,72 @@ func _check_pipeline() -> void:
 	_steps(sim, input, int(1.5 / DT))
 	check(not sim.wheel.gripped, "pipeline: releasing the button lets go")
 	check_near(sim.wheel.angle, 0.0, 0.000001, "pipeline: and the wheel returns to centre")
+
+
+## DRAG_TO through DriveSim (GDD 4.4): press on the object, carry it to the
+## anchor the ritual names, release. One thing fits in the hand: while it
+## carries, it cannot take the wheel.
+func _check_drag_to_pipeline() -> void:
+	var roots: Dictionary = data.roots.duplicate(true)
+	var rituals: Array = GameData.as_array(GameData.as_dict(roots["rituals"])["rituals"])
+	rituals.append({
+		"id": "hand_over_test", "anchor": "ashtray", "gesture": "DRAG_TO", "to": "cup_b",
+		"eyes_down": false, "requires": ["!lit"], "on_complete": ["nerves:-1"],
+	})
+	var private: GameData = GameData.from_parts(roots, data.lines.duplicate(true))
+	check(DataValidator.validate(private).is_empty(), "DRAG_TO: a ritual that names where the object goes is valid data")
+	var sim: DriveSim = DriveSim.new(private)
+	# The cigarettes sit in the ashtray: take them out so the test ritual is the one offered there.
+	sim.items.remove_item(sim.items.item(&"cigarettes"))
+	var input: DriveInput = DriveInput.new()
+	var cases: Array = [[&"cup_b", true], [&"radio", false], [&"ashtray", false]]
+	for entry: Variant in cases:
+		var case: Array = entry
+		var release_at: StringName = case[0]
+		var expected: bool = case[1]
+		sim.drain_events()
+		_aim(sim, input, &"ashtray")
+		_steps(sim, input, 60)
+		input.lmb = true
+		_steps(sim, input, 3)
+		check_eq(sim.gesture.kind, Gesture.Kind.DRAG_TO, "DRAG_TO: pressing on the object picks it up")
+		check(sim.hand.carrying, "DRAG_TO: the hand carries it")
+		input.pointer = sim.hand.anchor_pointer(sim.hand.anchor_index(release_at))
+		_steps(sim, input, 120)
+		if release_at != &"ashtray":
+			check(sim.hand.at_id() != &"ashtray", "DRAG_TO: the carried object moves with the hand")
+		input.lmb = false
+		_steps(sim, input, 5)
+		check_eq(_completed(sim, "hand_over_test"), expected,
+				"DRAG_TO: released at '%s' it %s" % [release_at, "completes" if expected else "does not complete"])
+		check(not sim.hand.carrying, "DRAG_TO: after the release the hand is empty")
+	# Released in the open.
+	sim.drain_events()
+	_aim(sim, input, &"ashtray")
+	_steps(sim, input, 60)
+	input.lmb = true
+	_steps(sim, input, 3)
+	input.pointer = sim.space.point_to_pointer(sim.space.grip_reference) + Vector2(0.0, 200.0)
+	_steps(sim, input, 120)
+	input.lmb = false
+	_steps(sim, input, 5)
+	check(not _completed(sim, "hand_over_test"), "DRAG_TO: released in the open it does not complete")
+	# The carrying hand cannot take the wheel.
+	_aim(sim, input, &"ashtray")
+	_steps(sim, input, 60)
+	input.lmb = true
+	_steps(sim, input, 3)
+	input.pointer = sim.space.point_to_pointer(sim.space.grip_reference)
+	_steps(sim, input, 120)
+	check(sim.hand.carrying, "DRAG_TO: with the pointer on the rim the hand still carries")
+	check(not sim.hand.gripping and not sim.wheel.gripped, "DRAG_TO: a hand that carries something does not grip the wheel (GDD 4.2)")
+	input.lmb = false
+	_steps(sim, input, 5)
+	input.lmb = true
+	_steps(sim, input, 80)
+	check(sim.hand.gripping and sim.wheel.gripped, "DRAG_TO: once it has let go, it can")
+	input.lmb = false
+	_steps(sim, input, 5)
 
 
 # --- Helpers ------------------------------------------------------------------

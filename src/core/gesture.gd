@@ -6,11 +6,13 @@ extends RefCounted
 ##   TAP        press and release within tap_max_time; completes on release
 ##   HOLD(t)    keep the button down for t seconds; an early release cancels
 ##   FLICK(dir) press, then move flick_min_distance in an allowed direction
-##              within flick_max_time
+##              within flick_max_time; the swipe must go more that way than
+##              sideways
 ##   DRAG_TO    press on the object, carry it, release over a destination
 ##   CRANK(n)   press, then circle the pointer for n full turns one way;
-##              counts cumulative heading change
-##   BEAD       a TAP, counted at most bead_max_rate times per second
+##              counts cumulative heading change; a change of more than
+##              crank_max_turn at once is a change of direction, not turning
+##   BEAD       a TAP; at most bead_max_rate count in any one second
 ##   DRAG       press and drag sideways (a dial): one step per `amount` pixels
 ##              of travel; completes on release (DECISIONS D-021)
 ##
@@ -45,8 +47,9 @@ var drag_steps: int = 0
 var _tap_max: float = 0.0
 var _flick_distance: float = 0.0
 var _flick_max: float = 0.0
-var _bead_interval: float = 0.0
+var _bead_rate: int = 0
 var _crank_min_step: float = 0.0
+var _crank_max_turn: float = PI
 
 var _amount: float = 0.0
 var _dirs: int = 0
@@ -56,15 +59,17 @@ var _crank_heading: float = 0.0
 var _crank_has_heading: bool = false
 var _crank_turned: float = 0.0
 var _clock: float = 0.0
-var _last_bead: float = -INF
+## When the last few beads were counted.
+var _bead_times: PackedFloat64Array = PackedFloat64Array()
 
 
 func configure(tuning: Tuning) -> void:
 	_tap_max = tuning.f("tap_max_time")
 	_flick_distance = tuning.f("flick_min_distance")
 	_flick_max = tuning.f("flick_max_time")
-	_bead_interval = 1.0 / tuning.f("bead_max_rate")
+	_bead_rate = tuning.i("bead_max_rate")
 	_crank_min_step = tuning.f("crank_min_step")
+	_crank_max_turn = deg_to_rad(tuning.f("crank_max_turn"))
 
 
 ## Starts a gesture at the moment a press is applied.
@@ -116,11 +121,14 @@ func step(dt: float, down: bool, delta: Vector2) -> void:
 		Kind.BEAD:
 			_step_tap(down)
 			if phase == Phase.DONE:
-				if _clock - _last_bead < _bead_interval - dt * 0.5:
+				# A tap counts unless bead_max_rate were counted in the last second.
+				while not _bead_times.is_empty() and _clock - _bead_times[0] > 1.0 - dt * 0.5:
+					_bead_times.remove_at(0)
+				if _bead_times.size() >= _bead_rate:
 					phase = Phase.CANCELLED
 					progress = 0.0
 				else:
-					_last_bead = _clock
+					_bead_times.append(_clock)
 		Kind.HOLD:
 			if elapsed >= _amount - dt * 0.5 and down:
 				_finish()
@@ -178,20 +186,17 @@ func _step_flick(down: bool, delta: Vector2, dt: float) -> void:
 		cancel()
 		return
 	_travel += delta
+	# The way the swipe mostly goes: it is a flick only if that way is allowed.
 	var best: int = 0
 	var best_distance: float = 0.0
-	if _dirs & DIR_UP and -_travel.y > best_distance:
-		best = DIR_UP
-		best_distance = -_travel.y
-	if _dirs & DIR_DOWN and _travel.y > best_distance:
-		best = DIR_DOWN
-		best_distance = _travel.y
-	if _dirs & DIR_LEFT and -_travel.x > best_distance:
-		best = DIR_LEFT
-		best_distance = -_travel.x
-	if _dirs & DIR_RIGHT and _travel.x > best_distance:
-		best = DIR_RIGHT
-		best_distance = _travel.x
+	if absf(_travel.y) >= absf(_travel.x):
+		best = DIR_UP if _travel.y < 0.0 else DIR_DOWN
+		best_distance = absf(_travel.y)
+	else:
+		best = DIR_LEFT if _travel.x < 0.0 else DIR_RIGHT
+		best_distance = absf(_travel.x)
+	if (_dirs & best) == 0:
+		best = 0
 	if best != 0 and best_distance >= _flick_distance and elapsed <= _flick_max + dt * 0.5:
 		direction = best
 		_finish()
@@ -209,7 +214,10 @@ func _step_crank(down: bool, delta: Vector2) -> void:
 	var heading: float = _crank_pending.angle()
 	_crank_pending = Vector2.ZERO
 	if _crank_has_heading:
-		_crank_turned += angle_difference(_crank_heading, heading)
+		var turned: float = angle_difference(_crank_heading, heading)
+		# Doubling back is not turning: it counts for nothing either way.
+		if absf(turned) <= _crank_max_turn:
+			_crank_turned += turned
 	_crank_heading = heading
 	_crank_has_heading = true
 	var needed: float = _amount * TAU

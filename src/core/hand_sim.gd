@@ -54,6 +54,9 @@ var grip_toggle: bool = false:
 var eyes_down: bool = false
 ## False while he can steer and cannot reach for anything (a Snap, GDD 6.1).
 var can_reach: bool = true
+## True while the hand carries something (a DRAG_TO in progress): one thing
+## fits in the hand, so it cannot take the wheel (GDD 4.2).
+var carrying: bool = false
 ## True while the hand can neither let go nor take hold (the weather cramp).
 var frozen: bool = false
 
@@ -279,7 +282,7 @@ func _let_go() -> void:
 
 func _choose_target(down: bool, pressed: bool) -> void:
 	snap_index = _nearest_anchor()
-	var on_rim: bool = _space.pointer_on_rim(pointer)
+	var on_rim: bool = _space.pointer_on_rim(pointer) and not carrying
 	if snap_index != NO_ANCHOR and on_rim:
 		# The rim is a place to point at too. Where the pointer is nearer to
 		# the rim's centre line than to the anchor, the wheel wins: otherwise
