@@ -1063,3 +1063,58 @@ Format: `D-NNN (milestone, date) Title` then Context / Decision / Why.
 - **Fixed on the way.** A save made at a stop in Act 2 or 3 would have
   looked like the start of a new act when loaded; what belongs to the
   Telling is now put back after the road is.
+
+## D-043 (M6, 2026-11-17) The Adaptations and their two synergies
+
+- **Fitting.** Whatever in the cabin works by being there is read into the
+  other systems whenever the cabin changes (`DriveSim._fit_cabin`, on
+  `ItemSim.cabin_serial`): wheel rates, sideways speed, the fifth gear, lamp
+  capacity, and where each anchor is.
+- **Crossover stalk.** It moves the `indicator_stalk` anchor to (0.20, 0.14,
+  -0.12): right of the column, 0.09 s from the wheel, clear of the other
+  controls on screen. The item's params say so (`moves_anchor`,
+  `moves_to`); the snapshot carries `anchor_moves`.
+- **Console window switch.** A new anchor `window_switch` at (0.20, -0.13,
+  0.12), a Near reach (0.20 s), with a HOLD of 0.6 s. The crank stays where
+  it is and still works.
+- **Wheel ring.** Read literally ("setting it locks the wheel at its current
+  angle") the hook would be useless: the hand must leave the wheel to tap
+  it, and a wheel let go is back at centre before any TAP can land (200
+  degrees a second). So: a TAP at the `hook` anchor (inside the rim, 0.16 s
+  from the grip) hangs the hook in its ring, and there it waits. The next
+  time his hand lets go of the wheel, the hook holds the wheel at the angle
+  it has, for `hook_lock_s` (4 s) at most; taking the wheel again ends it
+  at once. Then the hook is out of its ring for `hook_cooldown_s` (6 s)
+  and must be set again. It holds the angle, not the lane: the crown and
+  every other drift still carry the car. A stop takes the hook out of its
+  ring (every status ends there).
+- **Ring + Spinner knob.** While the hook holds and the road is straight
+  (no bend under the car), it turns the wheel to bring the car to the
+  middle of the lane it is in within `hook_settle_time` (0.5 s) and keep it
+  there against the drift. In a bend it holds a fixed angle like the ring
+  alone.
+- **Thumb keypad.** `pad_horn` (middle click) and `pad_wiper` (scroll, either
+  way) work only while he grips the wheel and only with the keypad fitted;
+  each press is one honk or one sweep, with all the horn's and the wipers'
+  own rules.
+- **Stalk + Keypad.** He indicates by himself when a lane change begins:
+  when the side of the car is over a lane line with a lane beyond it and
+  the car is moving that way. The indicator is then on by the time the car
+  crosses, so the patrol has nothing against him. Drifting onto the
+  shoulder is no lane change.
+- **Loud horn.** Every vehicle ahead in his lane within the horn's range
+  moves over if the next lane is free, whatever its type (the motorcade
+  holds every lane, so it has nowhere to go). The honk's calm is -5 in
+  place of -3, still once per cooldown; a honk in view of a patrol is the
+  honk's +15 and 15 more.
+- **Fog lamps.** +40% of whatever limits his view: the headlight cone at
+  night, the dust's visibility, and in rain the time a sweep keeps the
+  glass clear (6 s becomes 8.4 s). Each oncoming vehicle met flashes back:
+  +2 Nerves. A vehicle is met when it passes the car on an undivided road.
+  The rule of GDD 4.6 that each oncoming vehicle met on high beam adds 2
+  Nerves was missing and is now there too; the two add up.
+- **Wide mirror.** What the mirror tells him comes 5 s earlier: the patrol's
+  blue lights, and the tailgater's car behind. A cracked mirror's 2 s of
+  delay, until now only a number in the snapshot, works the same way with
+  the other sign; both together are 3 s early. `mirror_scale` (1.5) in the
+  snapshot is for the view.

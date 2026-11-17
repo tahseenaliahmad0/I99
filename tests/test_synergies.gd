@@ -366,7 +366,178 @@ func test_syn_seeds_tea() -> void:
 	check_eq(glass.hot_left, 0.0, "with no seeds the tea goes cold in its 40 s")
 
 
+## T-SYN-RING-SPINNER: Wheel ring + Spinner knob (7.8): on straights the hook
+## holds the lane centre instead of a fixed angle.
+func test_syn_ring_spinner() -> void:
+	var synergy: Dictionary = _synergy("wheel_ring", "spinner_knob")
+	check_eq(GameData.as_string(synergy.get("rule")), "hook_holds_lane", "the wheel ring and the spinner knob have a synergy")
+	var crown: float = tuning.f("crown_drift")
+	var off: float = 0.6
+
+	# The ring alone: a fixed angle. The car goes where the crown takes it.
+	var alone: Dictionary = _hooked_run(false, -off, 0.0)
+	check(GameData.as_bool(alone["hooked"]), "(the hook holds the wheel)")
+	check_near(GameData.as_float(alone["angle_spread"]), 0.0, 0.000001, "the ring alone holds a fixed angle")
+	check_near(GameData.as_float(alone["moved"]), crown * 3.0, 0.02, "and the car drifts with the crown: 0.75 m in 3 s")
+
+	# With the spinner knob: the lane centre, from either side, against the crown.
+	for side: float in [-off, off]:
+		var both: Dictionary = _hooked_run(true, side, 0.0)
+		check(GameData.as_bool(both["hooked"]), "(the hook holds the wheel)")
+		check_near(GameData.as_float(both["off_centre"]), 0.0, 0.03, "with the spinner knob the hook brings the car from %s m off to the middle of its lane" % str(side))
+		check(GameData.as_float(both["angle_spread"]) > 1.0, "by turning the wheel: it is no fixed angle")
+		check_near(GameData.as_float(both["angle"]), -crown / (tuning.f("lat_per_kmh") * tuning.fi("gear_speeds", 2)) * tuning.f("wheel_max_angle"), 0.5, "and holds it there with the wheel a little to the left, against the crown")
+
+	# On a bend it is a fixed angle again.
+	var bend: Dictionary = _hooked_run(true, -off, tuning.fi("curve_k", 1))
+	check(GameData.as_bool(bend["hooked"]), "(the hook holds the wheel in a bend)")
+	check_near(GameData.as_float(bend["angle_spread"]), 0.0, 0.000001, "in a bend the hook holds a fixed angle, spinner knob or not")
+
+	# The lock still ends after its 4 s.
+	var lock_s: float = 0.0
+	for give: Variant in GameData.as_array(_record("wheel_ring").get("gives")):
+		if GameData.as_string(GameData.as_dict(give).get("passive")) == "hook_lock_s":
+			lock_s = GameData.as_float(GameData.as_dict(give).get("amount"))
+	_ticks(_ticks_in(lock_s))
+	check_eq(GameData.as_string(_sim.snapshot()["hook"]), "cooling", "and after its 4 s the hook lets go as ever")
+
+
+## T-SYN-STALK-KEYPAD: Crossover stalk + Thumb keypad (7.8): he indicates
+## automatically when a lane change begins.
+func test_syn_stalk_keypad() -> void:
+	var synergy: Dictionary = _synergy("crossover_stalk", "thumb_keypad")
+	check_eq(GameData.as_string(synergy.get("rule")), "auto_indicate", "the crossover stalk and the thumb keypad have a synergy")
+	var fine: float = tuning.f("suspicion_lane_cross")
+
+	# Without the pair: a lane change he does not signal, in view of a patrol.
+	var plain: Dictionary = _lane_change_watched([], 1)
+	check_eq(GameData.as_int(plain["lanes_crossed"]), 1, "(he changes lane to the right)")
+	check_eq(GameData.as_int(plain["indicated"]), 0, "(with no hand for the stalk nothing indicates)")
+	check_near(GameData.as_float(plain["suspicion_jump"]), fine, 1.0, "(crossing the line unsignalled is +20 Suspicion)")
+	for one: String in ["crossover_stalk", "thumb_keypad"]:
+		var half: Dictionary = _lane_change_watched([one], 1)
+		check_near(GameData.as_float(half["suspicion_jump"]), fine, 1.0, "with the %s alone it is the same" % one)
+
+	# With both: the indicator comes on as the lane change begins.
+	for way: int in [1, -1]:
+		var both: Dictionary = _lane_change_watched(["crossover_stalk", "thumb_keypad"], way)
+		check_eq(GameData.as_int(both["lanes_crossed"]), 1, "(he changes lane, %s)" % ("right" if way > 0 else "left"))
+		check_eq(GameData.as_int(both["indicated"]), way, "with both he indicates that way by himself")
+		var room: float = _sim.car.lane_width() * 0.5 - _sim.car.half_width()
+		check(GameData.as_float(both["indicated_off"]) >= room - 0.02 and GameData.as_float(both["indicated_off"]) < _sim.car.lane_width() * 0.5,
+				"as the change begins: once the side of the car is over the line, before the car is (%s m off the middle of its lane)" % str(snappedf(GameData.as_float(both["indicated_off"]), 0.01)))
+		check(GameData.as_float(both["suspicion_jump"]) < 1.0, "and the patrol has nothing to hold against him")
+		check_eq(_sim.items.indicator, 0, "(the indicator cancels when the line is crossed, as ever)")
+
+	# Toward the shoulder there is no lane to change into: nothing indicates.
+	_new_sim()
+	_give("crossover_stalk")
+	_give("thumb_keypad")
+	_cruise(3, _sim.car.lanes - 1)
+	_keep_lane = false
+	_input.clear()
+	var guard: int = _ticks_in(10.0)
+	while not _sim.car.on_rumble and guard > 0:
+		guard -= 1
+		_tick()
+	_keep_lane = true
+	check(_sim.car.on_rumble, "(left alone in the right lane the car drifts onto the rumble strip)")
+	check_eq(_sim.items.indicator, 0, "drifting toward the shoulder is no lane change: nothing indicates")
+
+
 # --- Helpers -----------------------------------------------------------------
+
+## Third gear on a straight (or in a bend of strength `bend`), the car
+## `start_off` metres from the middle of its lane; the hook set, the wheel
+## taken and let go. Returns what the next 3 s did: whether the hook held,
+## how far the car moved, how far it ended from the middle, the wheel's last
+## angle and the spread of its angles over the last second.
+func _hooked_run(with_spinner: bool, start_off: float, bend: float) -> Dictionary:
+	_new_sim()
+	_give("wheel_ring")
+	if with_spinner:
+		_give("spinner_knob")
+	_cruise(3, 1)
+	_sim.curve_k = bend
+	_run(0.5)
+	_tap_at("hook")
+	_grip()
+	_ticks(_ticks_in(0.3))
+	var centre: float = _sim.car.lane_center(1)
+	_keep_lane = false
+	_sim.car.x = centre + start_off
+	_sim.car.v_lat = 0.0
+	_input.clear()
+	_tick()
+	var hooked: bool = GameData.as_string(_sim.snapshot()["hook"]) == "set"
+	var x_from: float = _sim.car.x
+	var low: float = INF
+	var high: float = -INF
+	for index: int in _ticks_in(3.0):
+		_tick()
+		if index >= _ticks_in(2.0):
+			low = minf(low, _sim.wheel.angle)
+			high = maxf(high, _sim.wheel.angle)
+	_keep_lane = true
+	var first: float = _sim.wheel.angle
+	return {
+		"hooked": hooked and GameData.as_string(_sim.snapshot()["hook"]) == "set",
+		"moved": _sim.car.x - x_from,
+		"off_centre": _sim.car.x - centre,
+		"angle": first,
+		"angle_spread": maxf(high - low, absf(first)) if with_spinner and bend == 0.0 else high - low,
+	}
+
+
+## A quiet Patrol leg, the patrol watching, the given Adaptations fitted: he
+## takes the wheel and changes one lane (`way` +1 right, -1 left) without
+## touching the stalk. Returns the lanes crossed, the way the indicator came
+## on by itself (0 for not at all), how far off the middle of his lane the
+## car was when it did, and the largest jump in Suspicion.
+func _lane_change_watched(fitted: Array, way: int) -> Dictionary:
+	_begin_quiet_leg("patrol", 2, 71)
+	for item_id: Variant in fitted:
+		_give(GameData.as_string(item_id))
+	var guard: int = _ticks_in(60.0)
+	while not _sim.suspicion.watching and guard > 0:
+		guard -= 1
+		_tick()
+	_run(2.0)
+	var lane: int = _sim.car.lane_of(_sim.car.x)
+	if lane + way < 0 or lane + way >= _sim.car.lanes:
+		# Start from the lane that has a neighbour that way.
+		lane = clampi(lane - way, 0, _sim.car.lanes - 1)
+		_sim.car.x = _sim.car.lane_center(lane)
+		_run(0.5)
+	_grip()
+	_ticks(_ticks_in(0.3))
+	_keep_lane = false
+	var centre: float = _sim.car.lane_center(lane)
+	var indicated: int = 0
+	var indicated_off: float = 0.0
+	var jump: float = 0.0
+	var crossed: int = 0
+	# Turn the wheel a third of the way to the lock that way, hold until he is
+	# in the next lane, then straighten.
+	_steer(float(way) * 45.0 / (tuning.f("steer_deg_per_px") * _sim.wheel.turn_rate_mult), 20)
+	guard = _ticks_in(8.0)
+	var before: float = _sim.suspicion.value
+	while crossed == 0 and guard > 0:
+		guard -= 1
+		_tick()
+		if indicated == 0 and _sim.items.indicator != 0:
+			indicated = _sim.items.indicator
+			indicated_off = absf(_sim.car.x - centre)
+		jump = maxf(jump, _sim.suspicion.value - before)
+		before = _sim.suspicion.value
+		if _sim.car.lane_of(_sim.car.x) != lane:
+			crossed = absi(_sim.car.lane_of(_sim.car.x) - lane)
+	_steer(-float(way) * 45.0 / (tuning.f("steer_deg_per_px") * _sim.wheel.turn_rate_mult), 20)
+	_ticks(SETTLE)
+	_release()
+	_keep_lane = true
+	return {"lanes_crossed": crossed, "indicated": indicated, "indicated_off": indicated_off, "suspicion_jump": jump}
+
 
 ## The synergy an item has with a partner ({} when it has none).
 func _synergy(item_id: String, with: String) -> Dictionary:

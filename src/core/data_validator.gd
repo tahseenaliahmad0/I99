@@ -28,7 +28,7 @@ const SLOT_ANCHOR: String = "@slot"
 const RITUAL_OPS: PackedStringArray = [
 	"nerves", "cash", "add_effect", "remove_effect", "consume_supply", "give", "toggle",
 	"horn", "wipe", "photo", "indicate", "window", "ash", "radio_step", "sfx", "line", "pay",
-	"clear_haze", "flip", "answer", "refill",
+	"clear_haze", "flip", "answer", "refill", "hook",
 ]
 ## Cabin switches a "toggle:" op may flip and a "flag:" condition may read.
 const CABIN_FLAGS: PackedStringArray = ["hazards", "high_beam", "window_open", "glovebox_open", "passenger"]
@@ -775,6 +775,13 @@ func _check_cross_rules() -> void:
 			var entries: Array = GameData.as_array(item.get(list))
 			for index: int in entries.size():
 				_check_entry(item, GameData.as_dict(entries[index]), "items[%s].%s[%d]" % [item_id, list, index])
+		# An item that moves a control says which anchor and where to.
+		var params: Dictionary = GameData.as_dict(item.get("params"))
+		if params.has("moves_anchor") or params.has("moves_to"):
+			if not _data.has_record("anchors", GameData.as_string(params.get("moves_anchor"))):
+				_err("E_REF", "items.json", "items[%s].params.moves_anchor" % item_id,
+						"unknown anchors id '%s'" % GameData.as_string(params.get("moves_anchor")))
+			_check(params.get("moves_to"), _t("vec3"), "items.json", "items[%s].params.moves_to" % item_id)
 		var synergies: Array = GameData.as_array(item.get("synergies"))
 		for index: int in synergies.size():
 			var synergy: Dictionary = GameData.as_dict(synergies[index])

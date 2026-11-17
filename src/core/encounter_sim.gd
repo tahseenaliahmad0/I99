@@ -65,6 +65,9 @@ var watch_ended: bool = false
 var nerves_rate: float = 0.0
 ## The part of nerves_rate that is the tailgater on his bumper.
 var tail_nerves_rate: float = 0.0
+## Seconds by which what the mirror tells him comes earlier (a wide mirror)
+## or, when negative, later (a cracked one): GDD 7.6, 6.3. Set by DriveSim.
+var tell_shift: float = 0.0
 ## He was cut off (the Tailgater's stab at the brake in front of him).
 var cut_off: bool = false
 ## The road under the car changed (a slip lane opened or closed, the side
@@ -268,7 +271,7 @@ func police() -> TrafficSim.Vehicle:
 ## the police car then follows for patrol_duration.
 func _step_patrol() -> void:
 	var at: float = GameData.as_float(_special.get("at_s"))
-	var lead: float = GameData.as_float(_special.get("lights_lead_s"))
+	var lead: float = maxf(GameData.as_float(_special.get("lights_lead_s")) + tell_shift, 0.0)
 	match patrol_phase:
 		PATROL_WAITING:
 			if time >= at - lead and _spawn_police():
@@ -330,7 +333,7 @@ func _follow() -> void:
 	if car == null:
 		return
 	var at: float = GameData.as_float(_special.get("at_s"))
-	var lead: float = GameData.as_float(_special.get("lights_lead_s"))
+	var lead: float = maxf(GameData.as_float(_special.get("lights_lead_s")) + tell_shift, 0.0)
 	var place: float = _car_half_length + GameData.as_float(_special.get("gap_m")) + car.half_length
 	var closed: float = clampf((time - (at - lead)) / maxf(lead, 0.001), 0.0, 1.0)
 	_shadow(car, lerpf(_tuning.f("patrol_spawn_behind"), place, closed))
@@ -352,7 +355,7 @@ func tailgater() -> TrafficSim.Vehicle:
 ## higher, or the end of his patience, also lose him.
 func _step_tailgater(dt: float, braking: bool, gear: int) -> void:
 	var at: float = GameData.as_float(_special.get("at_s"))
-	var tell: float = GameData.as_float(_special.get("tell_s"))
+	var tell: float = maxf(GameData.as_float(_special.get("tell_s")) + tell_shift, 0.0)
 	var car_lane: int = clampi(_car.lane_of(_car.x), 0, _car.lanes - 1)
 	var driver: TrafficSim.Vehicle = tailgater()
 	if tail_phase != TAIL_WAITING and tail_phase != TAIL_GONE and driver == null:

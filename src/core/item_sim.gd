@@ -32,6 +32,12 @@ const FLAG_WINDOW: StringName = &"window_open"
 const MUSIC: StringName = &"music"
 const COURAGE: StringName = &"courage"
 const CHEWING: StringName = &"chewing"
+## The hook on the wheel ring (GDD 7.6): hung in the ring and waiting for him
+## to let go, holding the wheel, and out again for a while.
+const HOOK_ARMED: StringName = &"hook_armed"
+const HOOK_SET: StringName = &"hook_set"
+const HOOK_COOLDOWN: StringName = &"hook_cooldown"
+const HOOK: StringName = &"hook"
 ## Synergy partners that are not items (GDD 7.8).
 const TOKEN_MUSIC: String = "music"
 const TOKEN_PHOTO: String = "photo"
@@ -59,6 +65,22 @@ const PASSIVES: Dictionary = {
 	"close_call_bonus": false,
 	"glare_mult": true,
 	"night_darker": false,
+	# Adaptations (GDD 7.6).
+	"turn_rate_mult": true,
+	"return_rate_mult": true,
+	"hook_lock_s": false,
+	"hook_cooldown_s": false,
+	"wheel_keys": false,
+	"fifth_gear": false,
+	"horn_yields_all": false,
+	"horn_nerves_more": false,
+	"horn_suspicion_more": false,
+	"lamp_capacity": false,
+	"lat_speed_mult": true,
+	"visibility_mult": true,
+	"flash_back_nerves": false,
+	"mirror_lead_s": false,
+	"mirror_scale": true,
 }
 
 ## One thing in the cabin.
@@ -188,6 +210,9 @@ var _placed: Dictionary = {}
 var _leg_holds: Array[StringName] = []
 ## Standing changes of what is in the cabin, combined: key -> value.
 var _passives: Dictionary = {}
+## Counts every change to what is in the cabin, so that who reads the
+## standing changes knows when to read them again.
+var cabin_serial: int = 0
 ## Seconds until the phone rings next; negative until it is drawn.
 var _call_wait: float = -1.0
 ## anchor id -> the anchor that takes its place while something sits there
@@ -706,8 +731,7 @@ func _run(op: String, owner: Item, direction: int) -> void:
 				_nerves.add(calm)
 		"indicate":
 			# The stalk goes up for right and down for left (GDD 4.6).
-			indicator = 1 if direction == Gesture.DIR_UP else -1
-			indicator_left = _indicator_time
+			indicate(1 if direction == Gesture.DIR_UP else -1)
 		"window":
 			var open: bool = not flag(FLAG_WINDOW)
 			flags[FLAG_WINDOW] = open
@@ -727,6 +751,9 @@ func _run(op: String, owner: Item, direction: int) -> void:
 			# A full supply again for everything of a kind (the Thermos: the tea, hot).
 			for refilled: Item in tagged(parts[1]):
 				restock(refilled)
+		"hook":
+			# The hook is hung in the ring: it will hold the wheel when he lets go.
+			_effects.hold(HOOK_ARMED, HOOK, true)
 		"radio_step":
 			_radio_step(direction)
 		"pay":
@@ -848,6 +875,17 @@ func _param(item_instance: Item, key: String, fallback: float) -> float:
 
 # --- Standing changes (GDD 7.5 to 7.7) ---------------------------------------
 
+## Anchors that something in the cabin has moved (the crossover stalk moves
+## the indicator): anchor id -> where it is now.
+func anchor_moves() -> Dictionary:
+	var moves: Dictionary = {}
+	for candidate: Item in items:
+		var params: Dictionary = GameData.as_dict(candidate.record.get("params"))
+		if params.has("moves_anchor"):
+			moves[GameData.as_string(params.get("moves_anchor"))] = GameData.as_vec3(params.get("moves_to"))
+	return moves
+
+
 ## What the things in the cabin change just by being there: the product of
 ## a multiplier, the sum of an amount (1 or 0 when nothing names the key).
 func passive(key: String) -> float:
@@ -857,6 +895,7 @@ func passive(key: String) -> float:
 
 
 func _refresh_passives() -> void:
+	cabin_serial += 1
 	_passives.clear()
 	for candidate: Item in items:
 		for list: String in ["gives", "takes"]:
@@ -1005,12 +1044,15 @@ func _horn() -> void:
 	horn_blown = true
 	if _horn_cooldown <= 0.0:
 		_horn_cooldown = _horn_cooldown_s
-		_nerves.add(_horn_nerves)
+		_nerves.add(_horn_nerves + passive("horn_nerves_more"))
 	var lane: int = _car.lane_of(_car.x)
 	var lane_center: float = _car.lane_center(lane)
 	var half_lane: float = _car.lane_width() * 0.5
+	# A loud horn moves every vehicle (GDD 7.6), where there is a lane for it
+	# to move into.
+	var all_yield: bool = passive("horn_yields_all") > 0.0
 	for vehicle: TrafficSim.Vehicle in _traffic.vehicles:
-		if vehicle.direction < 0 or not vehicle.yields_to_horn:
+		if vehicle.direction < 0 or not (vehicle.yields_to_horn or all_yield):
 			continue
 		if absf(vehicle.x - lane_center) >= half_lane:
 			continue
@@ -1044,7 +1086,8 @@ func _radio_step(direction: int) -> void:
 func rain_blur() -> float:
 	if not raining:
 		return 0.0
-	var clear_time: float = _faults.param(&"stuck_wiper", "wiper_clear_s", _wiper_clear)
+	# Fog lamps: in the rain, what they add to his view is time before it blurs (GDD 7.6).
+	var clear_time: float = _faults.param(&"stuck_wiper", "wiper_clear_s", _wiper_clear) * passive("visibility_mult")
 	if clear_time <= 0.0:
 		return 1.0
 	return clampf(since_wipe / clear_time, 0.0, 1.0)
@@ -1112,6 +1155,12 @@ func take_visible_contraband() -> Array[StringName]:
 		else:
 			index += 1
 	return taken
+
+
+## The indicator comes on: +1 for right, -1 for left, for indicator_time.
+func indicate(way: int) -> void:
+	indicator = way
+	indicator_left = _indicator_time
 
 
 ## The car crossed a lane line: the indicator cancels (GDD 4.6).

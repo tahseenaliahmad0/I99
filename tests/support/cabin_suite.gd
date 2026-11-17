@@ -84,6 +84,26 @@ func _reach(anchor: String) -> bool:
 	return _sim.hand.at_id() == StringName(anchor)
 
 
+## Seconds the hand takes from the grip reference on the wheel to an anchor.
+func _reach_time(anchor: String) -> float:
+	_input.clear()
+	_ticks(SETTLE)
+	_sim.hand.place_at(_sim.space.grip_reference)
+	var from_tick: int = _sim.tick
+	if not _reach(anchor):
+		return INF
+	return float(_sim.tick - from_tick) * DT
+
+
+## Gripping: the pointer pulled sideways `pixels` in all, over `ticks` ticks.
+func _steer(pixels: float, ticks: int = 10) -> void:
+	_input.pointer_is_absolute = false
+	_input.lmb = true
+	_input.pointer_delta = Vector2(pixels / float(ticks), 0.0)
+	_ticks(ticks)
+	_input.pointer_delta = Vector2.ZERO
+
+
 ## The button down for `ticks` ticks, then up.
 func _press(ticks: int) -> void:
 	_input.lmb = true

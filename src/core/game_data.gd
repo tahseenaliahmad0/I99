@@ -276,8 +276,10 @@ static func as_array(v: Variant) -> Array:
 	return []
 
 
-## [x, y, z] -> Vector3. Anything else is Vector3.ZERO.
+## [x, y, z] -> Vector3; a Vector3 is itself. Anything else is Vector3.ZERO.
 static func as_vec3(v: Variant) -> Vector3:
+	if v is Vector3:
+		return v
 	if v is Array:
 		var arr: Array = v
 		if arr.size() == 3 and is_number(arr[0]) and is_number(arr[1]) and is_number(arr[2]):

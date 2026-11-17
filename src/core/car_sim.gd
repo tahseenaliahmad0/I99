@@ -165,6 +165,11 @@ func cruise_speed(gear: int) -> float:
 	return cruise
 
 
+## Sideways speed a full lock commands at the speed it has now, m/s (GDD 5.3).
+func lat_authority() -> float:
+	return _lat_per_kmh * speed * lat_speed_mult
+
+
 ## Curve drift (GDD 5.4): k times (speed / 100) squared, outward, capped.
 ## `k` carries the sign of the push (+ toward the right shoulder).
 func curve_push(k: float) -> float:

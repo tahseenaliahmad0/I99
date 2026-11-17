@@ -60,6 +60,11 @@
       "eyes_down": true, "requires": ["ringing"], "on_complete": ["answer"] },
 
     { "id": "thermos_pour",    "anchor": "@slot", "item": "thermos",    "gesture": "HOLD", "hold_s": 1.0,
-      "eyes_down": false, "requires": ["supply>0", "tag:tea"], "on_complete": ["consume_supply", "refill:tea"] }
+      "eyes_down": false, "requires": ["supply>0", "tag:tea"], "on_complete": ["consume_supply", "refill:tea"] },
+
+    { "id": "window_switch_hold", "anchor": "window_switch", "item": "window_switch", "gesture": "HOLD", "hold_s": 0.6,
+      "eyes_down": false, "requires": [], "on_complete": ["window"] },
+    { "id": "hook_arm",        "anchor": "hook",  "item": "wheel_ring", "gesture": "TAP", "perform_s": 0.3,
+      "eyes_down": false, "requires": ["!hook_armed", "!hook_set", "!hook_cooldown"], "on_complete": ["hook"] }
   ]
 }

@@ -147,6 +147,18 @@ var _road_dt: float = DT
 ## Seconds he has swayed since Courage began (GDD 5.4), and this tick's push.
 var _sway_time: float = 0.0
 var _sway: float = 0.0
+## Where each anchor is by the data, before anything in the cabin moves it.
+var _anchor_home: PackedVector3Array = PackedVector3Array()
+## The state of the cabin (ItemSim.cabin_serial) that the systems were last
+## fitted to, and what was read from it then.
+var _cabin_seen: int = -1
+var _wheel_keys: bool = false
+var _auto_indicate: bool = false
+var _hook_keeps_lane: bool = false
+var _pad_horn_was: bool = false
+var _pad_wiper_was: bool = false
+## Where the car was along the road when the tick began.
+var _car_s_then: float = 0.0
 ## Ticks the gust still has to push: a gust lasts a whole number of ticks.
 var _gust_ticks_left: int = 0
 var _gust_push: float = 0.0
@@ -262,6 +274,12 @@ func _build() -> void:
 	_road_dt = DT
 	_sway_time = 0.0
 	_sway = 0.0
+	_pad_horn_was = false
+	_pad_wiper_was = false
+	_car_s_then = 0.0
+	_anchor_home = PackedVector3Array()
+	for index: int in hand.anchor_count():
+		_anchor_home.append(hand.anchor_position(index))
 	_gust_ticks_left = 0
 	_gust_push = 0.0
 	_braking = false
@@ -282,7 +300,7 @@ func _build() -> void:
 	car.reset(car.lanes / 2, start_gear)
 	_lane = car.lane_of(car.x)
 	_lever_anchor = hand.anchor_index(GEAR_LEVER)
-	_sync_anchors()
+	_fit_cabin()
 
 
 ## Sets the Telling seed: the four streams and the fault deck follow from it.
@@ -337,12 +355,22 @@ func step(input: DriveInput) -> void:
 	# His eyes are down while an eyes-down ritual is performed, and from the
 	# first TAP of an answer for as long as his hand stays on the phone.
 	hand.eyes_down = (gesture.is_active() and GameData.as_bool(_active_ritual.get("eyes_down"))) or _dialling_here()
+	_step_wheel_keys(input)
 
 	# 4. Wheel.
 	if hand.let_go:
 		wheel.release()
+		if effects.has_own(ItemSim.HOOK_ARMED):
+			# The hook, hung in its ring, takes the wheel as his hand leaves it
+			# (GDD 7.6): for hook_lock_s at most.
+			effects.hold(ItemSim.HOOK_ARMED, ItemSim.HOOK, false)
+			effects.add(ItemSim.HOOK_SET, items.passive("hook_lock_s"))
 	if hand.took_grip:
 		wheel.grip()
+		effects.remove(ItemSim.HOOK_SET)
+	wheel.locked = effects.has_own(ItemSim.HOOK_SET)
+	if wheel.locked and _hook_keeps_lane and curve_k == 0.0:
+		wheel.hold_at(_lane_keeping_angle())
 	wheel.tremor = nerves.tremor_offset
 	wheel.step(DT, hand.steer_px, steer_sensitivity)
 
@@ -354,8 +382,11 @@ func step(input: DriveInput) -> void:
 		nerves.add(_grind_nerves)
 		_emit("sfx_requested", {"id": "grind"})
 	_braking = input.rmb
+	_car_s_then = car.s
 	if not _standing():
 		car.step(_road_dt, wheel.steer(), gate.gear, _braking, _extra_drift())
+	if _auto_indicate:
+		_indicate_for_lane_change()
 	var lane: int = car.lane_of(car.x)
 	if lane != _lane:
 		# Crossing a lane line without indicating that way (GDD 6.5).
@@ -370,6 +401,7 @@ func step(input: DriveInput) -> void:
 	if not stopped:
 		leg.step_traffic(_road_dt)
 		traffic.step(_road_dt, car.s, car.x, car.speed)
+		_step_oncoming()
 
 	# 7. Collisions and close calls.
 	var lamps_before: int = faults.lamps
@@ -886,6 +918,7 @@ func state() -> Array:
 func _step_encounter() -> void:
 	if _standing() or not leg.active:
 		return
+	encounter.tell_shift = items.passive("mirror_lead_s") - faults.param(FAULT_MIRROR, "mirror_tell_delay_s", 0.0)
 	encounter.step(_road_dt, _braking, gate.gear)
 	nerves.add_rate(encounter.nerves_rate - encounter.tail_nerves_rate)
 	fray_rate(SOURCE_TAILGATER, encounter.tail_nerves_rate)
@@ -913,7 +946,7 @@ func _step_suspicion() -> void:
 	if leg.active and leg.night:
 		suspicion.add_rate(faults.param(FAULT_HEADLIGHT, "patrol_suspicion_per_s", 0.0))
 	if items.horn_blown:
-		suspicion.add(tuning.f("suspicion_honk"))
+		suspicion.add(tuning.f("suspicion_honk") + items.passive("horn_suspicion_more"))
 	if items.contraband_used:
 		suspicion.add(tuning.f("suspicion_contraband"))
 	if items.phone_used:
@@ -1035,7 +1068,7 @@ func give_item(id: StringName, slot: StringName = &"") -> ItemSim.Item:
 	if place != &"":
 		items.remove_item(items.item_in_slot(place))
 	var given: ItemSim.Item = items.add_item(id, place)
-	_sync_anchors()
+	_fit_cabin()
 	return given
 
 
@@ -1069,7 +1102,8 @@ func visibility() -> float:
 		# What makes the night darker for him shortens what he sees of it
 		# (GDD 7.5, 7.7: cracked sunglasses, tinted glass).
 		reach = minf(reach, headlight_cone() * maxf(1.0 - items.passive("night_darker"), 0.0))
-	return reach
+	# Fog lamps reach further into whatever limits his view (GDD 7.6).
+	return reach * items.passive("visibility_mult") if reach < INF else reach
 
 
 ## The Glare on his view now, 0 to 1 (GDD 5.8), after what he wears against it.
@@ -1119,6 +1153,10 @@ func snapshot() -> Dictionary:
 		"carrying": _carried(),
 		"view_block": GameData.as_string(_active_ritual.get("blocks_view")) if gesture.is_active() else "",
 		"courage": courage(),
+		"hook": "set" if effects.has_own(ItemSim.HOOK_SET) else ("armed" if effects.has_own(ItemSim.HOOK_ARMED) else ("cooling" if effects.has_own(ItemSim.HOOK_COOLDOWN) else "")),
+		"anchor_moves": items.anchor_moves(),
+		"mirror_scale": items.passive("mirror_scale"),
+		"mirror_shift": encounter.tell_shift,
 		"caller": String(items.caller),
 		"ring_left": items.ring_left,
 		"call_taps": items.call_taps,
@@ -1415,13 +1453,98 @@ func _feed_nerves() -> void:
 		nerves.jolt()
 
 
+## Reads what the things in the cabin change by being there into the
+## systems they change (GDD 7.5 to 7.7), and puts every anchor where the
+## cabin now has it. Runs whenever the cabin has changed.
+func _fit_cabin() -> void:
+	_cabin_seen = items.cabin_serial
+	wheel.turn_rate_mult = items.passive("turn_rate_mult")
+	wheel.return_rate_mult = items.passive("return_rate_mult")
+	car.lat_speed_mult = items.passive("lat_speed_mult")
+	gate.has_fifth = items.passive("fifth_gear") > 0.0
+	faults.set_capacity_bonus(roundi(items.passive("lamp_capacity")))
+	collision.cash_bonus = items.passive("close_call_bonus")
+	_wheel_keys = items.passive("wheel_keys") > 0.0
+	_auto_indicate = not items.pair("auto_indicate").is_empty()
+	_hook_keeps_lane = not items.pair("hook_holds_lane").is_empty()
+	var moves: Dictionary = items.anchor_moves()
+	for index: int in hand.anchor_count():
+		var id: String = String(hand.anchor_id(index))
+		hand.set_anchor_position(index, GameData.as_vec3(moves[id]) if moves.has(id) else _anchor_home[index])
+	_sync_anchors()
+
+
+## The thumb keypad (GDD 7.6): the horn and the wipers under the thumb of
+## the hand that grips. Each press is one honk or one sweep.
+func _step_wheel_keys(input: DriveInput) -> void:
+	if _wheel_keys and hand.gripping and nerves.snap_left <= 0.0:
+		if input.pad_horn and not _pad_horn_was:
+			_use_control("horn", 0)
+		if input.pad_wiper and not _pad_wiper_was:
+			_use_control("wipers", Gesture.DIR_UP)
+	_pad_horn_was = input.pad_horn
+	_pad_wiper_was = input.pad_wiper
+
+
+## A control used without the hand going to it.
+func _use_control(ritual_id: String, direction: int) -> void:
+	var ritual: Dictionary = data.record("rituals", ritual_id)
+	items.complete(ritual, direction)
+	_emit("ritual_completed", {"ritual": ritual_id, "anchor": GameData.as_string(ritual.get("anchor")), "direction": direction, "keypad": true})
+
+
+## The angle at which the wheel keeps the car in the middle of its lane on a
+## straight: against whatever carries it sideways, and back toward the
+## middle within hook_settle_time (GDD 7.8, Wheel ring + Spinner knob).
+func _lane_keeping_angle() -> float:
+	var authority: float = car.lat_authority()
+	if authority <= 0.0:
+		return wheel.angle
+	var lane: int = clampi(car.lane_of(car.x), 0, car.lanes - 1)
+	var wanted: float = (car.lane_center(lane) - car.x) / tuning.f("hook_settle_time") - car.drift
+	return clampf(wanted / authority, -1.0, 1.0) * wheel.max_angle()
+
+
+## Crossover stalk + Thumb keypad (GDD 7.8): he indicates as a lane change
+## begins: when the side of the car is over a lane line, with a lane beyond
+## it, and the car is moving that way.
+func _indicate_for_lane_change() -> void:
+	var lane: int = clampi(car.lane_of(car.x), 0, car.lanes - 1)
+	var off: float = car.x - car.lane_center(lane)
+	var room: float = car.lane_width() * 0.5 - car.half_width()
+	var moving: float = car.v_lat + car.drift
+	var way: int = 0
+	if off > room and moving > 0.0:
+		way = 1
+	elif off < -room and moving < 0.0:
+		way = -1
+	if way == 0 or items.indicator == way or lane + way < 0 or lane + way >= car.lanes:
+		return
+	items.indicate(way)
+	_emit("sfx_requested", {"id": "indicator_tick"})
+
+
+## Oncoming vehicles met this tick (GDD 4.6, 7.6): each one adds Nerves when
+## he drives on high beam, and flashes back at his fog lamps.
+func _step_oncoming() -> void:
+	if car.divided:
+		return
+	var each: float = (tuning.f("high_beam_nerves") if items.flag(FLAG_HIGH_BEAM) else 0.0) + items.passive("flash_back_nerves")
+	if each <= 0.0:
+		return
+	for vehicle: TrafficSim.Vehicle in traffic.vehicles:
+		if vehicle.direction < 0 and vehicle.s_then >= _car_s_then and vehicle.s < car.s:
+			nerves.add(each)
+
+
 ## What his statuses do to the other systems this tick (GDD 7.4, Courage):
 ## each stack pays close calls better, dulls what frays him, and makes one
 ## more source of Lag.
 func _apply_statuses() -> void:
+	if items.cabin_serial != _cabin_seen:
+		_fit_cabin()
 	nerves.gain_mult = maxf(1.0 + effects.total(GAIN_PER_STACK, true), 0.0)
 	collision.cash_mult = 1.0 + effects.total(CASH_PER_STACK, true)
-	collision.cash_bonus = items.passive("close_call_bonus")
 	var lag_ms: float = tuning.f("lag_per_source") * float(courage())
 	# Flask + Painkillers (GDD 7.8): with Courage on top of the pills, Lag
 	# doubles and close-call cash doubles.
@@ -1489,6 +1612,9 @@ func _report_nerves() -> void:
 
 
 func _report_effects() -> void:
+	if effects.expired.has(ItemSim.HOOK_SET):
+		# The hook is out of its ring: it cannot be set again for a while.
+		effects.add(ItemSim.HOOK_COOLDOWN, items.passive("hook_cooldown_s"))
 	for id: StringName in effects.added:
 		_emit("effect_added", {"effect": String(id)})
 	for id: StringName in effects.expired:

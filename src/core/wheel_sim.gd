@@ -21,6 +21,9 @@ var return_rate_mult: float = 1.0
 ## Seconds the car's steering lags behind the wheel (GDD 5.8, Lag); set by
 ## DriveSim before step(). Never more than lag_cap.
 var lag: float = 0.0
+## The hook holds the wheel (GDD 7.6, Wheel ring): let go, it stays at the
+## angle it has instead of returning to centre. Set by DriveSim.
+var locked: bool = false
 
 var _max_angle: float = 0.0
 var _deg_per_px: float = 0.0
@@ -75,11 +78,23 @@ func step(dt: float, steer_px: float, sensitivity: float) -> void:
 			blend = 1.0 - exp(-dt / _smoothing_s)
 		_held += (command - _held) * blend
 		angle = clampf(_held + tremor, -_max_angle, _max_angle)
+	elif locked:
+		command = angle
+		_held = angle
 	else:
 		angle = move_toward(angle, 0.0, _return_rate * return_rate_mult * dt)
 		command = angle
 		_held = angle
 	_remember(dt)
+
+
+## The hook turns the wheel to an angle (GDD 7.8: with a spinner knob it
+## keeps the lane on a straight). Only while locked.
+func hold_at(angle_deg: float) -> void:
+	if locked and not gripped:
+		angle = clampf(angle_deg, -_max_angle, _max_angle)
+		command = angle
+		_held = angle
 
 
 ## Steering input to the car: -1 (full left) to 1 (full right), GDD 5.3. It

@@ -165,7 +165,8 @@
     "radio_news_rate": 0.5,
     "radio_news_report_at": 10,
     "radio_step_px": 30,
-    "glovebox_cells": 2
+    "glovebox_cells": 2,
+    "hook_settle_time": 0.5
   },
 
   "car_cash_clock_law": {
@@ -589,6 +590,7 @@
     "suspicion_honk": "points for honking during a Patrol",
     "patrol_catch_up": "km/h the police car drops when the Patrol is over, to fall back",
     "patrol_spawn_behind": "m behind him at which the police car appears",
-    "pothole_cooldown": "s"
+    "pothole_cooldown": "s",
+    "hook_settle_time": "s for the hook to bring the car back to the middle of its lane (Wheel ring + Spinner knob)"
   }
 }
