@@ -1118,3 +1118,47 @@ Format: `D-NNN (milestone, date) Title` then Context / Decision / Why.
   delay, until now only a number in the snapshot, works the same way with
   the other sign; both together are 3 s early. `mirror_scale` (1.5) in the
   snapshot is for the view.
+
+## D-044 (M6, 2026-11-17) The Deals and the Phantom
+
+- **Forged papers.** A small thing for the dash or a glovebox cell,
+  contraband while he has it. `DriveSim.use_forged_papers()` is what the
+  Checkpoint's Papers phase (M7) will call: true once, and the papers are
+  gone. Until M7 the test checks that call; a check at the real Checkpoint
+  is owed to T-ITEM-FORGED-PAPERS then.
+- **Tinted glass, turbo, the good stuff** take no slot: they are the car's
+  own, and his the moment he buys them (D-037). Tinted glass and the turbo
+  cost no cash: their price is the lamp. Suspicion "gains" are everything
+  that raises it, at once or by the second; what wears it off is not
+  slowed. Lamp capacity changes add up (tinted and turbo: 3 lamps; a bull
+  bar gives one back). "Braking 30% weaker" is `brake_decel` times 0.7.
+  "20% darker" is, like the sunglasses' 15%, distance at night, and the
+  two add (35%).
+- **The good stuff.** Courage stacks to 5 instead of 3, and it is one
+  permanent source of Lag (40 ms sober; five stacks and it are 240 ms,
+  held at `lag_cap`). At four stacks and more nothing frays him at all
+  (1 - 0.3 n, never below nothing).
+- **The flinch.** A cross-reach begins when the hand, on his side of the
+  hub, is sent to a control on the far side (an anchor with x below 0). If
+  his Nerves are `phantom_flinch_from` (60) or more, or his lids are
+  closing, the hand stays where it is for `phantom_flinch_delay` (0.25 s)
+  before it leaves, while the snapshot shows the ghost going for that
+  control (`ghost_at`, `ghost_progress`). A hand already across does not
+  flinch on its way to the next control there; the next cross-reach does.
+  Gripping the left of the rim is not a reach for a control. An Adaptation
+  that puts the control on his side (the crossover stalk) or gives him
+  another on his side (the window switch) takes the cross-reach away, and
+  the flinch with it, by geometry alone.
+- **The cramp.** In a leg with rain or night, when the car passes
+  `phantom_cramp_at` (half) of the leg's length, a hum begins
+  (`phantom_hum`; `cramp` in the snapshot is "hum"); `phantom_cramp_hum`
+  (1.5 s) later the cramp: +10 Nerves, and for `phantom_cramp_length`
+  (0.5 s) a hand on the wheel cannot let go (it still steers), a hand off
+  it cannot take the wheel or begin anything at an anchor, and a lever in
+  the hand is not let go. The point is of the road, so a leg has one; a
+  stop does not bring it back. Painkillers taken before the point (or
+  during the hum) mean no cramp in that leg. The Storm's cramp is M7.
+- **The setting.** `DriveSim.phantom_enabled` (GDD 17.1, "The Phantom: on or
+  off"); the settings screen that sets it, like those for steering
+  sensitivity, grip mode and shifting, is M10.
+- **Numbers of 7.9** are in tuning.json (`phantom_*`).

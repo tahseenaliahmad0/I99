@@ -166,7 +166,13 @@
     "radio_news_report_at": 10,
     "radio_step_px": 30,
     "glovebox_cells": 2,
-    "hook_settle_time": 0.5
+    "hook_settle_time": 0.5,
+    "phantom_flinch_from": 60,
+    "phantom_flinch_delay": 0.25,
+    "phantom_cramp_at": 0.5,
+    "phantom_cramp_hum": 1.5,
+    "phantom_cramp_length": 0.5,
+    "phantom_cramp_nerves": 10
   },
 
   "car_cash_clock_law": {
@@ -591,6 +597,12 @@
     "patrol_catch_up": "km/h the police car drops when the Patrol is over, to fall back",
     "patrol_spawn_behind": "m behind him at which the police car appears",
     "pothole_cooldown": "s",
-    "hook_settle_time": "s for the hook to bring the car back to the middle of its lane (Wheel ring + Spinner knob)"
+    "hook_settle_time": "s for the hook to bring the car back to the middle of its lane (Wheel ring + Spinner knob)",
+    "phantom_flinch_from": "Nerves from which a cross-reach flinches (GDD 7.9)",
+    "phantom_flinch_delay": "s the real hand leaves late",
+    "phantom_cramp_at": "share of a Rain or Night leg's length at which the hum begins",
+    "phantom_cramp_hum": "s of hum before the cramp",
+    "phantom_cramp_length": "s the hand can neither let go nor take hold",
+    "phantom_cramp_nerves": "points"
   }
 }

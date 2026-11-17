@@ -27,10 +27,10 @@ Useful commands:
 
 ## Current state
 
-- **Milestone:** M6 (all items) is in progress: Habits first.
-- **Tests:** 83 of 114 passing (M0: 2, M1: 8, M2: 10, M3: 7, M4: 13, M5: 6, M6: 37 of 42).
+- **Milestone:** M6 (all items): all 42 tests pass; its views and its review's findings remain. M7 (bosses) is next.
+- **Tests:** 88 of 114 passing (M0: 2, M1: 8, M2: 10, M3: 7, M4: 13, M5: 6, M6: 42).
 - **Reviews:** `m1-review` and `m2-review` reported on every lens (run ids wf_53ae3899-d40 and wf_d8c835c4-884; findings saved as JSON under the scratchpad `fixes/` folder, which does not survive the container: the lists below are what is left). Applied: M1 hand, wheel and gate; M2 car (D-028), traffic and collisions (D-029); M1 gesture pipeline code (D-030); M1 rules and the M2 view findings on indicators, vehicle ids, dashes, bend (D-035). **Still open:** (a) M2 views: pointer ring drawn at the hand's clamped target; the hand does not follow the gear knob; forearm stretches beyond 0.30 m for five far anchors (decision not recorded); `scene` in placeholders ignored for road strips, arm and pointer. (b) M1 test honesty (18): no test moves the pointer with relative motion; T-WHEEL-01 never releases a turned wheel; grip and ride on an off-centre wheel; gate engage radius and grind band probed from one side; FLICK time and direction limits; CRANK angle-not-distance; gate channel width; camera pitch and glance following the hand; pointer pixels to screen; steering sensitivity wiring; loose brackets on timing limits; literals standing in for tuning values. (c) M1 gesture: rituals.json is not checked against the table of GDD 4.6. (d) M2 test honesty leftovers (see D-028 and D-029 for what was done). M3 and M4 have not been reviewed. Background agents hit the usage limit on 2026-11-17 (resets 2026-11-20 01:00 UTC): until then work without workflows.
-- **Next step:** M6, in this order: the four Deals (forged papers, tinted glass, turbo, the good stuff), the Phantom (flinch and weather cramp), the findings of the review `m6-items-review` (run wf_2f6ba2b0-546, on commit cf5650b); then the M6 views (a placeholder per item, the magenta contraband tag, what the hand carries, the ringing phone). One test per item; the registry texts are the definitions. Tests for the cabin extend `CabinSuite` (tests/support): use its `_reach`, `_hold_at`, `_tap_at`, `_flick`, `_carry`, `_to_quiet_leg`, `_into_stall`, `_leave_stop`. How items say what they do is D-040. Owed to M9: a check in T-ITEM-SEEDS with a real unanswered Doubt (it now checks the path Doubts will use, `DriveSim.fray`). Owed to M7: a check in T-ITEM-BREATH-MINTS at the real Checkpoint (it now checks `DriveSim.courage_noticed()`). The open review items above are to be worked off alongside.
+- **Next step:** (1) the M6 views: a placeholder per item, the magenta contraband tag, what the hand carries, the ringing phone, the tray's upper row, moved anchors, the ghost hand, Sway rocking the horizon, HUD rows (Courage, calls, hook, cramp). (2) Apply the confirmed findings of the review `m6-items-review` (run wf_2f6ba2b0-546, on commit cf5650b). (3) M7: the Checkpoint, the Storm, Dawn and the Call, Arrival. Tests for the cabin extend `CabinSuite` (tests/support): `_reach`, `_hold_at`, `_tap_at`, `_flick`, `_carry`, `_grip`, `_steer`, `_reach_time`, `_scrape_rail`, `_pass_closely`, `_to_quiet_leg`, `_into_stall`, `_leave_stop`, `_begin_quiet_leg`, `_drive_on_to_act`, `_into_next_quiet_leg`. How items say what they do is D-040 to D-044. **Owed checks, to be appended when their systems exist:** T-ITEM-SEEDS with a real unanswered Doubt (M9; it now checks `DriveSim.fray`); T-ITEM-BREATH-MINTS and T-ITEM-FORGED-PAPERS at the real Checkpoint (M7; they now check `courage_noticed()` and `use_forged_papers()`); T-PHANTOM-01 in the Storm (M7). Settings to wire in M10: `steer_sensitivity`, `grip_toggle`, `sequential_shift`, `phantom_enabled`. Workflows work again (the usage limit has lifted): use them for reviews and for independent parts. The open review items above are to be worked off alongside.
 
 ## Milestones
 
@@ -112,7 +112,8 @@ Do not start a milestone until every test of the previous one passes (GDD 18).
 - [x] Keepsakes: charm, air freshener, thermos, duct tape, lucky note, sunglasses, taxi sign (7 tests; D-042); standing changes (`passive` entries)
 - [x] Synergies: tea + cigarettes, cigarettes + freshener, beads + music, flask + photo, flask + painkillers, phone + taxi sign, seeds + tea (7 of 9)
 - [x] Adaptations: crossover stalk, window switch, spinner knob, wheel ring, thumb keypad, fifth gear, loud horn, bull bar, fog lamps, wide mirror (10 tests; D-043) and their two synergies (ring + spinner, stalk + keypad): all nine synergies pass
-- [ ] Deals (4), the Phantom
+- [x] Deals: forged papers, tinted glass, turbo, the good stuff (4 tests) and the Phantom: flinch and weather cramp (T-PHANTOM-01); D-044. All 42 tests of M6 pass.
+- [ ] Findings of the review `m6-items-review` (run wf_2f6ba2b0-546, on commit cf5650b)
 - [ ] Views: a placeholder per item, contraband tag, the carried object, the ringing phone
 
 ### M7 Bosses: T-BOSS-01..03, T-CALL-01
@@ -185,3 +186,5 @@ Two lines per slice, newest last.
   The seven Keepsakes and seven of the nine synergies (D-042). A save at a stop in Act 2 or 3 no longer looks like a new act. 71 of 114.
 - 2026-11-17 M6: the ten Adaptations and the last two synergies (D-043): the hook is hung in its ring and holds the wheel when he lets go; the high-beam rule of GDD 4.6 was missing and is in. 83 of 114.
   An adversarial review of the M6 items work runs as a workflow (`m6-items-review`), each lens in its own worktree.
+- 2026-11-17 M6: the four Deals and the Phantom (flinch and weather cramp), D-044. All 42 tests of M6 pass: 88 of 114.
+  Left for M6: the views of the items and the findings of the review that is still running.

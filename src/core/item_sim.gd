@@ -81,6 +81,13 @@ const PASSIVES: Dictionary = {
 	"flash_back_nerves": false,
 	"mirror_lead_s": false,
 	"mirror_scale": true,
+	# Deals (GDD 7.7).
+	"suspicion_gain_mult": true,
+	"close_call_mult": true,
+	"high_gear_bonus": false,
+	"brake_mult": true,
+	"courage_cap_more": false,
+	"lag_sources": false,
 }
 
 ## One thing in the cabin.
@@ -796,7 +803,9 @@ func _give_entry(owner: Item, entry: Dictionary) -> void:
 	if entry.has("effect"):
 		var effect: StringName = StringName(GameData.as_string(entry.get("effect")))
 		if entry.has("duration"):
-			_effects.add(effect, GameData.as_float(entry.get("duration")))
+			# The good stuff lets Courage stack higher (GDD 7.7).
+			var cap: int = _effects.max_stacks(effect) + roundi(passive("courage_cap_more")) if effect == COURAGE else 0
+			_effects.add(effect, GameData.as_float(entry.get("duration")), cap)
 		elif GameData.as_string(entry.get("for")) == String(LEG) and not _leg_holds.has(effect):
 			_leg_holds.append(effect)
 			_effects.hold(effect, LEG, true)
@@ -1101,6 +1110,16 @@ func on_hit(kind: int) -> void:
 		var spills_from: float = _param(candidate, "spills_on_hit", 0.0)
 		if spills_from > 0.0 and float(kind) >= spills_from and candidate.supply > 0:
 			candidate.supply = 0
+
+
+## Something in the cabin that passes a check by itself (forged papers pass
+## a checkpoint's Papers phase, GDD 7.7). True when he had it: it is used up.
+func use_pass(what: String) -> bool:
+	for candidate: Item in items:
+		if GameData.as_string(GameData.as_dict(candidate.record.get("params")).get("passes")) == what:
+			remove_item(candidate)
+			return true
+	return false
 
 
 ## The charm (GDD 7.5): the first scrape of a leg lights no lamp. True when

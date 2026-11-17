@@ -48,6 +48,9 @@ const GAIN_PER_STACK: String = "nerves_gain_per_stack"
 const HIDES_COURAGE: String = "hides_courage"
 const COURAGE: StringName = &"courage"
 const PAINKILLERS: StringName = &"painkillers"
+## The two parts of the weather cramp (GDD 7.9).
+const HUM: String = "hum"
+const CRAMPED: String = "cramp"
 
 const EXIT_NONE: int = 0
 const EXIT_AHEAD: int = 1
@@ -107,6 +110,8 @@ var free_traffic_per_km: float = 0.0
 ## Settings the simulation reads (GDD 17.1).
 var steer_sensitivity: float = 1.0
 var sequential_shift: bool = false
+## The Phantom setting (GDD 17.1): off, there is no flinch and no cramp.
+var phantom_enabled: bool = true
 ## Grip mode: false = hold, true = click to grip, click to release.
 var grip_toggle: bool = false:
 	set(value):
@@ -159,6 +164,12 @@ var _pad_horn_was: bool = false
 var _pad_wiper_was: bool = false
 ## Where the car was along the road when the tick began.
 var _car_s_then: float = 0.0
+var _close_call_mult: float = 1.0
+var _lag_sources: float = 0.0
+## The weather cramp (GDD 7.9): "" (none), "hum" (it is coming) or "cramp",
+## and the seconds left of that.
+var cramp: String = ""
+var _cramp_left: float = 0.0
 ## Ticks the gust still has to push: a gust lasts a whole number of ticks.
 var _gust_ticks_left: int = 0
 var _gust_push: float = 0.0
@@ -277,6 +288,8 @@ func _build() -> void:
 	_pad_horn_was = false
 	_pad_wiper_was = false
 	_car_s_then = 0.0
+	cramp = ""
+	_cramp_left = 0.0
 	_anchor_home = PackedVector3Array()
 	for index: int in hand.anchor_count():
 		_anchor_home.append(hand.anchor_position(index))
@@ -342,15 +355,17 @@ func step(input: DriveInput) -> void:
 
 	# 2. Hand.
 	hand.can_reach = nerves.snap_left <= 0.0
+	hand.flinches = phantom_enabled and not phantom_muted() and (nerves.value >= tuning.f("phantom_flinch_from") or nerves.lids > 0.0)
+	hand.frozen = cramp == CRAMPED
 	hand.step(DT, input, wheel.angle, _pound_mult if nerves.pound else 1.0)
 
-	# 3. Rituals.
+	# 3. Rituals. A cramped hand can neither let go nor take hold (GDD 7.9).
 	_resolve_gesture(input.lmb)
-	if _lever_in_hand and not input.lmb:
+	if _lever_in_hand and not input.lmb and not hand.frozen:
 		gate.release()
 		_lever_in_hand = false
 		hand.unpin()
-	if hand.press_applied and hand.can_reach:
+	if hand.press_applied and hand.can_reach and not hand.frozen:
 		_begin_at(hand.at_index, input.lmb)
 	# His eyes are down while an eyes-down ritual is performed, and from the
 	# first TAP of an answer for as long as his hand stays on the phone.
@@ -387,6 +402,7 @@ func step(input: DriveInput) -> void:
 		car.step(_road_dt, wheel.steer(), gate.gear, _braking, _extra_drift())
 	if _auto_indicate:
 		_indicate_for_lane_change()
+	_step_cramp()
 	var lane: int = car.lane_of(car.x)
 	if lane != _lane:
 		# Crossing a lane line without indicating that way (GDD 6.5).
@@ -1153,6 +1169,9 @@ func snapshot() -> Dictionary:
 		"carrying": _carried(),
 		"view_block": GameData.as_string(_active_ritual.get("blocks_view")) if gesture.is_active() else "",
 		"courage": courage(),
+		"cramp": cramp,
+		"ghost_at": hand.anchor_id(hand.ghost_anchor),
+		"ghost_progress": 1.0 - hand.flinch_left / maxf(tuning.f("phantom_flinch_delay"), 0.001) if hand.ghost_anchor != HandSim.NO_ANCHOR else 0.0,
 		"hook": "set" if effects.has_own(ItemSim.HOOK_SET) else ("armed" if effects.has_own(ItemSim.HOOK_ARMED) else ("cooling" if effects.has_own(ItemSim.HOOK_COOLDOWN) else "")),
 		"anchor_moves": items.anchor_moves(),
 		"mirror_scale": items.passive("mirror_scale"),
@@ -1464,6 +1483,11 @@ func _fit_cabin() -> void:
 	gate.has_fifth = items.passive("fifth_gear") > 0.0
 	faults.set_capacity_bonus(roundi(items.passive("lamp_capacity")))
 	collision.cash_bonus = items.passive("close_call_bonus")
+	car.high_gear_bonus = items.passive("high_gear_bonus")
+	car.brake_mult = items.passive("brake_mult")
+	suspicion.gain_mult = items.passive("suspicion_gain_mult")
+	_close_call_mult = items.passive("close_call_mult")
+	_lag_sources = items.passive("lag_sources")
 	_wheel_keys = items.passive("wheel_keys") > 0.0
 	_auto_indicate = not items.pair("auto_indicate").is_empty()
 	_hook_keeps_lane = not items.pair("hook_holds_lane").is_empty()
@@ -1544,8 +1568,8 @@ func _apply_statuses() -> void:
 	if items.cabin_serial != _cabin_seen:
 		_fit_cabin()
 	nerves.gain_mult = maxf(1.0 + effects.total(GAIN_PER_STACK, true), 0.0)
-	collision.cash_mult = 1.0 + effects.total(CASH_PER_STACK, true)
-	var lag_ms: float = tuning.f("lag_per_source") * float(courage())
+	collision.cash_mult = (1.0 + effects.total(CASH_PER_STACK, true)) * _close_call_mult
+	var lag_ms: float = tuning.f("lag_per_source") * (float(courage()) + _lag_sources)
 	# Flask + Painkillers (GDD 7.8): with Courage on top of the pills, Lag
 	# doubles and close-call cash doubles.
 	if courage() > 0 and effects.has_own(PAINKILLERS):
@@ -1565,6 +1589,45 @@ func courage() -> int:
 ## mints), else every stack (GDD 7.4, 10.2).
 func courage_noticed() -> int:
 	return 0 if effects.total(HIDES_COURAGE) > 0.0 else courage()
+
+
+## The Papers phase of a checkpoint (GDD 10.2, 7.7): forged papers pass it by
+## themselves, once. True when he had them; they are gone then.
+func use_forged_papers() -> bool:
+	if not items.use_pass("papers"):
+		return false
+	_fit_cabin()
+	return true
+
+
+## The weather cramp (GDD 7.9): once in a Rain leg and in a Night leg, as
+## the car passes a fixed point of it. A hum for phantom_cramp_hum, then for
+## phantom_cramp_length the hand can neither let go nor take hold, and
+## phantom_cramp_nerves. Muted or switched off, nothing happens.
+func _step_cramp() -> void:
+	if cramp == "":
+		if not leg.active or not (leg.raining or leg.night) or _standing():
+			return
+		var point: float = leg.length * tuning.f("phantom_cramp_at")
+		if _car_s_then < point and car.s >= point and phantom_enabled and not phantom_muted():
+			cramp = HUM
+			_cramp_left = tuning.f("phantom_cramp_hum")
+			_emit("sfx_requested", {"id": "phantom_hum"})
+		return
+	if not phantom_enabled or phantom_muted():
+		cramp = ""
+		_cramp_left = 0.0
+		return
+	_cramp_left -= DT
+	if _cramp_left >= DT * 0.5:
+		return
+	if cramp == HUM:
+		cramp = CRAMPED
+		_cramp_left = tuning.f("phantom_cramp_length")
+		nerves.add(tuning.f("phantom_cramp_nerves"))
+	else:
+		cramp = ""
+		_cramp_left = 0.0
 
 
 ## True while something he took mutes the Phantom (GDD 7.9: painkillers,

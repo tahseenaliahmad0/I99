@@ -59,6 +59,13 @@ var can_reach: bool = true
 var carrying: bool = false
 ## True while the hand can neither let go nor take hold (the weather cramp).
 var frozen: bool = false
+## The Phantom's wrong-hand flinch (GDD 7.9). DriveSim says each tick whether
+## a cross-reach begun now would flinch; the hand then leaves flinch_delay
+## late. `flinch_left` is what is left of that wait and `ghost_anchor` the
+## control the ghost of his left hand goes for (NO_ANCHOR when there is none).
+var flinches: bool = false
+var flinch_left: float = 0.0
+var ghost_anchor: int = NO_ANCHOR
 
 var _space: CabinSpace
 var _speed: float = 0.0
@@ -66,6 +73,10 @@ var _left_mult: float = 1.0
 var _snap_radius: float = 0.0
 var _buffer: float = 0.0
 var _arrive_epsilon: float = 0.0
+var _flinch_delay: float = 0.0
+## The left-side control the hand is on its way to (so that one reach
+## flinches once).
+var _cross_reach: int = NO_ANCHOR
 var _glance_tau: float = 0.0
 var _eyes_down_pitch: float = 0.0
 
@@ -94,6 +105,7 @@ func configure(data: GameData, space: CabinSpace) -> void:
 	_snap_radius = tuning.f("anchor_snap_radius")
 	_buffer = tuning.f("input_buffer")
 	_arrive_epsilon = tuning.f("hand_arrive_epsilon")
+	_flinch_delay = tuning.f("phantom_flinch_delay")
 	_glance_tau = tuning.f("glance_smoothing") * 0.001
 	_eyes_down_pitch = tuning.f("eyes_down_pitch")
 
@@ -128,6 +140,9 @@ func place_at(point: Vector3) -> void:
 	_grip_latched = false
 	_press_pending = false
 	_was_down = false
+	flinch_left = 0.0
+	ghost_anchor = NO_ANCHOR
+	_cross_reach = NO_ANCHOR
 	var glance: Vector2 = _space.glance_for(pos)
 	cam_yaw = glance.x
 	cam_pitch = glance.y
@@ -269,7 +284,9 @@ func step(dt: float, input: DriveInput, wheel_angle_deg: float, speed_mult: floa
 	if _press_pending and snap_index != _press_anchor:
 		_press_pending = false
 
-	_travel(dt, speed_mult)
+	_step_flinch(dt)
+	if flinch_left <= 0.0:
+		_travel(dt, speed_mult)
 
 	var resting_at: int = NO_ANCHOR
 	if snap_index != NO_ANCHOR and pos.is_equal_approx(_anchor_pos[snap_index]):
@@ -293,6 +310,30 @@ func step(dt: float, input: DriveInput, wheel_angle_deg: float, speed_mult: floa
 		_grip_angle = atan2(pos.y, pos.x) + deg_to_rad(wheel_angle_deg)
 
 	_update_glance(dt)
+
+
+## A cross-reach begins when the hand, on his side of the hub, is sent to a
+## control on the far side. If the Phantom flinches then, the hand waits
+## flinch_delay before it leaves, and the ghost goes for the control.
+func _step_flinch(dt: float) -> void:
+	var across: bool = snap_index != NO_ANCHOR and _anchor_pos[snap_index].x < 0.0
+	if not across:
+		_cross_reach = NO_ANCHOR
+		flinch_left = 0.0
+		ghost_anchor = NO_ANCHOR
+		return
+	if snap_index != _cross_reach:
+		_cross_reach = snap_index
+		flinch_left = 0.0
+		ghost_anchor = NO_ANCHOR
+		if flinches and pos.x >= 0.0:
+			flinch_left = _flinch_delay
+			ghost_anchor = snap_index
+	elif flinch_left > 0.0:
+		flinch_left -= dt
+		if flinch_left < dt * 0.5:
+			flinch_left = 0.0
+			ghost_anchor = NO_ANCHOR
 
 
 func _let_go() -> void:
