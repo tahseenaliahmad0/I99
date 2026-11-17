@@ -27,10 +27,10 @@ Useful commands:
 
 ## Current state
 
-- **Milestone:** M4 (legs and encounters): generator, forks and the leg runtime are in; encounters, Suspicion and views are next.
-- **Tests:** 38 of 114 passing (M0: 2, M1: 8, M2: 10, M3: 7, M4: 11).
+- **Milestone:** M4 (legs and encounters): all thirteen M4 tests pass. Left in M4: the wedding honk, the views for what M4 put in the snapshot, `--leg=`, and the reviews.
+- **Tests:** 40 of 114 passing (M0: 2, M1: 8, M2: 10, M3: 7, M4: 13).
 - **Reviews:** `m1-review` and `m2-review` have reported on every lens (journals under `/root/.claude/projects/-home-user-I99/.../subagents/workflows/`, run ids wf_53ae3899-d40 and wf_d8c835c4-884; the full results are also in the task output files). Applied: M1 hand, M1 wheel and gate, M2 car (DECISIONS D-028), M2 traffic and collisions (D-029; the fixer was cut off by the usage limit before its mutation pass and the independent verification never ran for either M2 fix). M1 gesture pipeline code defects (D-030: flick direction, crank reversal, bead rate, DRAG_TO, hand pinned until release). **Not applied yet** (findings saved as JSON under the scratchpad `fixes/` folder and in the workflow journals): the test-only findings of M1 gesture pipeline (loose thresholds, rituals.json against GDD 4.6, pointer_point in the snapshot), M1 test honesty (18), M1 determinism and rules (6: purity lint, grind lock 25 ticks, validator and the M1 constants, runner and `await`, whole-number settings, NO_ANCHOR as an index), M2 test honesty leftovers, M2 views (13: indicator blink clock, `scene` in placeholders, vehicle views keyed by id after `clear()`, world bend not returning to zero, and smaller ones). Background agents hit the model's usage limit on 2026-11-17 (resets 2026-11-20 01:00 UTC): until then work without workflows. M3 and M4 have not been reviewed.
-- **Next step:** Two-lane (T-LEG-08), Motorcade with its side road (T-LEG-09), then the views and the unapplied review findings.
+- **Next step:** wedding honk; M4 views (hazards, signs, police lights, Tailgater, night, dust, rain, slip lane and side road, glare) and `--leg=`; the unapplied review findings; then M5.
 
 ## Milestones
 
@@ -86,7 +86,9 @@ Do not start a milestone until every test of the previous one passes (GDD 18).
 - [x] T-LEG-01..05: Open road, Rush, Rain, Night, Roadworks driven through `DriveSim` (dust haze and visibility in the snapshot)
 - [x] `SuspicionSim` and the pull-over (T-SUS-01); `EncounterSim` with the Patrol (T-LEG-07); DECISIONS D-031
 - [x] Tailgater (T-LEG-06): in his tracks on the bumper, rams on the brake, pass and brake-check, lost in fourth
-- [ ] Two-lane (T-LEG-08); Motorcade with its side road (T-LEG-09); wedding honk
+- [x] Two-lane (T-LEG-08)
+- [x] Motorcade (T-LEG-09): convoy, wall, spotlight, slip lane and Two-lane side road (DECISIONS D-033)
+- [ ] Wedding honk (a wedding car passed closely is -5 Nerves)
 - [ ] Views: hazards, signs, police lights, night and dust visibility, rain; `--leg=` starts a leg
 - [ ] Review of M3 and M4
 
@@ -144,3 +146,7 @@ Two lines per slice, newest last.
   M1 review still running in the background on a snapshot; its findings will be applied as their own commit.
 - 2026-11-17 M2: road, vehicle and sky views with the world-bend shader; sandbox traffic; `m2-review` launched.
   M3: EffectSystem, full NervesSim and FaultSim, ItemSim with the base cabin; seven tests pass; 27 of 114.
+- 2026-11-17 M4: leg generator (D-026), forks, `LegSim`, the leg checker; T-GEN-01..03 and T-LEG-01..05 pass.
+  M1 and M2 review findings applied for the hand, wheel, gate, car, traffic, collisions and gestures (D-028 to D-030).
+- 2026-11-17 M4: Suspicion and the pull-over (D-031), Patrol, Tailgater (D-032), Two-lane, Motorcade with its side road (D-033).
+  All thirteen M4 tests pass and are promoted: 40 of 114. Background agents are over the usage limit until 2026-11-20.

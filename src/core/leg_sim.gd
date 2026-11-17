@@ -102,6 +102,13 @@ var _melons: Dictionary = {}
 var _melon_truck: TrafficSim.Vehicle = null
 var _shed_left: float = -1.0
 var _shed_wait: float = 0.0
+## True while the car is on a side road (the Motorcade's detour): the main
+## road's traffic, hazards, bends and gusts are not his then.
+var on_side_road: bool = false
+var _main_spawns: Array = []
+var _main_next: int = 0
+## Where the slip lane of a side road opens, or -1.
+var _side_road_at: float = -1.0
 
 
 func configure(data: GameData, car: CarSim, traffic: TrafficSim) -> void:
@@ -166,6 +173,13 @@ func begin(leg_plan: Dictionary) -> void:
 	_melon_truck = null
 	_shed_left = -1.0
 	_shed_wait = 0.0
+	on_side_road = false
+	_main_spawns = []
+	_main_next = 0
+	_side_road_at = -1.0
+	var detour: Dictionary = GameData.as_dict(GameData.as_dict(plan.get("motorcade")).get("detour"))
+	if not detour.is_empty():
+		_side_road_at = GameData.as_float(detour.get("at"))
 	begin_tick()
 
 
@@ -198,6 +212,44 @@ func _make_hazard(kind: String, s: float, x: float) -> Hazard:
 	return hazard
 
 
+# --- Side roads --------------------------------------------------------------
+
+## The car has left the main road for a side road that begins at `offset`
+## metres into the leg: from here the side road's own traffic is spawned.
+func enter_side_road(spawns: Array, offset: float) -> void:
+	_main_spawns = _spawns
+	_main_next = _next_spawn
+	_spawns = []
+	for entry: Variant in spawns:
+		var spawn: Dictionary = GameData.as_dict(entry).duplicate()
+		spawn["trigger_s"] = GameData.as_float(spawn.get("trigger_s")) + offset
+		_spawns.append(spawn)
+	_next_spawn = 0
+	_waiting = []
+	_changers = []
+	# A gust that was announced on the main road blows there, not here.
+	gust_tell_left = 0.0
+	gust_tell_dir = 0
+	on_side_road = true
+
+
+## The car is back on the main road.
+func leave_side_road() -> void:
+	if not on_side_road:
+		return
+	_spawns = _main_spawns
+	_next_spawn = _main_next
+	# What the main road would have put in front of him meanwhile is not there.
+	while _next_spawn < _spawns.size() and GameData.as_float(GameData.as_dict(_spawns[_next_spawn]).get("trigger_s")) <= _car.s:
+		_next_spawn += 1
+	_waiting = []
+	_changers = []
+	# Nor are the gusts he was not there for.
+	while _next_gust < _gusts.size() and GameData.as_float(GameData.as_dict(_gusts[_next_gust]).get("s")) - _gust_tell * _par_ms <= _car.s:
+		_next_gust += 1
+	on_side_road = false
+
+
 # --- 1. The road: bends and gusts --------------------------------------------
 
 ## Before the car moves: the leg's clock, the bend under the car, and gusts.
@@ -208,6 +260,9 @@ func step_road(dt: float) -> void:
 		curve_k = 0.0
 		return
 	time += dt
+	if on_side_road:
+		curve_k = 0.0
+		return
 	curve_k = curve_at(_car.s)
 	if gust_tell_left > 0.0:
 		gust_tell_left -= dt
@@ -376,7 +431,7 @@ func _move(dt: float) -> void:
 ## light no lamp: each adds its Nerves once, and its Suspicion while a police
 ## car is watching. A pothole adds Nerves and takes a share of his speed.
 func step_hazards(dt: float) -> void:
-	if not active:
+	if not active or on_side_road:
 		return
 	_pothole_wait = maxf(_pothole_wait - dt, 0.0)
 	var car_half_width: float = _car.half_width()
@@ -430,6 +485,8 @@ func step_progress() -> bool:
 ## small dictionaries with positions relative to the car's s.
 func hazards_near(behind: float, ahead: float) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
+	if on_side_road:
+		return out
 	for hazard: Hazard in hazards:
 		var gap: float = hazard.s - _car.s
 		if gap < -behind:
@@ -446,14 +503,22 @@ func hazards_near(behind: float, ahead: float) -> Array[Dictionary]:
 	return out
 
 
-## Curve signs between the car and `ahead` metres in front: each stands
-## curve_sign_lead seconds before its bend at par.
+## Road signs between the car and `ahead` metres in front: each curve sign
+## stands curve_sign_lead seconds before its bend at par, the side road's
+## slip_sign_lead seconds before its slip lane.
 func signs_near(ahead: float) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
+	if on_side_road:
+		return out
 	var lead: float = _data.tuning.f("curve_sign_lead") * _par_ms
 	for entry: Variant in _curves:
 		var curve: Dictionary = GameData.as_dict(entry)
 		var gap: float = GameData.as_float(curve.get("s")) - lead - _car.s
 		if gap >= 0.0 and gap <= ahead:
 			out.append({"kind": "curve", "ahead": gap, "k": GameData.as_float(curve.get("k"))})
+	if _side_road_at >= 0.0:
+		# The side road is signed like an Exit: slip_sign_lead seconds ahead.
+		var before: float = _side_road_at - _data.tuning.f("slip_sign_lead") * _par_ms - _car.s
+		if before >= 0.0 and before <= ahead:
+			out.append({"kind": "side_road", "ahead": before})
 	return out

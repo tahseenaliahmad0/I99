@@ -34,6 +34,14 @@ const TRAIL_STEP: float = 0.5
 const RAM_OVERLAP: float = 0.3
 const RAM_PAUSE: float = 1.0
 
+const MOTORCADE: StringName = &"motorcade"
+const ROAD_MARGIN: float = 5.0
+const SIDE_ROAD_AHEAD: int = 0
+## The slip lane is open on the right.
+const SIDE_ROAD_OPEN: int = 1
+const SIDE_ROAD_TAKEN: int = 2
+const SIDE_ROAD_BEHIND: int = 3
+
 var kind: String = ""
 ## True while the encounter is on: an empty road does not calm him then.
 var active: bool = false
@@ -57,6 +65,17 @@ var watch_ended: bool = false
 var nerves_rate: float = 0.0
 ## He was cut off (the Tailgater's stab at the brake in front of him).
 var cut_off: bool = false
+## The road under the car changed (a slip lane opened or closed, the side
+## road began or ended): DriveSim must look again at which lane the car is in.
+var road_changed: bool = false
+
+# --- Motorcade ---------------------------------------------------------------
+## How bright the spotlight on his windscreen is now, 0 to 1.
+var glare: float = 0.0
+var side_road: int = SIDE_ROAD_AHEAD
+## Where the last car of the motorcade is along the leg (also while the cars
+## are out of sight on the main road).
+var motorcade_s: float = 0.0
 
 var _data: GameData
 var _tuning: Tuning
@@ -78,18 +97,34 @@ var _tail_from_x: float = 0.0
 var _tail_speed: float = 0.0
 var _ram_ready: float = 0.0
 var _was_braking: bool = false
+var _leg: LegSim
+## The motorcade's cars in the order of the plan; null while one is too far
+## from the car to be on the road.
+var _convoy: Array[TrafficSim.Vehicle] = []
+var _convoy_plan: Dictionary = {}
+var _convoy_type: StringName = &""
+var _convoy_half_length: float = 0.0
+## How far the leading row is ahead of the last car.
+var _convoy_longest: float = 0.0
+var _keep_behind: float = 0.0
+var _main_lanes: int = 3
+var _main_divided: bool = true
 ## Where the car has been: s and x, a sample every half metre, for whoever
 ## drives in his tracks.
 var _trail_s: PackedFloat64Array = PackedFloat64Array()
 var _trail_x: PackedFloat64Array = PackedFloat64Array()
 
 
-func configure(data: GameData, car: CarSim, traffic: TrafficSim) -> void:
+func configure(data: GameData, car: CarSim, traffic: TrafficSim, leg: LegSim) -> void:
 	_data = data
 	_tuning = data.tuning
 	_car = car
 	_traffic = traffic
+	_leg = leg
 	_car_half_length = _tuning.f("car_length") * 0.5
+	# A little inside what TrafficSim keeps behind the car, so that it is this
+	# class that takes the motorcade's cars off the road and puts them back.
+	_keep_behind = _tuning.f("despawn_behind") - ROAD_MARGIN
 
 
 ## Starts the encounter of the plan's leg type, if it has one.
@@ -110,7 +145,22 @@ func begin(plan: Dictionary) -> void:
 	_was_braking = false
 	_trail_s = PackedFloat64Array()
 	_trail_x = PackedFloat64Array()
+	glare = 0.0
+	side_road = SIDE_ROAD_AHEAD
+	_convoy = []
+	_convoy_plan = GameData.as_dict(plan.get("motorcade"))
+	_main_lanes = GameData.as_int(plan.get("lanes"), 3)
+	_main_divided = GameData.as_bool(plan.get("divided"), true)
 	begin_tick()
+	if kind == "motorcade" and not _convoy_plan.is_empty():
+		_convoy_type = StringName(GameData.as_string(_convoy_plan.get("vehicle")))
+		_convoy_half_length = GameData.as_float(_data.record("vehicles", String(_convoy_type)).get("length")) * 0.5
+		_convoy_longest = 0.0
+		for entry: Variant in GameData.as_array(_convoy_plan.get("cars")):
+			_convoy_longest = maxf(_convoy_longest, GameData.as_float(GameData.as_dict(entry).get("ahead")))
+		motorcade_s = _car.s + GameData.as_float(_convoy_plan.get("start_ahead"))
+		_sync_convoy(GameData.as_float(_convoy_plan.get("speed")))
+		active = true
 
 
 func stop() -> void:
@@ -124,6 +174,7 @@ func begin_tick() -> void:
 	watch_ended = false
 	nerves_rate = 0.0
 	cut_off = false
+	road_changed = false
 
 
 ## One tick. `braking` is his foot on the brake, `gear` the engaged gear.
@@ -136,6 +187,8 @@ func step(dt: float, braking: bool, gear: int) -> void:
 		_step_patrol()
 	elif kind == "tailgater":
 		_step_tailgater(dt, braking, gear)
+	elif kind == "motorcade":
+		_step_motorcade(dt)
 	_was_braking = braking
 
 
@@ -401,3 +454,138 @@ func _tail_hold(driver: TrafficSim.Vehicle, x: float) -> void:
 func _tail_gone() -> void:
 	tail_phase = TAIL_GONE
 	active = false
+
+
+# --- Motorcade (GDD 9.3) -----------------------------------------------------
+
+## Five cars fill the road at a steady speed. Within keep_back_m of the last
+## one a spotlight is on his windscreen: Glare and Nerves by the second.
+## Nothing else ever happens: the motorcade never touches him, because the
+## car cannot come nearer than hold_gap_m to it (and it comes no nearer than
+## that to him when it is behind him). One side road, mid-leg, goes around it.
+func _step_motorcade(dt: float) -> void:
+	glare = 0.0
+	if _convoy_plan.is_empty():
+		return
+	var speed: float = GameData.as_float(_convoy_plan.get("speed"))
+	var hold_gap: float = GameData.as_float(_special.get("hold_gap_m"))
+	motorcade_s += speed * KMH_TO_MS * dt
+	_step_side_road()
+	if side_road == SIDE_ROAD_TAKEN:
+		# He is on the side road; the motorcade goes on along the main road.
+		active = false
+		return
+	if _car.s > motorcade_s:
+		# He is ahead of it (after the side road): it is traffic behind him
+		# now, and it does not push.
+		active = false
+		var limit: float = _car.s - _car_half_length - hold_gap - _convoy_half_length - _convoy_longest
+		if motorcade_s > limit:
+			motorcade_s = limit
+			speed = minf(speed, _car.speed)
+		_sync_convoy(speed)
+		return
+	active = true
+	# The wall: he cannot come nearer than hold_gap_m to the last car.
+	var rear: float = motorcade_s - _convoy_half_length
+	var nearest: float = rear - hold_gap - _car_half_length
+	if _car.s > nearest:
+		_car.s = nearest
+		_car.speed = minf(_car.speed, speed)
+	_sync_convoy(speed)
+	# The spotlight.
+	if rear - (_car.s + _car_half_length) < GameData.as_float(_convoy_plan.get("keep_back")):
+		glare = GameData.as_float(_special.get("glare"))
+		nerves_rate += GameData.as_float(_special.get("nerves_per_s"))
+
+
+## Puts each car of the motorcade in its place: on the road while it is
+## within what the road keeps behind the car (despawn_behind), off it beyond.
+func _sync_convoy(speed: float) -> void:
+	var cars: Array = GameData.as_array(_convoy_plan.get("cars"))
+	if _convoy.size() != cars.size():
+		_convoy.resize(cars.size())
+	for index: int in cars.size():
+		var place: Dictionary = GameData.as_dict(cars[index])
+		var s: float = motorcade_s + GameData.as_float(place.get("ahead"))
+		var vehicle: TrafficSim.Vehicle = _convoy[index]
+		if s + _convoy_half_length <= _car.s - _keep_behind:
+			if vehicle != null:
+				_traffic.remove(vehicle)
+				_convoy[index] = null
+			continue
+		if vehicle == null:
+			vehicle = _traffic.spawn(_convoy_type, GameData.as_int(place.get("lane")), s, speed)
+			if vehicle == null:
+				continue
+			vehicle.role = MOTORCADE
+			_convoy[index] = vehicle
+		vehicle.s = s
+		vehicle.speed = speed
+		vehicle.cruise = speed
+
+
+## From where to where along the leg the side road's slip lane runs, while it
+## is ahead of the car or beside it; Vector2(-1, -1) otherwise.
+func slip() -> Vector2:
+	var detour: Dictionary = GameData.as_dict(_convoy_plan.get("detour"))
+	if kind != "motorcade" or detour.is_empty() or side_road > SIDE_ROAD_OPEN:
+		return Vector2(-1.0, -1.0)
+	var at: float = GameData.as_float(detour.get("at"))
+	return Vector2(at, at + GameData.as_float(detour.get("slip")))
+
+
+## The cars of the motorcade that are on the road now.
+func motorcade() -> Array[TrafficSim.Vehicle]:
+	var out: Array[TrafficSim.Vehicle] = []
+	for vehicle: TrafficSim.Vehicle in _convoy:
+		if vehicle != null:
+			out.append(vehicle)
+	return out
+
+
+## The side road (GDD 9.3): a slip lane opens on the right at `at`; a car in
+## it where it ends is on a Two-lane road for `length` metres and rejoins
+## ahead of the motorcade.
+func _step_side_road() -> void:
+	var detour: Dictionary = GameData.as_dict(_convoy_plan.get("detour"))
+	if detour.is_empty():
+		return
+	var at: float = GameData.as_float(detour.get("at"))
+	var gore: float = at + GameData.as_float(detour.get("slip"))
+	var end: float = gore + GameData.as_float(detour.get("length"))
+	match side_road:
+		SIDE_ROAD_AHEAD:
+			if _car.s >= at:
+				side_road = SIDE_ROAD_OPEN
+				_car.set_road(_main_lanes + 1, _main_divided)
+				road_changed = true
+		SIDE_ROAD_OPEN:
+			if _car.s < gore:
+				return
+			road_changed = true
+			if _car.lane_of(_car.x) < _main_lanes:
+				# He stayed on the main road: the slip lane is behind him.
+				side_road = SIDE_ROAD_BEHIND
+				_car.set_road(_main_lanes, _main_divided)
+				return
+			side_road = SIDE_ROAD_TAKEN
+			var across: float = _car.x - _car.lane_center(_main_lanes)
+			_car.set_road(GameData.as_int(detour.get("lanes"), 1), GameData.as_bool(detour.get("divided")))
+			_car.x = _car.lane_center(0) + across
+			_traffic.remove_all()
+			_convoy = []
+			_leg.enter_side_road(GameData.as_array(detour.get("spawns")), gore)
+		SIDE_ROAD_TAKEN:
+			if _car.s < end:
+				return
+			side_road = SIDE_ROAD_BEHIND
+			road_changed = true
+			var across: float = _car.x - _car.lane_center(0)
+			_car.set_road(_main_lanes, _main_divided)
+			var room: float = (_car.lane_width() - _tuning.f("car_width")) * 0.5
+			_car.x = _car.lane_center(_main_lanes - 1) + clampf(across, -room, room)
+			_traffic.remove_all()
+			_leg.leave_side_road()
+			# The side road rejoins ahead of the motorcade, however long he took.
+			motorcade_s = minf(motorcade_s, _car.s - GameData.as_float(_special.get("rejoin_behind_m")) - _convoy_longest)

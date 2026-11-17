@@ -130,7 +130,7 @@ func _init(game_data: GameData) -> void:
 	faults.configure(data)
 	items.configure(data, effects, nerves, traffic, car, faults)
 	leg.configure(data, car, traffic)
-	encounter.configure(data, car, traffic)
+	encounter.configure(data, car, traffic, leg)
 	suspicion.configure(tuning)
 
 	cash = tuning.f("cash_start")
@@ -327,6 +327,9 @@ func _step_encounter() -> void:
 	nerves.add_rate(encounter.nerves_rate)
 	if encounter.cut_off:
 		nerves.add(tuning.f("cut_off_nerves"))
+	if encounter.road_changed:
+		# A slip lane or a side road: the same car, another lane count.
+		_lane = car.lane_of(car.x)
 	if encounter.watch_began:
 		suspicion.begin_watch()
 		_emit("suspicion_changed", {"value": 0.0, "watching": true})
@@ -563,6 +566,9 @@ func snapshot() -> Dictionary:
 		"suspicion_watching": suspicion.watching,
 		"police_lights": encounter.police_lights,
 		"tailgater": encounter.tail_phase if encounter.kind == "tailgater" else 0,
+		"glare": encounter.glare,
+		"side_road": encounter.side_road if encounter.kind == "motorcade" else 0,
+		"slip": encounter.slip(),
 		"pulled_over": pulled_over,
 		"visibility": visibility(),
 		# Unlit things show only inside what he can see: at night they appear late.

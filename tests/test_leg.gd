@@ -749,6 +749,496 @@ func test_leg_07() -> void:
 	check_eq(_contraband_count(), 2, "with a bribe he keeps everything")
 
 
+## T-LEG-08: Two-lane: an undivided road; trucks ahead hold 60 km/h; oncoming
+## vehicles arrive every 6 to 10 s; each gap is long enough to pass one truck
+## in gear 4; par 100 s.
+func test_leg_08() -> void:
+	var leg: Dictionary = data.record("legs", "two_lane")
+	var special: Dictionary = GameData.as_dict(leg.get("special"))
+	var truck_speed: float = GameData.as_float(special.get("truck_speed_kmh"))
+	var every: Array = GameData.as_array(special.get("oncoming_every_s"))
+	var oncoming_speeds: Array = GameData.as_array(special.get("oncoming_speed_kmh"))
+	var third: float = tuning.fi("gear_speeds", 2)
+	var fourth: float = tuning.fi("gear_speeds", 3)
+	check_near(GameData.as_float(leg.get("par_s")), 100.0, 0.000001, "GDD 9.1: Two-lane has a par of 100 s")
+	check_eq(GameData.as_int(leg.get("lanes")), 1, "one lane his way")
+	check(not GameData.as_bool(leg.get("divided")), "and no median: the other lane is oncoming traffic's")
+	check_near(truck_speed, 60.0, 0.000001, "GDD 9.3: trucks ahead hold 60 km/h")
+	check_near(GameData.as_float(every[0]), 6.0, 0.000001, "oncoming vehicles arrive every 6 s at the least")
+	check_near(GameData.as_float(every[1]), 10.0, 0.000001, "and every 10 s at the most")
+	check_eq(GameData.as_array(leg.get("acts")), [3.0], "it is an Act 3 road")
+
+	# The plans: trucks at 60 ahead, oncoming every 6 to 10 s at par, and every
+	# gap wide enough for a pass in fourth gear.
+	var truck: Dictionary = data.record("vehicles", GameData.as_string(special.get("truck")))
+	var margin: float = GameData.as_float(special.get("pass_margin_m"))
+	# Fourth gear: out, past the truck with pass_margin_m at both ends, and back.
+	var lane_change_s: float = tuning.f("lane_width") / (tuning.f("lat_per_kmh") * fourth)
+	var pass_s: float = (2.0 * margin + GameData.as_float(truck.get("length")) + tuning.f("car_length")) / ((fourth - truck_speed) * KMH_TO_MS) + 2.0 * lane_change_s
+	var trucks: int = 0
+	var gaps: int = 0
+	var tightest: float = INF
+	for index: int in SAMPLE_SEEDS:
+		var plan: Dictionary = LegGenerator.generate(data, "two_lane", 3, 800 + index, "")
+		var meets: Array[float] = []
+		var speeds: Array[float] = []
+		for entry: Variant in GameData.as_array(plan["spawns"]):
+			var spawn: Dictionary = entry
+			if GameData.as_int(spawn["direction"]) < 0:
+				check_eq(GameData.as_int(spawn["lane"]), LegGenerator.ONCOMING_LANE, "an oncoming vehicle is in the oncoming lane")
+				var speed: float = GameData.as_float(spawn["speed"])
+				check(speed >= GameData.as_float(oncoming_speeds[0]) and speed <= GameData.as_float(oncoming_speeds[1]), "at a speed the leg allows (%s)" % str(speed))
+				meets.append(GameData.as_float(spawn["meet_s"]))
+				speeds.append(speed)
+			elif GameData.as_int(spawn["lane"]) == 0:
+				trucks += 1
+				check_eq(GameData.as_string(spawn["vehicle"]), GameData.as_string(special.get("truck")), "what is ahead in his lane is a truck")
+				check_near(GameData.as_float(spawn["speed"]), truck_speed, 0.000001, "holding 60 km/h")
+		check(meets.size() >= 8, "seed %d: oncoming traffic all along the leg (%d vehicles)" % [800 + index, meets.size()])
+		if meets.is_empty():
+			continue
+		check(meets[0] / (third * KMH_TO_MS) <= GameData.as_float(every[1]) + 0.001, "the first comes within 10 s")
+		for pair: int in range(1, meets.size()):
+			var seconds: float = (meets[pair] - meets[pair - 1]) / (third * KMH_TO_MS)
+			check(seconds >= GameData.as_float(every[0]) - 0.001 and seconds <= GameData.as_float(every[1]) + 0.001,
+					"at third gear's speed oncoming vehicles arrive 6 to 10 s apart (%s s)" % str(snappedf(seconds, 0.01)))
+			# The same two vehicles, met in fourth gear: the road between them
+			# is covered at his speed plus theirs.
+			var road_between: float = (meets[pair] - meets[pair - 1]) * (1.0 + speeds[pair] / third)
+			var seconds_in_fourth: float = road_between / ((fourth + speeds[pair]) * KMH_TO_MS)
+			tightest = minf(tightest, seconds_in_fourth)
+			gaps += 1
+	check(trucks >= 3 * SAMPLE_SEEDS, "every leg has trucks to pass (%d in %d legs)" % [trucks, SAMPLE_SEEDS])
+	check(gaps > 0 and tightest >= pass_s, "each gap is long enough to pass one truck in gear 4: the tightest of %d is %s s, a pass takes %s s" % [gaps, str(snappedf(tightest, 0.01)), str(snappedf(pass_s, 0.01))])
+
+	# The tightest gap the leg allows, driven: fourth gear, out behind the
+	# truck as one oncoming vehicle goes by, back in before the next arrives.
+	_sim = DriveSim.new(fresh_data())
+	_events = []
+	_sim.set_road(1, false)
+	_sim.gate.reset(4)
+	_sim.car.reset(0, 4)
+	var slow: TrafficSim.Vehicle = _sim.traffic.spawn(StringName(GameData.as_string(special.get("truck"))), 0,
+			_sim.car.s + _sim.car.length() * 0.5 + margin + GameData.as_float(truck.get("length")) * 0.5, truck_speed)
+	var fastest_oncoming: float = GameData.as_float(oncoming_speeds[1])
+	var between: float = GameData.as_float(every[0]) * (third + GameData.as_float(oncoming_speeds[0])) * KMH_TO_MS
+	_sim.traffic.spawn(&"car", LegGenerator.ONCOMING_LANE, _sim.car.s, fastest_oncoming, -1)
+	var next: TrafficSim.Vehicle = _sim.traffic.spawn(&"car", LegGenerator.ONCOMING_LANE, _sim.car.s + between, fastest_oncoming, -1)
+	var lane_x: float = _sim.car.lane_center(0)
+	var out_x: float = _sim.traffic.lane_center(LegGenerator.ONCOMING_LANE)
+	var x: float = lane_x
+	var back_at: float = -1.0
+	var seconds: float = 0.0
+	var passed: bool = false
+	while seconds < 12.0 and next.s > _sim.car.s - 30.0:
+		var clear_of_truck: bool = _sim.car.s - _sim.car.length() * 0.5 > slow.s + slow.half_length + margin
+		var target: float = lane_x if clear_of_truck else out_x
+		x = move_toward(x, target, tuning.f("lat_per_kmh") * fourth * DT)
+		if clear_of_truck and is_equal_approx(x, lane_x) and back_at < 0.0:
+			back_at = seconds
+			passed = next.s > _sim.car.s
+		_sim.car.x = x
+		_sim.step(_input)
+		seconds += DT
+	check(back_at > 0.0 and passed, "in fourth gear he is past the truck and back in his lane (after %s s) before the next oncoming vehicle arrives" % str(snappedf(back_at, 0.01)))
+	check_eq(_sim.faults.lamps, 0, "with no lamp lit")
+	check_near(slow.speed, truck_speed, 0.000001, "and the truck held 60 km/h throughout")
+
+	# A whole leg on the plan's line in third gear: the oncoming lane is used
+	# to pass, and oncoming vehicles go by every 6 to 10 s.
+	_sim = DriveSim.new(fresh_data())
+	_events = []
+	var plan: Dictionary = _begin("two_lane", 3, 801)
+	var snapshot: Dictionary = _sim.snapshot()
+	check_eq(GameData.as_int(snapshot["lanes"]), 1, "driven: the road has one lane")
+	check(not GameData.as_bool(snapshot["divided"]), "and is undivided")
+	var arrivals: Array[float] = []
+	var met: Dictionary = {}
+	var in_oncoming_lane: float = 0.0
+	var trucks_passed: int = 0
+	var trucks_slow: int = 0
+	while _sim.leg.active:
+		_sim.car.x = _checker.line_x(_sim.car.s)
+		if _sim.car.x < 0.0:
+			in_oncoming_lane += DT
+		_sim.step(_input)
+		_collect()
+		for vehicle: TrafficSim.Vehicle in _sim.traffic.vehicles:
+			if met.has(vehicle.id) or vehicle.s > _sim.car.s:
+				continue
+			met[vehicle.id] = true
+			if vehicle.direction < 0:
+				arrivals.append(_sim.leg.time)
+			elif vehicle.x < _sim.car.road_right():
+				# (A hulk on the shoulder is not traffic.)
+				trucks_passed += 1
+				if not is_equal_approx(vehicle.speed, truck_speed):
+					trucks_slow += 1
+	check_near(_sim.leg.time, tuning.f("leg_length") / (third * KMH_TO_MS), 0.05, "in third gear the leg takes 90 s, 10 s under its par")
+	check_eq(_sim.faults.lamps, 0, "on the plan's line no lamp is lit")
+	check(trucks_passed >= 3, "trucks were passed (%d)" % trucks_passed)
+	check_eq(trucks_slow, 0, "each still doing 60 km/h when he passed it")
+	check(in_oncoming_lane > 5.0, "by way of the oncoming lane (%s s in it)" % str(snappedf(in_oncoming_lane, 0.1)))
+	check(arrivals.size() >= 8, "oncoming vehicles went by (%d)" % arrivals.size())
+	for pair: int in range(1, arrivals.size()):
+		var apart: float = arrivals[pair] - arrivals[pair - 1]
+		check(apart >= GameData.as_float(every[0]) - 0.1 and apart <= GameData.as_float(every[1]) + 0.1, "driven: %s s between two oncoming vehicles" % str(snappedf(apart, 0.01)))
+	check_near(GameData.as_float(_event("leg_ended").get("par_bonus")), floorf((100.0 - _sim.leg.time) * tuning.f("par_bonus_rate")), 0.000001, "10 s under par pays 5 cash")
+	check(not plan.is_empty(), "(the plan was generated)")
+
+
+## T-LEG-09: Motorcade: five black cars hold all lanes at 70 km/h; within
+## 100 m a spotlight gives Glare 80% and +2 Nerves per second; the motorcade
+## never touches him; staying behind for the whole leg takes 129 s; one side
+## road mid-leg is a Two-lane detour that rejoins ahead of the motorcade;
+## par 110 s.
+func test_leg_09() -> void:
+	var leg: Dictionary = data.record("legs", "motorcade")
+	var special: Dictionary = GameData.as_dict(leg.get("special"))
+	var two_lane: Dictionary = GameData.as_dict(data.record("legs", "two_lane").get("special"))
+	var speed: float = GameData.as_float(special.get("speed_kmh"))
+	var keep_back: float = GameData.as_float(special.get("keep_back_m"))
+	var hold_gap: float = GameData.as_float(special.get("hold_gap_m"))
+	var par: float = GameData.as_float(leg.get("par_s"))
+	var second: float = tuning.fi("gear_speeds", 1)
+	var third: float = tuning.fi("gear_speeds", 2)
+	var leg_length: float = tuning.f("leg_length")
+	check_near(par, 110.0, 0.000001, "GDD 9.1: the Motorcade has a par of 110 s")
+	check_eq(GameData.as_int(leg.get("lanes")), 3, "three lanes")
+	check(GameData.as_bool(leg.get("divided")), "with a median")
+	check_eq(GameData.as_array(leg.get("acts")), [3.0], "it is an Act 3 road")
+	check_eq(GameData.as_int(special.get("cars")), 5, "GDD 9.3: five cars")
+	check_near(speed, 70.0, 0.000001, "at 70 km/h")
+	check_near(keep_back, 100.0, 0.000001, "the spotlight reaches 100 m")
+	check_near(GameData.as_float(special.get("glare")), 0.8, 0.000001, "Glare 80%")
+	check_near(GameData.as_float(special.get("nerves_per_s")), 2.0, 0.000001, "+2 Nerves per second")
+	var black: Dictionary = data.record("vehicles", "motorcade_car")
+	var look: Dictionary = GameData.as_dict(GameData.as_dict(data.root("placeholders").get(GameData.as_string(black.get("placeholder")))).get("placeholder"))
+	var colour: Color = Color.html(GameData.as_string(look.get("color")))
+	check(maxf(colour.r, maxf(colour.g, colour.b)) < 0.1, "the cars are black (%s)" % GameData.as_string(look.get("color")))
+	check(not GameData.as_bool(black.get("yields_to_horn")) and is_zero_approx(GameData.as_float(black.get("honk_nerves"))),
+			"they do not answer the horn and have none: the motorcade never speaks")
+	check(not GameData.as_bool(black.get("traffic"), true), "and they are never ordinary traffic")
+
+	# The plans: five cars over all three lanes, nothing else on the main
+	# road, and one side road mid-leg that is a Two-lane road.
+	for index: int in SAMPLE_SEEDS:
+		var plan: Dictionary = LegGenerator.generate(data, "motorcade", 3, 900 + index, "")
+		var convoy: Dictionary = GameData.as_dict(plan.get("motorcade"))
+		var cars: Array = GameData.as_array(convoy.get("cars"))
+		check_eq(cars.size(), 5, "seed %d: five cars" % (900 + index))
+		var lanes_held: Dictionary = {}
+		for entry: Variant in cars:
+			lanes_held[GameData.as_int(GameData.as_dict(entry).get("lane"))] = true
+		check_eq(lanes_held.size(), GameData.as_int(plan["lanes"]), "holding every lane")
+		check_eq(GameData.as_string(convoy.get("vehicle")), "motorcade_car", "all of them the black car")
+		check_near(GameData.as_float(convoy.get("speed")), speed, 0.000001, "at 70 km/h")
+		check_eq(_ordinary(plan), 0, "no other traffic is in the lanes they fill")
+		var detour: Dictionary = GameData.as_dict(convoy.get("detour"))
+		var at: float = GameData.as_float(detour.get("at"))
+		var rejoin: float = at + GameData.as_float(detour.get("slip")) + GameData.as_float(detour.get("length"))
+		check(at >= 0.4 * leg_length and at <= 0.6 * leg_length, "the side road is mid-leg (at %s m)" % str(at))
+		check(rejoin <= GameData.as_float(plan["beats_end"]), "and is back on the main road before the Exit (%s m)" % str(rejoin))
+		check_eq(GameData.as_int(detour.get("lanes")), 1, "it is a Two-lane road: one lane his way")
+		check(not GameData.as_bool(detour.get("divided"), true), "and no median")
+		var trucks: int = 0
+		var meets: Array[float] = []
+		for entry: Variant in GameData.as_array(detour.get("spawns")):
+			var spawn: Dictionary = entry
+			if GameData.as_int(spawn["direction"]) < 0:
+				check_eq(GameData.as_int(spawn["lane"]), LegGenerator.ONCOMING_LANE, "its oncoming traffic is in the oncoming lane")
+				meets.append(GameData.as_float(spawn["meet_s"]))
+			else:
+				trucks += 1
+				check_eq(GameData.as_string(spawn["vehicle"]), GameData.as_string(two_lane.get("truck")), "what is ahead on it is a truck")
+				check_near(GameData.as_float(spawn["speed"]), GameData.as_float(two_lane.get("truck_speed_kmh")), 0.000001, "holding 60 km/h")
+		check(trucks >= 1, "with a truck to pass (%d)" % trucks)
+		var every: Array = GameData.as_array(two_lane.get("oncoming_every_s"))
+		check(meets.size() >= 2, "and oncoming traffic (%d vehicles)" % meets.size())
+		for pair: int in range(1, meets.size()):
+			var apart: float = (meets[pair] - meets[pair - 1]) / (third * KMH_TO_MS)
+			check(apart >= GameData.as_float(every[0]) - 0.001 and apart <= GameData.as_float(every[1]) + 0.001,
+					"arriving 6 to 10 s apart, as on any Two-lane road (%s s)" % str(snappedf(apart, 0.01)))
+
+	# Staying behind, at the motorcade's own speed, for the whole leg.
+	_sim = DriveSim.new(fresh_data())
+	_events = []
+	var plan: Dictionary = LegGenerator.generate(data, "motorcade", 3, 901, "")
+	var detour: Dictionary = GameData.as_dict(GameData.as_dict(plan["motorcade"]).get("detour"))
+	var at: float = GameData.as_float(detour.get("at"))
+	var gore: float = at + GameData.as_float(detour.get("slip"))
+	var rejoin: float = gore + GameData.as_float(detour.get("length"))
+	_sim.gate.reset(2)
+	_sim.begin_leg(plan)
+	_checker.load_plan(plan)
+	_collect()
+	check_near(_sim.car.speed, second, 0.000001, "(second gear is the motorcade's speed)")
+	check_near(second, speed, 0.000001, "(70 km/h)")
+	var convoy: Array[TrafficSim.Vehicle] = _sim.encounter.motorcade()
+	check_eq(convoy.size(), 5, "driven: five cars are on the road from the start")
+	var held: Dictionary = {}
+	var last: TrafficSim.Vehicle = null
+	for vehicle: TrafficSim.Vehicle in convoy:
+		check_eq(vehicle.type_id, &"motorcade_car", "each a black car")
+		check_eq(vehicle.role, EncounterSim.MOTORCADE, "of the motorcade")
+		held[vehicle.lane] = true
+		if last == null or vehicle.s < last.s:
+			last = vehicle
+	check_eq(held.size(), 3, "across all three lanes")
+	if not check(last != null, "(there is a last car)"):
+		return
+	var half_car: float = _sim.car.length() * 0.5
+	var start_gap: float = (last.s - last.half_length) - (_sim.car.s + half_car)
+	check(start_gap > keep_back, "it starts out of the spotlight's reach, where the sign can be read (%s m ahead)" % str(snappedf(start_gap, 0.1)))
+	check(_sim.encounter.active, "it is the leg's encounter")
+	var last_from: float = last.s
+	var off_speed: float = 0.0
+	var brightest: float = 0.0
+	var lanes_in_slip: int = 0
+	var lanes_after: int = 0
+	var sign_ahead: float = -1.0
+	var nerves_most: float = _sim.nerves.value
+	while _sim.leg.active:
+		_sim.car.x = _checker.line_x(_sim.car.s)
+		_sim.step(_input)
+		_collect()
+		for vehicle: TrafficSim.Vehicle in convoy:
+			off_speed = maxf(off_speed, absf(vehicle.speed - speed))
+		brightest = maxf(brightest, _sim.encounter.glare)
+		nerves_most = maxf(nerves_most, _sim.nerves.value)
+		if sign_ahead < 0.0 and _sim.car.s < at:
+			for road_sign: Dictionary in _sim.leg.signs_near(tuning.f("road_draw_ahead")):
+				if GameData.as_string(road_sign.get("kind")) == "side_road":
+					sign_ahead = at - _sim.car.s
+		if _sim.car.s > at + 1.0 and _sim.car.s < gore - 1.0:
+			lanes_in_slip = _sim.car.lanes
+		if _sim.car.s > gore + 1.0:
+			lanes_after = _sim.car.lanes
+	var behind_time: float = _sim.leg.time
+	check_near(behind_time, leg_length / (speed * KMH_TO_MS), 0.05, "staying behind for the whole leg takes the leg's length at 70 km/h")
+	check_eq(roundi(behind_time), 129, "GDD 9.3: 129 s")
+	check(behind_time > par, "which is %s s over par" % str(snappedf(behind_time - par, 0.1)))
+	check_near(GameData.as_float(_event("leg_ended").get("par_bonus")), 0.0, 0.000001, "so par pays nothing")
+	check(off_speed < 0.000001, "the five cars held 70 km/h throughout")
+	check_near(last.s - last_from, speed * KMH_TO_MS * behind_time, 0.05, "the last car covered what 70 km/h covers in that time")
+	check(is_zero_approx(brightest), "kept back, the spotlight never reached him")
+	check(nerves_most <= tuning.f("nerves_start") + 0.000001, "and the motorcade did nothing to his Nerves")
+	check_eq(_sim.faults.lamps, 0, "no lamp is lit")
+	check(sign_ahead > 0.0, "the side road is signed before its slip lane opens")
+	check_near(sign_ahead, tuning.f("road_draw_ahead") + tuning.f("slip_sign_lead") * third * KMH_TO_MS, 1.0, "its sign stands slip_sign_lead seconds short of the slip lane")
+	check_eq(lanes_in_slip, 4, "beside the slip lane the road is one lane wider")
+	check_eq(lanes_after, 3, "and three lanes again after it, for a car that stayed")
+	check_eq(_sim.encounter.side_road, EncounterSim.SIDE_ROAD_BEHIND, "the side road is behind him")
+
+	# Third gear, straight at it: the spotlight, then the wall.
+	_begin_quiet("motorcade", 3, 902)
+	convoy = _sim.encounter.motorcade()
+	last = convoy[convoy.size() - 1] if not convoy.is_empty() else null
+	for vehicle: TrafficSim.Vehicle in convoy:
+		if vehicle.s < last.s:
+			last = vehicle
+	if not check(last != null, "(quiet road: the motorcade is there)"):
+		return
+	var lit_at: float = -1.0
+	var lit_gap: float = 0.0
+	var dark_gap: float = INF
+	var nerves_lit: float = 0.0
+	var nerves_dark: float = 0.0
+	var nerves_later: float = 0.0
+	var window: float = 6.0
+	var glare_seen: float = 0.0
+	var glare_snapshot: float = -1.0
+	var nearest: float = INF
+	var fastest_at_wall: float = 0.0
+	while _sim.leg.active:
+		var nerves_before: float = _sim.nerves.value
+		_hold_lane_and_step(1)
+		var gap: float = (last.s - last.half_length) - (_sim.car.s + half_car)
+		nearest = minf(nearest, gap)
+		if gap < hold_gap + 0.01:
+			fastest_at_wall = maxf(fastest_at_wall, _sim.car.speed)
+		if _sim.encounter.glare > 0.0:
+			if lit_at < 0.0:
+				lit_at = _sim.leg.time
+				lit_gap = gap
+				nerves_dark = nerves_before
+				nerves_lit = _sim.nerves.value
+				glare_snapshot = GameData.as_float(_sim.snapshot()["glare"])
+			glare_seen = maxf(glare_seen, _sim.encounter.glare)
+			if absf(_sim.leg.time - (lit_at + window)) < DT * 0.5:
+				nerves_later = _sim.nerves.value
+		elif lit_at < 0.0:
+			dark_gap = minf(dark_gap, gap)
+	var closing_per_tick: float = (third - speed) * KMH_TO_MS * DT
+	check(lit_at > 0.0, "driven in third gear, the spotlight comes on")
+	check(lit_gap < keep_back and lit_gap > keep_back - 2.0 * closing_per_tick, "when he is within 100 m of the last car (%s m)" % str(snappedf(lit_gap, 0.01)))
+	check(dark_gap >= keep_back - 0.000001, "and not before (%s m)" % str(snappedf(dark_gap, 0.01)))
+	check_near(nerves_dark, tuning.f("nerves_start"), 0.000001, "until then the motorcade did nothing to his Nerves")
+	check_near(glare_seen, GameData.as_float(special.get("glare")), 0.000001, "Glare is 80%")
+	check_near(glare_snapshot, GameData.as_float(special.get("glare")), 0.000001, "and the snapshot says so")
+	check_near((nerves_later - nerves_lit) / window, GameData.as_float(special.get("nerves_per_s")), 0.01,
+			"in the spotlight his Nerves rise 2 a second (%s)" % str(snappedf((nerves_later - nerves_lit) / window, 0.001)))
+	check_near(nearest, hold_gap, 0.001, "he can come no nearer than %s m to the last car (%s m)" % [str(hold_gap), str(snappedf(nearest, 0.001))])
+	check(fastest_at_wall <= speed + 0.000001, "and there he is held to its speed (%s km/h)" % str(snappedf(fastest_at_wall, 0.01)))
+	check_eq(_sim.faults.lamps, 0, "the motorcade never touches him: no lamp")
+	check(not _has_event_named("hit"), "no hit")
+	check(_sim.leg.time > par and _sim.leg.time < behind_time, "however close he follows, the main road does not make par (%s s)" % str(snappedf(_sim.leg.time, 0.1)))
+
+	# Fourth gear at every part of the road: there is no way through.
+	var rail: float = _sim.car.road_right() + tuning.f("rumble_strip_width") + tuning.f("shoulder_width") * 0.5
+	for x: float in [_sim.car.lane_center(0), _sim.car.lane_center(1), _sim.car.lane_center(2), _sim.car.lane_width(), 2.0 * _sim.car.lane_width(), rail]:
+		_begin_quiet("motorcade", 3, 903)
+		_sim.gate.reset(4)
+		convoy = _sim.encounter.motorcade()
+		last = convoy[0]
+		for vehicle: TrafficSim.Vehicle in convoy:
+			if vehicle.s < last.s:
+				last = vehicle
+		var least: float = INF
+		while _sim.leg.active and _sim.leg.time < 30.0:
+			_sim.car.x = x
+			_sim.step(_input)
+			_collect()
+			least = minf(least, (last.s - last.half_length) - (_sim.car.s + half_car))
+		check(least >= hold_gap - 0.001, "in fourth gear at x = %s m he comes no nearer than %s m (%s m)" % [str(snappedf(x, 0.01)), str(hold_gap), str(snappedf(least, 0.001))])
+		check(not _has_event_named("hit") and not _has_event_named("close_call"), "with no hit and no close call there")
+		check_eq(_sim.faults.lamps, 0, "and no lamp")
+
+	# The side road, taken at par: a Two-lane detour that rejoins ahead of the
+	# motorcade.
+	_sim = DriveSim.new(fresh_data())
+	_events = []
+	plan = LegGenerator.generate(data, "motorcade", 3, 901, "")
+	_sim.gate.reset(2)
+	_sim.begin_leg(plan)
+	_checker.load_plan(plan)
+	_collect()
+	var side: LegChecker = LegChecker.new(data)
+	side.load_plan(detour)
+	var half_black: float = GameData.as_float(black.get("length")) * 0.5
+	var longest: float = 0.0
+	for entry: Variant in GameData.as_array(GameData.as_dict(plan["motorcade"]).get("cars")):
+		longest = maxf(longest, GameData.as_float(GameData.as_dict(entry).get("ahead")))
+	var slip_x: float = _sim.car.lane_center(3)
+	var right_x: float = _sim.car.lane_center(2)
+	var shift_at: float = _shift_up_at(at, gore, speed, third, GameData.as_float(special.get("start_ahead_m")))
+	var on_side: float = 0.0
+	var side_lanes: int = 0
+	var side_divided: bool = true
+	var oncoming_met: int = 0
+	var trucks_passed: int = 0
+	var met: Dictionary = {}
+	var entered_at: float = -1.0
+	var entry_speed: float = 0.0
+	var rejoined_at: float = -1.0
+	var rejoin_x: float = 0.0
+	var behind_at_rejoin: float = 0.0
+	var seen_ahead_after: int = 0
+	var was_taken: bool = false
+	var black_on_side: int = 0
+	while _sim.leg.active:
+		if _sim.car.s >= shift_at and _sim.gate.gear == 2:
+			_sim.gate.reset(3)
+		var taken: bool = _sim.encounter.side_road == EncounterSim.SIDE_ROAD_TAKEN
+		if taken:
+			_sim.car.x = side.line_x(_sim.car.s - gore)
+		elif _sim.encounter.side_road == EncounterSim.SIDE_ROAD_BEHIND:
+			_sim.car.x = right_x
+		elif _sim.car.s >= at:
+			_sim.car.x = lerpf(_checker.line_x(_sim.car.s), slip_x, clampf((_sim.car.s - at) / (0.5 * (gore - at)), 0.0, 1.0))
+		else:
+			_sim.car.x = _checker.line_x(_sim.car.s)
+		_sim.step(_input)
+		_collect()
+		taken = _sim.encounter.side_road == EncounterSim.SIDE_ROAD_TAKEN
+		if taken and not was_taken:
+			entered_at = _sim.car.s
+			entry_speed = _sim.car.speed
+			side_lanes = _sim.car.lanes
+			side_divided = _sim.car.divided
+		if was_taken and not taken:
+			rejoined_at = _sim.car.s
+			rejoin_x = _sim.car.x
+			behind_at_rejoin = _sim.car.s - half_car - (_sim.encounter.motorcade_s + longest + half_black)
+		was_taken = taken
+		if taken:
+			on_side += DT
+			for vehicle: TrafficSim.Vehicle in _sim.traffic.vehicles:
+				if vehicle.role == EncounterSim.MOTORCADE:
+					black_on_side += 1
+				if met.has(vehicle.id) or vehicle.s > _sim.car.s:
+					continue
+				met[vehicle.id] = true
+				if vehicle.direction < 0:
+					oncoming_met += 1
+				else:
+					trucks_passed += 1
+		elif rejoined_at >= 0.0:
+			for vehicle: TrafficSim.Vehicle in _sim.traffic.vehicles:
+				if vehicle.s > _sim.car.s:
+					seen_ahead_after += 1
+	check(entered_at >= gore and entered_at < gore + 1.0, "a car in the slip lane where it ends is on the side road (at %s m)" % str(snappedf(entered_at, 0.1)))
+	check_near(entry_speed, third, 0.5, "(the test's driver is in third gear by then: %s km/h)" % str(snappedf(entry_speed, 0.1)))
+	check_eq(side_lanes, 1, "driven: the side road has one lane his way")
+	check(not side_divided, "and no median")
+	check_eq(black_on_side, 0, "no car of the motorcade is on it")
+	check(trucks_passed >= 1, "he passes its trucks (%d)" % trucks_passed)
+	check(oncoming_met >= 2, "between its oncoming traffic (%d)" % oncoming_met)
+	check(rejoined_at >= rejoin and rejoined_at < rejoin + 1.0, "and after %s m he is back on the main road (at %s m)" % [str(rejoin - gore), str(snappedf(rejoined_at, 0.1))])
+	check_eq(_sim.car.lanes, 3, "three lanes")
+	check(_sim.car.divided, "and a median again")
+	check_near(rejoin_x, right_x, 0.05, "in its right lane, as far off its middle as he was off the side road's")
+	check(behind_at_rejoin > 0.0, "ahead of the motorcade: its leading cars are %s m behind him" % str(snappedf(behind_at_rejoin, 0.1)))
+	check_eq(seen_ahead_after, 0, "with nothing between him and the end of the leg")
+	check_eq(_sim.faults.lamps, 0, "no lamp is lit")
+	check(_sim.leg.time < par, "by the side road he is under par (%s s)" % str(snappedf(_sim.leg.time, 0.1)))
+	check(not _sim.encounter.active, "and the encounter is over")
+	check_near(GameData.as_float(_event("leg_ended").get("par_bonus")), floorf((par - _sim.leg.time) * tuning.f("par_bonus_rate")), 0.000001, "which pays the par bonus")
+
+	# The side road, taken slowly: he still rejoins ahead of the motorcade,
+	# and from behind it never touches him either.
+	_sim = DriveSim.new(fresh_data())
+	_events = []
+	plan = LegGenerator.generate(data, "motorcade", 3, 901, "")
+	_sim.gate.reset(2)
+	_sim.begin_leg(plan)
+	_checker.load_plan(plan)
+	_collect()
+	was_taken = false
+	var closest_behind: float = INF
+	var followers: int = 0
+	var follower_speed: float = 0.0
+	var pushed: float = 0.0
+	while _sim.leg.active:
+		var taken: bool = _sim.encounter.side_road == EncounterSim.SIDE_ROAD_TAKEN
+		if taken:
+			_sim.car.x = _sim.car.lane_center(0)
+			if _sim.gate.gear != 1:
+				_sim.gate.reset(1)
+		elif _sim.encounter.side_road == EncounterSim.SIDE_ROAD_BEHIND:
+			_sim.car.x = right_x
+		elif _sim.car.s >= at:
+			_sim.car.x = lerpf(_checker.line_x(_sim.car.s), slip_x, clampf((_sim.car.s - at) / (0.5 * (gore - at)), 0.0, 1.0))
+		else:
+			_sim.car.x = _checker.line_x(_sim.car.s)
+		var speed_before: float = _sim.car.speed
+		_sim.step(_input)
+		_collect()
+		if _sim.encounter.side_road == EncounterSim.SIDE_ROAD_BEHIND:
+			followers = maxi(followers, _sim.encounter.motorcade().size())
+			for vehicle: TrafficSim.Vehicle in _sim.encounter.motorcade():
+				closest_behind = minf(closest_behind, (_sim.car.s - half_car) - (vehicle.s + vehicle.half_length))
+				follower_speed = vehicle.speed
+			pushed = maxf(pushed, _sim.car.speed - maxf(speed_before, _sim.car.cruise_speed(_sim.gate.gear)))
+	check(_sim.leg.time > behind_time, "(crawling along the side road in first gear takes longer than staying behind: %s s)" % str(snappedf(_sim.leg.time, 0.1)))
+	check_eq(followers, 5, "however long he took, the motorcade is behind him when he rejoins: all five cars")
+	check(closest_behind >= hold_gap - 0.001, "it comes no nearer than %s m to his bumper (%s m)" % [str(hold_gap), str(snappedf(closest_behind, 0.001))])
+	check_near(follower_speed, _sim.car.speed, 0.01, "holding his speed behind him")
+	check(pushed <= 0.000001, "it does not push him")
+	check_eq(_sim.faults.lamps, 0, "and no lamp is lit")
+	check(not _has_event_named("hit"), "the motorcade never touches him")
+
+
 # --- Driving -----------------------------------------------------------------
 
 func _begin(leg_id: String, act: int, leg_seed: int, modifier: String = "") -> Dictionary:
@@ -900,6 +1390,18 @@ func _events_named(type: String) -> Array[Dictionary]:
 			out.append(event)
 	return out
 
+
+## How far into the leg a driver who starts in second gear behind the
+## motorcade must change up to third so as to reach the end of the slip lane
+## at third gear's speed without having met the motorcade's wall: as late as
+## the acceleration allows, and no earlier than keeps him clear of it.
+func _shift_up_at(at: float, gore: float, slow: float, fast: float, start_ahead: float) -> float:
+	# Changing up at X he closes (gore - X) * (1 - slow / fast) on the last
+	# car, which is start_ahead in front of him until then.
+	var may_close: float = start_ahead * 0.5
+	var from: float = gore - may_close / (1.0 - slow / fast)
+	check(from < at, "(the test's driver changes up before the slip lane, at %s m)" % str(snappedf(from, 0.1)))
+	return from
 
 # --- The law -----------------------------------------------------------------
 

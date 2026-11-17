@@ -656,3 +656,45 @@ Format: `D-NNN (milestone, date) Title` then Context / Decision / Why.
   GDD 6.1) and drives away. A driver who simply holds third gear is not hit
   by it. `gear_hold_s` unbroken seconds in fourth or fifth, or `duration_s`
   on the bumper, and he falls back instead: no pass, no brake.
+
+## D-033 (M4, 2026-11-17) The Motorcade and its side road
+
+- **The convoy.** Five `motorcade_car`s in a fixed formation: rows of two in
+  the outer lanes `row_gap_m` apart, the last car alone in the middle lane.
+  It starts `start_ahead_m` (180) in front of him, so the sign on the last
+  car can be read for about nine seconds in third gear before the spotlight
+  reaches him. It holds `speed_kmh` whatever happens.
+- **The wall.** "The motorcade never touches him" is a rule of the road, not
+  of his steering: across the whole width of the road, shoulder and slip
+  lane included, the car cannot come nearer than `hold_gap_m` to the last
+  car's rear bumper, and its speed is held to the motorcade's there.
+- **The spotlight** is on while the gap from his front bumper to the last
+  car's rear bumper is under `keep_back_m`: `glare` in the snapshot and
+  +`nerves_per_s`, on top of what any vehicle within traffic_radius adds
+  (GDD 6.1), as with the Tailgater. Outside it the motorcade does nothing.
+- **129 s** is the leg's 2,500 m at 70 km/h (128.6 s): a driver who stays
+  behind at the motorcade's speed. Following as closely as the wall allows
+  gains at most the 170 m he starts behind it: 120 s, still over par.
+- **The side road** is signed `slip_sign_lead` seconds ahead, like an Exit
+  (GDD 9.5). A slip lane opens on the right at `detour_at_m` (the road is
+  one lane wider beside it) and ends `detour_slip_m` further on. A car whose
+  middle is in the slip lane there is on the side road: one lane each way,
+  no median, the Two-lane leg's trucks and oncoming traffic from the plan's
+  detour, no bends, gusts or hazards of the main road. `detour_length_m`
+  later it is back in the right lane of the main road. Any other car stays
+  on the main road and the slip lane is gone.
+- **Rejoins ahead.** The motorcade goes on along the main road while he is
+  away. If the side road took him so long that it would be past the place
+  where he rejoins, it is put `rejoin_behind_m` behind him instead: the side
+  road rejoins ahead of the motorcade, as the GDD says, however he drove it.
+- **Behind him** it is traffic that does not push: it comes no nearer than
+  `hold_gap_m` to his rear bumper and takes his speed there (the one case in
+  which it is slower than 70 km/h). No spotlight from in front of it. Its
+  cars are taken off the road and put back at `despawn_behind` like any
+  others.
+- **The encounter** counts as on (no empty-road calm, GDD 6.1) while the
+  motorcade is ahead of him on the main road; not on the side road and not
+  once he is ahead of it.
+- **Vehicles ahead are never removed.** T-CC-01 says so; a despawn rule for
+  vehicles far ahead was tried here and taken out again.
+- **Why.** GDD 9.3 gives the numbers; GDD 1.5 for the rest.

@@ -100,6 +100,17 @@ func clear() -> void:
 	_next_id = 1
 
 
+## Takes every vehicle off the road in the middle of a leg (the car has
+## turned onto another road). Ids go on counting, so no later vehicle is
+## mistaken for one of these.
+func remove_all() -> void:
+	vehicles.clear()
+
+
+func remove(vehicle: Vehicle) -> void:
+	vehicles.erase(vehicle)
+
+
 func lane_center(lane: int) -> float:
 	return _lane_width * (float(lane) + 0.5)
 
