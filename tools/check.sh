@@ -4,6 +4,7 @@
 # Runs, in order: asset import, a parse check of every script and scene, the
 # data validator, the tests in tests/tests.json, and the headless scene smoke
 # tests. Exits non-zero if any step fails or prints an engine error.
+# After the data validator it also runs the sound check (tools/audio_check.gd).
 #
 #   tools/check.sh            every step
 #   tools/check.sh --final    also require every registered test to pass (GDD 18.2)
@@ -55,6 +56,7 @@ echo "I-99 check: $("$GODOT" --version)"
 run_step import --import
 run_step parse --script res://tools/parse_check.gd
 run_step data --script res://tools/validate_data.gd
+run_step audio --script res://tools/audio_check.gd
 if [ "${#TEST_ARGS[@]}" -gt 0 ]; then
   run_step tests --script res://tests/run_tests.gd -- "${TEST_ARGS[@]}"
 else
