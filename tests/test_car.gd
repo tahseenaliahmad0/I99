@@ -478,21 +478,35 @@ func _check_drifts() -> void:
 		_car.step(DT, 0.0, 3, false, _car.curve_push(ks[1]) - tuning.f("crown_drift"))
 	check_near(_car.x - start, ks[1], 0.001, "a curve of k 1.0 at 100 km/h carries the car 1 m outward in a second")
 
-	# A gust: gust_push for gust_duration, through DriveSim.
+	# A gust: gust_push for gust_duration, through DriveSim. The tolerance is a
+	# quarter of one tick of push, so one tick too many or too few is caught.
 	var calm: DriveSim = DriveSim.new(fresh_data())
 	var gusty: DriveSim = DriveSim.new(fresh_data())
 	var input: DriveInput = DriveInput.new()
 	gusty.start_gust(-1)
 	var ticks: int = int((tuning.f("gust_duration") + 1.0) / DT)
+	var pushed_ticks: int = 0
 	for _tick: int in ticks:
+		var apart: float = gusty.car.x - calm.car.x
 		calm.step(input)
 		gusty.step(input)
-	check_near(gusty.car.x - calm.car.x, -tuning.f("gust_push") * tuning.f("gust_duration"), 0.02, "a gust pushes gust_push for gust_duration, then stops")
+		if absf(gusty.car.x - calm.car.x - apart) > 0.000000001:
+			pushed_ticks += 1
+	check_near(gusty.car.x - calm.car.x, -tuning.f("gust_push") * tuning.f("gust_duration"), tuning.f("gust_push") * DT * 0.25, "a gust pushes gust_push for gust_duration, then stops")
+	check_eq(pushed_ticks, roundi(tuning.f("gust_duration") / DT), "it pushes for gust_duration in whole ticks, not one more")
 	var half_way: DriveSim = DriveSim.new(fresh_data())
 	half_way.start_gust(1)
 	for _tick: int in int(tuning.f("gust_duration") * 0.5 / DT):
 		half_way.step(input)
 	check_near(half_way.car.drift, tuning.f("crown_drift") + tuning.f("gust_push"), 0.000001, "during the gust the drift is crown plus gust_push")
+
+	# Other lengths are as exact. A gust lasts the nearest whole number of ticks
+	# to its duration: three times gust_duration is three times the ticks, and a
+	# duration between two ticks goes to the nearer one.
+	var whole: int = roundi(tuning.f("gust_duration") / DT)
+	check_eq(_gust_ticks(tuning.f("gust_duration") * 3.0), whole * 3, "a gust three times as long pushes for three times as many ticks, not one more")
+	check_eq(_gust_ticks(tuning.f("gust_duration") + DT * 0.6), whole + 1, "a duration 0.6 of a tick longer is one tick longer")
+	check_eq(_gust_ticks(tuning.f("gust_duration") + DT * 0.4), whole, "and one 0.4 of a tick longer is no longer")
 
 
 ## A curve through the whole simulation: DriveSim.curve_k bends the road, and
@@ -796,6 +810,27 @@ func _put_on_shoulder(x: float, speed: float) -> void:
 func _hold_on_shoulder(seconds: float, gear: int, braking: bool) -> void:
 	for _tick: int in roundi(seconds / DT):
 		_car.step(DT, 0.0, gear, braking, -tuning.f("crown_drift"))
+
+
+## Ticks during which a gust pushes the car of a whole simulation whose
+## gust_duration is `duration`, counted from the car's movement against a calm
+## twin. Also checks that the gust carried the car gust_push x that many ticks.
+func _gust_ticks(duration: float) -> int:
+	var gust_data: GameData = fresh_data()
+	gust_data.tuning.set_value("gust_duration", duration)
+	var calm: DriveSim = DriveSim.new(fresh_data())
+	var gusty: DriveSim = DriveSim.new(gust_data)
+	var input: DriveInput = DriveInput.new()
+	gusty.start_gust(-1)
+	var pushed_ticks: int = 0
+	for _tick: int in int((duration + 1.0) / DT):
+		var apart: float = gusty.car.x - calm.car.x
+		calm.step(input)
+		gusty.step(input)
+		if absf(gusty.car.x - calm.car.x - apart) > 0.000000001:
+			pushed_ticks += 1
+	check_near(gusty.car.x - calm.car.x, -tuning.f("gust_push") * float(pushed_ticks) * DT, 0.000001, "a gust of %s s carries the car gust_push for every tick it lasts" % str(duration))
+	return pushed_ticks
 
 
 ## How many events of one type the simulation queued since the last drain.

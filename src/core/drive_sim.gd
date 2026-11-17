@@ -75,7 +75,8 @@ var _active_ritual: Dictionary = {}
 var _active_anchor: int = HandSim.NO_ANCHOR
 var _lever_anchor: int = HandSim.NO_ANCHOR
 var _lever_in_hand: bool = false
-var _gust_left: float = 0.0
+## Ticks the gust still has to push: a gust lasts a whole number of ticks.
+var _gust_ticks_left: int = 0
 var _gust_push: float = 0.0
 var _gust_strength: float = 0.0
 var _gust_duration: float = 0.0
@@ -211,10 +212,11 @@ func set_road(lanes: int, divided: bool) -> void:
 	_lane = car.lane_of(car.x)
 
 
-## Starts one gust (GDD 5.4): gust_push for gust_duration. `direction` is +1
-## toward the right shoulder, -1 toward the left. `strength` scales it.
+## Starts one gust (GDD 5.4): gust_push for gust_duration, which is counted in
+## whole ticks (a float countdown ran one tick over). `direction` is +1 toward
+## the right shoulder, -1 toward the left. `strength` scales it.
 func start_gust(direction: int, strength: float = 1.0) -> void:
-	_gust_left = _gust_duration
+	_gust_ticks_left = roundi(_gust_duration * float(TICKS_PER_SECOND))
 	_gust_push = _gust_strength * strength * float(direction)
 
 
@@ -347,8 +349,8 @@ func _item_snapshots() -> Array[Dictionary]:
 ## Every sideways push but the road's crown (GDD 5.4), m/s toward the right.
 func _extra_drift() -> float:
 	var push: float = car.curve_push(curve_k) - faults.param(FAULT_PULL, "drift_left", 0.0)
-	if _gust_left > 0.0:
-		_gust_left -= DT
+	if _gust_ticks_left > 0:
+		_gust_ticks_left -= 1
 		push += _gust_push
 	return push
 
