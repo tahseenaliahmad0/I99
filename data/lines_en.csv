@@ -73,8 +73,6 @@ boss.storm.name,,STORM,true
 boss.dawn.name,,DAWN,true
 sign.exit,,[EXIT / %s],false
 sign.fork,,[%s],false
-sign.fork.branch,,%s / %s / %s,false
-sign.fork.branch_plain,,%s / %s / %s,false
 hud.clock,,Clock %s,false
 hud.telling,,"Act %s, leg %s: %s",false
 item.beads.name,,Worry beads,true
@@ -113,3 +111,19 @@ stop.offer.repair,,"Repair %s: %s",false
 stop.offer.restock,,"Restock %s: %s",false
 stop.offer.bought,,"%s: yours",false
 hud.stop,,"Stop: %s",false
+fault.rattle.name,,Rattle,true
+fault.cracked_windscreen.name,,Cracked windscreen,true
+fault.dead_headlight.name,,Dead headlight,true
+fault.pulling_steering.name,,Pulling steering,true
+fault.slipping_clutch.name,,Slipping clutch,true
+fault.stuck_wiper.name,,Stuck wiper,true
+fault.cracked_mirror.name,,Cracked mirror,true
+hud.wrecked,,WRECK,false
+stage.approach,,the road to the fork,false
+stage.leg,,leg,false
+stage.stop,,stop,false
+stage.boss,,boss,false
+stage.boss_stop,,boss stop,false
+stage.arrival,,arrival,false
+stage.ended,,arrived,false
+stage.none,,no Telling,false

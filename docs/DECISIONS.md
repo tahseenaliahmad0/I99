@@ -893,3 +893,36 @@ Format: `D-NNN (milestone, date) Title` then Context / Decision / Why.
   the button up at some moment since he arrived.
 - **Why.** GDD 11.1, 11.4, 13.3, 13.7; GDD 1.5.
 
+## D-039 (M5, 2026-11-17) What a Telling looks like; the game's part of saving
+
+- **Command line.** `--table=<id>` (with `--seed=`) starts a Telling in the
+  drive scene. `--continue` (not in GDD 13.9; it stands in for the title
+  screen's button until M9) goes on from the save file. `--bot=` in a
+  Telling keeps third gear, pulls in at every Exit, waits two seconds at a
+  stop and leaves, and takes the left and the right branch in turn: enough
+  to watch a Telling pass, and what the smoke test runs for 9,000 frames.
+- **Saving.** The drive controller writes the save when a `stop_entered`
+  event passes through it (`Game.write_save(sim.checkpoint)`), and clears
+  the Telling from it on `arrived`. Until the wedding room exists (M9) an
+  Arrival is followed by a new Telling with the next seed.
+- **The sky** follows the Clock in a Telling: night until `sky_dawn_from`
+  of the night is gone, then lighter until the deadline. Outside a Telling
+  it is as before (day, or the leg's night, rain or dust).
+- **Fork sign.** Over the road at `fork_sign_lead` before the gore, one
+  text over each half: the branch's leg, modifier, stop and par, one to a
+  line in large letters (`road_fork_text`). The gore itself is a yellow
+  block in the middle of the road. The road beyond it is not drawn as two:
+  the next stretch replaces the road in one frame (left for M10).
+- **Exit.** Signed with the stop's name; its slip lane is drawn like the
+  side road's.
+- **Stop.** `StopView` (cabin frame): the vendor (a green capsule) and, when
+  he is there, the shady guy (a darker one) at the passenger window; a
+  tray; on it a small box for each offer with a text that always faces the
+  eye: name and price, "free", "yours" once bought, "Repair ..." and
+  "Restock ...". A stall stands beside the road.
+- **Dashboard clock**: a Label3D on the dash showing the Clock.
+- **M2 view findings closed here:** the horn's and the glovebox's markers are
+  drawn on the surface of the prop they lie in (`marker_offset`); the left
+  sleeve hangs where the resting eye sees it; the Cabin has the nodes
+  Mirror, Visor, Seat and Glovebox of GDD 13.5.
+

@@ -411,6 +411,9 @@ func _anchor_schema() -> Dictionary:
 		"time_s": _num(0.0),
 		"via_w": _opt(_bool()),
 		"placeholder": _opt(_nullable(_ref("placeholders"))),
+		# Where its marker is drawn, relative to the anchor: for an anchor
+		# that lies inside a prop (the horn in the hub, the glovebox in the dash).
+		"marker_offset": _opt(_t("vec3")),
 	})
 
 

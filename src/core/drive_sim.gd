@@ -444,6 +444,9 @@ func _end_leg() -> void:
 	var clean_bonus: float = tuning.f("clean_leg_bonus") if clean else 0.0
 	var par_bonus: float = floorf(maxf(leg.par - leg.time, 0.0) * tuning.f("par_bonus_rate"))
 	cash += clean_bonus + par_bonus
+	# A clean leg also lets him breathe (GDD 6.1: -10 Nerves at the leg's end).
+	if clean:
+		nerves.add(tuning.f("clean_leg_nerves"))
 	items.raining = false
 	items.dust_rate = 0.0
 	car.lat_tau_mult = 1.0
@@ -1090,6 +1093,7 @@ func snapshot() -> Dictionary:
 		"legs_done": run.legs_done,
 		"stop": run.stop,
 		"stopped": stopped,
+		"gore_ahead": leg.length - car.s if run.active and run.fork_ahead() and leg.active else -1.0,
 		"offers": _offers_in_view(),
 		"boss": run.boss,
 		"pulled_over": pulled_over,

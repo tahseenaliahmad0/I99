@@ -12,6 +12,7 @@ var _night: Color = Color.BLACK
 var _rain: Color = Color.GRAY
 var _dust: Color = Color.TAN
 var _fog_near_share: float = 0.5
+var _dawn_from: float = 1.0
 
 
 func setup(data: GameData, factory: PlaceholderFactory) -> void:
@@ -22,6 +23,7 @@ func setup(data: GameData, factory: PlaceholderFactory) -> void:
 	_rain = Color.html(tuning.s("sky_color_rain"))
 	_dust = Color.html(tuning.s("sky_color_dust"))
 	_fog_near_share = tuning.f("fog_near_share")
+	_dawn_from = tuning.f("sky_dawn_from")
 	_environment = Environment.new()
 	_environment.background_mode = Environment.BG_COLOR
 	_environment.background_color = _day
@@ -34,7 +36,17 @@ func setup(data: GameData, factory: PlaceholderFactory) -> void:
 func apply(snapshot: Dictionary) -> void:
 	var sight: float = snapshot["visibility"]
 	var sky: Color = _day
-	if snapshot["night"]:
+	if snapshot["telling"]:
+		# The sky follows the Clock (GDD 6.4): night until the last part of
+		# it, then lighter until the deadline, when it is day.
+		var share: float = snapshot["night_share"]
+		var dawn: float = clampf((share - _dawn_from) / maxf(1.0 - _dawn_from, 0.001), 0.0, 1.0)
+		sky = _night.lerp(_day, dawn)
+		if snapshot["raining"]:
+			sky = sky.lerp(_rain, 0.5 * dawn)
+		elif is_finite(sight) and not snapshot["night"]:
+			sky = sky.lerp(_dust, 0.5)
+	elif snapshot["night"]:
 		sky = _night
 	elif snapshot["raining"]:
 		sky = _rain

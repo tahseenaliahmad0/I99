@@ -97,6 +97,32 @@ func test_leg_01() -> void:
 	check_near(GameData.as_float(ended.get("par_bonus")), 0.0, 0.000001, "at par there is no bonus for time")
 	check_near(_sim.cash - cash_before, tuning.f("clean_leg_bonus"), 0.000001, "the cash is his")
 
+	# A clean leg also calms him at its end: -10 Nerves (GDD 6.1). A leg on
+	# which a lamp was lit does not.
+	check_near(tuning.f("clean_leg_nerves"), -10.0, 0.000001, "GDD 6.1: a clean leg is -10 Nerves at its end")
+	for lamp_lit: bool in [false, true]:
+		_begin_quiet("open_road", 1, 5)
+		_sim.nerves.set_value(60.0)
+		if lamp_lit:
+			var guard: int = int(5.0 / DT)
+			while _sim.faults.lamps == 0 and guard > 0:
+				guard -= 1
+				_sim.car.x = _sim.car.guardrail_x()
+				_sim.step(_input)
+			for _tick: int in int(1.5 / DT):
+				_hold_lane_and_step(1)
+			_sim.gate.reset(3)
+		_sim.car.s = _sim.leg.length - 5.0
+		var before: float = 0.0
+		while _sim.leg.active:
+			before = _sim.nerves.value
+			_hold_lane_and_step(1)
+		if lamp_lit:
+			check(not GameData.as_bool(_event("leg_ended").get("clean")), "a leg on which a lamp was lit is not clean")
+			check(absf(_sim.nerves.value - before) < 0.05, "and brings no relief at its end (%s)" % str(snappedf(_sim.nerves.value - before, 0.001)))
+		else:
+			check_near(_sim.nerves.value - before, tuning.f("clean_leg_nerves"), 0.05, "at the end of a clean leg his Nerves drop by 10 (%s)" % str(snappedf(_sim.nerves.value - before, 0.001)))
+
 
 ## T-LEG-02: Rush: heavy traffic with frequent merges; par 90 s.
 func test_leg_02() -> void:

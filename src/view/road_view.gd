@@ -79,6 +79,14 @@ var _hazard_pool: Dictionary = {}
 var _hazards: Node3D
 var _signs: Array[Node3D] = []
 var _sign_nodes: Node3D
+var _fork_sign_height: float = 0.0
+## Letter sizes (Label3D pixel sizes) of a roadside sign and of a fork's sign.
+var _small_text: float = 0.01
+var _large_text: float = 0.01
+var _gore: Node3D
+var _fork_bar: Node3D
+var _stall: Node3D
+var _stall_offset: Vector2 = Vector2.ZERO
 
 
 func setup(data: GameData, factory: PlaceholderFactory) -> void:
@@ -107,6 +115,10 @@ func setup(data: GameData, factory: PlaceholderFactory) -> void:
 	_sign_inset = tuning.f("sign_inset")
 	_sign_text_height = tuning.f("sign_text_height")
 	_vehicle_sign_lift = tuning.f("vehicle_sign_lift")
+	_fork_sign_height = tuning.f("fork_sign_height")
+	_small_text = factory.size_of("road_sign_text").x
+	_large_text = factory.size_of("road_fork_text").x
+	_stall_offset = Vector2(tuning.fi("stop_stall_offset", 0), tuning.fi("stop_stall_offset", 1))
 	_lane_width = tuning.f("lane_width")
 	_rumble_width = tuning.f("rumble_strip_width")
 	_shoulder_width = tuning.f("shoulder_width")
@@ -128,6 +140,16 @@ func setup(data: GameData, factory: PlaceholderFactory) -> void:
 	_sign_nodes = Node3D.new()
 	_sign_nodes.name = "Signs"
 	add_child(_sign_nodes)
+	# The gore of a fork, the bar its sign hangs from, and a stop's stall.
+	_gore = factory.make_world("road_gore")
+	_gore.visible = false
+	add_child(_gore)
+	_fork_bar = factory.make_world("road_fork_sign")
+	_fork_bar.visible = false
+	add_child(_fork_bar)
+	_stall = factory.make_world("stop_stall")
+	_stall.visible = false
+	add_child(_stall)
 
 
 func apply(snapshot: Dictionary, delta: float) -> void:
@@ -177,7 +199,18 @@ func apply(snapshot: Dictionary, delta: float) -> void:
 	var hazards: Array[Dictionary] = snapshot["hazards"]
 	_show_hazards(hazards)
 	var signs: Array[Dictionary] = snapshot["signs"]
-	_show_signs(signs)
+	_show_signs(_sign_entries(signs))
+
+	# The gore: where the road parts (GDD 9.5).
+	var gore_ahead: float = snapshot["gore_ahead"]
+	_gore.visible = gore_ahead >= 0.0 and gore_ahead <= _ahead
+	if _gore.visible:
+		var gore_size: Vector3 = _factory.size_of("road_gore")
+		_gore.position = Vector3(_lane_width * float(_lanes) * 0.5, gore_size.y * 0.5, -(gore_ahead + gore_size.z * 0.5))
+	# At a stop: the stall beside the car.
+	_stall.visible = snapshot["stopped"]
+	if _stall.visible:
+		_stall.position = Vector3(car_x + _stall_offset.x, _factory.size_of("stop_stall").y * 0.5, -_stall_offset.y)
 
 
 # --- Building ----------------------------------------------------------------
@@ -433,8 +466,54 @@ func _show_hazards(hazards: Array[Dictionary]) -> void:
 			spare.visible = false
 
 
-## Road signs (GDD 16.1): a post inside the guardrail with a text in square
-## brackets.
+## What the snapshot's signs are to draw: where each text hangs and what it
+## says. A fork's sign is two texts over the road, one for each branch.
+func _sign_entries(signs: Array[Dictionary]) -> Array[Dictionary]:
+	var entries: Array[Dictionary] = []
+	var road_right: float = _lane_width * float(_lanes)
+	var fork_shown: bool = false
+	for road_sign: Dictionary in signs:
+		var ahead: float = road_sign["ahead"]
+		match GameData.as_string(road_sign.get("kind")):
+			"curve":
+				# A curve that pushes the car to the right is a bend to the left.
+				entries.append({"ahead": ahead, "x": _rail_x - _sign_inset, "height": _sign_text_height, "post": true,
+						"text": Lines.get_text("sign.curve.left" if GameData.as_float(road_sign.get("k")) > 0.0 else "sign.curve.right")})
+			"side_road":
+				entries.append({"ahead": ahead, "x": _rail_x - _sign_inset, "height": _sign_text_height, "post": true,
+						"text": Lines.get_text("sign.side_road")})
+			"exit":
+				entries.append({"ahead": ahead, "x": _rail_x - _sign_inset, "height": _sign_text_height, "post": true,
+						"text": Lines.format("sign.exit", [Lines.get_text("stop.%s.name" % GameData.as_string(road_sign.get("stop")))])})
+			"fork":
+				fork_shown = true
+				_fork_bar.position = Vector3(road_right * 0.5, _fork_sign_height + 0.6, -ahead)
+				entries.append({"ahead": ahead, "x": road_right * 0.22, "height": _fork_sign_height, "post": false, "large": true,
+						"text": _branch_text(GameData.as_dict(road_sign.get("left")))})
+				entries.append({"ahead": ahead, "x": road_right * 0.78, "height": _fork_sign_height, "post": false, "large": true,
+						"text": _branch_text(GameData.as_dict(road_sign.get("right")))})
+	_fork_bar.visible = fork_shown
+	return entries
+
+
+## "[RUSH / WEDDING / FUEL / 90]": a branch's leg, its modifier if it has
+## one, the stop at its end, and its par (GDD 9.5, 16.1).
+func _branch_text(branch: Dictionary) -> String:
+	var parts: PackedStringArray = [Lines.get_text("leg.%s.name" % GameData.as_string(branch.get("leg")))]
+	var modifier: String = GameData.as_string(branch.get("modifier"))
+	if not modifier.is_empty():
+		parts.append(Lines.get_text("modifier.%s.name" % modifier))
+	var stop: String = GameData.as_string(branch.get("stop"))
+	if not stop.is_empty():
+		parts.append(Lines.get_text("stop.%s.name" % stop))
+	parts.append("%d" % roundi(GameData.as_float(branch.get("par_s"))))
+	# One thing to a line, so that the letters can be large enough to read
+	# from the lead the sign is given.
+	return Lines.format("sign.fork", [" /\n".join(parts)])
+
+
+## Road signs (GDD 16.1): a text in square brackets, on a post inside the
+## guardrail or hung over the road.
 func _show_signs(signs: Array[Dictionary]) -> void:
 	var post_height: float = _factory.size_of("road_sign").y
 	for index: int in signs.size():
@@ -442,6 +521,7 @@ func _show_signs(signs: Array[Dictionary]) -> void:
 		if index >= _signs.size():
 			var made: Node3D = Node3D.new()
 			var post: Node3D = _factory.make_world("road_sign")
+			post.name = "Post"
 			post.position = Vector3(0.0, post_height * 0.5, 0.0)
 			made.add_child(post)
 			var text: Node3D = _factory.make("road_sign_text")
@@ -451,21 +531,17 @@ func _show_signs(signs: Array[Dictionary]) -> void:
 			_signs.append(made)
 		var node: Node3D = _signs[index]
 		var ahead: float = road_sign["ahead"]
+		var x: float = road_sign["x"]
+		var height: float = road_sign["height"]
 		node.visible = true
-		node.position = Vector3(_rail_x - _sign_inset, 0.0, -ahead)
+		node.position = Vector3(x, 0.0, -ahead)
+		var post_node: Node3D = node.get_node_or_null("Post") as Node3D
+		if post_node != null:
+			post_node.visible = road_sign["post"]
 		var label: Label3D = node.get_node_or_null("Text") as Label3D
 		if label != null:
-			label.text = _sign_text(road_sign)
-			label.position = Vector3(_bend_shift(ahead), _sign_text_height, 0.0)
+			label.text = GameData.as_string(road_sign.get("text"))
+			label.position = Vector3(_bend_shift(ahead), height, 0.0)
+			label.pixel_size = _large_text if GameData.as_bool(road_sign.get("large")) else _small_text
 	for index: int in range(signs.size(), _signs.size()):
 		_signs[index].visible = false
-
-
-func _sign_text(road_sign: Dictionary) -> String:
-	match GameData.as_string(road_sign.get("kind")):
-		"curve":
-			# A curve that pushes the car to the right is a bend to the left.
-			return Lines.get_text("sign.curve.left" if GameData.as_float(road_sign.get("k")) > 0.0 else "sign.curve.right")
-		"side_road":
-			return Lines.get_text("sign.side_road")
-	return ""

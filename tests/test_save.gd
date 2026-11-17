@@ -209,6 +209,28 @@ func test_save_01() -> void:
 	check_eq(loaded.state_hash(), _sim.state_hash(), "and the Telling goes on the same from it")
 	check_eq(_sim.run.act, 2, "(into Act 2)")
 
+	# The game's own file: `save.json` in the user folder, written by the Game autoload.
+	var kept_profile: Dictionary = Game.profile
+	Game.profile = profile
+	check(Game.save_path().ends_with(Save.FILE_NAME), "the game's save file is save.json")
+	check(Game.write_save(saved), "the game writes it")
+	check(FileAccess.file_exists(Game.save_path()), "it is on disk")
+	Game.profile = Save.default_profile()
+	Game.saved_telling = {}
+	Game.read_save()
+	check_eq(Game.profile, profile, "read again: the profile")
+	check_eq(Save.to_text(Game.profile, Game.saved_telling), text, "and the Telling, as it was written")
+	var from_game: DriveSim = DriveSim.new(fresh_data())
+	check(from_game.restore(Game.saved_telling), "from which the Telling goes on")
+	check_eq(from_game.run.stop, GameData.as_string(saved.get("stop"), from_game.run.stop), "at its stop")
+	check_eq(from_game.clock.minutes, Save.from_exact(bits.get("clock_min"), -1.0), "at its hour, to the bit")
+	check(Game.write_save({}), "with no Telling under way the file holds none")
+	Game.read_save()
+	check(Game.saved_telling.is_empty(), "and none is read")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(Game.save_path()))
+	Game.profile = kept_profile
+	Game.read_save()
+
 	# What is not a save made at a stop is not loaded.
 	var untouched: DriveSim = DriveSim.new(fresh_data())
 	var before: String = untouched.state_hash()

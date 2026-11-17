@@ -11,6 +11,8 @@ const WITH_ARGUMENTS: Array = [
 	["res://scenes/drive.tscn", ["--leg=night,2", "--bot=line"]],
 	["res://scenes/drive.tscn", ["--leg=roadworks,2", "--bot=line"]],
 	["res://scenes/drive.tscn", ["--leg=motorcade,3", "--bot=line"]],
+	# A Telling to its first stop and on: fork, leg, Exit, stop and save, fork again.
+	["res://scenes/drive.tscn", ["--table=drivers", "--seed=7", "--bot=line"], 9000],
 ]
 
 
@@ -34,7 +36,8 @@ func _initialize() -> void:
 		var run: Array = entry
 		var scene: String = run[0]
 		var arguments: PackedStringArray = PackedStringArray(run[1] as Array)
-		var result: Dictionary = Smoke.run_scene(scene, Smoke.DEFAULT_FRAMES, arguments)
+		var frames: int = GameData.as_int(run[2]) if run.size() > 2 else Smoke.DEFAULT_FRAMES
+		var result: Dictionary = Smoke.run_scene(scene, frames, arguments)
 		var errors: PackedStringArray = result["errors"]
 		var exit_code: int = result["exit_code"]
 		var seconds: float = result["seconds"]
