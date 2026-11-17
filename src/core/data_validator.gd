@@ -196,7 +196,16 @@ func _beat_schema() -> Dictionary:
 
 
 func _vehicle_schema() -> Dictionary:
-	return _obj({"id": _str()}, true)
+	return _obj({
+		"id": _str(),
+		"width": _num(0.1),
+		"length": _num(0.1),
+		"speed_kmh": _list_n(_num(0.0), 2),
+		"yields_to_horn": _bool(),
+		"honk_nerves": _num(0.0),
+		"acts": _list(_int(1.0, 3.0), 1),
+		"placeholder": _ref("placeholders"),
+	})
 
 
 func _modifier_schema() -> Dictionary:

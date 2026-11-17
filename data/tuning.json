@@ -68,7 +68,13 @@
     "gust_push": 1.5,
     "gust_duration": 1.0,
     "shoulder_speed_cap": 70,
-    "exit_max_speed": 70
+    "exit_max_speed": 70,
+
+    "rumble_strip_width": 0.5,
+    "shoulder_width": 2.5,
+    "median_barrier_x": -0.5,
+    "undivided_left_rail_margin": 0.5,
+    "start_gear": 1
   },
 
   "collisions": {
@@ -81,7 +87,17 @@
     "close_call_base_cash": 2,
     "chain_window": 4,
     "chain_step": 0.25,
-    "chain_cap": 3
+    "chain_cap": 3,
+
+    "hit_lamps": [1, 2, 3],
+    "hit_nerves": [10, 20, 30],
+    "scrape_speed_loss": 0.2,
+    "hit_forced_gear": 1,
+    "cone_nerves": 3,
+    "cone_suspicion": 10,
+    "close_call_nerves": 2,
+    "close_call_oncoming_mult": 2,
+    "traffic_follow_gap": 12
   },
 
   "nerves": {
@@ -239,6 +255,11 @@
     "gust_duration": "s",
     "shoulder_speed_cap": "km/h",
     "exit_max_speed": "km/h",
+    "rumble_strip_width": "m",
+    "shoulder_width": "m",
+    "median_barrier_x": "m, divided roads",
+    "undivided_left_rail_margin": "m beyond the oncoming lane",
+    "start_gear": "gear",
 
     "scrape_max_closing": "km/h",
     "crash_max_closing": "km/h",
@@ -250,6 +271,15 @@
     "chain_window": "s",
     "chain_step": "ratio",
     "chain_cap": "multiplier",
+    "hit_lamps": "lamps: scrape, crash, head-on",
+    "hit_nerves": "points: scrape, crash, head-on",
+    "scrape_speed_loss": "ratio",
+    "hit_forced_gear": "gear after a crash or head-on",
+    "cone_nerves": "points",
+    "cone_suspicion": "points",
+    "close_call_nerves": "points",
+    "close_call_oncoming_mult": "multiplier",
+    "traffic_follow_gap": "m a vehicle keeps behind the one ahead",
 
     "nerves_start": "points",
     "tremor_from": "points",

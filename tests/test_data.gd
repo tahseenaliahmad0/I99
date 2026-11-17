@@ -127,7 +127,11 @@ func _reset_fixture() -> void:
 	_list("modifiers", "modifiers").append({"id": "potholes"})
 	_list("legs", "legs").append(_parse(GDD_LEG))
 
-	_list("beats", "vehicles").append({"id": "truck"})
+	# The shipped data may already hold the truck the GDD example names.
+	if not data.has_record("vehicles", "truck"):
+		_list("beats", "vehicles").append({
+			"id": "truck", "width": 2.5, "length": 12.0, "speed_kmh": [60, 70],
+			"yields_to_horn": false, "honk_nerves": 0, "acts": [1, 2, 3], "placeholder": "veh_truck"})
 	_list("beats", "beats").append(_parse(GDD_BEAT))
 
 	_list("stops", "stops").append(_parse(GDD_STOP))

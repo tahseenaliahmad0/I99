@@ -32,8 +32,20 @@ var hand: HandSim = HandSim.new()
 var wheel: WheelSim = WheelSim.new()
 var gate: GearGate = GearGate.new()
 var gesture: Gesture = Gesture.new()
+var car: CarSim = CarSim.new()
+var traffic: TrafficSim = TrafficSim.new()
+var collision: Collision = Collision.new()
+var nerves: NervesSim = NervesSim.new()
+var faults: FaultSim = FaultSim.new()
+var rng: Rng = Rng.new()
 
 var tick: int = 0
+## Thousands of dinars (GDD 6). Never below zero.
+var cash: float = 0.0
+## True once every lamp is lit: the Telling is over (GDD 6.3).
+var wrecked: bool = false
+## Curve strength now: k of GDD 5.4, signed (+ pushes toward the right shoulder).
+var curve_k: float = 0.0
 
 ## Settings the simulation reads (GDD 17.1).
 var steer_sensitivity: float = 1.0
@@ -46,6 +58,13 @@ var _active_ritual: Dictionary = {}
 var _active_anchor: int = HandSim.NO_ANCHOR
 var _lever_anchor: int = HandSim.NO_ANCHOR
 var _lever_in_hand: bool = false
+var _gust_left: float = 0.0
+var _gust_push: float = 0.0
+var _gust_strength: float = 0.0
+var _gust_duration: float = 0.0
+var _grind_nerves: float = 0.0
+var _braking: bool = false
+var _forced_gear: int = 1
 
 
 func _init(game_data: GameData) -> void:
@@ -56,8 +75,20 @@ func _init(game_data: GameData) -> void:
 	wheel.configure(tuning)
 	gate.configure(tuning)
 	gesture.configure(tuning)
+	car.configure(tuning)
+	traffic.configure(data)
+	collision.configure(tuning)
+	nerves.configure(tuning)
+	faults.configure(tuning)
+	cash = tuning.f("cash_start")
+	_gust_strength = tuning.f("gust_push")
+	_gust_duration = tuning.f("gust_duration")
+	_grind_nerves = tuning.f("gate_grind_nerves")
+	_forced_gear = tuning.i("hit_forced_gear")
+	var start_gear: int = tuning.i("start_gear")
 	wheel.reset()
-	gate.reset(1)
+	gate.reset(start_gear)
+	car.reset(car.lanes / 2, start_gear)
 	_lever_anchor = hand.anchor_index(GEAR_LEVER)
 	# The tape deck shares the radio's place; it opens when a Mixtape is fitted (GDD 7.4).
 	hand.set_anchor_active(hand.anchor_index(TAPE_DECK), false)
@@ -96,12 +127,34 @@ func step(input: DriveInput) -> void:
 		wheel.release()
 	wheel.step(DT, hand.steer_px, steer_sensitivity)
 
-	# 5. Car: the gear lever.
+	# 5. Car: gear, speed, sideways motion, drift.
 	gate.step(DT, input.pointer_delta if _lever_in_hand else Vector2.ZERO, 1.0)
 	if gate.ground:
+		nerves.add(_grind_nerves)
 		_emit("sfx_requested", {"id": "grind"})
+	_braking = input.rmb
+	car.step(DT, wheel.steer(), gate.gear, _braking, _extra_drift())
+
+	# 6. Traffic.
+	traffic.step(DT, car.s, car.x, car.speed)
+
+	# 7. Collisions and close calls.
+	collision.step(DT, car, traffic, gate.gear)
+	_apply_collisions()
 
 	tick += 1
+
+
+## Sets the road the car is on: 1 to 3 lanes, divided or not (GDD 5.1).
+func set_road(lanes: int, divided: bool) -> void:
+	car.set_road(lanes, divided)
+
+
+## Starts one gust (GDD 5.4): gust_push for gust_duration. `direction` is +1
+## toward the right shoulder, -1 toward the left. `strength` scales it.
+func start_gust(direction: int, strength: float = 1.0) -> void:
+	_gust_left = _gust_duration
+	_gust_push = _gust_strength * strength * float(direction)
 
 
 ## What happened since the last call, oldest first.
@@ -137,7 +190,77 @@ func snapshot() -> Dictionary:
 		"gesture_kind": gesture.kind,
 		"gesture_progress": gesture.progress,
 		"gesture_anchor": hand.anchor_id(_active_anchor),
+		"car_x": car.x,
+		"car_s": car.s,
+		"speed": car.speed,
+		"v_lat": car.v_lat,
+		"drift": car.drift,
+		"lanes": car.lanes,
+		"divided": car.divided,
+		"on_rumble": car.on_rumble,
+		"on_shoulder": car.on_shoulder,
+		"braking": _braking,
+		"nerves": nerves.value,
+		"lamps": faults.lamps,
+		"lamp_capacity": faults.capacity,
+		"cash": cash,
+		"chain": collision.chain,
+		"wrecked": wrecked,
+		"vehicles": _vehicle_snapshots(),
 	}
+
+
+## One small dictionary per vehicle, positions relative to the car.
+func _vehicle_snapshots() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for vehicle: TrafficSim.Vehicle in traffic.vehicles:
+		out.append({
+			"id": vehicle.id,
+			"type": vehicle.type_id,
+			"x": vehicle.x,
+			"ahead": vehicle.s - car.s,
+			"direction": vehicle.direction,
+			"signalling": vehicle.signalling,
+			"role": vehicle.role,
+		})
+	return out
+
+
+# --- Car ---------------------------------------------------------------------
+
+## Every sideways push but the road's crown (GDD 5.4), m/s toward the right.
+func _extra_drift() -> float:
+	var push: float = car.curve_push(curve_k)
+	if _gust_left > 0.0:
+		_gust_left -= DT
+		push += _gust_push
+	return push
+
+
+func _apply_collisions() -> void:
+	if collision.hit != Collision.Hit.NONE:
+		var lit: int = faults.light(collision.hit_lamps)
+		nerves.add(collision.hit_nerves)
+		if collision.hit_forces_gear:
+			gate.force_gear(_forced_gear)
+			if _lever_in_hand:
+				_lever_in_hand = false
+				hand.unpin()
+		_emit("hit", {"kind": collision.hit, "lamps": lit, "vehicle": collision.hit_vehicle_id})
+		if lit > 0:
+			_emit("lamp_lit", {"lamps": faults.lamps, "lit": lit})
+		if faults.is_wrecked() and not wrecked:
+			wrecked = true
+			_emit("wreck", {})
+	if collision.close_calls > 0:
+		cash += collision.close_call_cash
+		nerves.add(collision.close_call_nerves + collision.honk_nerves)
+		_emit("close_call", {
+			"count": collision.close_calls,
+			"cash": collision.close_call_cash,
+			"mult": collision.close_call_mult,
+			"chain": collision.chain,
+		})
 
 
 # --- Rituals -----------------------------------------------------------------

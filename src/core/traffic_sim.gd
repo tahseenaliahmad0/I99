@@ -1,0 +1,210 @@
+class_name TrafficSim
+extends RefCounted
+## Traffic (GDD 5.5).
+##
+## Vehicles hold a lane at a set speed. Every lane change is scheduled by the
+## beat that spawned the vehicle, or caused by the horn. A lane change is
+## signalled for signal_time and takes lane_change_time. A vehicle that
+## catches up with another in its lane, or with the player from behind,
+## follows at its speed instead of driving through it (DECISIONS D-023).
+## Vehicles are removed despawn_behind metres behind the player.
+
+class Vehicle:
+	extends RefCounted
+	var id: int = 0
+	var type_id: StringName = &""
+	var type_index: int = 0
+	var half_width: float = 0.0
+	var half_length: float = 0.0
+	## Metres across the road and along the leg (centre of the vehicle).
+	var x: float = 0.0
+	var s: float = 0.0
+	## km/h along its own direction of travel; `cruise` is what it wants.
+	var speed: float = 0.0
+	var cruise: float = 0.0
+	## +1 with the player, -1 oncoming.
+	var direction: int = 1
+	var lane: int = 0
+	var yields_to_horn: bool = false
+	var honk_nerves: float = 0.0
+	## Lane change in progress: -1 signalling left, +1 right, 0 none.
+	var signalling: int = 0
+	var signal_left: float = 0.0
+	var change_left: float = 0.0
+	var change_from_x: float = 0.0
+	var change_to_x: float = 0.0
+	var change_to_lane: int = 0
+	var changing: bool = false
+	## A scheduled lane change: starts signalling when the vehicle reaches plan_s.
+	var has_plan: bool = false
+	var plan_s: float = 0.0
+	var plan_lane: int = 0
+	var plan_signal: float = 0.0
+	## Close-call bookkeeping (Collision).
+	var cc_overlap: bool = false
+	var cc_min_gap: float = INF
+	var cc_contact: bool = false
+	## Anything a leg wants to remember about this vehicle (police, motorcade...).
+	var role: StringName = &""
+
+	func closing_speed(player_speed: float) -> float:
+		if direction < 0:
+			return player_speed + speed
+		return player_speed - speed
+
+	func velocity() -> float:
+		return speed * float(direction)
+
+const KMH_TO_MS: float = 1.0 / 3.6
+
+var vehicles: Array[Vehicle] = []
+
+var _type_ids: Array[StringName] = []
+var _type_records: Array[Dictionary] = []
+var _lane_width: float = 0.0
+var _signal_time: float = 0.0
+var _late_signal_time: float = 0.0
+var _change_time: float = 0.0
+var _despawn_behind: float = 0.0
+var _follow_gap: float = 0.0
+var _car_half_length: float = 0.0
+var _car_half_width: float = 0.0
+var _next_id: int = 1
+
+
+func configure(data: GameData) -> void:
+	var tuning: Tuning = data.tuning
+	_lane_width = tuning.f("lane_width")
+	_signal_time = tuning.f("signal_time")
+	_late_signal_time = tuning.f("late_signal_time")
+	_change_time = tuning.f("lane_change_time")
+	_despawn_behind = tuning.f("despawn_behind")
+	_follow_gap = tuning.f("traffic_follow_gap")
+	_car_half_length = tuning.f("car_length") * 0.5
+	_car_half_width = tuning.f("car_width") * 0.5
+	_type_ids.clear()
+	_type_records.clear()
+	for record: Dictionary in data.records("vehicles"):
+		_type_ids.append(StringName(GameData.as_string(record.get("id"))))
+		_type_records.append(record)
+
+
+func clear() -> void:
+	vehicles.clear()
+	_next_id = 1
+
+
+func lane_center(lane: int) -> float:
+	return _lane_width * (float(lane) + 0.5)
+
+
+## Adds a vehicle. `lane` -1 is the oncoming lane. Unknown types are an error.
+func spawn(type_id: StringName, lane: int, s: float, speed_kmh: float, direction: int = 1) -> Vehicle:
+	var type_index: int = _type_ids.find(type_id)
+	if type_index == -1:
+		push_error("TrafficSim: unknown vehicle type '%s'" % type_id)
+		return null
+	var record: Dictionary = _type_records[type_index]
+	var vehicle: Vehicle = Vehicle.new()
+	vehicle.id = _next_id
+	_next_id += 1
+	vehicle.type_id = type_id
+	vehicle.type_index = type_index
+	vehicle.half_width = GameData.as_float(record.get("width")) * 0.5
+	vehicle.half_length = GameData.as_float(record.get("length")) * 0.5
+	vehicle.yields_to_horn = GameData.as_bool(record.get("yields_to_horn"))
+	vehicle.honk_nerves = GameData.as_float(record.get("honk_nerves"))
+	vehicle.lane = lane
+	vehicle.x = lane_center(lane)
+	vehicle.s = s
+	vehicle.speed = speed_kmh
+	vehicle.cruise = speed_kmh
+	vehicle.direction = direction
+	vehicles.append(vehicle)
+	return vehicle
+
+
+## Schedules one lane change: the vehicle starts signalling when it reaches
+## `at_s`, signals for signal_time (late_signal_time when `late`), then moves
+## over during lane_change_time.
+func plan_lane_change(vehicle: Vehicle, at_s: float, to_lane: int, late: bool = false) -> void:
+	vehicle.has_plan = true
+	vehicle.plan_s = at_s
+	vehicle.plan_lane = to_lane
+	vehicle.plan_signal = _late_signal_time if late else _signal_time
+
+
+## Starts a lane change now (the horn).
+func begin_lane_change(vehicle: Vehicle, to_lane: int, signal_time: float) -> void:
+	if vehicle.changing or vehicle.signalling != 0 or to_lane == vehicle.lane:
+		return
+	vehicle.signalling = 1 if to_lane > vehicle.lane else -1
+	vehicle.signal_left = signal_time
+	vehicle.change_to_lane = to_lane
+
+
+func step(dt: float, player_s: float, player_x: float, player_speed: float) -> void:
+	var index: int = 0
+	while index < vehicles.size():
+		var vehicle: Vehicle = vehicles[index]
+		_step_speed(vehicle, player_s, player_x, player_speed)
+		vehicle.s += vehicle.velocity() * KMH_TO_MS * dt
+		_step_lane_change(vehicle, dt)
+		if vehicle.s + vehicle.half_length < player_s - _despawn_behind:
+			vehicles.remove_at(index)
+		else:
+			index += 1
+
+
+## True when the two lanes' worth of road beside `s` in `lane` is clear of
+## other vehicles for `clearance` metres each way (for horn yields).
+func lane_is_free(lane: int, s: float, clearance: float, ignore: Vehicle) -> bool:
+	var center: float = lane_center(lane)
+	for other: Vehicle in vehicles:
+		if other == ignore:
+			continue
+		if absf(other.x - center) < _lane_width * 0.5 and absf(other.s - s) < clearance + other.half_length:
+			return false
+	return true
+
+
+func _step_speed(vehicle: Vehicle, player_s: float, player_x: float, player_speed: float) -> void:
+	var wanted: float = vehicle.cruise
+	if vehicle.direction > 0:
+		# Follow whatever is just ahead in the same lane: another vehicle...
+		for other: Vehicle in vehicles:
+			if other == vehicle or other.direction < 0:
+				continue
+			if absf(other.x - vehicle.x) >= vehicle.half_width + other.half_width:
+				continue
+			var gap: float = (other.s - other.half_length) - (vehicle.s + vehicle.half_length)
+			if gap >= 0.0 and gap < _follow_gap:
+				wanted = minf(wanted, other.speed)
+		# ...or the player, so ordinary traffic never rams him from behind.
+		if absf(player_x - vehicle.x) < vehicle.half_width + _car_half_width:
+			var gap_to_player: float = (player_s - _car_half_length) - (vehicle.s + vehicle.half_length)
+			if gap_to_player >= 0.0 and gap_to_player < _follow_gap:
+				wanted = minf(wanted, player_speed)
+	vehicle.speed = wanted
+
+
+func _step_lane_change(vehicle: Vehicle, dt: float) -> void:
+	if vehicle.has_plan and vehicle.s * float(vehicle.direction) >= vehicle.plan_s * float(vehicle.direction):
+		vehicle.has_plan = false
+		begin_lane_change(vehicle, vehicle.plan_lane, vehicle.plan_signal)
+	if vehicle.signalling != 0 and not vehicle.changing:
+		vehicle.signal_left -= dt
+		if vehicle.signal_left <= 0.0:
+			vehicle.changing = true
+			vehicle.change_left = _change_time
+			vehicle.change_from_x = vehicle.x
+			vehicle.change_to_x = lane_center(vehicle.change_to_lane)
+	if vehicle.changing:
+		vehicle.change_left -= dt
+		var done: float = 1.0 - clampf(vehicle.change_left / _change_time, 0.0, 1.0)
+		vehicle.x = lerpf(vehicle.change_from_x, vehicle.change_to_x, done)
+		if vehicle.change_left <= 0.0:
+			vehicle.x = vehicle.change_to_x
+			vehicle.lane = vehicle.change_to_lane
+			vehicle.changing = false
+			vehicle.signalling = 0
