@@ -99,6 +99,19 @@ func test_car_02() -> void:
 		_car.step(DT, 1.0, 3, false, 0.0)
 	check_near(_car.v_lat / expected, 1.0 - exp(-float(ticks) * DT / tau), 0.001, "after one lat_follow_tau the car has 63% of its sideways speed")
 
+	# First-order all the way: tick by tick the response is the exponential. (One
+	# sample at an even tick cannot tell a smooth rise from a ringing overshoot.)
+	_car.reset(1, 3)
+	var worst: float = 0.0
+	var highest: float = 0.0
+	for tick: int in roundi(3.0 * tau / DT):
+		_car.step(DT, 1.0, 3, false, 0.0)
+		_car.x = _car.lane_center(1)
+		worst = maxf(worst, absf(_car.v_lat - expected * (1.0 - exp(-float(tick + 1) * DT / tau))))
+		highest = maxf(highest, _car.v_lat)
+	check_near(worst, 0.0, 0.000001, "tick by tick the sideways speed is the command x (1 - e^(-t / lat_follow_tau))")
+	check(highest < expected, "and it never overshoots the command")
+
 	# Half lock is half the speed; the wheel at full lock is steer 1.
 	_car.reset(1, 3)
 	for _tick: int in int(1.5 / DT):
@@ -201,6 +214,14 @@ func _check_speed_changes() -> void:
 	var third: float = tuning.fi("gear_speeds", 2)
 	var fourth: float = tuning.fi("gear_speeds", 3)
 
+	# Each gear cruises at its speed of GDD 5.2; neutral, and a gear the box
+	# does not have, at none.
+	var gears: int = tuning.floats("gear_speeds").size()
+	for gear: int in range(1, gears + 1):
+		check_near(_car.cruise_speed(gear), tuning.fi("gear_speeds", gear - 1), 0.000001, "gear %d cruises at its gear_speeds entry" % gear)
+	check_eq(_car.cruise_speed(CarSim.NEUTRAL), 0.0, "neutral has no cruise speed")
+	check_eq(_car.cruise_speed(gears + 1), 0.0, "nor has a gear beyond the last")
+
 	# Releasing the brake: back up to cruise at accel.
 	_car.reset(1, 3)
 	_car.speed = third - 40.0
@@ -248,6 +269,14 @@ func _check_edges() -> void:
 	check_near(_car.road_right(), road_right, 0.000001, "three lanes are 3 x lane_width wide")
 	check_near(_car.lane_center(0), tuning.f("lane_width") * 0.5, 0.000001, "lane 0 is centred half a lane from the left edge")
 	check_near(_car.guardrail_x(), road_right + strip + tuning.f("shoulder_width"), 0.000001, "the guardrail stands beyond the strip and the shoulder")
+	check_near(half * 2.0, tuning.f("car_width"), 0.000001, "the car is car_width wide")
+	check_near(_car.length(), tuning.f("car_length"), 0.000001, "and car_length long")
+	check_near(_car.lane_width(), tuning.f("lane_width"), 0.000001, "a lane is lane_width wide")
+	for count: int in [1, 2]:
+		_car.set_road(count, true)
+		check_near(_car.road_right(), tuning.f("lane_width") * float(count), 0.000001, "a road of %d lane(s) is that many lane_widths wide" % count)
+		check_near(_car.guardrail_x(), tuning.f("lane_width") * float(count) + strip + tuning.f("shoulder_width"), 0.000001, "and its guardrail stands beyond its own strip and shoulder")
+	_car.set_road(3, true)
 
 	# In lane: neither strip nor shoulder.
 	_car.reset(2, 3)
@@ -266,6 +295,7 @@ func _check_edges() -> void:
 	check(_car.on_rumble and not _car.on_shoulder, "held there for 3 s it is still on the strip only")
 	check_near(_car.speed, third, 0.000001, "the rumble strip does not slow the car: it is still at third gear's cruise speed")
 	_car.reset(2, 4)
+	check(not _car.on_rumble, "reset() takes the car off the strip")
 	_car.x = road_right - half + strip * 0.5
 	for _tick: int in int(1.0 / DT):
 		_car.step(DT, 0.0, CarSim.NEUTRAL, false, -crown)
@@ -326,8 +356,14 @@ func _check_edges() -> void:
 	_car.x = _car.guardrail_x() - half - 0.05
 	var touched: bool = false
 	var speed_before: float = 0.0
+	# Where the car stood before the tick that touched, and the farthest a tick
+	# can carry it sideways: an edge is touched when the car's side gets there,
+	# not earlier and not after driving on through it.
+	var x_before: float = 0.0
+	var one_tick: float = (tuning.f("lat_per_kmh") * third + crown) * DT
 	for _tick: int in int(2.0 / DT):
 		speed_before = _car.speed
+		x_before = _car.x
 		_car.step(DT, 0.3, 3, false, 0.0)
 		collision.step(DT, _car, traffic, 3)
 		if _car.edge_touched != CarSim.EDGE_NONE:
@@ -343,6 +379,15 @@ func _check_edges() -> void:
 		check(not collision.hit_forces_gear, "and forces no gear")
 		check_eq(collision.hit_vehicle_id, 0, "no vehicle was hit: it was the rail")
 		check_eq(_car.v_lat, 0.0, "the rail stops the car's sideways speed")
+		var short_of_rail: float = _car.guardrail_x() - (x_before + half)
+		check(short_of_rail > 0.0 and short_of_rail <= one_tick, "it touched as its right side got to the guardrail: the tick before, that side was short of it by less than a tick of travel")
+		check(_car.on_shoulder, "(it is on the shoulder there)")
+		# reset() gives a clean slate wherever the car was.
+		_car.reset(1, 3)
+		check(_car.edge_touched == CarSim.EDGE_NONE and not _car.on_shoulder and not _car.on_rumble, "reset() puts the car in a lane touching nothing, on neither strip nor shoulder")
+		check_eq(_car.drift, 0.0, "with no drift on it yet")
+		_car.step(DT, 0.0, 3, false, 0.0)
+		check_near(_car.speed, third, 0.000001, "the shoulder's cap has not come along")
 
 	# The median barrier on a divided road.
 	_car.set_road(3, true)
@@ -351,6 +396,7 @@ func _check_edges() -> void:
 	collision.reset()
 	touched = false
 	for _tick: int in int(3.0 / DT):
+		x_before = _car.x
 		_car.step(DT, -0.4, 3, false, 0.0)
 		speed_before = _car.speed
 		collision.step(DT, _car, traffic, 3)
@@ -366,6 +412,10 @@ func _check_edges() -> void:
 		check_near(_car.speed, speed_before * (1.0 - tuning.f("scrape_speed_loss")), 0.000001, "and takes scrape_speed_loss off the speed")
 		check(not collision.hit_forces_gear, "and forces no gear")
 		check_eq(_car.v_lat, 0.0, "the barrier stops the car's sideways speed")
+		var short_of_barrier: float = (x_before - half) - tuning.f("median_barrier_x")
+		check(short_of_barrier > 0.0 and short_of_barrier <= one_tick, "it touched as its left side got to the barrier: the tick before, that side was short of it by less than a tick of travel")
+		_car.step(DT, 0.0, 3, false, 0.0)
+		check_eq(_car.edge_touched, CarSim.EDGE_NONE, "a tick later the car, pushed clear, touches nothing")
 
 	# An undivided road has the oncoming lane on the left instead.
 	_car.set_road(1, false)
@@ -382,6 +432,7 @@ func _check_edges() -> void:
 	collision.reset()
 	touched = false
 	for _tick: int in int(3.0 / DT):
+		x_before = _car.x
 		_car.step(DT, -0.4, 3, false, 0.0)
 		speed_before = _car.speed
 		collision.step(DT, _car, traffic, 3)
@@ -394,6 +445,8 @@ func _check_edges() -> void:
 		check_eq(collision.hit, Collision.Hit.SCRAPE, "touching the rail left of the oncoming lane is a scrape")
 		check_eq(collision.hit_lamps, int(tuning.fi("hit_lamps", 0)), "which lights one lamp")
 		check_near(_car.speed, speed_before * (1.0 - tuning.f("scrape_speed_loss")), 0.000001, "and takes scrape_speed_loss off the speed")
+		var short_of_left_rail: float = (x_before - half) - rail_x
+		check(short_of_left_rail > 0.0 and short_of_left_rail <= one_tick, "it touched as its left side got to the rail: the tick before, that side was short of it by less than a tick of travel")
 	_car.set_road(3, true)
 
 
@@ -499,6 +552,15 @@ func _check_drifts() -> void:
 	for _tick: int in int(tuning.f("gust_duration") * 0.5 / DT):
 		half_way.step(input)
 	check_near(half_way.car.drift, tuning.f("crown_drift") + tuning.f("gust_push"), 0.000001, "during the gust the drift is crown plus gust_push")
+
+	# The other way, and stronger: start_gust's direction and strength.
+	var strong_calm: DriveSim = DriveSim.new(fresh_data())
+	var strong: DriveSim = DriveSim.new(fresh_data())
+	strong.start_gust(1, 2.0)
+	for _tick: int in ticks:
+		strong_calm.step(input)
+		strong.step(input)
+	check_near(strong.car.x - strong_calm.car.x, 2.0 * tuning.f("gust_push") * tuning.f("gust_duration"), tuning.f("gust_push") * DT * 0.25, "a gust of strength 2 toward the right shoulder carries the car twice as far that way")
 
 	# Other lengths are as exact. A gust lasts the nearest whole number of ticks
 	# to its duration: three times gust_duration is three times the ticks, and a
@@ -620,8 +682,10 @@ func _check_steering_in_sim() -> void:
 	check_near(_sim_sideways_rate(sim, input), crown, 0.001, "gripped and not turned, the wheel is straight: the car moves with the crown alone")
 	_drag(sim, input, lock_px * 1.2)
 	check_near(_sim_sideways_rate(sim, input), full + crown, 0.001, "the mouse dragged right to full lock at 100 km/h: the car moves 5.0 m/s to the right, plus the crown")
+	check_near(sim.car.v_lat, full, 0.001, "and its v_lat has settled at lat_per_kmh x speed")
 	_drag(sim, input, -lock_px * 2.4)
 	check_near(_sim_sideways_rate(sim, input), -full + crown, 0.001, "dragged left to full lock: it moves 5.0 m/s to the left, less the crown")
+	check_near(sim.car.v_lat, -full, 0.001, "with v_lat settled the other way")
 	_drag(sim, input, lock_px * 1.5)
 	check_near(_sim_sideways_rate(sim, input), full * 0.5 + crown, 0.001, "dragged back to half right lock: half as fast to the right (steer = wheel_angle / wheel_max_angle)")
 	check(sim.hand.gripping, "(the hand held the wheel throughout)")
@@ -701,9 +765,11 @@ func _scrape_edge_in_sim(edge: String, lanes: int, divided: bool, lane: int, sid
 	var touched: bool = false
 	var nerves_before: float = 0.0
 	var speed_before: float = 0.0
+	var x_before: float = 0.0
 	for _tick: int in int(5.0 / DT):
 		nerves_before = sim.nerves.value
 		speed_before = sim.car.speed
+		x_before = sim.car.x
 		sim.step(input)
 		if sim.car.edge_touched != CarSim.EDGE_NONE:
 			touched = true
@@ -712,9 +778,13 @@ func _scrape_edge_in_sim(edge: String, lanes: int, divided: bool, lane: int, sid
 		return
 	var pushback: float = tuning.f("hit_pushback")
 	var pushed_to: float = sim.car.left_limit_x() + sim.car.half_width() + pushback
+	var short_of_it: float = (x_before - sim.car.half_width()) - sim.car.left_limit_x()
 	if side > 0.0:
 		pushed_to = sim.car.guardrail_x() - sim.car.half_width() - pushback
+		short_of_it = sim.car.guardrail_x() - (x_before + sim.car.half_width())
+	var one_tick: float = (tuning.f("lat_per_kmh") * tuning.fi("gear_speeds", 2) + tuning.f("crown_drift")) * DT
 	check_eq(sim.car.edge_touched, CarSim.EDGE_RIGHT if side > 0.0 else CarSim.EDGE_LEFT, "%s: on its side of the road" % edge)
+	check(short_of_it > 0.0 and short_of_it <= one_tick, "%s: the car touched it as its side got there: the tick before, it was short of it by less than a tick of travel" % edge)
 	check_near(sim.car.x, pushed_to, 0.000001, "%s: the car is pushed hit_pushback back from it" % edge)
 	check_eq(sim.collision.hit, Collision.Hit.SCRAPE, "%s: touching it is a scrape" % edge)
 	check_eq(sim.faults.lamps, int(tuning.fi("hit_lamps", 0)), "%s: one lamp is lit" % edge)
@@ -729,6 +799,24 @@ func _scrape_edge_in_sim(edge: String, lanes: int, divided: bool, lane: int, sid
 			if GameData.as_int(event.get("vehicle"), -1) == 0:
 				rail_events += 1
 	check(hit_events == 1 and rail_events == 1, "%s: the scrape is announced once, as a hit on no vehicle" % edge)
+
+	# Held against it at full lock the car is back at once, but it cannot be hit
+	# again for hit_immunity (GDD 5.6); the first touch after that is a scrape.
+	var lamps: int = sim.faults.lamps
+	var touches: int = 0
+	for _tick: int in int(tuning.f("hit_immunity") / DT) - 2:
+		sim.step(input)
+		if sim.car.edge_touched != CarSim.EDGE_NONE:
+			touches += 1
+	check(touches > 0, "%s: held at full lock the car is against it again within hit_immunity" % edge)
+	check_eq(sim.faults.lamps, lamps, "%s: but it cannot be hit again for hit_immunity" % edge)
+	var again: bool = false
+	for _tick: int in int(1.0 / DT):
+		sim.step(input)
+		if sim.collision.hit != Collision.Hit.NONE:
+			again = true
+			break
+	check(again and sim.faults.lamps == lamps + int(tuning.fi("hit_lamps", 0)), "%s: once hit_immunity is over the next touch is a scrape again" % edge)
 
 
 # --- Helpers ------------------------------------------------------------------
