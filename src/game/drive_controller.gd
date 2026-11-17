@@ -22,13 +22,18 @@ var _leg_spec: String = ""
 var _legs_begun: int = 0
 var _plan: Dictionary = {}
 ## `--bot=`: until the DriverBot of GDD 13.8 is built (M11), any value holds
-## the car on the plan's line, which is enough to look at a leg.
+## the car on the plan's line, which is enough to look at a leg. In a
+## Telling it also keeps third gear, pulls in at every Exit and leaves each
+## stop after a moment.
 var _bot: bool = false
+## Seconds the stand-in bot has stood at a stop.
+var _bot_stood: float = 0.0
 
 @onready var _camera: Camera3D = $Camera3D
 @onready var _cabin: CabinView = $Cabin
 @onready var _hand: HandView = $Cabin/Hand
 @onready var _road: RoadView = $Road
+@onready var _stop: StopView = $Cabin/Stop
 @onready var _sky: SkyView = $Sky
 @onready var _pointer: PointerView = $Overlay/Pointer
 @onready var _hud: DebugHud = $DebugHUD
@@ -49,11 +54,18 @@ func _ready() -> void:
 	_cabin.setup(data, _factory)
 	_hand.setup(data, _factory, sim.space)
 	_road.setup(data, _factory)
+	_stop.setup(data, _factory)
 	_sky.setup(data, _factory)
 	_pointer.setup(data, _factory)
 	sim.rng.reseed(int(str(Game.args.get("seed", "1"))))
 	_bot = Game.args.has("bot")
-	if Game.args.has("leg"):
+	if Game.args.has("continue") and not Game.saved_telling.is_empty() and sim.restore(Game.saved_telling):
+		print("[drive] continuing the Telling of %s" % sim.run.table)
+	elif Game.args.has("table"):
+		# A Telling (GDD 11.1), from Baghdad.
+		sim.begin_telling(str(Game.args["table"]), int(str(Game.args.get("seed", "1"))))
+		print("[drive] a Telling for %s, seed %d" % [sim.run.table, sim.run.seed])
+	elif Game.args.has("leg"):
 		_leg_spec = str(Game.args["leg"])
 		_begin_leg()
 	else:
@@ -99,11 +111,20 @@ func _physics_process(_delta: float) -> void:
 		_input.pointer = sim.hand.anchor_pointer(_aim_anchor)
 	if not _leg_spec.is_empty() and not sim.leg.active:
 		_begin_leg()
-	if _bot and sim.leg.active and not sim.leg.on_side_road:
-		sim.car.x = _line_x(sim.car.s)
+	if _bot:
+		_stand_in_bot()
 	sim.step(_input)
 	for event: Dictionary in sim.drain_events():
-		Events.emit_event(GameData.as_string(event.get("type")), event)
+		var type: String = GameData.as_string(event.get("type"))
+		Events.emit_event(type, event)
+		if type == "stop_entered":
+			# The game saves at every stop and after every boss (GDD 11.1).
+			Game.write_save(sim.checkpoint)
+			print("[drive] stop %s, saved (frame %d, clock %s)" % [str(event.get("stop")), _frames, sim.clock.text()])
+		elif type == "arrived":
+			# Until the wedding room exists (M9) the night simply begins again.
+			Game.write_save({})
+			sim.begin_telling(sim.run.table, sim.run.seed + 1)
 
 
 func _process(delta: float) -> void:
@@ -115,6 +136,7 @@ func _process(delta: float) -> void:
 	_cabin.apply(snapshot)
 	_hand.apply(snapshot)
 	_road.apply(snapshot, delta)
+	_stop.apply(snapshot)
 	_sky.apply(snapshot)
 	_pointer.apply(snapshot, _camera, _cabin)
 	_hud.apply(snapshot)
@@ -122,6 +144,43 @@ func _process(delta: float) -> void:
 	_frames += 1
 	if not _shot_path.is_empty() and _frames == _shot_frame:
 		_save_shot()
+
+
+## The stand-in for the DriverBot (M11): it sets the car on a line and works
+## the gear and the wheel through the input, so that a leg or a whole
+## Telling can be looked at without a player.
+func _stand_in_bot() -> void:
+	if sim.stopped:
+		# A moment at the stop, then the wheel is held until he is off.
+		_bot_stood += DriveSim.DT
+		if _bot_stood > 2.0:
+			_input.pointer_is_absolute = true
+			_input.pointer = sim.space.point_to_pointer(sim.space.grip_reference)
+			_input.lmb = true
+		return
+	_bot_stood = 0.0
+	if not sim.leg.active or sim.wrecked or sim.leg.on_side_road:
+		return
+	var car: CarSim = sim.car
+	if not sim.run.active:
+		car.x = _line_x(car.s)
+		return
+	if not is_same(_plan, sim.leg.plan):
+		_plan = sim.leg.plan
+	var gear: int = 3
+	var x: float = _line_x(car.s)
+	var slip: Vector2 = sim.exit_slip()
+	if slip.x >= 0.0 and car.s >= slip.x:
+		# Into the slip lane in second gear: he stops at every stop.
+		gear = 2
+		x = lerpf(x, car.lane_center(car.lanes - 1), clampf((car.s - slip.x) / (0.5 * (slip.y - slip.x)), 0.0, 1.0))
+	elif sim.run.fork_ahead() and sim.leg.length - car.s < 120.0:
+		# The left branch on even legs, the right on odd ones.
+		var side: float = 0.25 if sim.run.legs_done % 2 == 0 else 0.75
+		x = lerpf(x, car.road_right() * side, clampf(1.0 - (sim.leg.length - car.s - 40.0) / 80.0, 0.0, 1.0))
+	if sim.gate.gear != gear:
+		sim.gate.reset(gear)
+	car.x = x
 
 
 ## Starts the leg named by `--leg=<id>[,act[,modifier]]` in third gear; each

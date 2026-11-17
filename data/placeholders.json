@@ -771,5 +771,120 @@
       "text": "[SIGN]"
     },
     "scene": null
+  },
+  "stop_vendor": {
+    "placeholder": {
+      "shape": "capsule",
+      "size": [
+        0.17,
+        1.1
+      ],
+      "color": "#4E9A51"
+    },
+    "scene": null
+  },
+  "stop_shady": {
+    "placeholder": {
+      "shape": "capsule",
+      "size": [
+        0.17,
+        1.1
+      ],
+      "color": "#2F4F3A"
+    },
+    "scene": null
+  },
+  "stop_tray": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.16,
+        0.02,
+        0.64
+      ],
+      "color": "#8A6B45"
+    },
+    "scene": null
+  },
+  "stop_offer": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.07,
+        0.07,
+        0.07
+      ],
+      "color": "#E8E0D0"
+    },
+    "scene": null
+  },
+  "stop_offer_text": {
+    "placeholder": {
+      "shape": "label",
+      "size": [
+        0.0012
+      ],
+      "color": "#FFFFFF",
+      "text": "[OFFER]"
+    },
+    "scene": null
+  },
+  "stop_stall": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        3.0,
+        2.6,
+        4.0
+      ],
+      "color": "#B98B5E"
+    },
+    "scene": null
+  },
+  "cabin_clock_text": {
+    "placeholder": {
+      "shape": "label",
+      "size": [
+        0.0011
+      ],
+      "color": "#7CFFB2",
+      "text": "22:00"
+    },
+    "scene": null
+  },
+  "road_gore": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        1.2,
+        1.0,
+        8.0
+      ],
+      "color": "#D8C24A"
+    },
+    "scene": null
+  },
+  "road_fork_sign": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        11.0,
+        0.25,
+        0.25
+      ],
+      "color": "#A8ADB3"
+    },
+    "scene": null
+  },
+  "road_fork_text": {
+    "placeholder": {
+      "shape": "label",
+      "size": [
+        0.03
+      ],
+      "color": "#FFFFFF",
+      "text": "[FORK]"
+    },
+    "scene": null
   }
 }

@@ -62,6 +62,29 @@ func retell() -> void:
 	begin(table, Rng.derive(seed, RETELLING_SALT + retellings))
 
 
+## A Telling loaded from a save: he stands at a stop (`stage_id` is "stop",
+## on the leg he took on `side` of the last fork, or "boss_stop").
+func resume(table_id: String, telling_seed: int, told_again: int, in_act: int, legs_behind: int, stage_id: String, side: int) -> void:
+	active = true
+	table = table_id
+	seed = telling_seed
+	retellings = told_again
+	act = clampi(in_act, 1, RunGenerator.ACTS)
+	legs_done = clampi(legs_behind, 0, RunGenerator.LEGS_PER_ACT)
+	boss = ""
+	stop = ""
+	if stage_id == STAGE_NAMES[Stage.BOSS_STOP]:
+		branch = {}
+		branches = []
+		boss = GameData.as_string(boss_record().get("id"))
+		enter_boss_stop()
+		return
+	var fork: Array[Dictionary] = _fork(legs_done)
+	branch = fork[clampi(side, 0, fork.size() - 1)] if not fork.is_empty() else {}
+	branches = _fork(legs_done + 1)
+	enter_stop()
+
+
 func stage_name() -> String:
 	return STAGE_NAMES[stage]
 

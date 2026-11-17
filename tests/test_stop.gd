@@ -255,6 +255,8 @@ func _check_tea_stall() -> void:
 	glass.supply = 1
 	glass.hot_left = 0.0
 	_into_stall()
+	# (A stop makes the simulation anew from what a save holds: look again.)
+	glass = _sim.items.item(&"tea_glass")
 	check_eq(_sim.run.stop, "tea_stall", "he is at a tea stall")
 	check_near(_sim.clock.minutes - _clock_at_stall, 20.0, 0.01, "which charges 20 game minutes on entry")
 	check_near(_sim.nerves.value, GameData.as_float(data.record("stops", "tea_stall").get("nerves_to")), 0.000001, "and sets his Nerves to 30")

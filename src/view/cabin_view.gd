@@ -9,6 +9,8 @@ extends Node3D
 const WHEEL_NODE: String = "Wheel"
 const GEAR_LEVER_NODE: String = "GearLever"
 const GEAR_LEVER_ANCHOR: String = "gear_lever"
+## Anchors whose marker hangs on a node of its own (GDD 13.5).
+const NAMED_NODES: Dictionary = {"mirror": "Mirror", "visor": "Visor", "seat": "Seat", "glovebox": "Glovebox"}
 
 var _factory: PlaceholderFactory
 var _wheel: Node3D
@@ -33,6 +35,7 @@ var _item_nodes: Dictionary = {}
 var _lit_tip: Node3D
 var _visor_down: Node3D
 var _items: Node3D
+var _clock: Label3D
 
 
 func setup(data: GameData, factory: PlaceholderFactory) -> void:
@@ -59,12 +62,17 @@ func setup(data: GameData, factory: PlaceholderFactory) -> void:
 			continue
 		var marker: Node3D = factory.make(GameData.as_string(anchor.get("placeholder"), default_marker))
 		marker.name = id
-		marker.position = GameData.as_vec3(anchor.get("pos"))
+		# An anchor inside a prop shows its marker on the prop's surface.
+		marker.position = GameData.as_vec3(anchor.get("pos")) + GameData.as_vec3(anchor.get("marker_offset"))
 		if id == GEAR_LEVER_ANCHOR:
 			var lever: Node3D = _group(GEAR_LEVER_NODE)
 			lever.add_child(marker)
 			_lever_knob = marker
 			_lever_rest = marker.position
+		elif NAMED_NODES.has(id):
+			# The nodes GDD 13.5 names: later milestones hang the mirror image,
+			# the visor's flip and the glovebox door on them.
+			_group(GameData.as_string(NAMED_NODES[id])).add_child(marker)
 		else:
 			anchors.add_child(marker)
 		_markers[id] = marker
@@ -102,6 +110,12 @@ func setup(data: GameData, factory: PlaceholderFactory) -> void:
 	_cash_per_note = tuning.f("cash_per_note")
 	dash.add_child(_cash)
 
+	# The dashboard clock (GDD 6.4, 16.3).
+	_clock = factory.make("cabin_clock_text") as Label3D
+	if _clock != null:
+		_clock.position = Vector3(tuning.fi("dash_clock_pos", 0), tuning.fi("dash_clock_pos", 1), tuning.fi("dash_clock_pos", 2))
+		dash.add_child(_clock)
+
 	_lit_tip = factory.make("item_cigarette_lit")
 	_lit_tip.visible = false
 	_items.add_child(_lit_tip)
@@ -135,6 +149,8 @@ func apply(snapshot: Dictionary) -> void:
 
 	var cash: float = snapshot["cash"]
 	_cash.scale.y = maxf(cash / _cash_per_note, 0.05)
+	if _clock != null:
+		_clock.text = str(snapshot["clock"])
 
 	_visor_down.visible = snapshot["visor_down"]
 	var items: Array[Dictionary] = snapshot["items"]

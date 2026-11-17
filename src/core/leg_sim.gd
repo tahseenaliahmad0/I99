@@ -216,6 +216,25 @@ func _make_hazard(kind: String, s: float, x: float) -> Hazard:
 	return hazard
 
 
+## Puts the leg where it is when the car has come to `s` after `seconds`
+## (a Telling loaded from a save stands at the leg's stall): what the road
+## held before that point is behind him and is not put back.
+func fast_forward(s: float, seconds: float) -> void:
+	time = seconds
+	while _next_spawn < _spawns.size() and GameData.as_float(GameData.as_dict(_spawns[_next_spawn]).get("trigger_s")) <= s:
+		_next_spawn += 1
+	while _next_gust < _gusts.size() and GameData.as_float(GameData.as_dict(_gusts[_next_gust]).get("s")) - _gust_tell * _par_ms <= s:
+		_next_gust += 1
+	_waiting = []
+	_changers = []
+	movers = []
+	_flock_started = true
+	_melon_truck = null
+	_shed_left = -1.0
+	gust_tell_left = 0.0
+	gust_tell_dir = 0
+
+
 # --- Side roads --------------------------------------------------------------
 
 ## The car has left the main road for a side road that begins at `offset`
@@ -259,11 +278,12 @@ func leave_side_road() -> void:
 ## Before the car moves: the leg's clock, the bend under the car, and gusts.
 ## A gust is announced when the car is gust_tell seconds short of it at par,
 ## and blows exactly gust_tell seconds later.
-func step_road(dt: float) -> void:
+func step_road(dt: float, clock_dt: float = -1.0) -> void:
 	if not active:
 		curve_k = 0.0
 		return
-	time += dt
+	# The leg's clock is his, not the road's: it does not slow with the road.
+	time += clock_dt if clock_dt >= 0.0 else dt
 	if on_side_road:
 		curve_k = 0.0
 		return

@@ -10,10 +10,10 @@
 
   "anchors": [
     { "id": "wiper_stalk",        "pos": [0.22, 0.02, 0.02],    "time_s": 0.10 },
-    { "id": "horn",               "pos": [0.00, 0.00, 0.00],    "time_s": 0.13 },
+    { "id": "horn",               "pos": [0.00, 0.00, 0.00],    "time_s": 0.13, "marker_offset": [0.0, 0.0, 0.05] },
     { "id": "hazard_button",      "pos": [0.30, 0.06, -0.14],   "time_s": 0.16 },
     { "id": "radio",              "pos": [0.38, 0.02, -0.14],   "time_s": 0.21 },
-    { "id": "tape",               "pos": [0.38, 0.02, -0.14],   "time_s": 0.21 },
+    { "id": "tape",               "pos": [0.38, 0.02, -0.14],   "time_s": 0.21, "over": "radio" },
     { "id": "ashtray",            "pos": [0.34, -0.08, -0.10],  "time_s": 0.21 },
     { "id": "gear_lever",         "pos": [0.33, -0.12, 0.12],   "time_s": 0.23, "placeholder": "cabin_gear_knob" },
     { "id": "cup_a",              "pos": [0.38, -0.12, -0.02],  "time_s": 0.24 },
@@ -27,7 +27,7 @@
     { "id": "mirror",             "pos": [0.42, 0.50, -0.20],   "time_s": 0.34, "placeholder": "cabin_mirror" },
     { "id": "dash_2",             "pos": [0.62, 0.20, -0.30],   "time_s": 0.39 },
     { "id": "passenger_shoulder", "pos": [0.75, 0.15, 0.50],    "time_s": 0.53 },
-    { "id": "glovebox",           "pos": [0.92, -0.10, -0.22],  "time_s": 0.57 },
+    { "id": "glovebox",           "pos": [0.92, -0.10, -0.22],  "time_s": 0.57, "marker_offset": [0.0, 0.0, 0.06] },
     { "id": "seat",               "pos": [0.80, -0.25, 0.45],   "time_s": 0.60 },
     { "id": "indicator_stalk",    "pos": [-0.22, 0.02, 0.02],   "time_s": 0.41, "via_w": true },
     { "id": "headlight_knob",     "pos": [-0.30, -0.02, -0.12], "time_s": 0.53, "via_w": true },
@@ -37,7 +37,12 @@
     { "id": "offer_2",            "pos": [0.98, 0.14, 0.14],    "time_s": 0.57 },
     { "id": "offer_3",            "pos": [0.98, 0.14, 0.26],    "time_s": 0.59 },
     { "id": "offer_4",            "pos": [0.98, 0.14, 0.38],    "time_s": 0.62 },
-    { "id": "offer_5",            "pos": [0.98, 0.14, 0.50],    "time_s": 0.66 }
+    { "id": "offer_5",            "pos": [0.98, 0.14, 0.50],    "time_s": 0.66 },
+    { "id": "offer_6",            "pos": [1.02, 0.30, 0.02],    "time_s": 0.60 },
+    { "id": "offer_7",            "pos": [1.02, 0.30, 0.14],    "time_s": 0.61 },
+    { "id": "offer_8",            "pos": [1.02, 0.30, 0.26],    "time_s": 0.63 },
+    { "id": "offer_9",            "pos": [1.02, 0.30, 0.38],    "time_s": 0.65 },
+    { "id": "offer_10",           "pos": [1.02, 0.30, 0.50],    "time_s": 0.69 }
   ],
 
   "slots": [
@@ -73,7 +78,7 @@
     { "id": "door_left",     "placeholder": "cabin_door",      "pos": [-0.60, -0.05, 0.25] },
     { "id": "door_right",    "placeholder": "cabin_door",      "pos": [1.15, -0.05, 0.25] },
     { "id": "hood",          "placeholder": "cabin_hood",      "pos": [0.275, -0.10, -1.05] },
-    { "id": "left_sleeve",   "placeholder": "left_sleeve",     "pos": [-0.22, -0.04, 0.55] },
+    { "id": "left_sleeve",   "placeholder": "left_sleeve",     "pos": [-0.27, 0.03, 0.10] },
     { "id": "floor",         "placeholder": "cabin_floor",     "pos": [0.275, -0.45, 0.20] }
   ]
 }

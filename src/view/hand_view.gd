@@ -10,6 +10,7 @@ var _upper_length: float = 0.0
 var _forearm_length: float = 0.0
 var _slide_max: float = 0.0
 var _pole: Vector3 = Vector3.DOWN
+var _gate_scale: float = 0.0
 
 var _upper: MeshInstance3D
 var _forearm: MeshInstance3D
@@ -24,6 +25,7 @@ func setup(data: GameData, factory: PlaceholderFactory, space: CabinSpace) -> vo
 	_upper_length = tuning.f("arm_upper_length")
 	_forearm_length = tuning.f("arm_forearm_length")
 	_slide_max = tuning.f("shoulder_slide_max")
+	_gate_scale = tuning.f("gate_view_scale")
 	_pole = Vector3(tuning.fi("arm_pole", 0), tuning.fi("arm_pole", 1), tuning.fi("arm_pole", 2)).normalized()
 
 	_upper = factory.make("arm_upper") as MeshInstance3D
@@ -43,6 +45,11 @@ func setup(data: GameData, factory: PlaceholderFactory, space: CabinSpace) -> vo
 
 func apply(snapshot: Dictionary) -> void:
 	var hand: Vector3 = snapshot["hand_pos"]
+	# On the gear lever the hand is on the knob, which moves with the lever
+	# (CabinView draws the knob the same way).
+	if snapshot["hand_at"] == CabinView.GEAR_LEVER_ANCHOR:
+		var lever: Vector2 = snapshot["lever"]
+		hand += Vector3(lever.x, 0.0, -lever.y) * _gate_scale
 	var solved: Dictionary = solve(_shoulder, hand, _upper_length, _forearm_length, _slide_max, _pole)
 	var shoulder: Vector3 = solved["shoulder"]
 	var elbow: Vector3 = solved["elbow"]

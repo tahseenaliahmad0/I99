@@ -9,6 +9,17 @@ extends RefCounted
 ## "indicate", "window", "ash", "radio_step"). Items never change other
 ## systems directly beyond that: they add, remove or query statuses in the
 ## EffectSystem and emit resource changes (GDD 13.3).
+##
+## What an item gives and takes (GDD 7.2) is a list of entries, each one of:
+##   {"effect": id, "duration": s}            on use: a timed status
+##   {"resource": "nerves"|"cash", "amount": n, "over": s}
+##                                            on use: at once, or spread over s
+##   {"effect": id, "for": "leg"}             on use: a status held to the leg's end
+##   {"effect": id}                           a status held on while it is there
+##   {"resource": "nerves", "per_s": r}       Nerves by the second while it is there
+##   {"effect": "haze_rate", "amount": r}     haze by the second while it is there
+## each with an optional "while" condition. A resource entry may name a
+## "synergy" rule: when that synergy's partner is there, its amount is used.
 
 const SLOT_ANCHOR: String = "@slot"
 const STATIC: StringName = &"static"
@@ -16,6 +27,14 @@ const AWAKE: StringName = &"awake"
 const VISOR_DOWN: StringName = &"visor_down"
 const HAZE_RATE: String = "haze_rate"
 const FLAG_WINDOW: StringName = &"window_open"
+const MUSIC: StringName = &"music"
+## Synergy partners that are not items (GDD 7.8).
+const TOKEN_MUSIC: String = "music"
+const TOKEN_PHOTO: String = "photo"
+## What an item that plays in the deck is tagged (the mixtape).
+const TAG_TAPE: String = "tape"
+## Who holds a status that lasts for the rest of the leg.
+const LEG: StringName = &"leg"
 
 ## One thing in the cabin.
 class Item:
@@ -37,6 +56,41 @@ class Item:
 	var lapse_left: float = -1.0
 	## The status this item's use switches on ("lit"), if any.
 	var use_effect: StringName = &""
+	## A tape (it has a "side_s"): seconds it has played since it was last flipped.
+	var is_tape: bool = false
+	var side_time: float = 0.0
+	## What it does by the second while it is in the cabin.
+	var standing: Array[Standing] = []
+
+
+## One thing an item does all the time it is there (its condition allowing).
+class Standing:
+	extends RefCounted
+	const HAZE: int = 0
+	const NERVES: int = 1
+	const STATUS: int = 2
+	var kind: int = HAZE
+	var amount: float = 0.0
+	var effect: StringName = &""
+	var condition: Condition = null
+	## The status is being held on right now.
+	var held: bool = false
+
+
+## A condition of items.json or rituals.json, read once: an effect id,
+## "supply>0", "hot", "playing", "warbling" or "flag:<switch>", each
+## optionally negated with "!".
+class Condition:
+	extends RefCounted
+	const EFFECT: int = 0
+	const SUPPLY: int = 1
+	const HOT: int = 2
+	const FLAG: int = 3
+	const PLAYING: int = 4
+	const WARBLING: int = 5
+	var negated: bool = false
+	var word: int = EFFECT
+	var name: StringName = &""
 
 var items: Array[Item] = []
 ## Cabin switches: hazards, high_beam, window_open, glovebox_open.
@@ -78,6 +132,16 @@ var _faults: FaultSim
 
 ## anchor id -> Array of control rituals (no owning item) offered there.
 var _controls: Dictionary = {}
+## anchor id -> Array of rituals an item has at a place of their own, not at
+## its slot (the painkillers are taken at his face).
+var _placed: Dictionary = {}
+## Statuses held until the leg ends.
+var _leg_holds: Array[StringName] = []
+## anchor id -> the anchor that takes its place while something sits there
+## (anchors.json "over": the tape deck is the radio).
+var _covered_by: Dictionary = {}
+## condition text -> Condition.
+var _conditions: Dictionary = {}
 ## slot id -> anchor id ("" for slots with no anchor).
 var _slot_anchor: Dictionary = {}
 var _stations: Array[StringName] = []
@@ -141,16 +205,23 @@ func configure(data: GameData, effects: EffectSystem, nerves: NervesSim, traffic
 		_stations.append(StringName(GameData.as_string(station)))
 
 	_controls.clear()
+	_placed.clear()
 	for ritual: Dictionary in data.records("rituals"):
-		if ritual.has("item"):
-			continue
 		var anchor: String = GameData.as_string(ritual.get("anchor"))
-		var offered: Array = _controls.get(anchor, [])
+		if anchor == SLOT_ANCHOR:
+			continue
+		var at_anchor: Dictionary = _placed if ritual.has("item") else _controls
+		var offered: Array = at_anchor.get(anchor, [])
 		offered.append(ritual)
-		_controls[anchor] = offered
+		at_anchor[anchor] = offered
 	_slot_anchor.clear()
 	for slot: Dictionary in data.records("slots"):
 		_slot_anchor[GameData.as_string(slot.get("id"))] = GameData.as_string(slot.get("anchor"))
+	_covered_by.clear()
+	for anchor: Dictionary in data.records("anchors"):
+		if anchor.has("over"):
+			_covered_by[GameData.as_string(anchor.get("over"))] = GameData.as_string(anchor.get("id"))
+	_conditions.clear()
 	reset_cabin()
 
 
@@ -171,6 +242,7 @@ func reset_cabin() -> void:
 	cash_delta = 0.0
 	_horn_cooldown = 0.0
 	_drips.clear()
+	_leg_holds.clear()
 	events.clear()
 	for entry: Variant in GameData.as_array(_data.root("items").get("starting_cabin")):
 		var start: Dictionary = GameData.as_dict(entry)
@@ -178,9 +250,44 @@ func reset_cabin() -> void:
 				GameData.as_int(start.get("supply"), -1))
 
 
+## The cabin of a Telling loaded from a save: nothing but what the save lists.
+func empty_cabin() -> void:
+	items.clear()
+	flags.clear()
+
+
+## Tunes the radio to a station (or to static) without the dial.
+func set_radio(station: StringName) -> void:
+	_radio_index = _stations.find(station)
+	radio = station if _radio_index != -1 else STATIC
+	_radio_held = STATIC
+	_radio_time = 0.0
+
+
 ## What resets when a new leg begins.
 func begin_leg() -> void:
 	photo_used = false
+	for held: StringName in _leg_holds:
+		_effects.hold(held, LEG, false)
+	_leg_holds.clear()
+
+
+## What of this leg a stop must not forget (the save holds it): the photo
+## was looked at, and the statuses that last to the leg's end.
+func leg_state() -> Dictionary:
+	var held: Array = []
+	for status: StringName in _leg_holds:
+		held.append(String(status))
+	return {"photo": photo_used, "held": held}
+
+
+func set_leg_state(state: Dictionary) -> void:
+	photo_used = GameData.as_bool(state.get("photo"))
+	for status: Variant in GameData.as_array(state.get("held")):
+		var id: StringName = StringName(GameData.as_string(status))
+		if not _leg_holds.has(id):
+			_leg_holds.append(id)
+			_effects.hold(id, LEG, true)
 
 
 func begin_tick() -> void:
@@ -207,10 +314,16 @@ func add_item(id: StringName, slot: StringName, supply: int = -1) -> Item:
 	if supply_spec.has("uses"):
 		item.supply = supply if supply >= 0 else GameData.as_int(supply_spec.get("uses"))
 	item.hot_left = _param(item, "hot_for_s", 0.0)
+	item.is_tape = _param(item, "side_s", 0.0) > 0.0
 	for give: Variant in GameData.as_array(record.get("gives")):
 		var entry: Dictionary = GameData.as_dict(give)
-		if entry.has("effect") and item.use_effect == &"" and not entry.has("while"):
+		if entry.has("effect") and entry.has("duration") and item.use_effect == &"" and not entry.has("while"):
 			item.use_effect = StringName(GameData.as_string(entry.get("effect")))
+	for list: String in ["gives", "takes"]:
+		for listed: Variant in GameData.as_array(record.get(list)):
+			var standing: Standing = _standing_of(GameData.as_dict(listed))
+			if standing != null:
+				item.standing.append(standing)
 	items.append(item)
 	return item
 
@@ -218,10 +331,34 @@ func add_item(id: StringName, slot: StringName, supply: int = -1) -> Item:
 func remove_item(item: Item) -> void:
 	if item == null:
 		return
-	# What it had switched on goes with it.
-	if item.use_effect != &"" and _effects.has_own(item.use_effect):
+	# What it was doing stops with it: a smoke goes out, a tape falls silent.
+	if item.burning and item.use_effect != &"" and _effects.has_own(item.use_effect):
 		_effects.remove(item.use_effect)
+	for standing: Standing in item.standing:
+		if standing.held:
+			standing.held = false
+			_effects.hold(standing.effect, item.id, false)
 	items.erase(item)
+
+
+## The entry of a "gives" or "takes" list that works all the time the item
+## is there, or null for one that works when the item is used.
+func _standing_of(entry: Dictionary) -> Standing:
+	var standing: Standing = Standing.new()
+	if GameData.as_string(entry.get("effect")) == HAZE_RATE:
+		standing.kind = Standing.HAZE
+		standing.amount = GameData.as_float(entry.get("amount"))
+	elif entry.has("per_s"):
+		standing.kind = Standing.NERVES
+		standing.amount = GameData.as_float(entry.get("per_s"))
+	elif entry.has("effect") and not entry.has("duration") and not entry.has("for"):
+		standing.kind = Standing.STATUS
+		standing.effect = StringName(GameData.as_string(entry.get("effect")))
+	else:
+		return null
+	if entry.has("while"):
+		standing.condition = _condition(GameData.as_string(entry.get("while")))
+	return standing
 
 
 func item(id: StringName) -> Item:
@@ -260,15 +397,38 @@ func restock(item_instance: Item) -> void:
 	item_instance.hot_left = _param(item_instance, "hot_for_s", 0.0)
 
 
+## True for a drink that was hot and no longer is: worth refilling though full.
+func gone_cold(item_instance: Item) -> bool:
+	return _param(item_instance, "hot_for_s", 0.0) > 0.0 and item_instance.hot_left <= 0.0
+
+
 ## True when something can be done at this anchor at all (a control, or an
 ## item sitting in a slot there). The hand only snaps to such anchors.
 func anchor_in_use(anchor: String) -> bool:
+	if _covered(anchor):
+		return false
 	for offered: Variant in GameData.as_array(_controls.get(anchor)):
 		var control: Dictionary = offered
 		if _requirements_hold(control, null):
 			return true
 	for candidate: Item in items:
 		if anchor_of(candidate) == anchor:
+			return true
+	for offered: Variant in GameData.as_array(_placed.get(anchor)):
+		var placed: Dictionary = offered
+		if owner_of(placed) != null:
+			return true
+	return false
+
+
+## True while another anchor stands in this one's place: something sits in
+## the slot there (a tape in the deck covers the radio's dial).
+func _covered(anchor: String) -> bool:
+	if not _covered_by.has(anchor):
+		return false
+	var cover: String = GameData.as_string(_covered_by[anchor])
+	for candidate: Item in items:
+		if anchor_of(candidate) == cover:
 			return true
 	return false
 
@@ -288,11 +448,30 @@ func ritual_at(anchor: String) -> Dictionary:
 			continue
 		for ritual_id: Variant in GameData.as_array(candidate.record.get("rituals")):
 			var ritual: Dictionary = _data.record("rituals", GameData.as_string(ritual_id))
-			if _requirements_hold(ritual, candidate):
+			if GameData.as_string(ritual.get("anchor")) == SLOT_ANCHOR and _requirements_hold(ritual, candidate):
 				return ritual
+	for offered: Variant in GameData.as_array(_placed.get(anchor)):
+		var placed: Dictionary = offered
+		var owner: Item = owner_of(placed)
+		if owner != null and _requirements_hold(placed, owner):
+			return placed
 	for offered: Variant in GameData.as_array(_controls.get(anchor)):
 		var control: Dictionary = offered
 		if _requirements_hold(control, null):
+			return control
+	return {}
+
+
+## Where a HOLD is offered, a control that is a TAP may be offered too (his
+## face: the pills are a HOLD, a slap is a TAP). A press let go within a
+## TAP's time is then that TAP. {} when `primary` is not a HOLD or there is
+## no such control.
+func tap_alternative(anchor: String, primary: Dictionary) -> Dictionary:
+	if GameData.as_string(primary.get("gesture")) != "HOLD":
+		return {}
+	for offered: Variant in GameData.as_array(_controls.get(anchor)):
+		var control: Dictionary = offered
+		if GameData.as_string(control.get("gesture")) == "TAP" and _requirements_hold(control, null):
 			return control
 	return {}
 
@@ -334,18 +513,53 @@ func _requirements_hold(ritual: Dictionary, owner: Item) -> bool:
 	return true
 
 
-## One condition: an effect id, "supply>0", "hot" or "flag:<switch>", each
-## optionally negated with "!".
+## One condition, by its text (see Condition).
 func _holds(condition: String, owner: Item) -> bool:
-	if condition.begins_with("!"):
-		return not _holds(condition.substr(1), owner)
-	if condition == "supply>0":
-		return owner != null and owner.supply > 0
-	if condition == "hot":
-		return owner != null and owner.hot_left > 0.0
-	if condition.begins_with("flag:"):
-		return flag(StringName(condition.substr(5)))
-	return _effects.has(StringName(condition))
+	return _met(_condition(condition), owner)
+
+
+func _condition(text: String) -> Condition:
+	if _conditions.has(text):
+		var known: Condition = _conditions[text]
+		return known
+	var condition: Condition = Condition.new()
+	var word: String = text
+	if word.begins_with("!"):
+		condition.negated = true
+		word = word.substr(1)
+	if word == "supply>0":
+		condition.word = Condition.SUPPLY
+	elif word == "hot":
+		condition.word = Condition.HOT
+	elif word == "playing":
+		condition.word = Condition.PLAYING
+	elif word == "warbling":
+		condition.word = Condition.WARBLING
+	elif word.begins_with("flag:"):
+		condition.word = Condition.FLAG
+		condition.name = StringName(word.substr(5))
+	else:
+		condition.name = StringName(word)
+	_conditions[text] = condition
+	return condition
+
+
+func _met(condition: Condition, owner: Item) -> bool:
+	var met: bool = false
+	match condition.word:
+		Condition.SUPPLY:
+			met = owner != null and owner.supply > 0
+		Condition.HOT:
+			met = owner != null and owner.hot_left > 0.0
+		Condition.PLAYING:
+			met = owner != null and _is_tape(owner) and not _warbles(owner)
+		Condition.WARBLING:
+			met = owner != null and _is_tape(owner) and _warbles(owner)
+		Condition.FLAG:
+			met = flag(condition.name)
+		_:
+			met = _effects.has(condition.name)
+	return met != condition.negated
 
 
 func _run(op: String, owner: Item, direction: int) -> void:
@@ -390,6 +604,11 @@ func _run(op: String, owner: Item, direction: int) -> void:
 		"ash":
 			if owner != null and owner.burning:
 				owner.ashed = true
+		"clear_haze":
+			haze = 0.0
+		"flip":
+			if owner != null:
+				owner.side_time = 0.0
 		"radio_step":
 			_radio_step(direction)
 		"pay":
@@ -407,23 +626,63 @@ func _run(op: String, owner: Item, direction: int) -> void:
 func _give(owner: Item) -> void:
 	if owner == null:
 		return
-	for give: Variant in GameData.as_array(owner.record.get("gives")):
-		var entry: Dictionary = GameData.as_dict(give)
-		if entry.has("while") and not _holds(GameData.as_string(entry.get("while")), owner):
-			continue
-		if entry.has("effect"):
-			_effects.add(StringName(GameData.as_string(entry.get("effect"))), GameData.as_float(entry.get("duration")))
-		elif GameData.as_string(entry.get("resource")) == "nerves":
-			var amount: float = GameData.as_float(entry.get("amount"))
-			var over: float = GameData.as_float(entry.get("over"))
-			if over > 0.0:
-				_drips.append(Vector2(amount / over, over))
-			else:
-				_nerves.add(amount)
-		elif GameData.as_string(entry.get("resource")) == "cash":
-			cash_delta += GameData.as_float(entry.get("amount"))
-	if owner.use_effect != &"" and _effects.has_own(owner.use_effect):
+	for list: String in ["gives", "takes"]:
+		for listed: Variant in GameData.as_array(owner.record.get(list)):
+			_give_entry(owner, GameData.as_dict(listed))
+	if owner.use_effect != &"" and _effects.has_own(owner.use_effect) and _param(owner, "ash_by_s", 0.0) > 0.0:
 		_start_burn(owner)
+
+
+## One entry of an item's gives or takes, when the item is used. Entries
+## that work all the time (see Standing) are not for here.
+func _give_entry(owner: Item, entry: Dictionary) -> void:
+	if entry.has("per_s") or GameData.as_string(entry.get("effect")) == HAZE_RATE:
+		return
+	if entry.has("while") and not _holds(GameData.as_string(entry.get("while")), owner):
+		return
+	if entry.has("effect"):
+		var effect: StringName = StringName(GameData.as_string(entry.get("effect")))
+		if entry.has("duration"):
+			_effects.add(effect, GameData.as_float(entry.get("duration")))
+		elif GameData.as_string(entry.get("for")) == String(LEG) and not _leg_holds.has(effect):
+			_leg_holds.append(effect)
+			_effects.hold(effect, LEG, true)
+		return
+	var amount: float = GameData.as_float(entry.get("amount"))
+	if entry.has("synergy"):
+		var synergy: Dictionary = _synergy(owner, GameData.as_string(entry.get("synergy")))
+		if not synergy.is_empty():
+			amount = GameData.as_float(synergy.get("amount"))
+	if GameData.as_string(entry.get("resource")) == "nerves":
+		var over: float = GameData.as_float(entry.get("over"))
+		if over > 0.0:
+			_drips.append(Vector2(amount / over, over))
+		else:
+			_nerves.add(amount)
+	elif GameData.as_string(entry.get("resource")) == "cash":
+		cash_delta += amount
+
+
+# --- Synergies (GDD 7.8) -----------------------------------------------------
+
+## The synergy of `owner` under a rule name, if its partner is there now: an
+## item in the cabin, music playing, the photo on the visor. {} otherwise.
+func _synergy(owner: Item, rule: String) -> Dictionary:
+	if owner == null:
+		return {}
+	for listed: Variant in GameData.as_array(owner.record.get("synergies")):
+		var synergy: Dictionary = GameData.as_dict(listed)
+		if GameData.as_string(synergy.get("rule")) == rule and _partner_there(GameData.as_string(synergy.get("with"))):
+			return synergy
+	return {}
+
+
+func _partner_there(with: String) -> bool:
+	if with == TOKEN_MUSIC:
+		return _effects.has(MUSIC)
+	if with == TOKEN_PHOTO:
+		return true
+	return item(StringName(with)) != null
 
 
 ## A smoke has just been lit: it burns from now, unashed, and the craving waits.
@@ -449,6 +708,30 @@ func _give_duration(owner: Item, id: StringName) -> float:
 func _param(item_instance: Item, key: String, fallback: float) -> float:
 	var params: Dictionary = GameData.as_dict(item_instance.record.get("params"))
 	return GameData.as_float(params.get(key), fallback)
+
+
+# --- The tape deck -----------------------------------------------------------
+
+## The tape in the deck, or null.
+func tape() -> Item:
+	for candidate: Item in items:
+		if _is_tape(candidate):
+			return candidate
+	return null
+
+
+func _is_tape(candidate: Item) -> bool:
+	return candidate.is_tape
+
+
+## A tape left unflipped past the length of its side warbles (GDD 7.4).
+func _warbles(candidate: Item) -> bool:
+	return candidate.side_time >= _param(candidate, "side_s", INF)
+
+
+## For the views: this item is a tape, and it warbles.
+func warbling(candidate: Item) -> bool:
+	return candidate.is_tape and _warbles(candidate)
 
 
 # --- Controls ----------------------------------------------------------------
@@ -558,16 +841,27 @@ func step(dt: float) -> void:
 			index += 1
 
 	var haze_rate: float = 0.0
+	var deck_mult: float = _window_radio_mult if flag(FLAG_WINDOW) else 1.0
 	for candidate: Item in items:
 		candidate.hot_left -= dt
 		if candidate.hot_left < dt * 0.5:
 			candidate.hot_left = 0.0
-		for take: Variant in GameData.as_array(candidate.record.get("takes")):
-			var entry: Dictionary = GameData.as_dict(take)
-			if GameData.as_string(entry.get("effect")) != HAZE_RATE:
-				continue
-			if not entry.has("while") or _holds(GameData.as_string(entry.get("while")), candidate):
-				haze_rate += GameData.as_float(entry.get("amount"))
+		if _is_tape(candidate):
+			candidate.side_time += dt
+		for standing: Standing in candidate.standing:
+			var on: bool = standing.condition == null or _met(standing.condition, candidate)
+			match standing.kind:
+				Standing.HAZE:
+					if on:
+						haze_rate += standing.amount
+				Standing.NERVES:
+					if on:
+						# What comes out of the deck is halved by an open window.
+						_nerves.add_rate(standing.amount * (deck_mult if _is_tape(candidate) else 1.0))
+				Standing.STATUS:
+					if on != standing.held:
+						standing.held = on
+						_effects.hold(standing.effect, candidate.id, on)
 		_step_smoke(candidate, dt)
 		_step_lapse(candidate, dt)
 
@@ -620,6 +914,9 @@ func _step_lapse(candidate: Item, dt: float) -> void:
 ## Stations (GDD 6.2): music calms, the news frays and keeps him awake, the
 ## call-in show does nothing; every station drifts to static.
 func _step_radio(dt: float) -> void:
+	if radio != STATIC and tape() != null:
+		# The deck plays the tape, not the radio.
+		radio = STATIC
 	if radio != STATIC:
 		_radio_time += dt
 		if _radio_time >= _radio_drift:

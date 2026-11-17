@@ -60,6 +60,8 @@ var close_call_nerves: float = 0.0
 var close_call_mult: float = 1.0
 ## Honk Nerves owed for passing honking vehicles closely (taxis).
 var honk_nerves: float = 0.0
+## The part of honk_nerves that frays him (an angry honk, not a happy one).
+var honk_frights: float = 0.0
 ## Ids of the vehicles that honked this tick, one entry per honk.
 var honk_vehicle_ids: PackedInt32Array = PackedInt32Array()
 
@@ -171,6 +173,7 @@ func _clear_results() -> void:
 	close_call_nerves = 0.0
 	close_call_mult = 1.0
 	honk_nerves = 0.0
+	honk_frights = 0.0
 	honk_vehicle_ids = PackedInt32Array()
 
 
@@ -315,6 +318,7 @@ func _judge_pass(vehicle: TrafficSim.Vehicle, car: CarSim, gear: int) -> void:
 	if passed and close and not vehicle.cc_contact:
 		if vehicle.honk_nerves != 0.0:
 			honk_nerves += vehicle.honk_nerves
+			honk_frights += maxf(vehicle.honk_nerves, 0.0)
 			honk_vehicle_ids.append(vehicle.id)
 		if vehicle.closing_speed(car.speed) >= _cc_min_closing:
 			_count_close_call(vehicle, gear)

@@ -58,6 +58,14 @@ func apply(snapshot: Dictionary) -> void:
 		Lines.format("hud.effects", [", ".join(effect_names)]),
 		Lines.format("hud.tick", [str(snapshot["tick"])]),
 	]
+	rows.append(Lines.format("hud.clock", [str(snapshot["clock"])]))
+	if snapshot["telling"]:
+		var legs_done: int = snapshot["legs_done"]
+		rows.append(Lines.format("hud.telling", [str(snapshot["act"]), str(legs_done + 1), Lines.get_text("stage.%s" % str(snapshot["stage"]))]))
+	if snapshot["stopped"]:
+		rows.append(Lines.format("hud.stop", [Lines.get_text("stop.%s.name" % str(snapshot["stop"]))]))
+	if snapshot["wrecked"]:
+		rows.append(Lines.get_text("hud.wrecked"))
 	if snapshot["leg_active"]:
 		var leg_time: float = snapshot["leg_time"]
 		var leg_par: float = snapshot["leg_par"]

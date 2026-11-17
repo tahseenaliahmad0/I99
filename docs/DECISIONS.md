@@ -851,3 +851,160 @@ Format: `D-NNN (milestone, date) Title` then Context / Decision / Why.
 - **Hitcher.** Two minutes and nothing to buy until the passengers of M8.
 - **Why.** GDD 9.6, 12.2, 14; GDD 1.5 for the rest.
 
+## D-038 (M5, 2026-11-17) Wreck and restart, the save, the input log
+
+- **Wreck.** In a Telling, the fifth lamp starts a cut of `wreck_to_wheel`
+  seconds in which nothing moves; then the same Table is told again from
+  Baghdad with another seed (derived from the old one and the count of
+  retellings), the starting cabin, 22:00. The pointer follows the player
+  through the cut, and a pointer that is on the rim puts the hand there:
+  with the button down he has the wheel on the very tick the Telling
+  restarts. Outside a Telling a Wreck simply stays one.
+- **A stop is a save point, and goes on from the save.** On entering a stop
+  (the leg's, or a boss stop) `DriveSim` takes what a save holds
+  (`capture()`), keeps it as `checkpoint`, and at once rebuilds itself from
+  it (`restore()`). The uninterrupted Telling and the one loaded from the
+  file are therefore the same code path, and T-SAVE-01 holds them to the
+  same state hash. Consequences, all intended: at a stop every timed
+  effect ends, the haze is gone, the hand is off the wheel at its rest, the
+  leg's encounter is over; items keep their supply and a drink its heat;
+  the radio keeps its station and the switches their state.
+- **The save file** follows GDD 13.7 and adds what standing at a stop needs:
+  `stage` (stop or boss_stop), `side` (the branch he is on), `retellings`,
+  `leg_lamps`, `shady`, `radio`, `switches`, and `exact`. Its readable
+  numbers (`clock_min`, `cash`, `nerves`) are rounded to a thousandth and
+  are for people; `exact` holds the same numbers and the leg's clock as the
+  sixteen hexadecimal digits of their bits, because this engine's JSON
+  reader can lose the last bit of a float. A save without `exact` (written
+  by hand) loads from the readable numbers. Whole numbers are written as
+  whole numbers, so a file read and written again is the same file. Seeds
+  too large for a JSON number are written as their digits.
+- **Who writes.** `Save` (core) only turns the profile and the Telling into
+  text and back; the Game autoload writes `user://save.json` when a stop is
+  entered. Nothing else changes `checkpoint`, so nothing is written during
+  a leg.
+- **Input log.** `InputLog` (core, not in the file list of GDD 13.2) holds
+  each tick's `DriveInput`. `DriveSim.state_hash()` is a SHA-256 over the
+  snapshot, the save's view of the Telling, effect timers, every vehicle
+  and the main numbers of each part. T-REPLAY-01 drives 75 s by real input
+  (horn, two gear changes on the gate, the wheel held and steered, brake)
+  and replays the log to the same hash.
+- **Leaving a stop** needs a grip taken there: the hand off the wheel and
+  the button up at some moment since he arrived.
+- **Why.** GDD 11.1, 11.4, 13.3, 13.7; GDD 1.5.
+
+## D-039 (M5, 2026-11-17) What a Telling looks like; the game's part of saving
+
+- **Command line.** `--table=<id>` (with `--seed=`) starts a Telling in the
+  drive scene. `--continue` (not in GDD 13.9; it stands in for the title
+  screen's button until M9) goes on from the save file. `--bot=` in a
+  Telling keeps third gear, pulls in at every Exit, waits two seconds at a
+  stop and leaves, and takes the left and the right branch in turn: enough
+  to watch a Telling pass, and what the smoke test runs for 9,000 frames.
+- **Saving.** The drive controller writes the save when a `stop_entered`
+  event passes through it (`Game.write_save(sim.checkpoint)`), and clears
+  the Telling from it on `arrived`. Until the wedding room exists (M9) an
+  Arrival is followed by a new Telling with the next seed.
+- **The sky** follows the Clock in a Telling: night until `sky_dawn_from`
+  of the night is gone, then lighter until the deadline. Outside a Telling
+  it is as before (day, or the leg's night, rain or dust).
+- **Fork sign.** Over the road at `fork_sign_lead` before the gore, one
+  text over each half: the branch's leg, modifier, stop and par, one to a
+  line in large letters (`road_fork_text`). The gore itself is a yellow
+  block in the middle of the road. The road beyond it is not drawn as two:
+  the next stretch replaces the road in one frame (left for M10).
+- **Exit.** Signed with the stop's name; its slip lane is drawn like the
+  side road's.
+- **Stop.** `StopView` (cabin frame): the vendor (a green capsule) and, when
+  he is there, the shady guy (a darker one) at the passenger window; a
+  tray; on it a small box for each offer with a text that always faces the
+  eye: name and price, "free", "yours" once bought, "Repair ..." and
+  "Restock ...". A stall stands beside the road.
+- **Dashboard clock**: a Label3D on the dash showing the Clock.
+- **M2 view findings closed here:** the horn's and the glovebox's markers are
+  drawn on the surface of the prop they lie in (`marker_offset`); the left
+  sleeve hangs where the resting eye sees it; the Cabin has the nodes
+  Mirror, Visor, Seat and Glovebox of GDD 13.5.
+
+
+## D-040 (M6, 2026-11-17) How items say what they do; beads, seeds, tissues, the tape
+
+- **Gives and takes are entries of five shapes** (items.json, read by
+  `ItemSim` and checked by the validator): a timed status on use
+  (`effect` + `duration`); a resource on use (`resource` + `amount`,
+  optionally `over` a time); a status held on while the item is in the
+  cabin (`effect` alone); Nerves by the second (`resource` + `per_s`); haze
+  by the second (`effect: haze_rate` + `amount`, as GDD 14 writes it). Each
+  may have a `while` condition. A resource entry may name a `synergy` rule
+  of the same item: when that synergy's partner is there, the synergy's
+  amount is used instead (beads: -2, with music -4).
+- **Statuses carry numbers and immunities** in the effects registry
+  (`immune: [honk, tailgater, doubt]` on `chewing`). Nerves from such a
+  source go through `DriveSim.fray(source, amount)`; a gain is dropped
+  while he is immune to its source. Only gains: a wedding car's happy honk
+  still calms a man who chews. Being cut off is not a honk and still
+  frays him. Doubts do not exist until M9; their Nerves will come through
+  `fray(&"doubt", ...)`, and T-ITEM-SEEDS checks that path now.
+- **Perform times** in GDD 7.4 ("TAP 0.3 s", "DRAG ... 0.8 s") are what a
+  practised player takes, not rules: they are stored as `perform_s` on the
+  ritual for the bot. Rules are `hold_s`, `out_m`, `across_m`.
+- **Carrying.** A DRAG_TO may now end where it began (`"to": "@slot"`) once
+  the object has been `out_m` away from there (the tape: out of the deck and
+  in again), or anywhere at all once it has been carried `across_m`
+  sideways (a tissue across the glass; no `to`). While the hand carries
+  something it cannot take the wheel, as before.
+- **The tape deck is the radio.** GDD 16.2 gives `radio` and `tape` one
+  position. With a tape in the slot the `tape` anchor takes the radio's
+  place (`"over": "radio"` in anchors.json): the dial is not offered, the
+  radio falls silent, and the deck plays the tape. The tape is the `music`
+  status while it plays (so the beads answer to it) and stops being music
+  when it warbles. An open window halves what the tape does to his Nerves,
+  as it does the radio's. A flip at any time starts the side's 60 s again.
+  At a stop the side starts again too (every timer ends there, D-038).
+- **Tea.** A fuel station also offers the 2-cash refill for a full glass
+  that has gone cold: hot tea is what he is paying for.
+- **Timed statuses are counted in whole ticks** like every other countdown
+  (the review's rule): a 25 s status is on for exactly 3,000 ticks.
+- **`DriveSim.give_item`** puts an item in the cabin outside a stop (debug
+  key F5 will use it; the tests do).
+
+## D-041 (M6, 2026-11-17) Focus, the pills, Courage, the mints; a tray of ten
+
+- **Focus** ("the road runs at 85% speed while the hand runs at full
+  speed"). The tick is shorter (`road_speed` of the `focus` status) for the
+  car (its speed and its sideways motion), traffic, hazards, collisions'
+  timers and the leg's encounter. It is whole for the gesture, the hand, the
+  wheel, the gear gate, every status and item timer, Nerves, the Clock and
+  the leg's own clock. So Focus buys time to think and pays for it in Clock
+  minutes and par seconds. "Then Tremor +50% for 20 s": the 20 s begin with
+  the sip.
+- **Painkillers are taken at his face**, as GDD 7.4 says: the ritual belongs
+  to the item but is offered at `face`; the bottle on the dash is the slot
+  it costs. Where a HOLD and a control's TAP are offered at one anchor, a
+  press let go within `tap_max_time` is the TAP (a slap) and a press held
+  for `hold_s` is the HOLD (a pill); anything between is neither.
+  `blocks_view` of the ritual being performed is in the snapshot
+  (`view_block`).
+- **"For the leg"** means until the next stretch of road begins (the gore).
+  Such statuses are held by the leg and pass through the leg's stop: the
+  save holds them (`leg_state`), together with whether the photo has been
+  looked at this leg, which until now a stop forgot. A second pill in one
+  leg does not raise the Heavy floor again.
+- **Courage** stacks add up: n stacks pay close calls x(1 + 0.5 n) and scale
+  every gain of Nerves by (1 - 0.3 n), never below nothing. Each stack has
+  its own 45 s; a sip at the cap renews the stack that would end first.
+  Like every timer, Courage ends at a stop.
+- **Sway** swings from the moment Courage begins (to the right first) at
+  `sway_frequency`, `sway_per_stack` per stack, and ends with Courage.
+- **Lag.** The car is steered by the angle the wheel had `lag` seconds ago
+  (between ticks, in proportion): `lag_per_source` per Courage stack, never
+  more than `lag_cap`. The wheel itself is not delayed.
+- **Refilling the flask** is the shady guy's business (20), not the fuel
+  station's: contraband is restocked only where it is sold.
+- **Breath mints.** `DriveSim.courage_noticed()` is the Courage a policeman
+  notices: none while he is minty. The Checkpoint (M7) will read it; a
+  check with the real Checkpoint is owed to T-ITEM-BREATH-MINTS then.
+- **The tray has ten places**, two rows of five (`offer_6` to `offer_10`
+  above and behind the first row). A fuel station late in a Telling can hold
+  out three items, five restocks and two Deals; with five places most of
+  that waited unseen until something was bought.

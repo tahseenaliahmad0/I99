@@ -17,7 +17,8 @@ enum AppState { BOOT, TITLE, PROLOGUE, WEDDING, TELLING, WRECK_CUT, ENDING, FINA
 ## `--shot=<file.png>` saves one rendered frame and quits, after
 ## `--shot-frame=<n>` frames (DECISIONS D-014, D-019).
 const VALUE_ARGS: PackedStringArray = ["table", "seed", "leg", "boss", "bot", "user-dir", "aim", "shot", "shot-frame"]
-const FLAG_ARGS: PackedStringArray = ["skip-prologue"]
+## `--continue` goes on from the save file (until the title screen offers it).
+const FLAG_ARGS: PackedStringArray = ["skip-prologue", "continue"]
 
 ## Tools and tests started with `--script` never touch the player's files.
 const TOOL_USER_DIR: String = "user://test_runs/tool"
@@ -27,6 +28,10 @@ var data_errors: PackedStringArray = []
 var args: Dictionary = {}
 var user_dir: String = "user://"
 var state: AppState = AppState.BOOT
+## What persists (GDD 11.5): Tables, guests, modes, whether the prologue was seen.
+var profile: Dictionary = Save.default_profile()
+## The Telling of the save file, {} when there is none to continue.
+var saved_telling: Dictionary = {}
 
 
 func _ready() -> void:
@@ -51,6 +56,42 @@ func _ready() -> void:
 	Settings.setup(user_dir, {})
 	Lines.setup(data)
 	Audio.setup(data)
+	read_save()
+
+
+# --- The save file (GDD 13.7) ------------------------------------------------
+
+func save_path() -> String:
+	return user_dir.path_join(Save.FILE_NAME)
+
+
+## Reads the save file if there is one. A file that cannot be read leaves a
+## new player's profile and no Telling.
+func read_save() -> void:
+	profile = Save.default_profile()
+	saved_telling = {}
+	if not FileAccess.file_exists(save_path()):
+		return
+	var read: Dictionary = Save.from_text(FileAccess.get_file_as_string(save_path()))
+	profile = GameData.as_dict(read.get("profile"))
+	saved_telling = GameData.as_dict(read.get("telling"))
+	if not GameData.as_bool(read.get("ok")):
+		push_warning("Game: %s is not a save (%s); starting afresh" % [save_path(), GameData.as_string(read.get("error"))])
+
+
+## Writes the save file: the profile, and the Telling as it stands at the
+## stop he has just come to ({} when no Telling is under way).
+func write_save(telling: Dictionary) -> bool:
+	saved_telling = telling
+	# The folder may have been cleared away since the game started.
+	if user_dir != "user://":
+		DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(user_dir))
+	var file: FileAccess = FileAccess.open(save_path(), FileAccess.WRITE)
+	if file == null:
+		push_error("Game: cannot write %s (%s)" % [save_path(), error_string(FileAccess.get_open_error())])
+		return false
+	file.store_string(Save.to_text(profile, telling))
+	return true
 
 
 func _runs_as_tool() -> bool:

@@ -3,16 +3,19 @@ extends RefCounted
 ## A stop (GDD 9.6): what the vendor has on his tray and what the hand does
 ## with it.
 ##
-## The tray lies at the passenger window, one offer at each of its anchors
-## (offer_1 to offer_5); what does not fit waits and moves up as room is
-## made. A TAP on an offer buys it when cash allows. An item that belongs in
+## The tray lies at the passenger window in two rows of five, one offer at
+## each of its anchors (offer_1 to offer_10): room for everything a stop can
+## hold out at once. What does not fit waits and moves up as room is made. A TAP on an offer buys it when cash allows. An item that belongs in
 ## a slot is then his, still on the tray: a DRAG_TO from there to one of its
 ## slots puts it in (what was in the slot stays with the vendor). An
 ## adaptation goes straight into a free bay, and a deal that changes the car
 ## takes hold at once. Whatever he has paid for and not placed when he
 ## leaves is paid back.
 
-const TRAY: PackedStringArray = ["offer_1", "offer_2", "offer_3", "offer_4", "offer_5"]
+const TRAY: PackedStringArray = [
+	"offer_1", "offer_2", "offer_3", "offer_4", "offer_5",
+	"offer_6", "offer_7", "offer_8", "offer_9", "offer_10",
+]
 const ITEM: StringName = &"item"
 const RESTOCK: StringName = &"restock"
 const REPAIR: StringName = &"repair"
@@ -97,6 +100,7 @@ func begin(id: String, act: int, shady: bool, price_mult: float = 1.0) -> void:
 			var deal: Offer = _item_offer(item_id)
 			deal.shady = true
 			offers.append(deal)
+		_offer_restocks(true)
 	_fill_tray()
 
 
@@ -145,16 +149,26 @@ func _lay_out(record: Dictionary) -> void:
 					offer.price = 0.0
 				offers.append(offer)
 	if GameData.as_bool(record.get("restocks")):
-		for owned: ItemSim.Item in _items.items:
-			var supply: Dictionary = GameData.as_dict(owned.record.get("supply"))
-			var uses: int = GameData.as_int(supply.get("uses"))
-			var restock: float = GameData.as_float(supply.get("restock"))
-			if uses > 0 and restock > 0.0 and owned.supply < uses:
-				var refill: Offer = Offer.new()
-				refill.kind = RESTOCK
-				refill.id = String(owned.id)
-				refill.price = roundf(restock * _price_mult)
-				offers.append(refill)
+		_offer_restocks(false)
+
+
+## A restock offer for each thing he has used: what is lawful from a stop
+## that restocks, contraband from the shady guy alone (the flask is "sold
+## only as a Deal", GDD 7.4).
+func _offer_restocks(contraband: bool) -> void:
+	for owned: ItemSim.Item in _items.items:
+		if GameData.as_bool(owned.record.get("contraband")) != contraband:
+			continue
+		var supply: Dictionary = GameData.as_dict(owned.record.get("supply"))
+		var uses: int = GameData.as_int(supply.get("uses"))
+		var restock: float = GameData.as_float(supply.get("restock"))
+		if uses > 0 and restock > 0.0 and (owned.supply < uses or _items.gone_cold(owned)):
+			var refill: Offer = Offer.new()
+			refill.kind = RESTOCK
+			refill.id = String(owned.id)
+			refill.price = roundf(restock * _price_mult)
+			refill.shady = contraband
+			offers.append(refill)
 
 
 func _item_offer(item_id: String) -> Offer:
@@ -321,7 +335,7 @@ func buy(anchor: String, cash: float) -> float:
 			_pay(offer)
 			_items.restock(owned)
 			offers.erase(offer)
-			events.append({"type": "item_bought", "item": offer.id, "price": offer.price, "free": false, "shady": false, "restock": true})
+			events.append({"type": "item_bought", "item": offer.id, "price": offer.price, "free": false, "shady": offer.shady, "restock": true})
 		REPAIR:
 			if not _faults.repair(StringName(offer.id)):
 				return cash
