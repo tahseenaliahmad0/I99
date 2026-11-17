@@ -47,6 +47,10 @@ var length: float = 0.0
 var par: float = 0.0
 var raining: bool = false
 var night: bool = false
+## Dust haze (GDD 9.4): how fast the windscreen clouds with the window open,
+## and how far he can see (INF: no dust).
+var dust_rate: float = 0.0
+var dust_visibility: float = INF
 ## Curve strength now: k of GDD 5.4, signed (+ pushes toward the right shoulder).
 var curve_k: float = 0.0
 ## Seconds until the gust that has been announced (0: none announced).
@@ -128,6 +132,14 @@ func begin(leg_plan: Dictionary) -> void:
 	var condition: String = GameData.as_string(plan.get("condition"))
 	raining = condition == "rain"
 	night = condition == "night"
+	dust_rate = 0.0
+	dust_visibility = INF
+	var modifier_id: String = GameData.as_string(plan.get("modifier"))
+	if not modifier_id.is_empty():
+		var modifier: Dictionary = _data.record("modifiers", modifier_id)
+		dust_rate = GameData.as_float(modifier.get("haze_per_s"))
+		if modifier.has("visibility_m"):
+			dust_visibility = GameData.as_float(modifier.get("visibility_m"))
 	curve_k = 0.0
 	gust_tell_left = 0.0
 	gust_tell_dir = 0

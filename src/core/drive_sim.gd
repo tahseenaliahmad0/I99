@@ -234,6 +234,7 @@ func begin_leg(plan: Dictionary) -> void:
 	items.begin_leg()
 	leg.begin(plan)
 	items.raining = leg.raining
+	items.dust_rate = leg.dust_rate
 	car.lat_tau_mult = _rain_response if leg.raining else 1.0
 	_leg_lamps_lit = 0
 	_emit("leg_started", {
@@ -251,6 +252,7 @@ func _end_leg() -> void:
 	var par_bonus: float = floorf(maxf(leg.par - leg.time, 0.0) * tuning.f("par_bonus_rate"))
 	cash += clean_bonus + par_bonus
 	items.raining = false
+	items.dust_rate = 0.0
 	car.lat_tau_mult = 1.0
 	curve_k = 0.0
 	_emit("leg_ended", {
@@ -303,6 +305,17 @@ func start_gust(direction: int, strength: float = 1.0) -> void:
 func heavy_floor() -> float:
 	var index: int = clampi(act, 1, _heavy_floors.size()) - 1
 	return _heavy_floors[index] + heavy_floor_bonus
+
+
+## How far he can see along the road, in metres (GDD 9.1, 9.4): the
+## headlight cone at night, the dust in a dust haze, else no limit (INF).
+func visibility() -> float:
+	if not leg.active:
+		return INF
+	var reach: float = leg.dust_visibility
+	if leg.night:
+		reach = minf(reach, headlight_cone())
+	return reach
 
 
 ## How far the headlights reach at night, in metres (GDD 4.6, 6.3).
@@ -389,8 +402,10 @@ func snapshot() -> Dictionary:
 		"night": leg.active and leg.night,
 		"gust_tell": leg.gust_tell_left,
 		"gust_dir": leg.gust_tell_dir,
-		"hazards": leg.hazards_near(tuning.f("road_draw_behind"), tuning.f("road_draw_ahead")) if leg.active else [],
-		"signs": leg.signs_near(tuning.f("road_draw_ahead")) if leg.active else [],
+		"visibility": visibility(),
+		# Unlit things show only inside what he can see: at night they appear late.
+		"hazards": leg.hazards_near(tuning.f("road_draw_behind"), minf(tuning.f("road_draw_ahead"), visibility())) if leg.active else [],
+		"signs": leg.signs_near(minf(tuning.f("road_draw_ahead"), visibility())) if leg.active else [],
 		"items": _item_snapshots(),
 		"anchors_in_use": _anchors_in_use(),
 		"vehicles": _vehicle_snapshots(),

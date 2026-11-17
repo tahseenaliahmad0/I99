@@ -28,9 +28,9 @@ Useful commands:
 ## Current state
 
 - **Milestone:** M4 (legs and encounters): generator, forks and the leg runtime are in; encounters, Suspicion and views are next.
-- **Tests:** 30 of 114 passing (M0: 2, M1: 8, M2: 10, M3: 7, M4: 3).
+- **Tests:** 35 of 114 passing (M0: 2, M1: 8, M2: 10, M3: 7, M4: 8).
 - **Reviews in flight:** `m1-review` (snapshot a7c3d8a) and `m2-review` (snapshot e197006) have reported on every lens; their findings are in the workflow journals. `m2-fixes` applies the car and traffic/collision findings in worktrees (branches `fix/m2-car`, `fix/m2-traffic-collision`): merge them when they report. The M1 gesture, test-honesty and determinism findings and the M2 test-honesty and views findings are not applied yet. M3 and M4 have not been reviewed.
-- **Next step:** T-LEG-01..05 through `DriveSim`, then Suspicion and the three encounters.
+- **Next step:** Suspicion and the pull-over, then Patrol, Tailgater, Two-lane and Motorcade.
 
 ## Milestones
 
@@ -83,7 +83,7 @@ Do not start a milestone until every test of the previous one passes (GDD 18).
 - [x] `RunGenerator`: forks by act (leg pool, modifier chance)
 - [x] `LegSim`: spawns by trigger, planned lane changes, curves, gusts, hazards, flock, melons, leg end
 - [x] `tests/support/leg_checker.gd`: independent rule checker and driven check; T-GEN-01..03 pass
-- [ ] T-LEG-01..05: Open road, Rush, Rain, Night, Roadworks driven through `DriveSim`
+- [x] T-LEG-01..05: Open road, Rush, Rain, Night, Roadworks driven through `DriveSim` (dust haze and visibility in the snapshot)
 - [ ] `SuspicionSim` and the pull-over (T-SUS-01); Patrol (T-LEG-07); Tailgater (T-LEG-06)
 - [ ] Two-lane (T-LEG-08); Motorcade with its side road (T-LEG-09); wedding honk
 - [ ] Views: hazards, signs, police lights, night and dust visibility, rain; `--leg=` starts a leg

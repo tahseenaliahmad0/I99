@@ -47,6 +47,8 @@ var radio: StringName = STATIC
 var since_wipe: float = 0.0
 ## True while it rains (the leg says so): only then does the view blur.
 var raining: bool = false
+## Dust in the air (the leg says so): haze per second while the window is open.
+var dust_rate: float = 0.0
 ## -1 signalling left, +1 right, 0 off.
 var indicator: int = 0
 var indicator_left: float = 0.0
@@ -509,6 +511,8 @@ func step(dt: float) -> void:
 		_step_smoke(candidate, dt)
 		_step_lapse(candidate, dt)
 
+	if flag(FLAG_WINDOW):
+		haze_rate += dust_rate
 	if haze_rate > 0.0:
 		haze = minf(haze + haze_rate * dt, _haze_cap)
 	else:

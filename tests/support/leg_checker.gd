@@ -313,6 +313,16 @@ func _check_line() -> void:
 					_problem("rule 3: the line runs into the flock at %s" % str(at))
 
 
+## Takes a plan's road and line without checking anything, for line_x().
+func load_plan(plan: Dictionary) -> void:
+	_load_road(plan)
+
+
+## Where across the road the plan's line is at `s` (after load_plan, check or drive).
+func line_x(s: float) -> float:
+	return _line_x(s)
+
+
 ## Where across the road the line is when the player is at `s`. A lane
 ## change moves it steadily over gen_lane_change metres; inside a chicane it
 ## follows the corridor between the cones.
