@@ -14,6 +14,7 @@ extends RefCounted
 ##   {"effect": id, "duration": s}            on use: a timed status
 ##   {"resource": "nerves"|"cash", "amount": n, "over": s}
 ##                                            on use: at once, or spread over s
+##   {"effect": id, "for": "leg"}             on use: a status held to the leg's end
 ##   {"effect": id}                           a status held on while it is there
 ##   {"resource": "nerves", "per_s": r}       Nerves by the second while it is there
 ##   {"effect": "haze_rate", "amount": r}     haze by the second while it is there
@@ -32,6 +33,8 @@ const TOKEN_MUSIC: String = "music"
 const TOKEN_PHOTO: String = "photo"
 ## What an item that plays in the deck is tagged (the mixtape).
 const TAG_TAPE: String = "tape"
+## Who holds a status that lasts for the rest of the leg.
+const LEG: StringName = &"leg"
 
 ## One thing in the cabin.
 class Item:
@@ -129,6 +132,11 @@ var _faults: FaultSim
 
 ## anchor id -> Array of control rituals (no owning item) offered there.
 var _controls: Dictionary = {}
+## anchor id -> Array of rituals an item has at a place of their own, not at
+## its slot (the painkillers are taken at his face).
+var _placed: Dictionary = {}
+## Statuses held until the leg ends.
+var _leg_holds: Array[StringName] = []
 ## anchor id -> the anchor that takes its place while something sits there
 ## (anchors.json "over": the tape deck is the radio).
 var _covered_by: Dictionary = {}
@@ -197,13 +205,15 @@ func configure(data: GameData, effects: EffectSystem, nerves: NervesSim, traffic
 		_stations.append(StringName(GameData.as_string(station)))
 
 	_controls.clear()
+	_placed.clear()
 	for ritual: Dictionary in data.records("rituals"):
-		if ritual.has("item"):
-			continue
 		var anchor: String = GameData.as_string(ritual.get("anchor"))
-		var offered: Array = _controls.get(anchor, [])
+		if anchor == SLOT_ANCHOR:
+			continue
+		var at_anchor: Dictionary = _placed if ritual.has("item") else _controls
+		var offered: Array = at_anchor.get(anchor, [])
 		offered.append(ritual)
-		_controls[anchor] = offered
+		at_anchor[anchor] = offered
 	_slot_anchor.clear()
 	for slot: Dictionary in data.records("slots"):
 		_slot_anchor[GameData.as_string(slot.get("id"))] = GameData.as_string(slot.get("anchor"))
@@ -232,6 +242,7 @@ func reset_cabin() -> void:
 	cash_delta = 0.0
 	_horn_cooldown = 0.0
 	_drips.clear()
+	_leg_holds.clear()
 	events.clear()
 	for entry: Variant in GameData.as_array(_data.root("items").get("starting_cabin")):
 		var start: Dictionary = GameData.as_dict(entry)
@@ -256,6 +267,27 @@ func set_radio(station: StringName) -> void:
 ## What resets when a new leg begins.
 func begin_leg() -> void:
 	photo_used = false
+	for held: StringName in _leg_holds:
+		_effects.hold(held, LEG, false)
+	_leg_holds.clear()
+
+
+## What of this leg a stop must not forget (the save holds it): the photo
+## was looked at, and the statuses that last to the leg's end.
+func leg_state() -> Dictionary:
+	var held: Array = []
+	for status: StringName in _leg_holds:
+		held.append(String(status))
+	return {"photo": photo_used, "held": held}
+
+
+func set_leg_state(state: Dictionary) -> void:
+	photo_used = GameData.as_bool(state.get("photo"))
+	for status: Variant in GameData.as_array(state.get("held")):
+		var id: StringName = StringName(GameData.as_string(status))
+		if not _leg_holds.has(id):
+			_leg_holds.append(id)
+			_effects.hold(id, LEG, true)
 
 
 func begin_tick() -> void:
@@ -319,7 +351,7 @@ func _standing_of(entry: Dictionary) -> Standing:
 	elif entry.has("per_s"):
 		standing.kind = Standing.NERVES
 		standing.amount = GameData.as_float(entry.get("per_s"))
-	elif entry.has("effect") and not entry.has("duration"):
+	elif entry.has("effect") and not entry.has("duration") and not entry.has("for"):
 		standing.kind = Standing.STATUS
 		standing.effect = StringName(GameData.as_string(entry.get("effect")))
 	else:
@@ -382,6 +414,10 @@ func anchor_in_use(anchor: String) -> bool:
 	for candidate: Item in items:
 		if anchor_of(candidate) == anchor:
 			return true
+	for offered: Variant in GameData.as_array(_placed.get(anchor)):
+		var placed: Dictionary = offered
+		if owner_of(placed) != null:
+			return true
 	return false
 
 
@@ -412,11 +448,30 @@ func ritual_at(anchor: String) -> Dictionary:
 			continue
 		for ritual_id: Variant in GameData.as_array(candidate.record.get("rituals")):
 			var ritual: Dictionary = _data.record("rituals", GameData.as_string(ritual_id))
-			if _requirements_hold(ritual, candidate):
+			if GameData.as_string(ritual.get("anchor")) == SLOT_ANCHOR and _requirements_hold(ritual, candidate):
 				return ritual
+	for offered: Variant in GameData.as_array(_placed.get(anchor)):
+		var placed: Dictionary = offered
+		var owner: Item = owner_of(placed)
+		if owner != null and _requirements_hold(placed, owner):
+			return placed
 	for offered: Variant in GameData.as_array(_controls.get(anchor)):
 		var control: Dictionary = offered
 		if _requirements_hold(control, null):
+			return control
+	return {}
+
+
+## Where a HOLD is offered, a control that is a TAP may be offered too (his
+## face: the pills are a HOLD, a slap is a TAP). A press let go within a
+## TAP's time is then that TAP. {} when `primary` is not a HOLD or there is
+## no such control.
+func tap_alternative(anchor: String, primary: Dictionary) -> Dictionary:
+	if GameData.as_string(primary.get("gesture")) != "HOLD":
+		return {}
+	for offered: Variant in GameData.as_array(_controls.get(anchor)):
+		var control: Dictionary = offered
+		if GameData.as_string(control.get("gesture")) == "TAP" and _requirements_hold(control, null):
 			return control
 	return {}
 
@@ -586,8 +641,12 @@ func _give_entry(owner: Item, entry: Dictionary) -> void:
 	if entry.has("while") and not _holds(GameData.as_string(entry.get("while")), owner):
 		return
 	if entry.has("effect"):
+		var effect: StringName = StringName(GameData.as_string(entry.get("effect")))
 		if entry.has("duration"):
-			_effects.add(StringName(GameData.as_string(entry.get("effect"))), GameData.as_float(entry.get("duration")))
+			_effects.add(effect, GameData.as_float(entry.get("duration")))
+		elif GameData.as_string(entry.get("for")) == String(LEG) and not _leg_holds.has(effect):
+			_leg_holds.append(effect)
+			_effects.hold(effect, LEG, true)
 		return
 	var amount: float = GameData.as_float(entry.get("amount"))
 	if entry.has("synergy"):

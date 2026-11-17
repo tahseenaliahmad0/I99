@@ -28,6 +28,9 @@ func setup(data: GameData, factory: PlaceholderFactory) -> void:
 	_tray = factory.make("stop_tray")
 	_tray.position = _vec(tuning, "stop_tray_pos")
 	add_child(_tray)
+	var shelf: Node3D = factory.make("stop_tray")
+	shelf.position = _vec(tuning, "stop_shelf_pos")
+	add_child(shelf)
 	for anchor: Dictionary in data.records("anchors"):
 		_anchor_pos[GameData.as_string(anchor.get("id"))] = GameData.as_vec3(anchor.get("pos"))
 	for place: int in StopSim.TRAY.size():

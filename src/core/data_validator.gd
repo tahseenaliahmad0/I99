@@ -62,6 +62,8 @@ const STOP_TUNING_KEYS: Dictionary = {
 }
 const HECKLE_TYPES: PackedStringArray = ["TWIST", "DARE", "DOUBT", "QUESTION", "ORDER", "FIB"]
 const FLICK_DIRS: PackedStringArray = ["up", "down", "left", "right"]
+## What a ritual may block of the view while it is performed (GDD 7.4).
+const VIEW_BLOCKS: PackedStringArray = ["lower_centre"]
 const PLACEHOLDER_SHAPES: PackedStringArray = ["box", "cylinder", "capsule", "sphere", "quad", "label"]
 const REQUIRED_POINTS: PackedStringArray = ["G", "W", "eye", "shoulder"]
 
@@ -208,6 +210,14 @@ func _effect_schema() -> Dictionary:
 		"implies": _opt(_list(_ref("effects"))),
 		# Sources of Nerves he does not feel while the status is on.
 		"immune": _opt(_list(_enum(NERVE_SOURCES))),
+		# Numbers a status carries while it is on (EffectSystem.product, total).
+		"road_speed": _opt(_num(0.1, 1.0)),
+		"tremor_scale": _opt(_num(0.0)),
+		"heavy_floor": _opt(_num()),
+		"mutes_phantom": _opt(_bool()),
+		"hides_courage": _opt(_bool()),
+		"close_call_cash_per_stack": _opt(_num()),
+		"nerves_gain_per_stack": _opt(_num()),
 	})
 
 
@@ -230,7 +240,7 @@ func _ritual_schema() -> Dictionary:
 		"perform_s": _opt(_above()),
 		"over_items": _opt(_bool()),
 		"eyes_down": _bool(),
-		"blocks_view": _opt(_nullable(_str())),
+		"blocks_view": _opt(_nullable(_enum(VIEW_BLOCKS))),
 		"requires": _list(_str()),
 		"on_complete": _list(_str()),
 		"on_step": _opt(_list(_str())),
@@ -832,13 +842,15 @@ func _check_beats() -> void:
 ## One entry of an item's "gives" or "takes" (see ItemSim): a status, or a
 ## change to a resource, with the keys that kind of entry has.
 func _check_entry(item: Dictionary, entry: Dictionary, where: String) -> void:
-	const ENTRY_KEYS: PackedStringArray = ["effect", "duration", "resource", "amount", "over", "per_s", "while", "synergy"]
+	const ENTRY_KEYS: PackedStringArray = ["effect", "duration", "for", "resource", "amount", "over", "per_s", "while", "synergy"]
 	for key: Variant in entry:
 		if not ENTRY_KEYS.has(str(key)):
 			_err("E_UNKNOWN_KEY", "items.json", where, "unknown key '%s' (%s)" % [str(key), ", ".join(ENTRY_KEYS)])
 	for key: String in ["duration", "amount", "over", "per_s"]:
 		if entry.has(key) and not GameData.is_number(entry[key]):
 			_err("E_TYPE", "items.json", "%s.%s" % [where, key], "must be a number")
+	if entry.has("for") and (GameData.as_string(entry.get("for")) != "leg" or entry.has("duration") or not entry.has("effect")):
+		_err("E_RULE", "items.json", where + ".for", "\"for\" is \"leg\", on a status with no duration")
 	if entry.has("effect") == entry.has("resource"):
 		_err("E_RULE", "items.json", where, "needs exactly one of \"effect\" and \"resource\"")
 	if entry.has("effect"):

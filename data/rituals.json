@@ -47,6 +47,14 @@
     { "id": "tissue_wipe",     "anchor": "@slot", "item": "tissue_box", "gesture": "DRAG_TO", "across_m": 0.4, "perform_s": 0.8,
       "eyes_down": false, "requires": ["supply>0"], "on_complete": ["consume_supply", "clear_haze"] },
     { "id": "tape_flip",       "anchor": "@slot", "item": "mixtape",    "gesture": "DRAG_TO", "to": "@slot", "out_m": 0.3, "perform_s": 0.8,
-      "eyes_down": false, "requires": [], "on_complete": ["flip"] }
+      "eyes_down": false, "requires": [], "on_complete": ["flip"] },
+    { "id": "energy_drink_sip", "anchor": "@slot", "item": "energy_drink", "gesture": "HOLD", "hold_s": 0.6,
+      "eyes_down": false, "requires": ["supply>0"], "on_complete": ["consume_supply", "give"] },
+    { "id": "painkillers_take", "anchor": "face", "item": "painkillers", "gesture": "HOLD", "hold_s": 1.2,
+      "eyes_down": false, "blocks_view": "lower_centre", "requires": ["supply>0"], "on_complete": ["consume_supply", "give"] },
+    { "id": "flask_sip",       "anchor": "@slot", "item": "arak_flask", "gesture": "HOLD", "hold_s": 0.7,
+      "eyes_down": false, "requires": ["supply>0"], "on_complete": ["consume_supply", "give"] },
+    { "id": "mints_take",      "anchor": "@slot", "item": "breath_mints", "gesture": "TAP", "perform_s": 0.3,
+      "eyes_down": false, "requires": ["supply>0"], "on_complete": ["consume_supply", "give"] }
   ]
 }

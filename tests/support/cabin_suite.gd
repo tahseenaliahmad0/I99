@@ -180,6 +180,29 @@ func _begin_quiet_leg(leg_id: String, act: int, leg_seed: int) -> Dictionary:
 	return plan
 
 
+## A vehicle in the next lane passed with half of close_call_gap to spare, at
+## `closing_kmh` more than its speed, in third gear with nobody steering.
+## Returns the change in his Nerves over the pass; what happened is in _events.
+func _pass_closely(type: String, closing_kmh: float) -> float:
+	_cruise(3, 1)
+	_sim.traffic.clear()
+	_keep_lane = false
+	_input.clear()
+	var speed: float = tuning.fi("gear_speeds", 2)
+	var other: TrafficSim.Vehicle = _sim.traffic.spawn(StringName(type), 0, _sim.car.s + 12.0, speed - closing_kmh)
+	var beside: float = other.x + other.half_width + _sim.car.half_width() + tuning.f("close_call_gap") * 0.5
+	_events = []
+	var before: float = _sim.nerves.value
+	var guard: int = _ticks_in(30.0)
+	while _sim.car.s < other.s + other.half_length + 8.0 and guard > 0:
+		guard -= 1
+		_sim.car.x = beside
+		_tick()
+	_keep_lane = true
+	_sim.traffic.clear()
+	return _sim.nerves.value - before
+
+
 ## The hand on the wheel, gripping, with the button held.
 func _grip() -> void:
 	_input.clear()
@@ -277,23 +300,26 @@ func _count_events(type: String, key: String = "", value: String = "") -> int:
 
 # --- A Telling and its stops -------------------------------------------------
 
-## The first seed whose first fork has a `stop_id` at the end of its right branch.
-func _seed_for(stop_id: String) -> int:
-	for candidate: int in range(1, 2000):
+## The first seed whose first fork has a `stop_id` at the end of its right
+## branch (or the one after `skip` such seeds).
+func _seed_for(stop_id: String, skip: int = 0) -> int:
+	for candidate: int in range(1, 4000):
 		if GameData.as_string(RunGenerator.fork(data, candidate, 1, 0)[RunState.RIGHT]["stop"]) == stop_id:
-			return candidate
-	fail("no seed under 2000 leads to a %s" % stop_id)
+			if skip == 0:
+				return candidate
+			skip -= 1
+	fail("no seed under 4000 leads to a %s" % stop_id)
 	return 1
 
 
 ## A Telling on its first leg, the one that ends at a `stop_id`, with nothing
 ## on the road and the car in third gear.
-func _to_quiet_leg(stop_id: String) -> void:
+func _to_quiet_leg(stop_id: String, skip: int = 0) -> void:
 	_sim = DriveSim.new(fresh_data())
 	_events = []
 	_keep_lane = true
 	_input.clear()
-	_sim.begin_telling(TABLE, _seed_for(stop_id))
+	_sim.begin_telling(TABLE, _seed_for(stop_id, skip))
 	var guard: int = _ticks_in(60.0)
 	while _sim.run.stage == RunState.Stage.APPROACH and guard > 0:
 		guard -= 1

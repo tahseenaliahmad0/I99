@@ -50,9 +50,12 @@ func configure(data: GameData) -> void:
 			shields.append(id)
 			_immune[source_id] = shields
 		for key: Variant in record:
-			if GameData.is_number(record[key]) and str(key) != "max_stacks":
+			# A number, or a switch that is on ("mutes_phantom": true counts as 1).
+			var value: Variant = record[key]
+			var is_switch: bool = value is bool and GameData.as_bool(value)
+			if (GameData.is_number(value) and str(key) != "max_stacks") or is_switch:
 				var carriers: Dictionary = _numbers.get(str(key), {})
-				carriers[id] = GameData.as_float(record[key])
+				carriers[id] = 1.0 if is_switch else GameData.as_float(value)
 				_numbers[str(key)] = carriers
 
 

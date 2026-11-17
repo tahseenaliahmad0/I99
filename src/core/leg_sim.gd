@@ -278,11 +278,12 @@ func leave_side_road() -> void:
 ## Before the car moves: the leg's clock, the bend under the car, and gusts.
 ## A gust is announced when the car is gust_tell seconds short of it at par,
 ## and blows exactly gust_tell seconds later.
-func step_road(dt: float) -> void:
+func step_road(dt: float, clock_dt: float = -1.0) -> void:
 	if not active:
 		curve_k = 0.0
 		return
-	time += dt
+	# The leg's clock is his, not the road's: it does not slow with the road.
+	time += clock_dt if clock_dt >= 0.0 else dt
 	if on_side_road:
 		curve_k = 0.0
 		return

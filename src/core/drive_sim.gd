@@ -38,6 +38,15 @@ const LAW: StringName = &"law"
 const SOURCE_HONK: StringName = &"honk"
 const SOURCE_TAILGATER: StringName = &"tailgater"
 const SOURCE_DOUBT: StringName = &"doubt"
+## Numbers a status carries in the effects registry (EffectSystem.product, total).
+const ROAD_SPEED: String = "road_speed"
+const TREMOR_SCALE: String = "tremor_scale"
+const HEAVY_FLOOR: String = "heavy_floor"
+const MUTES_PHANTOM: String = "mutes_phantom"
+const CASH_PER_STACK: String = "close_call_cash_per_stack"
+const GAIN_PER_STACK: String = "nerves_gain_per_stack"
+const HIDES_COURAGE: String = "hides_courage"
+const COURAGE: StringName = &"courage"
 
 const EXIT_NONE: int = 0
 const EXIT_AHEAD: int = 1
@@ -128,6 +137,15 @@ var _carry_out: float = 0.0
 var _carry_across: float = 0.0
 var _carry_out_needed: float = 0.0
 var _carry_across_needed: float = 0.0
+## The TAP that a HOLD begun at the same anchor turns into when the button
+## is let go within a TAP's time (ItemSim.tap_alternative).
+var _tap_instead: Dictionary = {}
+## The tick's length for everything outside the cabin: the car, the road,
+## traffic, encounters. Shorter than DT while he has Focus (GDD 7.4).
+var _road_dt: float = DT
+## Seconds he has swayed since Courage began (GDD 5.4), and this tick's push.
+var _sway_time: float = 0.0
+var _sway: float = 0.0
 ## Ticks the gust still has to push: a gust lasts a whole number of ticks.
 var _gust_ticks_left: int = 0
 var _gust_push: float = 0.0
@@ -239,6 +257,10 @@ func _build() -> void:
 	_lever_in_hand = false
 	_pinned_until_release = false
 	_drag_destinations = []
+	_tap_instead = {}
+	_road_dt = DT
+	_sway_time = 0.0
+	_sway = 0.0
 	_gust_ticks_left = 0
 	_gust_push = 0.0
 	_braking = false
@@ -292,6 +314,10 @@ func step(input: DriveInput) -> void:
 	encounter.begin_tick()
 	suspicion.begin_tick()
 
+	# Focus (GDD 7.4): the road runs slower, the hand does not.
+	_road_dt = DT * effects.product(ROAD_SPEED)
+	_apply_statuses()
+
 	# 1. Gesture recogniser.
 	gesture.step(DT, input.lmb, input.pointer_delta)
 
@@ -325,7 +351,7 @@ func step(input: DriveInput) -> void:
 		_emit("sfx_requested", {"id": "grind"})
 	_braking = input.rmb
 	if not _standing():
-		car.step(DT, wheel.steer(), gate.gear, _braking, _extra_drift())
+		car.step(_road_dt, wheel.steer(), gate.gear, _braking, _extra_drift())
 	var lane: int = car.lane_of(car.x)
 	if lane != _lane:
 		# Crossing a lane line without indicating that way (GDD 6.5).
@@ -338,13 +364,13 @@ func step(input: DriveInput) -> void:
 	if free_traffic_per_km > 0.0:
 		_step_free_traffic()
 	if not stopped:
-		leg.step_traffic(DT)
-		traffic.step(DT, car.s, car.x, car.speed)
+		leg.step_traffic(_road_dt)
+		traffic.step(_road_dt, car.s, car.x, car.speed)
 
 	# 7. Collisions and close calls.
 	var lamps_before: int = faults.lamps
 	if not _standing():
-		collision.step(DT, car, traffic, gate.gear)
+		collision.step(_road_dt, car, traffic, gate.gear)
 		_apply_collisions()
 		_step_leg_hazards()
 	_leg_lamps_lit += maxi(faults.lamps - lamps_before, 0)
@@ -481,7 +507,7 @@ func _end_leg() -> void:
 func _step_leg_road() -> void:
 	if not leg.active or _standing():
 		return
-	leg.step_road(DT)
+	leg.step_road(_road_dt, DT)
 	curve_k = leg.curve_k
 	if leg.gust_started != 0:
 		start_gust(leg.gust_started)
@@ -727,6 +753,7 @@ func capture() -> Dictionary:
 		"stage": run.stage_name(),
 		"side": _side,
 		"leg_lamps": _leg_lamps_lit,
+		"leg_state": items.leg_state(),
 		"shady": _shady_here,
 		# For people: rounded. What is loaded are the exact bits below.
 		"clock_min": snappedf(clock.minutes, 0.001),
@@ -801,6 +828,8 @@ func restore(telling: Dictionary) -> bool:
 		_lane = car.lane_of(car.x)
 		leg.fast_forward(car.s, maxf(Save.from_exact(bits.get("leg_time"), 0.0), 0.0))
 		_leg_lamps_lit = GameData.as_int(telling.get("leg_lamps"))
+		# What he did once this leg stays done, and what lasts to its end lasts.
+		items.set_leg_state(GameData.as_dict(telling.get("leg_state")))
 		# Whatever the leg's encounter was, it is behind him.
 		encounter.stop()
 	else:
@@ -845,7 +874,7 @@ func state() -> Array:
 func _step_encounter() -> void:
 	if _standing() or not leg.active:
 		return
-	encounter.step(DT, _braking, gate.gear)
+	encounter.step(_road_dt, _braking, gate.gear)
 	nerves.add_rate(encounter.nerves_rate - encounter.tail_nerves_rate)
 	fray_rate(SOURCE_TAILGATER, encounter.tail_nerves_rate)
 	if encounter.cut_off:
@@ -962,7 +991,7 @@ func _release_from_pull_over() -> void:
 ## Cones, melons, sheep and potholes (GDD 5.6, 9.4): Nerves, and for a
 ## pothole a share of his speed. No lamp.
 func _step_leg_hazards() -> void:
-	leg.step_hazards(DT)
+	leg.step_hazards(_road_dt)
 	if leg.hits.is_empty():
 		return
 	nerves.add(leg.hazard_nerves)
@@ -1015,7 +1044,7 @@ func start_gust(direction: int, strength: float = 1.0) -> void:
 ## The Heavy floor now (GDD 6.1): by act, plus what the Table or a pill adds.
 func heavy_floor() -> float:
 	var index: int = clampi(act, 1, _heavy_floors.size()) - 1
-	return _heavy_floors[index] + heavy_floor_bonus
+	return _heavy_floors[index] + heavy_floor_bonus + effects.total(HEAVY_FLOOR)
 
 
 ## How far he can see along the road, in metres (GDD 9.1, 9.4): the
@@ -1069,6 +1098,11 @@ func snapshot() -> Dictionary:
 		"gesture_progress": gesture.progress,
 		"gesture_anchor": hand.anchor_id(_active_anchor),
 		"carrying": _carried(),
+		"view_block": GameData.as_string(_active_ritual.get("blocks_view")) if gesture.is_active() else "",
+		"courage": courage(),
+		"sway": _sway,
+		"lag": wheel.lag,
+		"steer_angle": wheel.lagged_angle(),
 		"car_x": car.x,
 		"car_s": car.s,
 		"speed": car.speed,
@@ -1252,7 +1286,16 @@ func _extra_drift() -> float:
 	if _gust_ticks_left > 0:
 		_gust_ticks_left -= 1
 		push += _gust_push
-	return push
+	# Sway (GDD 5.4): sway_per_stack per Courage stack, swinging at
+	# sway_frequency from the moment Courage began.
+	var stacks: int = courage()
+	if stacks > 0:
+		_sway = tuning.f("sway_per_stack") * float(stacks) * sin(TAU * tuning.f("sway_frequency") * _sway_time)
+		_sway_time += DT
+	else:
+		_sway = 0.0
+		_sway_time = 0.0
+	return push + _sway
 
 
 ## Sandbox traffic: one vehicle every 1000 / free_traffic_per_km metres,
@@ -1321,6 +1364,7 @@ func _feed_nerves() -> void:
 	nerves.heavy_floor = heavy_floor()
 	nerves.awake = effects.has(AWAKE)
 	nerves.tremor_muted = effects.has(TREMOR_MUTE)
+	nerves.tremor_scale = effects.product(TREMOR_SCALE)
 
 	var near: int = 0
 	var nearest: float = INF
@@ -1335,6 +1379,32 @@ func _feed_nerves() -> void:
 	nerves.add_rate(faults.param(FAULT_RATTLE, "nerves_per_s", 0.0))
 	if car.on_rumble:
 		nerves.jolt()
+
+
+## What his statuses do to the other systems this tick (GDD 7.4, Courage):
+## each stack pays close calls better, dulls what frays him, and makes one
+## more source of Lag.
+func _apply_statuses() -> void:
+	nerves.gain_mult = maxf(1.0 + effects.total(GAIN_PER_STACK, true), 0.0)
+	collision.cash_mult = 1.0 + effects.total(CASH_PER_STACK, true)
+	wheel.lag = minf(tuning.f("lag_per_source") * float(courage()), tuning.f("lag_cap")) * 0.001
+
+
+## Courage stacks now (GDD 7.4).
+func courage() -> int:
+	return effects.stacks(COURAGE)
+
+
+## The Courage a policeman notices: none while something hides it (breath
+## mints), else every stack (GDD 7.4, 10.2).
+func courage_noticed() -> int:
+	return 0 if effects.total(HIDES_COURAGE) > 0.0 else courage()
+
+
+## True while something he took mutes the Phantom (GDD 7.9: painkillers,
+## for the leg).
+func phantom_muted() -> bool:
+	return effects.total(MUTES_PHANTOM) > 0.0
 
 
 ## Nerves from a named source (a honk, a tailgater, a Doubt): a gain is not
@@ -1406,6 +1476,7 @@ func _begin_at(anchor: int, button_down: bool) -> void:
 		return
 	_active_ritual = ritual
 	_active_anchor = anchor
+	_tap_instead = items.tap_alternative(String(hand.anchor_id(anchor)), ritual)
 	gesture.begin(kind, _gesture_amount(ritual, kind), _gesture_dirs(ritual))
 	# Eyes-down rituals pull the eyes off the road while performed (GDD 4.7).
 	hand.eyes_down = GameData.as_bool(ritual.get("eyes_down"))
@@ -1456,11 +1527,17 @@ func _resolve_gesture(button_down: bool) -> void:
 	if gesture.phase == Gesture.Phase.DONE:
 		_run_drag_steps()
 		_complete_ritual()
+	elif gesture.phase == Gesture.Phase.CANCELLED and gesture.kind == Gesture.Kind.HOLD and not _tap_instead.is_empty() \
+			and not button_down and hand.at_index == _active_anchor and gesture.elapsed <= tuning.f("tap_max_time") + DT * 0.5:
+		# Let go within a TAP's time: it was the TAP that is offered there too.
+		_active_ritual = _tap_instead
+		_complete_ritual()
 	if gesture.phase != Gesture.Phase.IDLE:
 		var carried: bool = gesture.kind == Gesture.Kind.DRAG_TO
 		gesture.reset()
 		_active_ritual = {}
 		_active_anchor = HandSim.NO_ANCHOR
+		_tap_instead = {}
 		hand.eyes_down = false
 		hand.carrying = false
 		_drag_destinations = []

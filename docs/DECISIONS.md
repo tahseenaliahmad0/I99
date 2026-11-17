@@ -967,3 +967,44 @@ Format: `D-NNN (milestone, date) Title` then Context / Decision / Why.
   (the review's rule): a 25 s status is on for exactly 3,000 ticks.
 - **`DriveSim.give_item`** puts an item in the cabin outside a stop (debug
   key F5 will use it; the tests do).
+
+## D-041 (M6, 2026-11-17) Focus, the pills, Courage, the mints; a tray of ten
+
+- **Focus** ("the road runs at 85% speed while the hand runs at full
+  speed"). The tick is shorter (`road_speed` of the `focus` status) for the
+  car (its speed and its sideways motion), traffic, hazards, collisions'
+  timers and the leg's encounter. It is whole for the gesture, the hand, the
+  wheel, the gear gate, every status and item timer, Nerves, the Clock and
+  the leg's own clock. So Focus buys time to think and pays for it in Clock
+  minutes and par seconds. "Then Tremor +50% for 20 s": the 20 s begin with
+  the sip.
+- **Painkillers are taken at his face**, as GDD 7.4 says: the ritual belongs
+  to the item but is offered at `face`; the bottle on the dash is the slot
+  it costs. Where a HOLD and a control's TAP are offered at one anchor, a
+  press let go within `tap_max_time` is the TAP (a slap) and a press held
+  for `hold_s` is the HOLD (a pill); anything between is neither.
+  `blocks_view` of the ritual being performed is in the snapshot
+  (`view_block`).
+- **"For the leg"** means until the next stretch of road begins (the gore).
+  Such statuses are held by the leg and pass through the leg's stop: the
+  save holds them (`leg_state`), together with whether the photo has been
+  looked at this leg, which until now a stop forgot. A second pill in one
+  leg does not raise the Heavy floor again.
+- **Courage** stacks add up: n stacks pay close calls x(1 + 0.5 n) and scale
+  every gain of Nerves by (1 - 0.3 n), never below nothing. Each stack has
+  its own 45 s; a sip at the cap renews the stack that would end first.
+  Like every timer, Courage ends at a stop.
+- **Sway** swings from the moment Courage begins (to the right first) at
+  `sway_frequency`, `sway_per_stack` per stack, and ends with Courage.
+- **Lag.** The car is steered by the angle the wheel had `lag` seconds ago
+  (between ticks, in proportion): `lag_per_source` per Courage stack, never
+  more than `lag_cap`. The wheel itself is not delayed.
+- **Refilling the flask** is the shady guy's business (20), not the fuel
+  station's: contraband is restocked only where it is sold.
+- **Breath mints.** `DriveSim.courage_noticed()` is the Courage a policeman
+  notices: none while he is minty. The Checkpoint (M7) will read it; a
+  check with the real Checkpoint is owed to T-ITEM-BREATH-MINTS then.
+- **The tray has ten places**, two rows of five (`offer_6` to `offer_10`
+  above and behind the first row). A fuel station late in a Telling can hold
+  out three items, five restocks and two Deals; with five places most of
+  that waited unseen until something was bought.
