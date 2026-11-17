@@ -337,4 +337,7 @@ func _count_close_call(vehicle: TrafficSim.Vehicle, gear: int) -> void:
 		pay *= _cc_oncoming_mult
 	close_calls += 1
 	close_call_cash += pay + cash_bonus
-	close_call_nerves += _cc_nerves
+	# A happy honk (a wedding car, GDD 9.4) is instead of the close call's
+	# Nerves, not on top of them.
+	if vehicle.honk_nerves >= 0.0:
+		close_call_nerves += _cc_nerves

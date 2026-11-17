@@ -698,3 +698,22 @@ Format: `D-NNN (milestone, date) Title` then Context / Decision / Why.
 - **Vehicles ahead are never removed.** T-CC-01 says so; a despawn rule for
   vehicles far ahead was tried here and taken out again.
 - **Why.** GDD 9.3 gives the numbers; GDD 1.5 for the rest.
+
+## D-034 (M4, 2026-11-17) The wedding's happy honk; one list of bus signals
+
+- **Happy honk.** A car of the wedding motorcade carries the modifier's
+  `honk_nerves` (-5). Passed closely it honks like a taxi does, and a honk
+  that calms takes the place of the close call's +2 Nerves instead of
+  adding to it (GDD 9.4: "-5 Nerves instead of +2"). The close call still
+  counts and pays.
+- **Bus signals.** `EventNames.ALL` (core) is the list of GDD 13.6. The
+  `Events` autoload takes its names from it, and `DriveSim` refuses to
+  announce anything else (an engine error, which fails any test that causes
+  it). The item simulation's two private notices, the falling ash and the
+  craving, are not on that list: they are in the snapshot's item entries
+  now (`ash_fell`, `craving`).
+- **Sandbox traffic** draws only from vehicle types that are ordinary
+  traffic (not the police, a motorcade car, a wedding car, a hulk).
+- **Why.** GDD 9.4, 13.6; GDD 1.5 rule 4 (no signal the document does not
+  name).
+

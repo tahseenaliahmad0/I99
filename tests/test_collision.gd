@@ -395,6 +395,8 @@ func test_cc_01() -> void:
 	result = _pass(4, &"car", taxi_speed, gap_limit * 0.5, 1)
 	check_eq(_honks(result), 0, "a car passed the same way does not honk: only taxis do")
 
+	_check_wedding_honk()
+
 	# Falling back from beside a vehicle is not passing it.
 	_start(3, 1)
 	var beside: TrafficSim.Vehicle = _sim.traffic.spawn(&"truck", 2, 4.0, third)
@@ -1274,6 +1276,64 @@ func _honks(result: PassResult) -> int:
 
 ## The payload of a hit event (GDD 13.6): its class, the lamps it lit and the
 ## vehicle (0 for a rail).
+## GDD 9.4: passing a car of a wedding motorcade closely earns a happy honk:
+## -5 Nerves instead of the close call's +2.
+func _check_wedding_honk() -> void:
+	var modifier: Dictionary = data.record("modifiers", "wedding")
+	var happy: float = GameData.as_float(modifier.get("honk_nerves"))
+	check_near(happy, -5.0, 0.000001, "GDD 9.4: a happy honk is -5 Nerves")
+	var gap_limit: float = tuning.f("close_call_gap")
+	var speed: float = GameData.as_float(modifier.get("speed_kmh"))
+	var third: float = tuning.fi("gear_speeds", 2)
+	check(third - speed >= tuning.f("close_call_min_closing"), "(third gear passes a wedding car fast enough for a close call)")
+	for air: float in [gap_limit * 0.5, gap_limit + 0.1]:
+		_start(3, 1)
+		_sim.begin_leg({
+			"leg": "open_road", "act": 2, "seed": 1, "modifier": "wedding", "lanes": 3, "divided": true,
+			"condition": "clear", "par_s": 90.0, "length": tuning.f("leg_length"), "start_lane": 1,
+			"beats": [], "hazards": [], "curves": [], "gusts": [], "zones": [], "path": [[0.0, 1]],
+			"spawns": [{"vehicle": "wedding_car", "lane": 2, "speed": speed, "direction": 1, "role": "wedding",
+					"change_to": 2, "change_gap": 0.0, "late": false, "trigger_s": 0.0, "ahead": 40.0, "meet_s": 0.0}],
+		})
+		_sim.step(_input)
+		var guest: TrafficSim.Vehicle = null
+		for vehicle: TrafficSim.Vehicle in _sim.traffic.vehicles:
+			if vehicle.role == &"wedding":
+				guest = vehicle
+		if not check(guest != null, "the leg's wedding car is on the road"):
+			return
+		check_near(guest.honk_nerves, happy, 0.000001, "a wedding car's honk is the happy one")
+		_held_x = guest.x - guest.half_width - _sim.car.half_width() - air
+		_sim.drain_events()
+		var cash_before: float = _sim.cash
+		var judged: float = 0.0
+		var calls: int = 0
+		var honks: int = 0
+		var was_along: bool = false
+		for _tick: int in int(MAX_SECONDS / DT):
+			_hold_x()
+			var nerves_before: float = _sim.nerves.value
+			_sim.step(_input)
+			calls += _sim.collision.close_calls
+			var along: bool = absf(guest.s - _sim.car.s) < guest.half_length + _sim.car.length() * 0.5
+			if was_along and not along:
+				judged = _sim.nerves.value - nerves_before
+			was_along = along
+			honks += _honk_events(_sim.drain_events(), guest.id)
+			if _sim.car.s > guest.s + 20.0:
+				break
+		if air < gap_limit:
+			check_eq(calls, 1, "a wedding car passed closely is a close call")
+			check_near(_sim.cash - cash_before, tuning.f("close_call_base_cash") * tuning.fi("gear_cash_mult", 2), 0.000001, "which pays as any other")
+			check_eq(honks, 1, "it honks, once")
+			check_near(judged, happy, 0.01, "and the happy honk is -5 Nerves instead of the close call's +2 (%s)" % str(snappedf(judged, 0.001)))
+		else:
+			check_eq(calls, 0, "a wedding car passed with more than close_call_gap is no close call")
+			check_eq(honks, 0, "and it does not honk")
+			check_near(judged, 0.0, 0.01, "nor does his Nerves change")
+		check_eq(_sim.faults.lamps, 0, "no lamp is lit")
+
+
 func _check_hit_event(event: Dictionary, kind: Collision.Hit, lamps: int, vehicle_id: int, what: String) -> void:
 	check_eq(GameData.as_int(event.get("kind"), -1), int(kind), "%s: the hit event carries its class" % what)
 	check_eq(GameData.as_int(event.get("lamps"), -1), lamps, "%s: the lamps it lit" % what)

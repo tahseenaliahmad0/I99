@@ -88,7 +88,7 @@ Do not start a milestone until every test of the previous one passes (GDD 18).
 - [x] Tailgater (T-LEG-06): in his tracks on the bumper, rams on the brake, pass and brake-check, lost in fourth
 - [x] Two-lane (T-LEG-08)
 - [x] Motorcade (T-LEG-09): convoy, wall, spotlight, slip lane and Two-lane side road (DECISIONS D-033)
-- [ ] Wedding honk (a wedding car passed closely is -5 Nerves)
+- [x] Wedding honk (a wedding car passed closely is -5 Nerves; checked in T-CC-01); one list of bus signals (D-034)
 - [ ] Views: hazards, signs, police lights, night and dust visibility, rain; `--leg=` starts a leg
 - [ ] Review of M3 and M4
 

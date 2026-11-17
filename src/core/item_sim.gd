@@ -31,6 +31,8 @@ class Item:
 	var burning: bool = false
 	var burn_time: float = 0.0
 	var ashed: bool = false
+	## The ash of this one fell before he ashed it.
+	var ash_fell: bool = false
 	## Seconds until neglect bites (GDD 7.2, Lapse); negative when not armed.
 	var lapse_left: float = -1.0
 	## The status this item's use switches on ("lit"), if any.
@@ -411,6 +413,7 @@ func _start_burn(candidate: Item) -> void:
 	candidate.burning = true
 	candidate.burn_time = 0.0
 	candidate.ashed = false
+	candidate.ash_fell = false
 	candidate.lapse_left = -1.0
 
 
@@ -572,8 +575,8 @@ func _step_smoke(candidate: Item, dt: float) -> void:
 		candidate.burn_time += dt
 		if not candidate.ashed and candidate.burn_time >= ash_by:
 			candidate.ashed = true
+			candidate.ash_fell = true
 			_nerves.add(_param(candidate, "ash_nerves", 0.0))
-			events.append({"type": "ash_dropped", "item": String(candidate.id)})
 	elif candidate.burning:
 		candidate.burning = false
 		var lapse: Dictionary = GameData.as_dict(candidate.record.get("lapse"))
@@ -592,7 +595,6 @@ func _step_lapse(candidate: Item, dt: float) -> void:
 	var lapse: Dictionary = GameData.as_dict(candidate.record.get("lapse"))
 	if GameData.as_string(lapse.get("resource")) == "nerves":
 		_nerves.add(GameData.as_float(lapse.get("amount")))
-	events.append({"type": "lapse", "item": String(candidate.id)})
 
 
 ## Stations (GDD 6.2): music calms, the news frays and keeps him awake, the

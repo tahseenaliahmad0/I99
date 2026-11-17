@@ -109,6 +109,8 @@ var _main_spawns: Array = []
 var _main_next: int = 0
 ## Where the slip lane of a side road opens, or -1.
 var _side_road_at: float = -1.0
+## What a wedding car's honk does to his Nerves (the modifier's honk_nerves).
+var _wedding_honk: float = 0.0
 
 
 func configure(data: GameData, car: CarSim, traffic: TrafficSim) -> void:
@@ -141,9 +143,11 @@ func begin(leg_plan: Dictionary) -> void:
 	night = condition == "night"
 	dust_rate = 0.0
 	dust_visibility = INF
+	_wedding_honk = 0.0
 	var modifier_id: String = GameData.as_string(plan.get("modifier"))
 	if not modifier_id.is_empty():
 		var modifier: Dictionary = _data.record("modifiers", modifier_id)
+		_wedding_honk = GameData.as_float(modifier.get("honk_nerves"))
 		dust_rate = GameData.as_float(modifier.get("haze_per_s"))
 		if modifier.has("visibility_m"):
 			dust_visibility = GameData.as_float(modifier.get("visibility_m"))
@@ -365,6 +369,9 @@ func _spawn(spawn: Dictionary, dt: float) -> bool:
 		_changers.append([vehicle, change_to, GameData.as_float(spawn.get("change_gap")), GameData.as_bool(spawn.get("late"))])
 	if vehicle.role == &"melon_truck":
 		_melon_truck = vehicle
+	elif vehicle.role == &"wedding":
+		# A wedding car's honk is a happy one (GDD 9.4).
+		vehicle.honk_nerves = _wedding_honk
 	return true
 
 

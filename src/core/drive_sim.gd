@@ -245,7 +245,7 @@ func step(input: DriveInput) -> void:
 	_report_effects()
 	cash = maxf(cash + items.cash_delta, 0.0)
 	for event: Dictionary in items.events:
-		_events.append(event)
+		_announce(event)
 	items.events.clear()
 
 	# 12. Leg progress.
@@ -613,6 +613,8 @@ func _item_snapshots() -> Array[Dictionary]:
 			"supply": item.supply,
 			"hot": item.hot_left > 0.0,
 			"burning": item.burning,
+			"ash_fell": item.ash_fell,
+			"craving": item.lapse_left >= 0.0,
 		})
 	return out
 
@@ -634,7 +636,11 @@ func _step_free_traffic() -> void:
 	if car.s < _next_free_spawn_s:
 		return
 	_next_free_spawn_s = car.s + 1000.0 / free_traffic_per_km
-	var types: PackedStringArray = data.record_ids("vehicles")
+	# Ordinary traffic only: not the police, a motorcade car or a hulk.
+	var types: PackedStringArray = PackedStringArray()
+	for candidate: Dictionary in data.records("vehicles"):
+		if GameData.as_bool(candidate.get("traffic"), true):
+			types.append(GameData.as_string(candidate.get("id")))
 	if types.is_empty():
 		return
 	var record: Dictionary = data.record("vehicles", types[rng.range_i(Rng.ROAD, 0, types.size() - 1)])
@@ -880,4 +886,14 @@ func _gesture_dirs(ritual: Dictionary) -> int:
 
 func _emit(type: String, payload: Dictionary) -> void:
 	payload["type"] = type
-	_events.append(payload)
+	_announce(payload)
+
+
+## Every event leaves the simulation through here, and only under a name the
+## Events bus has (GDD 13.6).
+func _announce(event: Dictionary) -> void:
+	var type: String = GameData.as_string(event.get("type"))
+	if not EventNames.ALL.has(type):
+		push_error("DriveSim: '%s' is not a signal on the Events bus (GDD 13.6)" % type)
+		return
+	_events.append(event)
