@@ -112,7 +112,7 @@ func _reset_fixture() -> void:
 
 	_list("rituals", "rituals").append(_parse(GDD_RITUAL))
 	_list("rituals", "rituals").append({
-		"id": "cig_ash", "anchor": "ashtray", "gesture": "FLICK", "eyes_down": false,
+		"id": "cig_ash", "anchor": "ashtray", "gesture": "FLICK", "flick_dirs": ["down"], "eyes_down": false,
 		"requires": ["lit"], "on_complete": ["ash"], "sfx": null})
 	_list("rituals", "rituals").append({
 		"id": "tea_sip", "anchor": "cup_a", "gesture": "HOLD", "hold_s": 0.6, "eyes_down": false,
@@ -216,6 +216,14 @@ func _check_broken_records() -> void:
 	_reset_fixture()
 	_record("rituals", "cig_light")["eyes_down"] = "no"
 	_expect("E_TYPE", "rituals[cig_light].eyes_down", "a string where a boolean belongs")
+
+	_reset_fixture()
+	_record("rituals", "cig_light").erase("hold_s")
+	_expect("E_RULE", "rituals[cig_light]", "a HOLD ritual with no hold time")
+
+	_reset_fixture()
+	_record("rituals", "cig_ash")["flick_dirs"] = ["sideways"]
+	_expect("E_ENUM", "rituals[cig_ash].flick_dirs[0]", "an unknown flick direction")
 
 	# Legs and beats
 	_reset_fixture()

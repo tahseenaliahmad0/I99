@@ -1,5 +1,28 @@
 {
   "version": 1,
 
-  "rituals": []
+  "rituals": [
+    { "id": "horn",            "anchor": "horn",               "gesture": "TAP",
+      "eyes_down": false, "requires": [], "on_complete": [] },
+    { "id": "wipers",          "anchor": "wiper_stalk",        "gesture": "FLICK", "flick_dirs": ["up"],
+      "eyes_down": false, "requires": [], "on_complete": [] },
+    { "id": "hazards",         "anchor": "hazard_button",      "gesture": "TAP",
+      "eyes_down": false, "requires": [], "on_complete": [] },
+    { "id": "gear_shift",      "anchor": "gear_lever",         "gesture": "GATE",
+      "eyes_down": false, "requires": [], "on_complete": [] },
+    { "id": "visor_photo",     "anchor": "visor",              "gesture": "FLICK", "flick_dirs": ["down"],
+      "eyes_down": false, "requires": [], "on_complete": [] },
+    { "id": "slap",            "anchor": "face",               "gesture": "TAP",
+      "eyes_down": false, "requires": [], "on_complete": [] },
+    { "id": "passenger_ask",   "anchor": "passenger_shoulder", "gesture": "TAP",
+      "eyes_down": false, "requires": [], "on_complete": [] },
+    { "id": "glovebox_toggle", "anchor": "glovebox",           "gesture": "TAP",
+      "eyes_down": false, "requires": [], "on_complete": [] },
+    { "id": "indicator",       "anchor": "indicator_stalk",    "gesture": "FLICK", "flick_dirs": ["up", "down"],
+      "eyes_down": false, "requires": [], "on_complete": [] },
+    { "id": "headlights",      "anchor": "headlight_knob",     "gesture": "TAP",
+      "eyes_down": false, "requires": [], "on_complete": [] },
+    { "id": "window_crank",    "anchor": "window_crank",       "gesture": "CRANK", "turns": 3,
+      "eyes_down": false, "requires": [], "on_complete": [] }
+  ]
 }

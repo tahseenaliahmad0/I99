@@ -24,6 +24,7 @@ const RARITIES: PackedStringArray = ["common", "uncommon", "rare"]
 const GESTURES: PackedStringArray = ["TAP", "HOLD", "FLICK", "DRAG_TO", "CRANK", "BEAD", "GATE"]
 const BEAT_TYPES: PackedStringArray = ["CALM", "CLUSTER", "SLOWPOKE", "MERGE", "CURVE", "GUST", "HAZARD", "SPECIAL"]
 const HECKLE_TYPES: PackedStringArray = ["TWIST", "DARE", "DOUBT", "QUESTION", "ORDER", "FIB"]
+const FLICK_DIRS: PackedStringArray = ["up", "down", "left", "right"]
 const PLACEHOLDER_SHAPES: PackedStringArray = ["box", "cylinder", "capsule", "sphere", "quad", "label"]
 const REQUIRED_POINTS: PackedStringArray = ["G", "W", "eye", "shoulder"]
 
@@ -159,6 +160,8 @@ func _ritual_schema() -> Dictionary:
 		"anchor": _ref("anchors"),
 		"gesture": _enum(GESTURES),
 		"hold_s": _opt(_num(0.0)),
+		"flick_dirs": _opt(_list(_enum(FLICK_DIRS), 1)),
+		"turns": _opt(_num(0.0)),
 		"eyes_down": _bool(),
 		"blocks_view": _opt(_nullable(_str())),
 		"requires": _list(_str()),
@@ -503,6 +506,18 @@ func _check_cross_rules() -> void:
 		if has_legs == has_until:
 			_err("E_RULE", "passengers.json", "passengers[%s]" % GameData.as_string(passenger.get("id"), "?"),
 					"needs exactly one of rides_legs and rides_until")
+	for ritual: Dictionary in _data.records("rituals"):
+		var needs: String = ""
+		match GameData.as_string(ritual.get("gesture")):
+			"HOLD":
+				needs = "hold_s"
+			"FLICK":
+				needs = "flick_dirs"
+			"CRANK":
+				needs = "turns"
+		if not needs.is_empty() and not ritual.has(needs):
+			_err("E_RULE", "rituals.json", "rituals[%s]" % GameData.as_string(ritual.get("id"), "?"),
+					"a %s ritual needs \"%s\"" % [GameData.as_string(ritual.get("gesture")), needs])
 	for item: Dictionary in _data.records("items"):
 		var item_id: String = GameData.as_string(item.get("id"), "?")
 		var synergies: Array = GameData.as_array(item.get("synergies"))
