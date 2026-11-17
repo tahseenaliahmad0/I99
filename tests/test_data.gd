@@ -77,6 +77,7 @@ func test_data_01() -> void:
 	_check_broken_records()
 	_check_broken_tuning_anchors_lines()
 	_check_broken_files()
+	_check_broken_item_rules()
 
 
 # --- 1. Shipped data ----------------------------------------------------------
@@ -92,6 +93,125 @@ func _check_shipped_data() -> void:
 	check(data.has_line("narrator.start"), "a line of GDD 3.6 exists by id")
 	note("%d tuning constants, %d anchors, %d lines" % [
 		data.tuning.keys().size(), data.records("anchors").size(), data.line_ids().size()])
+
+
+# --- 6. What items say they do (M6) -------------------------------------------
+
+## The rules that came with the items of GDD 7: entries of gives and takes,
+## synergy rules, tags, standing changes, and what their rituals may say.
+func _check_broken_item_rules() -> void:
+	_reset_fixture()
+	_record("items", "cigarettes")["synergies"] = [{"with": "tea_glass", "rule": "nonsense"}]
+	_expect("E_ENUM", "items[cigarettes].synergies[0].rule", "a synergy rule the simulation does not know")
+
+	_reset_fixture()
+	_record("items", "cigarettes")["tags"] = ["smoke", "gadget"]
+	_expect("E_REF", "items[cigarettes].tags[1]", "a tag that is not in the tag list")
+
+	_reset_fixture()
+	_record("items", "cigarettes")["gives"] = [{"effect": "lit", "duration": 25, "bogus": 1}]
+	_expect("E_UNKNOWN_KEY", "items[cigarettes].gives[0]", "an entry with an unknown key")
+
+	_reset_fixture()
+	_record("items", "cigarettes")["gives"] = [{"effect": "glow", "duration": 5}]
+	_expect("E_REF", "items[cigarettes].gives[0].effect", "an entry with an unknown status")
+
+	_reset_fixture()
+	_record("items", "cigarettes")["gives"] = [{"effect": "lit", "resource": "nerves", "amount": -1}]
+	_expect("E_RULE", "items[cigarettes].gives[0]", "an entry that is both a status and a resource")
+
+	_reset_fixture()
+	_record("items", "cigarettes")["gives"] = [{"duration": 5}]
+	_expect("E_RULE", "items[cigarettes].gives[0]", "an entry that is neither")
+
+	_reset_fixture()
+	_record("items", "cigarettes")["takes"] = [{"resource": "fuel", "amount": 1}]
+	_expect("E_ENUM", "items[cigarettes].takes[0].resource", "an unknown resource")
+
+	_reset_fixture()
+	_record("items", "cigarettes")["takes"] = [{"resource": "nerves", "amount": 1, "per_s": 1}]
+	_expect("E_RULE", "items[cigarettes].takes[0]", "a resource entry both at once and by the second")
+
+	_reset_fixture()
+	_record("items", "cigarettes")["takes"] = [{"resource": "nerves"}]
+	_expect("E_RULE", "items[cigarettes].takes[0]", "a resource entry with no amount")
+
+	_reset_fixture()
+	_record("items", "cigarettes")["gives"] = [{"effect": "lit", "duration": "long"}]
+	_expect("E_TYPE", "items[cigarettes].gives[0].duration", "a duration that is not a number")
+
+	_reset_fixture()
+	_record("items", "cigarettes")["gives"] = [{"effect": "lit", "duration": 5, "while": "moonlight"}]
+	_expect("E_REF", "items[cigarettes].gives[0].while", "an entry under an unknown condition")
+
+	_reset_fixture()
+	_record("items", "cigarettes")["gives"] = [{"resource": "nerves", "amount": -2, "synergy": "bead_calm"}]
+	_expect("E_REF", "items[cigarettes].gives[0].synergy", "an entry naming a synergy the item does not have")
+
+	_reset_fixture()
+	_record("items", "cigarettes")["gives"] = [{"passive": "moon_boots", "amount": 1}]
+	_expect("E_ENUM", "items[cigarettes].gives[0].passive", "an unknown standing change")
+
+	_reset_fixture()
+	_record("items", "cigarettes")["gives"] = [{"passive": "close_call_bonus", "amount": 1, "while": "lit"}]
+	_expect("E_RULE", "items[cigarettes].gives[0]", "a standing change with more than its amount")
+
+	_reset_fixture()
+	_record("items", "cigarettes")["gives"] = [{"effect": "lit", "for": "act"}]
+	_expect("E_RULE", "items[cigarettes].gives[0].for", "a status held for something other than the leg")
+
+	_reset_fixture()
+	_record("items", "cigarettes")["takes"] = [{"effect": "haze_rate", "while": "lit"}]
+	_expect("E_RULE", "items[cigarettes].takes[0]", "a haze entry with no rate")
+
+	# Rituals.
+	_reset_fixture()
+	_record("rituals", "cig_light")["on_complete"] = ["refill:soup"]
+	_expect("E_REF", "rituals[cig_light].on_complete[0]", "a refill of a tag that is not in the tag list")
+
+	_reset_fixture()
+	_record("rituals", "cig_light")["requires"] = ["tag:soup"]
+	_expect("E_REF", "rituals[cig_light].requires[0]", "a condition on a tag that is not in the tag list")
+
+	_reset_fixture()
+	_record("rituals", "cig_light")["blocks_view"] = "everything"
+	_expect("E_ENUM", "rituals[cig_light].blocks_view", "an unknown part of the view")
+
+	_reset_fixture()
+	var carried: Dictionary = _record("rituals", "cig_light")
+	carried["gesture"] = "DRAG_TO"
+	carried["to"] = "@slot"
+	_expect("E_RULE", "rituals[cig_light].to", "a carry back to the slot by a ritual that is not at its slot")
+
+	_reset_fixture()
+	carried = _record("rituals", "cig_light")
+	carried["gesture"] = "DRAG_TO"
+	carried["to"] = "moon"
+	_expect("E_REF", "rituals[cig_light].to", "a carry to an unknown anchor")
+
+	_reset_fixture()
+	carried = _record("rituals", "cig_light")
+	carried["gesture"] = "DRAG_TO"
+	_expect("E_RULE", "rituals[cig_light]", "a carry with no destination and no distance")
+
+	_reset_fixture()
+	carried = _record("rituals", "cig_light")
+	carried["gesture"] = "DRAG_TO"
+	carried["across_m"] = 0.4
+	check(_validate().is_empty(), "a carry across with no destination is valid; first: %s" % _first(_validate()))
+
+	# Statuses and anchors.
+	_reset_fixture()
+	_record("effects", "lit")["immune"] = ["sneeze"]
+	_expect("E_ENUM", "effects[lit].immune[0]", "immunity to an unknown source of Nerves")
+
+	_reset_fixture()
+	_record("effects", "lit")["road_speed"] = 3.0
+	_expect("E_RANGE", "effects[lit].road_speed", "a road that runs faster than time")
+
+	_reset_fixture()
+	_record("anchors", "tape")["over"] = "moon"
+	_expect("E_REF", "anchors[tape].over", "an anchor standing over an unknown one")
 
 
 # --- 2. The GDD 14 examples ---------------------------------------------------

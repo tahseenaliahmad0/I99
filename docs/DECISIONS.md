@@ -1008,3 +1008,187 @@ Format: `D-NNN (milestone, date) Title` then Context / Decision / Why.
   above and behind the first row). A fuel station late in a Telling can hold
   out three items, five restocks and two Deals; with five places most of
   that waited unseen until something was bought.
+
+## D-042 (M6, 2026-11-17) The phone, the Keepsakes, seven synergies
+
+- **Calls.** The wait for the next call (25 to 40 s, from the road stream)
+  is counted from the end of the last one, or from when the phone first
+  rides along. "One call in four is Um Noor" is every fourth call of the
+  Telling, not a one-in-four chance: he can learn it. Her call pays no cash
+  (also with the taxi sign). Each of the three TAPs is a ritual; from the
+  first one his eyes are down for as long as his hand stays on the phone
+  and the call is open. One call is one use of the phone to whoever watches
+  (+30 once, not per TAP). A call still ringing when he stops is dropped
+  without penalty. The count of calls and of calls answered in a row pass
+  through a stop.
+- **Standing changes.** A Keepsake, Adaptation or Deal that works by being
+  there says so with `{"passive": key, "amount": n}` entries; `ItemSim`
+  keeps the combined value per key (multipliers multiply, amounts add) and
+  the other systems read it. The keys are `ItemSim.PASSIVES`.
+- **Charm.** It turns aside scrapes only (rail, barrier, a slow vehicle, the
+  tailgater's ram), the first of each leg. The scrape still frays him and
+  costs speed. No lamp lit means the leg can still be a clean one. Spent,
+  it stays spent through the leg's stop.
+- **Thermos.** Offered while there is tea in the cabin to refill; a pour
+  fills the glass and makes it hot, whatever was in it. It has no restock:
+  four refills are what it holds.
+- **Duct tape.** It takes hold of the first fault lit in the act (of
+  several lit by one hit, the first drawn) and that fault mends itself 10 s
+  later, or the moment he stands at a stop. The lamp did light: the leg is
+  not clean. A new act begins when the road of that act does.
+- **Lucky note.** 1 cash per close call, flat: not multiplied by gear,
+  chain or Courage.
+- **Cracked sunglasses.** "Darker" is distance: at night he sees that share
+  less far (the headlight cone times 1 - 0.15), and the snapshot carries the
+  share for the picture. Glare is multiplied by 0.3 on its way to the view;
+  Glare does nothing else.
+- **Synergies** live on one item of the pair (`synergies`: `with`, `rule`,
+  numbers) and work by rule name (`ItemSim.SYNERGY_RULES`), only while the
+  partner is in the cabin (or, for the tokens, music is playing / always
+  for the photo).
+  - Tea + Cigarettes: every sip while one is lit adds 10 s to that burn
+    (no Tremor, Awake, Haze for 10 s more). The -10 Nerves of a cigarette
+    stay -10.
+  - Flask + Photo: a look with Courage ends all Courage, every time. The
+    -40 takes the place of the photo's -20 and is, like it, once per leg.
+  - Flask + Painkillers: while Courage and a pill's 60 s overlap, Lag is
+    doubled (and then capped) and close-call cash doubled. Owning both
+    does nothing by itself.
+  - Phone + Taxi sign: every third call answered in a row pays 20 more; a
+    missed call starts the row again; Um Noor's call counts as answered.
+  - Seeds + Tea: the tea does not cool while he chews.
+- **Tags.** items.json lists the tags there are (`tags`). An item's tags,
+  a `tag:<tag>` condition and a `refill:<tag>` op must name one of them: a
+  misspelt tag is an error whether or not any item carries the right one.
+- **Fixed on the way.** A save made at a stop in Act 2 or 3 would have
+  looked like the start of a new act when loaded; what belongs to the
+  Telling is now put back after the road is.
+
+## D-043 (M6, 2026-11-17) The Adaptations and their two synergies
+
+- **Fitting.** Whatever in the cabin works by being there is read into the
+  other systems whenever the cabin changes (`DriveSim._fit_cabin`, on
+  `ItemSim.cabin_serial`): wheel rates, sideways speed, the fifth gear, lamp
+  capacity, and where each anchor is.
+- **Crossover stalk.** It moves the `indicator_stalk` anchor to (0.20, 0.14,
+  -0.12): right of the column, 0.09 s from the wheel, clear of the other
+  controls on screen. The item's params say so (`moves_anchor`,
+  `moves_to`); the snapshot carries `anchor_moves`.
+- **Console window switch.** A new anchor `window_switch` at (0.20, -0.13,
+  0.12), a Near reach (0.20 s), with a HOLD of 0.6 s. The crank stays where
+  it is and still works.
+- **Wheel ring.** Read literally ("setting it locks the wheel at its current
+  angle") the hook would be useless: the hand must leave the wheel to tap
+  it, and a wheel let go is back at centre before any TAP can land (200
+  degrees a second). So: a TAP at the `hook` anchor (inside the rim, 0.16 s
+  from the grip) hangs the hook in its ring, and there it waits. The next
+  time his hand lets go of the wheel, the hook holds the wheel at the angle
+  it has, for `hook_lock_s` (4 s) at most; taking the wheel again ends it
+  at once. Then the hook is out of its ring for `hook_cooldown_s` (6 s)
+  and must be set again. It holds the angle, not the lane: the crown and
+  every other drift still carry the car. A stop takes the hook out of its
+  ring (every status ends there).
+- **Ring + Spinner knob.** While the hook holds and the road is straight
+  (no bend under the car), it turns the wheel to bring the car to the
+  middle of the lane it is in within `hook_settle_time` (0.5 s) and keep it
+  there against the drift. In a bend it holds a fixed angle like the ring
+  alone.
+- **Thumb keypad.** `pad_horn` (middle click) and `pad_wiper` (scroll, either
+  way) work only while he grips the wheel and only with the keypad fitted;
+  each press is one honk or one sweep, with all the horn's and the wipers'
+  own rules.
+- **Stalk + Keypad.** He indicates by himself when a lane change begins:
+  when the side of the car is over a lane line with a lane beyond it and
+  the car is moving that way. The indicator is then on by the time the car
+  crosses, so the patrol has nothing against him. Drifting onto the
+  shoulder is no lane change.
+- **Loud horn.** Every vehicle ahead in his lane within the horn's range
+  moves over if the next lane is free, whatever its type (the motorcade
+  holds every lane, so it has nowhere to go). The honk's calm is -5 in
+  place of -3, still once per cooldown; a honk in view of a patrol is the
+  honk's +15 and 15 more.
+- **Fog lamps.** +40% of whatever limits his view: the headlight cone at
+  night, the dust's visibility, and in rain the time a sweep keeps the
+  glass clear (6 s becomes 8.4 s). Each oncoming vehicle met flashes back:
+  +2 Nerves. A vehicle is met when it passes the car on an undivided road.
+  The rule of GDD 4.6 that each oncoming vehicle met on high beam adds 2
+  Nerves was missing and is now there too; the two add up.
+- **Wide mirror.** What the mirror tells him comes 5 s earlier: the patrol's
+  blue lights, and the tailgater's car behind. A cracked mirror's 2 s of
+  delay, until now only a number in the snapshot, works the same way with
+  the other sign; both together are 3 s early. `mirror_scale` (1.5) in the
+  snapshot is for the view.
+
+## D-044 (M6, 2026-11-17) The Deals and the Phantom
+
+- **Forged papers.** A small thing for the dash or a glovebox cell,
+  contraband while he has it. `DriveSim.use_forged_papers()` is what the
+  Checkpoint's Papers phase (M7) will call: true once, and the papers are
+  gone. Until M7 the test checks that call; a check at the real Checkpoint
+  is owed to T-ITEM-FORGED-PAPERS then.
+- **Tinted glass, turbo, the good stuff** take no slot: they are the car's
+  own, and his the moment he buys them (D-037). Tinted glass and the turbo
+  cost no cash: their price is the lamp. Suspicion "gains" are everything
+  that raises it, at once or by the second; what wears it off is not
+  slowed. Lamp capacity changes add up (tinted and turbo: 3 lamps; a bull
+  bar gives one back). "Braking 30% weaker" is `brake_decel` times 0.7.
+  "20% darker" is, like the sunglasses' 15%, distance at night, and the
+  two add (35%).
+- **The good stuff.** Courage stacks to 5 instead of 3, and it is one
+  permanent source of Lag (40 ms sober; five stacks and it are 240 ms,
+  held at `lag_cap`). At four stacks and more nothing frays him at all
+  (1 - 0.3 n, never below nothing).
+- **The flinch.** A cross-reach begins when the hand, on his side of the
+  hub, is sent to a control on the far side (an anchor with x below 0). If
+  his Nerves are `phantom_flinch_from` (60) or more, or his lids are
+  closing, the hand stays where it is for `phantom_flinch_delay` (0.25 s)
+  before it leaves, while the snapshot shows the ghost going for that
+  control (`ghost_at`, `ghost_progress`). A hand already across does not
+  flinch on its way to the next control there; the next cross-reach does.
+  Gripping the left of the rim is not a reach for a control. An Adaptation
+  that puts the control on his side (the crossover stalk) or gives him
+  another on his side (the window switch) takes the cross-reach away, and
+  the flinch with it, by geometry alone.
+- **The cramp.** In a leg with rain or night, when the car passes
+  `phantom_cramp_at` (half) of the leg's length, a hum begins
+  (`phantom_hum`; `cramp` in the snapshot is "hum"); `phantom_cramp_hum`
+  (1.5 s) later the cramp: +10 Nerves, and for `phantom_cramp_length`
+  (0.5 s) a hand on the wheel cannot let go (it still steers), a hand off
+  it cannot take the wheel or begin anything at an anchor, and a lever in
+  the hand is not let go. The point is of the road, so a leg has one; a
+  stop does not bring it back. Painkillers taken before the point (or
+  during the hum) mean no cramp in that leg. The Storm's cramp is M7.
+- **The setting.** `DriveSim.phantom_enabled` (GDD 17.1, "The Phantom: on or
+  off"); the settings screen that sets it, like those for steering
+  sensitivity, grip mode and shifting, is M10.
+- **Numbers of 7.9** are in tuning.json (`phantom_*`).
+
+## D-045 (M6, 2026-11-17) What the items look like
+
+- **An item in a reachable slot** is drawn at its slot from its own
+  placeholder (`item_<id>`); contraband wears a small magenta tag over it
+  (GDD 16.1). A ringing phone rises and falls on its mount twice a second
+  (under the three flashes a second of GDD 16.4).
+- **Fittings** (anchors.json `fittings`): what an Adaptation adds to the car
+  is drawn while its item is in a bay: the spinner knob and the thumb
+  keypad on the wheel (they turn with it), the ring at the hook's anchor,
+  the crossover stalk's lever, the console switch, the bull bar and the fog
+  lamps at the front of the hood, where they take a little of the road
+  from his view. The taxi sign is on the roof and cannot be seen from the
+  driver's seat; the fifth gear, the loud horn, the turbo, the tinted glass
+  and the good stuff have nothing to draw yet (the tint is for the post
+  effect of M10).
+- **A moved anchor** is drawn where the snapshot's `anchor_moves` says, and
+  so is an item whose slot it is. The wide mirror widens the mirror.
+- **The hand** carries what it carries (the item's own placeholder, or a
+  plain box for his licence and banknotes). Under Lag it is drawn where the
+  wheel was when the car last answered: it trails the wheel. The ghost of
+  the Phantom is a faint arm and hand from the pinned sleeve to the control
+  and a little through it.
+- **Sway** rolls the camera (`sway_view_roll` degrees per m/s of push).
+- **Command line.** `--give=<item>[,<item>...]` puts items in the cabin and
+  `--hud` starts with the numeric HUD showing (both for looking at things;
+  the debug keys of GDD 13.9 are M10). The smoke test now also drives a
+  Rain leg with a cabin full of items.
+- **Three bays** hold at most three Adaptations: `--give` with a fourth
+  takes the place of the first.

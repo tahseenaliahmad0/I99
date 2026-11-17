@@ -11,6 +11,9 @@ const WITH_ARGUMENTS: Array = [
 	["res://scenes/drive.tscn", ["--leg=night,2", "--bot=line"]],
 	["res://scenes/drive.tscn", ["--leg=roadworks,2", "--bot=line"]],
 	["res://scenes/drive.tscn", ["--leg=motorcade,3", "--bot=line"]],
+	# A cabin full of things: every kind of item drawn, the HUD's rows for them.
+	["res://scenes/drive.tscn", ["--leg=rain,1", "--bot=line", "--hud",
+			"--give=beads,seeds,phone,arak_flask,mixtape,thermos,forged_papers,tissue_box,bull_bar,fog_lamps,taxi_sign,spinner_knob,wheel_ring,crossover_stalk,thumb_keypad,wide_mirror,tinted_glass,turbo,good_stuff"], 3000],
 	# A Telling to its first stop and on: fork, leg, Exit, stop and save, fork again.
 	["res://scenes/drive.tscn", ["--table=drivers", "--seed=7", "--bot=line"], 9000],
 ]

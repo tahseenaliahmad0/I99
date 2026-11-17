@@ -36,6 +36,17 @@ var _lit_tip: Node3D
 var _visor_down: Node3D
 var _items: Node3D
 var _clock: Label3D
+## anchor id -> where its marker is drawn when nothing has moved the anchor,
+## and how far that is from the anchor itself.
+var _marker_home: Dictionary = {}
+var _marker_offset: Dictionary = {}
+## Things fitted to the car: [item id, node] for each (GDD 7.6).
+var _fittings: Array[Array] = []
+## item id -> the magenta tag on it while it is contraband (GDD 16.1).
+var _tags: Dictionary = {}
+var _mirror: Node3D
+var _ring_bob: float = 0.0
+var _ring_hz: float = 0.0
 
 
 func setup(data: GameData, factory: PlaceholderFactory) -> void:
@@ -76,6 +87,8 @@ func setup(data: GameData, factory: PlaceholderFactory) -> void:
 		else:
 			anchors.add_child(marker)
 		_markers[id] = marker
+		_marker_home[id] = marker.position
+		_marker_offset[id] = GameData.as_vec3(anchor.get("marker_offset"))
 
 	_outline = factory.make("anchor_outline")
 	_outline.name = "SnapOutline"
@@ -116,6 +129,22 @@ func setup(data: GameData, factory: PlaceholderFactory) -> void:
 		_clock.position = Vector3(tuning.fi("dash_clock_pos", 0), tuning.fi("dash_clock_pos", 1), tuning.fi("dash_clock_pos", 2))
 		dash.add_child(_clock)
 
+	# What is fitted to the car shows where it is fitted, on the wheel or off it.
+	var fitted: Node3D = _group("Fittings")
+	for fitting: Dictionary in data.records("fittings"):
+		var node: Node3D = factory.make(GameData.as_string(fitting.get("placeholder")))
+		node.name = GameData.as_string(fitting.get("id"))
+		node.position = GameData.as_vec3(fitting.get("pos"))
+		node.visible = false
+		if GameData.as_bool(fitting.get("on_wheel")):
+			_wheel.add_child(node)
+		else:
+			fitted.add_child(node)
+		_fittings.append([GameData.as_string(fitting.get("item")), node])
+	_mirror = get_node_or_null("Mirror") as Node3D
+	_ring_bob = tuning.f("phone_ring_bob")
+	_ring_hz = tuning.f("phone_ring_hz")
+
 	_lit_tip = factory.make("item_cigarette_lit")
 	_lit_tip.visible = false
 	_items.add_child(_lit_tip)
@@ -135,11 +164,19 @@ func apply(snapshot: Dictionary) -> void:
 	if _lever_knob != null:
 		_lever_knob.position = _lever_rest + Vector3(lever.x, 0.0, -lever.y) * _gate_scale
 
-	# An anchor is drawn only while something can be done there.
+	# An anchor is drawn only while something can be done there, and where it
+	# is now: an Adaptation may have moved it (the crossover stalk).
 	var in_use: Array[StringName] = snapshot["anchors_in_use"]
+	var moves: Dictionary = snapshot["anchor_moves"]
 	for id: Variant in _markers:
 		var marker_node: Node3D = _markers[id]
 		marker_node.visible = in_use.has(StringName(str(id)))
+		var home: Vector3 = _marker_home[id]
+		var offset: Vector3 = _marker_offset[id]
+		marker_node.position = (GameData.as_vec3(moves[str(id)]) + offset) if moves.has(str(id)) else home
+	if _mirror != null:
+		var mirror_scale: float = snapshot["mirror_scale"]
+		_mirror.scale = Vector3(mirror_scale, 1.0, 1.0)
 
 	var capacity: int = snapshot["lamp_capacity"]
 	var lit: int = snapshot["lamps"]
@@ -154,7 +191,8 @@ func apply(snapshot: Dictionary) -> void:
 
 	_visor_down.visible = snapshot["visor_down"]
 	var items: Array[Dictionary] = snapshot["items"]
-	_show_items(items)
+	var time: float = snapshot["time"]
+	_show_items(items, moves, str(snapshot["caller"]) != "", time)
 
 	var snapped: String = str(snapshot["hand_snap"])
 	if snapped != _snapped:
@@ -169,12 +207,19 @@ func apply(snapshot: Dictionary) -> void:
 
 ## Each item is drawn at its slot (GDD 7.1), from its own placeholder
 ## "item_<id>" (or "item_default"). An empty one is hidden.
-func _show_items(items: Array[Dictionary]) -> void:
+func _show_items(items: Array[Dictionary], moves: Dictionary, ringing: bool, time: float) -> void:
 	var seen: Dictionary = {}
 	var burning: bool = false
+	for fitting: Array in _fittings:
+		var fitted: Node3D = fitting[1]
+		fitted.visible = false
 	for item: Dictionary in items:
 		var id: String = str(item["id"])
 		seen[id] = true
+		for fitting: Array in _fittings:
+			if fitting[0] == id:
+				var fitted: Node3D = fitting[1]
+				fitted.visible = true
 		var node: Node3D = null
 		if _item_nodes.has(id):
 			node = _item_nodes[id]
@@ -187,16 +232,34 @@ func _show_items(items: Array[Dictionary]) -> void:
 		var supply: int = item["supply"]
 		node.visible = _anchor_pos.has(anchor) and supply != 0
 		if _anchor_pos.has(anchor):
-			var at: Vector3 = _anchor_pos[anchor]
+			var at: Vector3 = GameData.as_vec3(moves[anchor]) if moves.has(anchor) else _anchor_pos[anchor]
 			node.position = at + Vector3(0.0, _item_lift, 0.0)
+			if ringing and id == "phone":
+				# The ringing phone shakes on its mount, slowly enough to be no flash (GDD 16.4).
+				node.position.y += _ring_bob * (0.5 + 0.5 * sin(TAU * _ring_hz * time))
 			if item["burning"]:
 				burning = true
 				_lit_tip.position = node.position + Vector3(0.03, 0.01, 0.0)
+		# Contraband wears a magenta tag (GDD 16.1).
+		if item["contraband"]:
+			var tag: Node3D = null
+			if _tags.has(id):
+				tag = _tags[id]
+			else:
+				tag = _factory.make("item_contraband_tag")
+				_items.add_child(tag)
+				_tags[id] = tag
+			tag.visible = node.visible
+			tag.position = node.position + Vector3(0.0, _factory.size_of("item_contraband_tag").y * 2.5, 0.0)
 	_lit_tip.visible = burning
 	for id: Variant in _item_nodes:
 		if not seen.has(id):
 			var gone: Node3D = _item_nodes[id]
 			gone.visible = false
+	for id: Variant in _tags:
+		if not seen.has(id):
+			var loose: Node3D = _tags[id]
+			loose.visible = false
 
 
 ## Where an anchor's marker is drawn, in world space (for overlays).

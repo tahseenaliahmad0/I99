@@ -127,3 +127,15 @@ stage.boss_stop,,,true
 stage.arrival,,,true
 stage.ended,,,true
 stage.none,,,true
+hud.courage,,,true
+hud.call,,,true
+call.dispatcher,,,true
+call.um_noor,,,true
+hud.hook,,,true
+hook.armed,,,true
+hook.set,,,true
+hook.cooling,,,true
+hud.cramp.hum,,,true
+hud.cramp.cramp,,,true
+hud.ghost,,,true
+hud.carrying,,,true

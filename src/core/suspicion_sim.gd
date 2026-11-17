@@ -15,6 +15,8 @@ var watching: bool = false
 var reached_max: bool = false
 ## What one-off offences added this tick.
 var jumped: float = 0.0
+## Scales everything that raises Suspicion (tinted glass, GDD 7.7). Set by DriveSim.
+var gain_mult: float = 1.0
 
 var _max: float = 100.0
 var _decay: float = 0.0
@@ -52,6 +54,8 @@ func begin_tick() -> void:
 func add(amount: float) -> void:
 	if not watching:
 		return
+	if amount > 0.0:
+		amount *= gain_mult
 	value = clampf(value + amount, 0.0, _max)
 	jumped += amount
 
@@ -59,7 +63,7 @@ func add(amount: float) -> void:
 ## An offence that counts by the second, for this tick.
 func add_rate(per_second: float) -> void:
 	if watching:
-		_rate += per_second
+		_rate += per_second * (gain_mult if per_second > 0.0 else 1.0)
 
 
 func step(dt: float) -> void:

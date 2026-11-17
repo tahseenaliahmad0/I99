@@ -16,9 +16,12 @@ enum AppState { BOOT, TITLE, PROLOGUE, WEDDING, TELLING, WRECK_CUT, ENDING, FINA
 ## `--aim=<anchor id>` points the hand at an anchor without a mouse, and
 ## `--shot=<file.png>` saves one rendered frame and quits, after
 ## `--shot-frame=<n>` frames (DECISIONS D-014, D-019).
-const VALUE_ARGS: PackedStringArray = ["table", "seed", "leg", "boss", "bot", "user-dir", "aim", "shot", "shot-frame"]
+## `--give=<item>[,<item>...]` puts items in the cabin (the debug key F5 of
+## GDD 13.9 from the command line).
+const VALUE_ARGS: PackedStringArray = ["table", "seed", "leg", "boss", "bot", "user-dir", "aim", "shot", "shot-frame", "give"]
 ## `--continue` goes on from the save file (until the title screen offers it).
-const FLAG_ARGS: PackedStringArray = ["skip-prologue", "continue"]
+## `--hud` starts with the numeric HUD showing.
+const FLAG_ARGS: PackedStringArray = ["skip-prologue", "continue", "hud"]
 
 ## Tools and tests started with `--script` never touch the player's files.
 const TOOL_USER_DIR: String = "user://test_runs/tool"

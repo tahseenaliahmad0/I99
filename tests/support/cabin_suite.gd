@@ -84,6 +84,26 @@ func _reach(anchor: String) -> bool:
 	return _sim.hand.at_id() == StringName(anchor)
 
 
+## Seconds the hand takes from the grip reference on the wheel to an anchor.
+func _reach_time(anchor: String) -> float:
+	_input.clear()
+	_ticks(SETTLE)
+	_sim.hand.place_at(_sim.space.grip_reference)
+	var from_tick: int = _sim.tick
+	if not _reach(anchor):
+		return INF
+	return float(_sim.tick - from_tick) * DT
+
+
+## Gripping: the pointer pulled sideways `pixels` in all, over `ticks` ticks.
+func _steer(pixels: float, ticks: int = 10) -> void:
+	_input.pointer_is_absolute = false
+	_input.lmb = true
+	_input.pointer_delta = Vector2(pixels / float(ticks), 0.0)
+	_ticks(ticks)
+	_input.pointer_delta = Vector2.ZERO
+
+
 ## The button down for `ticks` ticks, then up.
 func _press(ticks: int) -> void:
 	_input.lmb = true
@@ -352,6 +372,73 @@ func _scrape() -> void:
 	_sim.gate.reset(3)
 	for event: Dictionary in _sim.drain_events():
 		_events.append(event)
+
+
+## One scrape along the guardrail, whether or not it lights a lamp; then
+## back in his lane, in third gear, past the hit's immunity. Returns the hit.
+func _scrape_rail() -> Dictionary:
+	var lane_x: float = _sim.car.x
+	var hit: Dictionary = {}
+	var guard: int = _ticks_in(5.0)
+	_input.clear()
+	while hit.is_empty() and guard > 0:
+		guard -= 1
+		_sim.car.x = _sim.car.guardrail_x()
+		_sim.step(_input)
+		for event: Dictionary in _sim.drain_events():
+			_events.append(event)
+			if GameData.as_string(event.get("type")) == "hit":
+				hit = event
+	for _index: int in _ticks_in(tuning.f("hit_immunity") + 0.2):
+		_sim.car.x = lane_x
+		_sim.step(_input)
+	_sim.gate.reset(3)
+	for event: Dictionary in _sim.drain_events():
+		_events.append(event)
+	return hit
+
+
+## Drives the Telling on, each stretch to its end at once and through every
+## stop, until `act` has begun.
+func _drive_on_to_act(act: int) -> void:
+	var guard: int = 40000
+	_input.clear()
+	while _sim.run.act < act and guard > 0:
+		guard -= 1
+		if _sim.stopped:
+			_leave_stop()
+			continue
+		_sim.car.x = _sim.car.lane_center(1 if _sim.car.lanes > 1 else 0)
+		if _sim.leg.active and _sim.car.s < _sim.leg.length - 2.0:
+			_sim.car.s = _sim.leg.length - 1.0
+		_sim.step(_input)
+	for event: Dictionary in _sim.drain_events():
+		_events.append(event)
+	check_eq(_sim.run.act, act, "(act %d)" % act)
+
+
+## Drives on past the next fork into the leg behind it (the right branch),
+## with nothing on that leg's road.
+func _into_next_quiet_leg() -> void:
+	var guard: int = _ticks_in(120.0)
+	var legs_done: int = _sim.run.legs_done
+	var on_approach: bool = _sim.run.stage == RunState.Stage.APPROACH
+	_input.clear()
+	while not (_sim.run.stage == RunState.Stage.LEG and (on_approach or _sim.run.legs_done > legs_done)) and guard > 0:
+		guard -= 1
+		_sim.car.x = _sim.car.lane_center(_sim.car.lanes - 1)
+		if _sim.leg.active and _sim.car.s < _sim.leg.length - 2.0:
+			_sim.car.s = _sim.leg.length - 1.0
+		_sim.step(_input)
+	var plan: Dictionary = RunGenerator.plan(data, _sim.run.branch, _sim.run.act)
+	for key: String in ["spawns", "hazards", "curves", "gusts", "zones"]:
+		plan[key] = []
+	for key: String in ["flock", "melons", "motorcade"]:
+		plan[key] = {}
+	_sim.gate.reset(3)
+	_sim.begin_leg(plan)
+	_sim.in_encounter = true
+	_sim.drain_events()
 
 
 ## Into the slip lane and to the stall in second gear: he stops. (A stop
