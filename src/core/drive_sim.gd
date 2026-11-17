@@ -1362,6 +1362,7 @@ func _item_snapshots() -> Array[Dictionary]:
 			"ash_fell": item.ash_fell,
 			"craving": item.lapse_left >= 0.0,
 			"warbling": items.warbling(item),
+			"contraband": GameData.as_bool(item.record.get("contraband")),
 		})
 	return out
 

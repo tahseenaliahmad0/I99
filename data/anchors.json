@@ -44,7 +44,7 @@
     { "id": "offer_9",            "pos": [1.02, 0.30, 0.38],    "time_s": 0.65 },
     { "id": "offer_10",           "pos": [1.02, 0.30, 0.50],    "time_s": 0.69 },
     { "id": "window_switch",      "pos": [0.20, -0.13, 0.12],   "time_s": 0.20 },
-    { "id": "hook",               "pos": [0.09, -0.09, 0.00],   "time_s": 0.16 }
+    { "id": "hook",               "pos": [0.09, -0.09, 0.00],   "time_s": 0.16, "marker_offset": [0.0, 0.0, 0.05] }
   ],
 
   "slots": [
@@ -63,6 +63,17 @@
     { "id": "bay_1",       "anchor": null,          "reach": "none", "holds": ["adaptation"] },
     { "id": "bay_2",       "anchor": null,          "reach": "none", "holds": ["adaptation"] },
     { "id": "bay_3",       "anchor": null,          "reach": "none", "holds": ["adaptation"] }
+  ],
+
+  "fittings": [
+    { "id": "spinner_knob",    "item": "spinner_knob",    "placeholder": "fit_spinner_knob",    "pos": [0.13, 0.14, 0.03],   "on_wheel": true },
+    { "id": "thumb_keypad",    "item": "thumb_keypad",    "placeholder": "fit_thumb_keypad",    "pos": [0.06, 0.05, 0.03],   "on_wheel": true },
+    { "id": "wheel_ring",      "item": "wheel_ring",      "placeholder": "fit_wheel_ring",      "pos": [0.09, -0.115, 0.05] },
+    { "id": "crossover_stalk", "item": "crossover_stalk", "placeholder": "fit_crossover_stalk", "pos": [0.15, 0.10, -0.09] },
+    { "id": "window_switch",   "item": "window_switch",   "placeholder": "fit_window_switch",   "pos": [0.20, -0.145, 0.12] },
+    { "id": "bull_bar",        "item": "bull_bar",        "placeholder": "fit_bull_bar",        "pos": [0.275, 0.11, -1.58] },
+    { "id": "fog_lamp_left",   "item": "fog_lamps",       "placeholder": "fit_fog_lamp",        "pos": [-0.35, 0.06, -1.50] },
+    { "id": "fog_lamp_right",  "item": "fog_lamps",       "placeholder": "fit_fog_lamp",        "pos": [0.90, 0.06, -1.50] }
   ],
 
   "props": [

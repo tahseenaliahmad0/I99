@@ -71,6 +71,12 @@ func _ready() -> void:
 	else:
 		sim.free_traffic_per_km = tuning.f("free_traffic_per_km")
 
+	if Game.args.has("give"):
+		for item_id: String in str(Game.args["give"]).split(",", false):
+			if sim.give_item(StringName(item_id)) == null:
+				push_error("Drive: --give names an item that cannot be put in the cabin: '%s'" % item_id)
+	if Game.args.has("hud") and not _hud.visible:
+		_hud.toggle()
 	if Game.args.has("aim"):
 		_aim_anchor = sim.hand.anchor_index(StringName(str(Game.args["aim"])))
 		if _aim_anchor == HandSim.NO_ANCHOR:
@@ -131,8 +137,10 @@ func _process(delta: float) -> void:
 	var snapshot: Dictionary = sim.snapshot()
 	var cam_yaw: float = snapshot["cam_yaw"]
 	var cam_pitch: float = snapshot["cam_pitch"]
-	# Yaw toward the passenger (+X) is a negative turn about +Y.
-	_camera.rotation = Vector3(deg_to_rad(cam_pitch), -deg_to_rad(cam_yaw), 0.0)
+	# Yaw toward the passenger (+X) is a negative turn about +Y. Sway rocks
+	# the horizon (GDD 5.8): the camera rolls with the push.
+	var sway: float = snapshot["sway"]
+	_camera.rotation = Vector3(deg_to_rad(cam_pitch), -deg_to_rad(cam_yaw), deg_to_rad(sway * sim.tuning.f("sway_view_roll")))
 	_cabin.apply(snapshot)
 	_hand.apply(snapshot)
 	_road.apply(snapshot, delta)

@@ -1162,3 +1162,33 @@ Format: `D-NNN (milestone, date) Title` then Context / Decision / Why.
   off"); the settings screen that sets it, like those for steering
   sensitivity, grip mode and shifting, is M10.
 - **Numbers of 7.9** are in tuning.json (`phantom_*`).
+
+## D-045 (M6, 2026-11-17) What the items look like
+
+- **An item in a reachable slot** is drawn at its slot from its own
+  placeholder (`item_<id>`); contraband wears a small magenta tag over it
+  (GDD 16.1). A ringing phone rises and falls on its mount twice a second
+  (under the three flashes a second of GDD 16.4).
+- **Fittings** (anchors.json `fittings`): what an Adaptation adds to the car
+  is drawn while its item is in a bay: the spinner knob and the thumb
+  keypad on the wheel (they turn with it), the ring at the hook's anchor,
+  the crossover stalk's lever, the console switch, the bull bar and the fog
+  lamps at the front of the hood, where they take a little of the road
+  from his view. The taxi sign is on the roof and cannot be seen from the
+  driver's seat; the fifth gear, the loud horn, the turbo, the tinted glass
+  and the good stuff have nothing to draw yet (the tint is for the post
+  effect of M10).
+- **A moved anchor** is drawn where the snapshot's `anchor_moves` says, and
+  so is an item whose slot it is. The wide mirror widens the mirror.
+- **The hand** carries what it carries (the item's own placeholder, or a
+  plain box for his licence and banknotes). Under Lag it is drawn where the
+  wheel was when the car last answered: it trails the wheel. The ghost of
+  the Phantom is a faint arm and hand from the pinned sleeve to the control
+  and a little through it.
+- **Sway** rolls the camera (`sway_view_roll` degrees per m/s of push).
+- **Command line.** `--give=<item>[,<item>...]` puts items in the cabin and
+  `--hud` starts with the numeric HUD showing (both for looking at things;
+  the debug keys of GDD 13.9 are M10). The smoke test now also drives a
+  Rain leg with a cabin full of items.
+- **Three bays** hold at most three Adaptations: `--give` with a fourth
+  takes the place of the first.

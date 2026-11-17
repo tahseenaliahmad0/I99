@@ -127,3 +127,15 @@ stage.boss_stop,,boss stop,false
 stage.arrival,,arrival,false
 stage.ended,,arrived,false
 stage.none,,no Telling,false
+hud.courage,,Courage %s  sway %s m/s  lag %s ms,false
+hud.call,,"Call: %s, %s s left, %s taps",false
+call.dispatcher,,the dispatcher,false
+call.um_noor,,Um Noor,false
+hud.hook,,Hook: %s,false
+hook.armed,,set,false
+hook.set,,holding the wheel,false
+hook.cooling,,out of its ring,false
+hud.cramp.hum,,A HUM...,false
+hud.cramp.cramp,,CRAMP,false
+hud.ghost,,His left hand reaches,false
+hud.carrying,,Carrying: %s,false

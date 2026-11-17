@@ -451,6 +451,18 @@ func _prop_schema() -> Dictionary:
 	})
 
 
+## Something fitted to the car that the cabin shows while its item is there.
+func _fitting_schema() -> Dictionary:
+	return _obj({
+		"id": _str(),
+		"item": _ref("items"),
+		"placeholder": _ref("placeholders"),
+		"pos": _t("vec3"),
+		# It sits on the wheel and turns with it.
+		"on_wheel": _opt(_bool()),
+	})
+
+
 func _placeholder_schema() -> Dictionary:
 	return _obj({
 		"placeholder": _obj({
@@ -636,6 +648,7 @@ func _check_anchor_file() -> void:
 		_err("E_MISSING", "anchors.json", "points", "required object is missing")
 	_check_record_set("anchors", _anchor_schema())
 	_check_record_set("props", _prop_schema())
+	_check_record_set("fittings", _fitting_schema())
 
 
 func _check_registry(file: String, schema: Dictionary) -> void:

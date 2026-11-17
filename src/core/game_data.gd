@@ -29,6 +29,7 @@ const RECORD_SETS: Dictionary = {
 	"anchors": ["anchors", "anchors"],
 	"slots": ["anchors", "slots"],
 	"props": ["anchors", "props"],
+	"fittings": ["anchors", "fittings"],
 }
 ## The fourteen JSON files of GDD 13.2. placeholders and sfx are registries:
 ## the root object maps an id straight to its entry (GDD 14).

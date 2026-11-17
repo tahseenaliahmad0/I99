@@ -85,4 +85,20 @@ func apply(snapshot: Dictionary) -> void:
 		rows.append(Lines.format("hud.blur", ["%.2f" % rain_blur, "%.2f" % haze]))
 	if snapshot["eyes_shut"]:
 		rows.append(Lines.get_text("hud.eyes_shut"))
+	var courage: int = snapshot["courage"]
+	var lag: float = snapshot["lag"]
+	if courage > 0 or lag > 0.0:
+		var sway: float = snapshot["sway"]
+		rows.append(Lines.format("hud.courage", [str(courage), "%.2f" % sway, "%.0f" % (lag * 1000.0)]))
+	if str(snapshot["caller"]) != "":
+		var ring_left: float = snapshot["ring_left"]
+		rows.append(Lines.format("hud.call", [Lines.get_text("call.%s" % str(snapshot["caller"])), "%.1f" % ring_left, str(snapshot["call_taps"])]))
+	if str(snapshot["hook"]) != "":
+		rows.append(Lines.format("hud.hook", [Lines.get_text("hook.%s" % str(snapshot["hook"]))]))
+	if str(snapshot["cramp"]) != "":
+		rows.append(Lines.get_text("hud.cramp.%s" % str(snapshot["cramp"])))
+	if str(snapshot["ghost_at"]) != "":
+		rows.append(Lines.get_text("hud.ghost"))
+	if str(snapshot["carrying"]) != "":
+		rows.append(Lines.format("hud.carrying", [str(snapshot["carrying"])]))
 	_label.text = "\n".join(rows)

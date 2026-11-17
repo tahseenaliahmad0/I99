@@ -886,5 +886,318 @@
       "text": "[FORK]"
     },
     "scene": null
+  },
+  "item_beads": {
+    "placeholder": {
+      "shape": "cylinder",
+      "size": [
+        0.012,
+        0.09
+      ],
+      "color": "#8B5A2B"
+    },
+    "scene": null
+  },
+  "item_seeds": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.05,
+        0.03,
+        0.035
+      ],
+      "color": "#3D3D3D"
+    },
+    "scene": null
+  },
+  "item_phone": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.045,
+        0.085,
+        0.012
+      ],
+      "color": "#1E2A38"
+    },
+    "scene": null
+  },
+  "item_energy_drink": {
+    "placeholder": {
+      "shape": "cylinder",
+      "size": [
+        0.016,
+        0.075
+      ],
+      "color": "#2E86DE"
+    },
+    "scene": null
+  },
+  "item_painkillers": {
+    "placeholder": {
+      "shape": "cylinder",
+      "size": [
+        0.014,
+        0.04
+      ],
+      "color": "#FFFFFF"
+    },
+    "scene": null
+  },
+  "item_mixtape": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.07,
+        0.012,
+        0.045
+      ],
+      "color": "#5B3A8C"
+    },
+    "scene": null
+  },
+  "item_tissue_box": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.09,
+        0.04,
+        0.05
+      ],
+      "color": "#A8D8EA"
+    },
+    "scene": null
+  },
+  "item_breath_mints": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.035,
+        0.012,
+        0.025
+      ],
+      "color": "#7FE0B0"
+    },
+    "scene": null
+  },
+  "item_arak_flask": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.045,
+        0.075,
+        0.02
+      ],
+      "color": "#C0C8CC"
+    },
+    "scene": null
+  },
+  "item_charm": {
+    "placeholder": {
+      "shape": "sphere",
+      "size": [
+        0.022
+      ],
+      "color": "#1F5FBF"
+    },
+    "scene": null
+  },
+  "item_air_freshener": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.035,
+        0.06,
+        0.004
+      ],
+      "color": "#2E9E4F"
+    },
+    "scene": null
+  },
+  "item_thermos": {
+    "placeholder": {
+      "shape": "cylinder",
+      "size": [
+        0.035,
+        0.22
+      ],
+      "color": "#B03A2E"
+    },
+    "scene": null
+  },
+  "item_duct_tape": {
+    "placeholder": {
+      "shape": "cylinder",
+      "size": [
+        0.03,
+        0.03
+      ],
+      "color": "#9AA0A6"
+    },
+    "scene": null
+  },
+  "item_lucky_note": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.06,
+        0.002,
+        0.03
+      ],
+      "color": "#7DB37D"
+    },
+    "scene": null
+  },
+  "item_sunglasses": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.07,
+        0.02,
+        0.02
+      ],
+      "color": "#222222"
+    },
+    "scene": null
+  },
+  "item_forged_papers": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.07,
+        0.004,
+        0.05
+      ],
+      "color": "#EFE6C8"
+    },
+    "scene": null
+  },
+  "item_contraband_tag": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.014,
+        0.014,
+        0.014
+      ],
+      "color": "#FF00B4"
+    },
+    "scene": null
+  },
+  "hand_carried": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.035,
+        0.035,
+        0.035
+      ],
+      "color": "#E8E0D0"
+    },
+    "scene": null
+  },
+  "ghost_hand": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.075,
+        0.095,
+        0.03
+      ],
+      "color": "#DDE6F2"
+    },
+    "scene": null
+  },
+  "ghost_arm": {
+    "placeholder": {
+      "shape": "capsule",
+      "size": [
+        0.028,
+        0.3
+      ],
+      "color": "#DDE6F2"
+    },
+    "scene": null
+  },
+  "fit_spinner_knob": {
+    "placeholder": {
+      "shape": "sphere",
+      "size": [
+        0.02
+      ],
+      "color": "#D94F30"
+    },
+    "scene": null
+  },
+  "fit_wheel_ring": {
+    "placeholder": {
+      "shape": "cylinder",
+      "size": [
+        0.03,
+        0.008
+      ],
+      "color": "#C9A227"
+    },
+    "scene": null
+  },
+  "fit_thumb_keypad": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.035,
+        0.022,
+        0.01
+      ],
+      "color": "#3F7CAC"
+    },
+    "scene": null
+  },
+  "fit_crossover_stalk": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.11,
+        0.014,
+        0.014
+      ],
+      "color": "#6B6B75"
+    },
+    "scene": null
+  },
+  "fit_window_switch": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.03,
+        0.012,
+        0.045
+      ],
+      "color": "#2B2B2B"
+    },
+    "scene": null
+  },
+  "fit_bull_bar": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        1.6,
+        0.07,
+        0.07
+      ],
+      "color": "#8D99A6"
+    },
+    "scene": null
+  },
+  "fit_fog_lamp": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.14,
+        0.09,
+        0.05
+      ],
+      "color": "#FFE680"
+    },
+    "scene": null
   }
 }
