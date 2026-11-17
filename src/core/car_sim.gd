@@ -15,6 +15,11 @@ extends RefCounted
 ##   v_lat_command = steer * lat_per_kmh * speed_kmh          (m/s)
 ##   v_lat         = follow(v_lat_command, lat_follow_tau)    (car inertia)
 ##   x            += (v_lat + sum_of_drifts) * dt
+##
+## Drift needs forward speed, as steering does: the sum of drifts is scaled by
+## speed / drift_fade_speed, up to 1. A car at rest is not pushed sideways at
+## all, and from drift_fade_speed up (slower than any gear cruises) the
+## numbers of GDD 5.4 are exact.
 
 const KMH_TO_MS: float = 1.0 / 3.6
 const NEUTRAL: int = 0
@@ -33,7 +38,8 @@ var s: float = 0.0
 var speed: float = 0.0
 ## m/s sideways from steering alone.
 var v_lat: float = 0.0
-## m/s sideways from drift this tick (crown, curve, gust and extras).
+## m/s sideways from drift this tick (crown, curve, gust and extras), as it
+## reached the car: scaled down below drift_fade_speed.
 var drift: float = 0.0
 
 # --- Modifiers set by DriveSim (items, faults, weather) ----------------------
@@ -63,6 +69,7 @@ var _engine_brake: float = 0.0
 var _brake_decel: float = 0.0
 var _neutral_coast: float = 0.0
 var _crown: float = 0.0
+var _drift_fade_speed: float = 0.0
 var _curve_cap: float = 0.0
 var _shoulder_cap: float = 0.0
 var _rumble_width: float = 0.0
@@ -85,6 +92,7 @@ func configure(tuning: Tuning) -> void:
 	_brake_decel = tuning.f("brake_decel")
 	_neutral_coast = tuning.f("neutral_coast")
 	_crown = tuning.f("crown_drift")
+	_drift_fade_speed = tuning.f("drift_fade_speed")
 	_curve_cap = tuning.f("curve_cap")
 	_shoulder_cap = tuning.f("shoulder_speed_cap")
 	_rumble_width = tuning.f("rumble_strip_width")
@@ -164,11 +172,23 @@ func curve_push(k: float) -> float:
 	return signf(k) * minf(push, _curve_cap)
 
 
+## The share of every sideways drift that reaches the car at its speed: none
+## at rest, all of it from drift_fade_speed up. Without this a stopped car
+## would slide down the crown into the guardrail with no way to steer back
+## (steering authority is lat_per_kmh times the speed, nothing at rest).
+func drift_share() -> float:
+	if _drift_fade_speed <= 0.0:
+		return 1.0
+	return clampf(speed / _drift_fade_speed, 0.0, 1.0)
+
+
 # --- The tick ----------------------------------------------------------------
 
 ## `steer` is -1 to 1 (WheelSim.steer, after Tremor and Lag). `gear` is 0 for
 ## neutral. `extra_drift` is every sideways push but the road's crown: curve,
-## gust, a pulling fault, sway (m/s, + toward the right shoulder).
+## gust, a pulling fault, sway (m/s, + toward the right shoulder). The crown
+## and the extras reach the car in proportion to its speed below
+## drift_fade_speed (see drift_share).
 func step(dt: float, steer: float, gear: int, braking: bool, extra_drift: float) -> void:
 	_step_speed(dt, gear, braking)
 
@@ -178,7 +198,7 @@ func step(dt: float, steer: float, gear: int, braking: bool, extra_drift: float)
 	if tau > 0.0:
 		blend = 1.0 - exp(-dt / tau)
 	v_lat += (command - v_lat) * blend
-	drift = _crown + extra_drift
+	drift = (_crown + extra_drift) * drift_share()
 	x += (v_lat + drift) * dt
 	s += speed * KMH_TO_MS * dt
 

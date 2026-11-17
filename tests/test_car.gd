@@ -49,12 +49,19 @@ func test_car_01() -> void:
 			break
 	check_near(seconds, 3.4, 0.05, "the same in a full DriveSim with the wheel unheld")
 
-	# The drift is toward the right shoulder, at crown_drift, at any speed.
+	# The drift is toward the right shoulder, at crown_drift, in every gear. (It
+	# fades only below drift_fade_speed, slower than any gear cruises: T-CAR-05.)
 	_car.reset(1, 1)
 	var before: float = _car.x
 	for _tick: int in int(1.0 / DT):
 		_car.step(DT, 0.0, 1, false, 0.0)
 	check_near(_car.x - before, tuning.f("crown_drift"), 0.001, "the crown pushes toward the right shoulder at crown_drift in any gear")
+	for gear: int in [2, 3, 4, 5]:
+		_car.reset(1, gear)
+		before = _car.x
+		for _tick: int in int(1.0 / DT):
+			_car.step(DT, 0.0, gear, false, 0.0)
+		check_near(_car.x - before, tuning.f("crown_drift"), 0.001, "the crown pushes at crown_drift in gear %d as well" % gear)
 
 
 ## T-CAR-02: full lock at 100 km/h settles at 5.0 m/s sideways.
@@ -186,6 +193,7 @@ func test_car_05() -> void:
 	_check_edges_in_sim()
 	_check_drifts()
 	_check_curve_in_sim()
+	_check_drift_at_low_speed()
 
 
 func _check_speed_changes() -> void:
@@ -425,6 +433,74 @@ func _check_curve_in_sim() -> void:
 				check_near(rate, crown + push, 0.000001, "hands off in gear %d with curve_k %s the car moves at the crown and the curve's push of %s m/s" % [gear, str(side * k), str(push)])
 
 
+## Drift and forward speed (DECISIONS: drift at rest). All sideways drift is
+## scaled by speed / drift_fade_speed, up to 1: a car at rest is not pushed
+## sideways at all, and from drift_fade_speed up nothing changes.
+func _check_drift_at_low_speed() -> void:
+	var crown: float = tuning.f("crown_drift")
+	var gust: float = tuning.f("gust_push")
+	var fade: float = tuning.f("drift_fade_speed")
+	var lat: float = tuning.f("lat_per_kmh")
+	var coast_tick: float = tuning.f("neutral_coast") * DT
+	check(fade > 0.0 and fade <= tuning.fi("gear_speeds", 0), "drift_fade_speed is no more than first gear's cruise speed: in every gear the drift of GDD 5.4 is whole")
+	check(crown / fade < lat, "below it the crown grows more slowly with speed than full lock does: steering always beats the crown")
+
+	# At rest nothing pushes the car sideways.
+	_car.reset(1, 3)
+	check_eq(_sideways_rate(0.0, CarSim.NEUTRAL, 0.0), 0.0, "at rest the crown does not move the car")
+	check_eq(_car.speed, 0.0, "(it is at rest)")
+	check_eq(_sideways_rate(0.0, CarSim.NEUTRAL, 0.0, gust), 0.0, "nor does a gust or a curve to the right")
+	check_eq(_sideways_rate(0.0, CarSim.NEUTRAL, 0.0, -gust), 0.0, "or to the left")
+	check_eq(_sideways_rate(-1.0, CarSim.NEUTRAL, 0.0), 0.0, "and with the wheel at full lock a car at rest stays where it is")
+	check_eq(_car.drift, 0.0, "the drift it reports is zero")
+
+	# Rolling slower than drift_fade_speed, every drift is in proportion to the speed.
+	# (In neutral a tick takes neutral_coast x DT off the speed it starts with.)
+	check_near(_sideways_rate(0.0, CarSim.NEUTRAL, fade * 0.5 + coast_tick), crown * 0.5, 0.000001, "at half of drift_fade_speed the crown pushes half as hard")
+	check_near(_car.speed, fade * 0.5, 0.000001, "(it rolls at half of drift_fade_speed)")
+	check_near(_sideways_rate(0.0, CarSim.NEUTRAL, fade * 0.5 + coast_tick, gust), (crown + gust) * 0.5, 0.000001, "and a gust on top of it half as hard as well")
+	check_near(_sideways_rate(0.0, CarSim.NEUTRAL, fade * 0.25 + coast_tick, -gust), (crown - gust) * 0.25, 0.000001, "at a quarter of it, a quarter")
+
+	# From drift_fade_speed up the drift is whole.
+	check_near(_sideways_rate(0.0, CarSim.NEUTRAL, fade + coast_tick), crown, 0.000001, "at drift_fade_speed the crown is whole")
+	check_near(_car.speed, fade, 0.000001, "(it rolls at drift_fade_speed)")
+	check_near(_sideways_rate(0.0, CarSim.NEUTRAL, fade + coast_tick, -gust), crown - gust, 0.000001, "and so is a gust")
+	check_near(_sideways_rate(0.0, CarSim.NEUTRAL, fade * 1.5), crown, 0.000001, "above it nothing changes")
+
+	# So full left lock beats the crown at any speed, down to a crawl.
+	for share: float in [0.05, 0.25, 0.5, 1.0]:
+		var rate: float = _sideways_rate(-1.0, CarSim.NEUTRAL, fade * share + coast_tick)
+		check_near(rate, -lat * _car.speed + crown * share, 0.001, "at %s km/h full left lock moves the car left: steering less the crown's share" % str(fade * share))
+		check(rate < 0.0, "at %s km/h the car answers the wheel, not the crown" % str(fade * share))
+
+	# A drift_fade_speed of 0 switches the fade off (and divides nothing by zero).
+	var plain_data: GameData = fresh_data()
+	plain_data.tuning.set_value("drift_fade_speed", 0.0)
+	var plain: CarSim = CarSim.new()
+	plain.configure(plain_data.tuning)
+	plain.set_road(3, true)
+	plain.reset(1, 3)
+	plain.speed = 0.0
+	var plain_x: float = plain.x
+	for _tick: int in int(1.0 / DT):
+		plain.step(DT, 0.0, CarSim.NEUTRAL, false, 0.0)
+	check_near(plain.x - plain_x, crown, 0.000001, "with drift_fade_speed 0 there is no fade: the crown is whole even at rest")
+
+	# The whole simulation: a parked car is moved neither by a gust nor by a curve.
+	var input: DriveInput = DriveInput.new()
+	var parked: DriveSim = DriveSim.new(fresh_data())
+	parked.gate.reset(GearGate.NEUTRAL)
+	parked.car.reset(1, 3)
+	parked.car.speed = 0.0
+	parked.curve_k = tuning.fi("curve_k", 2)
+	parked.start_gust(-1)
+	var parked_x: float = parked.car.x
+	for _tick: int in int((tuning.f("gust_duration") + 1.0) / DT):
+		parked.step(input)
+	check_eq(parked.car.x, parked_x, "in the whole simulation a parked car is moved neither by a gust nor by a curve")
+	check_eq(parked.car.s, 0.0, "(it is parked)")
+
+
 # --- Through the whole simulation, with real input -------------------------------
 
 ## Steering with the mouse (GDD 4.1, 4.3, 5.3): hold the left button with the
@@ -456,8 +532,8 @@ func _check_steering_in_sim() -> void:
 	check_eq(sim.faults.lamps, 0, "and without touching anything")
 
 
-## Braking with the right button (GDD 4.1, 4.8). `expected` is the stopping
-## time and `ideal` the stopping distance.
+## Braking with the right button (GDD 4.1, 4.8), and what the car does at rest:
+## nothing. `expected` is the stopping time and `ideal` the stopping distance.
 func _check_braking_in_sim(expected: float, ideal: float) -> void:
 	var third: float = tuning.fi("gear_speeds", 2)
 	var sim: DriveSim = DriveSim.new(fresh_data())
@@ -476,6 +552,38 @@ func _check_braking_in_sim(expected: float, ideal: float) -> void:
 	check_near(sim.car.s, ideal, third * KMH_TO_MS * DT, "in the same distance")
 	check_eq(sim.car.speed, 0.0, "its speed reads zero")
 	check_eq(sim.gate.gear, 3, "(the lever is still in third)")
+
+	# Braked to rest and left alone, hands off: the car stays where it stopped.
+	# It does not slide down the crown into the guardrail (GDD 4.8, 5.1, 10.3).
+	var x_rest: float = sim.car.x
+	var s_rest: float = sim.car.s
+	sim.drain_events()
+	for _tick: int in int(30.0 / DT):
+		sim.step(input)
+	check_eq(sim.car.x, x_rest, "braked to rest, hands off, brake held for 30 s: the car has not moved sideways")
+	check_eq(sim.car.s, s_rest, "nor along the road")
+	check(not sim.car.on_rumble and not sim.car.on_shoulder and sim.car.lane_of(sim.car.x) == 1, "it is still in its lane")
+	check_eq(sim.faults.lamps, 0, "no lamp is lit")
+	check_eq(_count_events(sim, "hit"), 0, "nothing was hit")
+	check(not sim.wrecked, "and the car is no Wreck")
+
+	# Out of gear with the brake released it is parked just the same.
+	sim.gate.reset(GearGate.NEUTRAL)
+	input.rmb = false
+	for _tick: int in int(5.0 / DT):
+		sim.step(input)
+	check_eq(sim.car.x, x_rest, "parked in neutral with the brake released it stays put as well")
+	check_eq(sim.car.s, s_rest, "(it has not rolled)")
+
+	# Back in gear it pulls away at accel, and the crown returns with the speed.
+	sim.gate.reset(3)
+	for _tick: int in int(1.0 / DT):
+		sim.step(input)
+	var accel_ms: float = tuning.f("accel") * KMH_TO_MS
+	check_near(sim.car.s - s_rest, accel_ms * 0.5, accel_ms * DT, "in gear with the brake released the car pulls away at accel")
+	var crept: float = sim.car.x - x_rest
+	check(crept > 0.0 and crept < tuning.f("crown_drift"), "and as it gathers speed the crown begins to carry it right again, more gently than at speed")
+	check_eq(sim.faults.lamps, 0, "still with no lamp lit")
 
 
 ## The whole simulation on a road of `lanes`, steered with the mouse from the
@@ -590,3 +698,11 @@ func _drag(sim: DriveSim, input: DriveInput, px: float) -> void:
 	sim.step(input)
 	input.pointer_delta = Vector2.ZERO
 
+
+## How many events of one type the simulation queued since the last drain.
+func _count_events(sim: DriveSim, type: String) -> int:
+	var count: int = 0
+	for event: Dictionary in sim.drain_events():
+		if GameData.as_string(event.get("type")) == type:
+			count += 1
+	return count
