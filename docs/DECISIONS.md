@@ -520,3 +520,31 @@ Format: `D-NNN (milestone, date) Title` then Context / Decision / Why.
   the car's sideways response time (30% slower).
 - **Leg income (GDD 12.1).** At the end of a leg: `clean_leg_bonus` if no
   lamp was lit in it, and one cash per whole 2 s under par.
+
+## D-028 (M2 review, 2026-11-17) The car at rest, on the shoulder and in a gust
+
+- **Context.** The M2 review found that a car braked to rest slid down the
+  crown into the guardrail and was a Wreck at 0 km/h (GDD 5.4 says the crown
+  pushes "always"; 5.3 gives no steering at rest), that the shoulder's speed
+  cap was skipped in neutral, and that a gust lasted 121 ticks.
+- **Drift fades with speed.** Every sideways drift (crown, curve, gust,
+  pulling steering, later sway) is scaled by `speed / drift_fade_speed`, up
+  to 1, with `drift_fade_speed` = 20 km/h. At rest the car does not move
+  sideways; from 20 km/h up nothing changes, so 3.4 s to the lane line and
+  5.0 m/s at full lock stay exact; below it full lock always beats the
+  crown. The share is read from the speed the tick ends with. `CarSim.drift`
+  and the snapshot's `drift` are the drift as it reached the car. A gust's
+  ticks run out whether or not the car moves.
+- **The shoulder's cap** belongs to the surface: above
+  `shoulder_speed_cap` the car slows at `engine_brake` at least, whatever
+  the lever or the foot does, neutral included, and the tick that reaches
+  the cap ends on it. The rumble strip slows nothing and frays nothing; it
+  still ends a Nod.
+- **A gust** lasts a whole number of ticks: round(`gust_duration` x 120).
+- **Pinned by the T-CAR tests since the review** (behaviour that existed):
+  within a tick the speed changes first and the car then moves at the new
+  speed; a rail or barrier also stops the car's sideways speed; the brake
+  sheds `brake_decel` in every lever state, never more; the sideways speed
+  follows its command as an exact first-order response; the rail left of
+  the oncoming lane scrapes like the guardrail.
+- **Why.** GDD 4.8, 4.6, 10.2 and 10.3 all need a car that can stand still.

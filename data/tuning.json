@@ -74,6 +74,7 @@
     "shoulder_width": 2.5,
     "median_barrier_x": -0.5,
     "undivided_left_rail_margin": 0.5,
+    "drift_fade_speed": 20,
     "start_gear": 1
   },
 
@@ -387,6 +388,7 @@
     "shoulder_width": "m",
     "median_barrier_x": "m, divided roads",
     "undivided_left_rail_margin": "m beyond the oncoming lane",
+    "drift_fade_speed": "km/h; below it every sideways drift is scaled by speed / drift_fade_speed (none at rest)",
     "start_gear": "gear",
 
     "scrape_max_closing": "km/h",

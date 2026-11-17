@@ -29,7 +29,7 @@ Useful commands:
 
 - **Milestone:** M4 (legs and encounters): generator, forks and the leg runtime are in; encounters, Suspicion and views are next.
 - **Tests:** 35 of 114 passing (M0: 2, M1: 8, M2: 10, M3: 7, M4: 8).
-- **Reviews in flight:** `m1-review` (snapshot a7c3d8a) and `m2-review` (snapshot e197006) have reported on every lens; their findings are in the workflow journals. `m2-fixes` applies the car and traffic/collision findings in worktrees (branches `fix/m2-car`, `fix/m2-traffic-collision`): merge them when they report. The M1 gesture, test-honesty and determinism findings and the M2 test-honesty and views findings are not applied yet. M3 and M4 have not been reviewed.
+- **Reviews:** `m1-review` and `m2-review` have reported on every lens (journals under `/root/.claude/projects/-home-user-I99/.../subagents/workflows/`, run ids wf_53ae3899-d40 and wf_d8c835c4-884; the full results are also in the task output files). Applied: M1 hand, M1 wheel and gate, M2 car (merged from `fix/m2-car`, DECISIONS D-028). **Not applied yet:** M2 traffic and collisions (critical: one oncoming truck or tanker hits twice and wrecks the car; the fixer was cut off by the usage limit with uncommitted work in `.claude/worktrees/wf_9b62580d-4a9-2`), M1 gesture pipeline (7 findings), M1 test honesty (11), M1 determinism and rules (18), M2 test honesty (9), M2 views (14). Background agents hit the model's usage limit on 2026-11-17 (resets 2026-11-20 01:00 UTC): until then work without workflows. M3 and M4 have not been reviewed.
 - **Next step:** Suspicion and the pull-over, then Patrol, Tailgater, Two-lane and Motorcade.
 
 ## Milestones
