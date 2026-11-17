@@ -21,6 +21,8 @@ var _exits: Array[String] = []
 var _forks_met: int = 0
 var _legs_met: int = 0
 var _was_stage: int = RunState.Stage.NONE
+## Ticks the scripted driver's hand has been on the key.
+var _key_ticks: int = 0
 ## Legs (by number) whose passed Exit has been checked.
 var _missed_checked: Dictionary = {}
 
@@ -36,6 +38,7 @@ func before_each() -> void:
 	_forks_met = 0
 	_legs_met = 0
 	_was_stage = RunState.Stage.NONE
+	_key_ticks = 0
 	_missed_checked = {}
 
 
@@ -96,6 +99,8 @@ func test_run_01() -> void:
 				stages.append(type)
 			if type == "stop_entered":
 				stop_minutes += GameData.as_float(event.get("minutes"))
+			if type == "hit":
+				note("the scripted driver was hit in %s %s of act %d, %d m in" % [_sim.run.stage_name(), _sim.boss.kind if _sim.boss.active else _sim.leg.leg_id, _sim.run.act, roundi(_sim.car.s)])
 		if not stood and not _sim.stopped:
 			driving_seconds += DT
 		# What the road shows on the way: looked at once on each leg, 200 m
@@ -605,7 +610,28 @@ func _script_tick() -> void:
 			elif decision != STOP:
 				x = _checker.line_x(exit_at)
 		RunState.Stage.BOSS:
-			x = _clear_lane_x()
+			if _sim.boss.kind == BossSim.DAWN:
+				# Up to the last checkpoint he drives the line the plan found. He
+				# drops to second gear between its closing barriers, where the
+				# plan keeps the road beside him clear, and takes them at 70, as
+				# the sign asks. After that, off the plan's pace, he looks where
+				# he goes.
+				var barriers: Vector3 = _sim.boss.corridor()
+				if _lined_plan != _sim.leg.plan:
+					_lined_plan = _sim.leg.plan
+					_checker.load_plan(_sim.leg.plan)
+				if car.s < barriers.z:
+					x = _checker.line_x(car.s)
+				else:
+					x = _clear_lane_x()
+				if car.s > barriers.x + 10.0 and car.s < barriers.z:
+					gear = 2
+			else:
+				x = _clear_lane_x()
+		RunState.Stage.ARRIVAL:
+			gear = tuning.i("start_gear")
+			x = car.lane_center(0)
+			_park_and_turn_the_key()
 		_:
 			x = car.lane_center(car.lanes / 2)
 	if _sim.gate.gear != gear:
@@ -613,28 +639,55 @@ func _script_tick() -> void:
 	car.x = x
 
 
-## In a boss he keeps to a lane with open road ahead: when what is ahead in
-## his lane comes near, he is in the lane with the most room.
+## The Arrival (GDD 10.5): the brake goes on in time to stop in the middle of
+## the bay; standing there, the hand goes to the key and taps it.
+func _park_and_turn_the_key() -> void:
+	var car: CarSim = _sim.car
+	var bay: Vector2 = _sim.snapshot()["bay"]
+	var speed_ms: float = car.speed * KMH_TO_MS
+	var stopping: float = speed_ms * speed_ms / (2.0 * tuning.f("brake_decel") * KMH_TO_MS)
+	if car.s + stopping >= (bay.x + bay.y) * 0.5:
+		_input.rmb = true
+	if not _sim.boss.in_bay:
+		_key_ticks = 0
+		return
+	var key: int = _sim.hand.anchor_index(&"key")
+	_input.pointer_is_absolute = true
+	_input.pointer = _sim.hand.anchor_pointer(key)
+	if _sim.hand.at_index == key:
+		_key_ticks += 1
+		_input.lmb = _key_ticks <= 4
+
+
+## In a boss he looks where he goes: when what is ahead in his lane comes
+## near he moves to a lane with clearly more room, beside him and ahead; and
+## where there is none he brakes behind what is in front of him.
 func _clear_lane_x() -> float:
 	var car: CarSim = _sim.car
 	var lane: int = clampi(car.lane_of(car.x), 0, car.lanes - 1)
-	if _room_ahead(lane) < 80.0:
+	var room: float = _room(lane, 0.0)
+	if room < 80.0:
 		for other: int in car.lanes:
-			if _room_ahead(other) > _room_ahead(lane):
+			var there: float = _room(other, -15.0)
+			if there > room + 10.0 and there > 30.0:
 				lane = other
+				room = there
+	if room < 10.0 + car.speed * KMH_TO_MS * 0.8:
+		_input.rmb = true
 	return car.lane_center(lane)
 
 
-## Metres of a lane that are free from 15 m behind the car onward.
-func _room_ahead(lane: int) -> float:
+## Metres of a lane that are free, bumper to bumper, counting the vehicles
+## whose middle is more than `from` metres ahead of the car's.
+func _room(lane: int, from: float) -> float:
 	var car: CarSim = _sim.car
 	var room: float = INF
 	for vehicle: TrafficSim.Vehicle in _sim.traffic.vehicles:
 		if absf(vehicle.x - car.lane_center(lane)) >= car.lane_width() * 0.5 + vehicle.half_width:
 			continue
 		var gap: float = vehicle.s - car.s
-		if gap > -15.0:
-			room = minf(room, gap)
+		if gap > from:
+			room = minf(room, gap - vehicle.half_length - car.length() * 0.5)
 	return room
 
 

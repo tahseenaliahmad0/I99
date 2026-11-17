@@ -215,7 +215,6 @@
     "missed_exit_nerves": 5,
     "stop_leave_grip": 0.5,
     "fork_sign_lead": 5,
-    "arrival_length": 300,
 
     "traffic_per_act": 2,
     "modifier_chance": [0, 0.3333, 0.6667],
@@ -569,7 +568,6 @@
     "missed_exit_nerves": "points (GDD 6.1)",
     "stop_leave_grip": "s of gripping the wheel that leaves a stop (GDD 9.6)",
     "fork_sign_lead": "s at par speed before the gore at which the fork's sign stands",
-    "arrival_length": "m of street before the bay (until the Arrival is built in M7)",
     "traffic_per_act": "vehicles per km added in each act after the first",
     "modifier_chance": "share of legs with a modifier, acts 1 to 3",
     "boss_modifier_chance": "share of Tellings in which the act's boss has one of its two modifiers, acts 1 to 3",

@@ -146,3 +146,7 @@ sign.boss_modifier.night_storm,,[NIGHT STORM],true
 sign.boss_modifier.market_day,,[MARKET DAY],true
 sign.boss_modifier.early_sun,,[EARLY SUN],true
 sign.boss,,[%s / %s],false
+call.noor,,Noor,true
+sign.checkpoint,,[CHECKPOINT / %s],false
+hud.the_call,,The Call: %s,false
+hud.bay,,In the bay: turn the key,false

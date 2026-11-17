@@ -146,3 +146,7 @@ sign.boss_modifier.night_storm,,,true
 sign.boss_modifier.market_day,,,true
 sign.boss_modifier.early_sun,,,true
 sign.boss,,,true
+call.noor,,,true
+sign.checkpoint,,,true
+hud.the_call,,,true
+hud.bay,,,true

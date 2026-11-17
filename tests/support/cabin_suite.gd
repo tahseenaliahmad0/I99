@@ -209,7 +209,8 @@ func _begin_quiet_boss(boss_id: String, modifier: String = "", boss_seed: int = 
 	_keep_lane = true
 	_input.clear()
 	var plan: Dictionary = BossSim.plan(data, boss_id, modifier, boss_seed)
-	plan["spawns"] = []
+	for key: String in ["spawns", "hazards", "curves"]:
+		plan[key] = []
 	_sim.gate.reset(3)
 	_sim.begin_leg(plan)
 	_sim.in_encounter = true

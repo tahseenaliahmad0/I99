@@ -28,8 +28,10 @@ const SLOT_ANCHOR: String = "@slot"
 const RITUAL_OPS: PackedStringArray = [
 	"nerves", "cash", "add_effect", "remove_effect", "consume_supply", "give", "toggle",
 	"horn", "wipe", "photo", "indicate", "window", "ash", "radio_step", "sfx", "line", "pay",
-	"clear_haze", "flip", "answer", "refill", "hook",
+	"clear_haze", "flip", "answer", "refill", "hook", "call", "key",
 ]
+## How the Call is taken at the pocket (GDD 10.4).
+const CALL_WAYS: PackedStringArray = ["alone", "passenger"]
 ## Cabin switches a "toggle:" op may flip and a "flag:" condition may read.
 const CABIN_FLAGS: PackedStringArray = ["hazards", "high_beam", "window_open", "glovebox_open", "passenger"]
 ## Conditions that are not effect ids.
@@ -68,7 +70,7 @@ const FLICK_DIRS: PackedStringArray = ["up", "down", "left", "right"]
 ## What a ritual may block of the view while it is performed (GDD 7.4).
 const VIEW_BLOCKS: PackedStringArray = ["lower_centre"]
 const PLACEHOLDER_SHAPES: PackedStringArray = ["box", "cylinder", "capsule", "sphere", "quad", "label"]
-const REQUIRED_POINTS: PackedStringArray = ["G", "W", "eye", "shoulder"]
+const REQUIRED_POINTS: PackedStringArray = ["G", "W", "eye", "shoulder", "ear"]
 
 var errors: PackedStringArray = []
 
@@ -348,6 +350,7 @@ func _boss_schema() -> Dictionary:
 		"divided": _bool(),
 		"modifiers": _list(_ref("boss_modifiers")),
 		"storm": _opt(_storm_schema()),
+		"dawn": _opt(_dawn_schema()),
 		"line_ids": _opt(_map(_ref("lines"))),
 	})
 
@@ -376,6 +379,60 @@ func _storm_schema() -> Dictionary:
 	})
 
 
+## Dawn's numbers (GDD 10.4).
+func _dawn_schema() -> Dictionary:
+	return _obj({
+		"heavy_floor": _num(0.0),
+		"sunrise_at_m": _above(0.0),
+		"glare": _num(0.0, 1.0),
+		"glare_ramp_m": _above(0.0),
+		# Where across his view the sun and the false dawn's glow are: -1 is
+		# the far left, 0 dead ahead, 1 the far right.
+		"sun_side": _num(-1.0, 1.0),
+		"glow_side": _num(-1.0, 1.0),
+		"road": _obj({
+			"density": _num(0.0),
+			"tail_m": _num(0.0),
+			"builds_from": _num(0.0, 1.0),
+			"beat_weights": _map_keyed(_enum(BEAT_TYPES), _num(0.0)),
+		}),
+		"checkpoint": _corridor_schema({"max_kmh": _above(0.0), "sign_lead_s": _num(0.0), "search_minutes": _num(0.0)}),
+		"call": _obj({
+			"from_end_m": _above(0.0),
+			"ring_s": _above(0.0),
+			"talk_s": _above(0.0),
+			"wrist_steer": _num(0.0, 1.0),
+			"stopped_kmh": _num(0.0),
+		}),
+	})
+
+
+## A checkpoint's corridor between barriers (GDD 10.2, 10.4), with what else
+## the checkpoint needs.
+func _corridor_schema(more: Dictionary) -> Dictionary:
+	var fields: Dictionary = {
+		"at_m": _above(0.0),
+		"length_m": _above(0.0),
+		"taper_m": _above(0.0),
+		"gap_m": _above(0.0),
+	}
+	fields.merge(more)
+	return _obj(fields)
+
+
+## The street of the Arrival (GDD 10.5).
+func _arrival_schema() -> Dictionary:
+	return _obj({
+		"length_m": _above(0.0),
+		"lanes": _int(1.0, 3.0),
+		"divided": _bool(),
+		"heavy_floor": _num(0.0),
+		"bay_m": _above(0.0),
+		"stopped_kmh": _num(0.0),
+		"bump_kmh": _num(0.0),
+	})
+
+
 ## What a boss's modifier changes (GDD 10.2 to 10.4): one number, for the
 ## boss it names.
 func _boss_modifier_schema() -> Dictionary:
@@ -394,6 +451,16 @@ func _boss_modifier_schema() -> Dictionary:
 
 ## A boss lists its own modifiers, and has the numbers of its set piece.
 func _check_bosses() -> void:
+	if _data.roots.has("legs"):
+		var street: Variant = _data.root("legs").get("arrival")
+		if street == null:
+			_err("E_MISSING", "legs.json", "arrival", "the street of the Arrival is missing (GDD 10.5)")
+		else:
+			_check(street, _arrival_schema(), "legs.json", "arrival")
+			var arrival: Dictionary = GameData.as_dict(street)
+			if GameData.is_number(arrival.get("bay_m")) and GameData.is_number(arrival.get("length_m")) \
+					and (GameData.as_float(arrival.get("bay_m")) < _data.tuning.f("car_length") or GameData.as_float(arrival.get("bay_m")) > GameData.as_float(arrival.get("length_m"))):
+				_err("E_RANGE", "legs.json", "arrival.bay_m", "the bay must hold the car and fit in the street")
 	for boss: Dictionary in _data.records("bosses"):
 		var id: String = GameData.as_string(boss.get("id"))
 		var label: String = "bosses[%s]" % id
@@ -404,6 +471,22 @@ func _check_bosses() -> void:
 				_err("E_RULE", "legs.json", "%s.modifiers" % label, "'%s' is a modifier of another boss" % modifier_id)
 		if id == "storm" and not boss.has("storm"):
 			_err("E_MISSING", "legs.json", "%s.storm" % label, "the Storm needs its numbers")
+		if id == "dawn" and not boss.has("dawn"):
+			_err("E_MISSING", "legs.json", "%s.dawn" % label, "Dawn needs its numbers")
+		var dawn: Dictionary = GameData.as_dict(boss.get("dawn"))
+		var length: float = GameData.as_float(boss.get("length_m"))
+		var check: Dictionary = GameData.as_dict(dawn.get("checkpoint"))
+		var call: Dictionary = GameData.as_dict(dawn.get("call"))
+		if not dawn.is_empty() and GameData.is_number(check.get("at_m")) and GameData.is_number(call.get("from_end_m")):
+			# False dawn, then sunrise with the last checkpoint in it, then the Call.
+			var sunrise: float = GameData.as_float(dawn.get("sunrise_at_m"))
+			var corridor_from: float = GameData.as_float(check.get("at_m")) - GameData.as_float(check.get("taper_m"))
+			var corridor_to: float = GameData.as_float(check.get("at_m")) + GameData.as_float(check.get("length_m"))
+			var call_at: float = length - GameData.as_float(call.get("from_end_m"))
+			if not (sunrise < corridor_from and corridor_to < call_at and call_at < length):
+				_err("E_RULE", "legs.json", "%s.dawn" % label, "the order along the road must be: sunrise, the last checkpoint, the Call, the end")
+			if GameData.as_float(check.get("gap_m")) <= _data.tuning.f("car_width") or GameData.as_float(check.get("gap_m")) > _data.tuning.f("lane_width"):
+				_err("E_RANGE", "legs.json", "%s.dawn.checkpoint.gap_m" % label, "must be wider than the car and no wider than a lane")
 		var storm: Dictionary = GameData.as_dict(boss.get("storm"))
 		var gaps: Array = GameData.as_array(GameData.as_dict(storm.get("tail_lights")).get("gap_m"))
 		if gaps.size() == 2 and GameData.as_float(gaps[0]) > GameData.as_float(gaps[1]):
@@ -618,7 +701,9 @@ func _tuning_schema() -> Dictionary:
 		"wreck_to_wheel": pos,
 		# The road between legs (M5)
 		"exit_slip_length": above, "missed_exit_nerves": pos, "stop_leave_grip": pos,
-		"fork_sign_lead": pos, "arrival_length": above,
+		"fork_sign_lead": pos,
+		# Bosses (M7)
+		"boss_modifier_chance": _list_n(_num(0.0, 1.0), 3),
 	}
 
 
@@ -1003,6 +1088,9 @@ func _check_op(op: String, file_label: String, where: String) -> void:
 		"pay":
 			if argument != "fine" and argument != "bribe":
 				_err("E_ENUM", file_label, where, "'pay' takes fine or bribe, not '%s'" % argument)
+		"call":
+			if not CALL_WAYS.has(argument):
+				_err("E_ENUM", file_label, where, "'call' takes %s, not '%s'" % [" or ".join(CALL_WAYS), argument])
 		"refill":
 			if not _item_tags().has(argument):
 				_err("E_REF", file_label, where, "'refill' takes an item tag; '%s' is not a tag of items.json" % argument)

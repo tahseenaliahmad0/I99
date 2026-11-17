@@ -35,6 +35,12 @@ const FLAG_HIGH_BEAM: StringName = &"high_beam"
 const FLAG_HAZARDS: StringName = &"hazards"
 const PULLED_OVER: StringName = &"pulled_over"
 const LAW: StringName = &"law"
+## Statuses a set piece holds: the phone in his pocket rings (GDD 10.4); he
+## stands in the bay (GDD 10.5).
+const THE_CALL: StringName = &"the_call"
+const IN_BAY: StringName = &"in_bay"
+const SET_PIECE: StringName = &"set_piece"
+const NOOR: String = "noor"
 ## Sources of Nerves a status can make him immune to (GDD 7.4).
 const SOURCE_HONK: StringName = &"honk"
 const SOURCE_TAILGATER: StringName = &"tailgater"
@@ -169,6 +175,12 @@ var _pad_wiper_was: bool = false
 var _car_s_then: float = 0.0
 var _close_call_mult: float = 1.0
 var _lag_sources: float = 0.0
+## The Heavy floor of the road he is on, where the road says its own (Dawn
+## and the street of the Arrival, GDD 6.1); -1: the act's.
+var _floor_of_road: float = -1.0
+## His wrist is on the wheel (the Call taken alone).
+var _wrist_on_wheel: bool = false
+var _in_bay: bool = false
 ## The weather cramp (GDD 7.9): "" (none), "hum" (it is coming) or "cramp",
 ## and the seconds left of that.
 var cramp: String = ""
@@ -293,6 +305,9 @@ func _build() -> void:
 	_pad_horn_was = false
 	_pad_wiper_was = false
 	_car_s_then = 0.0
+	_floor_of_road = -1.0
+	_wrist_on_wheel = false
+	_in_bay = false
 	cramp = ""
 	_cramp_left = 0.0
 	_anchor_home = PackedVector3Array()
@@ -359,8 +374,11 @@ func step(input: DriveInput) -> void:
 	# 1. Gesture recogniser.
 	gesture.step(DT, input.lmb, input.pointer_delta)
 
-	# 2. Hand.
-	hand.can_reach = nerves.snap_left <= 0.0
+	# 2. Hand. In a Snap, and while he talks on the phone, he can steer and
+	# cannot reach (GDD 6.1, 10.4).
+	hand.can_reach = nerves.snap_left <= 0.0 and not boss.talking()
+	hand.at_ear = boss.phone_in_hand()
+	hand.wrist_steer = boss.wrist_steer
 	hand.flinches = phantom_enabled and not phantom_muted() and (nerves.value >= tuning.f("phantom_flinch_from") or nerves.lids > 0.0)
 	hand.frozen = cramp == CRAMPED
 	hand.step(DT, input, wheel.angle, _pound_mult if nerves.pound else 1.0)
@@ -389,6 +407,14 @@ func step(input: DriveInput) -> void:
 	if hand.took_grip:
 		wheel.grip()
 		effects.remove(ItemSim.HOOK_SET)
+	if hand.at_ear != _wrist_on_wheel:
+		# The Call taken alone: his wrist is on the wheel while his hand holds
+		# the phone to his ear (GDD 10.4).
+		_wrist_on_wheel = hand.at_ear
+		if _wrist_on_wheel:
+			wheel.grip()
+		elif not hand.gripping:
+			wheel.release()
 	wheel.locked = effects.has_own(ItemSim.HOOK_SET)
 	if wheel.locked and _hook_keeps_lane and curve_k == 0.0:
 		wheel.hold_at(_lane_keeping_angle())
@@ -404,8 +430,16 @@ func step(input: DriveInput) -> void:
 		_emit("sfx_requested", {"id": "grind"})
 	_braking = input.rmb
 	_car_s_then = car.s
-	if not _standing():
+	var walls: Vector2 = boss.walls(car.s, car.x)
+	car.wall_left = walls.x
+	car.wall_right = walls.y
+	if boss.holds_car():
+		# Pulled over for the Call: the car stands until he hangs up (GDD 10.4).
+		car.speed = 0.0
+		car.v_lat = 0.0
+	elif not _standing():
 		car.step(_road_dt, wheel.steer(), gate.gear, _braking, _extra_drift())
+	_step_set_piece()
 	if _auto_indicate:
 		_indicate_for_lane_change()
 	_step_cramp()
@@ -432,6 +466,9 @@ func step(input: DriveInput) -> void:
 		if boss.rear_end:
 			# What came out of the dust behind his standing car (GDD 10.3).
 			collision.strike(Collision.Hit.CRASH)
+		if boss.wall_speed > 0.0:
+			# The end of the street (GDD 10.5), at the speed he met it.
+			collision.strike(collision.classify(boss.wall_speed, false))
 		_apply_collisions()
 		_step_leg_hazards()
 	_leg_lamps_lit += maxi(faults.lamps - lamps_before, 0)
@@ -519,6 +556,7 @@ func _set_stretch(plan: Dictionary) -> void:
 	act = GameData.as_int(plan.get("act"), act)
 	if act != act_before:
 		items.begin_act()
+	_floor_of_road = GameData.as_float(plan.get("heavy_floor"), -1.0)
 	curve_k = 0.0
 	items.begin_leg()
 	leg.begin(plan)
@@ -588,10 +626,11 @@ func _step_leg_road() -> void:
 	curve_k = leg.curve_k
 	if leg.gust_started != 0:
 		_blow(leg.gust_started, leg.gust_push)
-	boss.step_road(_road_dt, items.flag(FLAG_HAZARDS))
+	boss.step_road(_road_dt, DT, items.flag(FLAG_HAZARDS))
 	if boss.rear_end_tell:
 		# Its horn, and its lights in the mirror: the tell (GDD 2.2, pillar 4).
 		_emit("sfx_requested", {"id": "horn", "behind": true})
+	_report_call()
 
 
 # --- A Telling (GDD 9.5, 11.1) -----------------------------------------------
@@ -631,9 +670,7 @@ func _step_telling(button_down: bool) -> void:
 		RunState.Stage.BOSS:
 			if leg.step_progress():
 				_end_boss()
-		RunState.Stage.ARRIVAL:
-			if leg.step_progress():
-				_arrive()
+		# The Arrival ends with the key, in the bay (GDD 10.5).
 
 
 ## The gore point (GDD 9.5): the branch is the side of the split the car is on.
@@ -749,7 +786,7 @@ func _leave_stop() -> void:
 	if run.stage == RunState.Stage.BOSS_STOP:
 		run.leave_boss_stop()
 		if run.stage == RunState.Stage.ARRIVAL:
-			_set_stretch(RunGenerator.blank_plan(run.act, RunGenerator.ROAD_LANES, true, tuning.f("arrival_length")))
+			_set_stretch(BossSim.arrival_plan(data, run.act))
 		else:
 			_enter_approach()
 	else:
@@ -779,6 +816,9 @@ func begin_boss(boss_id: String, modifier_id: String = "", boss_seed: int = 0) -
 
 
 func _end_boss() -> void:
+	# Whoever is on the phone hangs up as he pulls in.
+	boss.hang_up()
+	_report_call()
 	_emit("boss_ended", {"boss": run.boss, "act": run.act, "modifier": boss.modifier, "time": leg.time})
 	boss.stop()
 	_clear_weather()
@@ -790,11 +830,84 @@ func _end_boss() -> void:
 			"shady": false, "offers": stop.offers_view()})
 
 
-## The end of the road (GDD 10.5): the Clock is read. Until the Arrival is
-## built (M7) the end of the street is the bay.
+## The street of the Arrival by itself (a test, `--boss=arrival`).
+func begin_arrival() -> void:
+	_set_stretch(BossSim.arrival_plan(data, act))
+
+
+## What a set piece does once the car has moved: the last checkpoint's
+## soldiers, the phone in his pocket, the bay.
+func _step_set_piece() -> void:
+	boss.step_after_car(_car_s_then)
+	if boss.call_began:
+		effects.hold(THE_CALL, SET_PIECE, true)
+		_emit("call_started", {"caller": NOOR})
+		_emit("sfx_requested", {"id": "phone_ring"})
+		_sync_anchors()
+	if boss.searched:
+		_search_at_the_barriers()
+	if boss.in_bay != _in_bay:
+		_in_bay = boss.in_bay
+		effects.hold(IN_BAY, SET_PIECE, _in_bay)
+		_sync_anchors()
+
+
+## The Call rang out unanswered: nothing is lost but the true ending (GDD 10.4).
+func _report_call() -> void:
+	if boss.call_missed:
+		effects.hold(THE_CALL, SET_PIECE, false)
+		_emit("call_resolved", {"caller": NOOR, "answered": false, "taken": ""})
+		_sync_anchors()
+
+
+## He took the phone from his pocket (GDD 10.4): a TAP answers it alone, and
+## pulled over with his hazard lights on he takes it standing; handed to a
+## passenger, they hold it to his ear.
+func _take_the_call(way: StringName) -> void:
+	var how: String = BossSim.TAKEN_WITH_PASSENGER if way == &"passenger" else BossSim.TAKEN_ALONE
+	if how == BossSim.TAKEN_ALONE and boss.pulled_over_safely(items.flag(FLAG_HAZARDS)):
+		how = BossSim.TAKEN_PARKED
+	if not boss.answer(how):
+		return
+	effects.hold(THE_CALL, SET_PIECE, false)
+	run.call_answered = true
+	_emit("call_resolved", {"caller": NOOR, "answered": true, "taken": how})
+
+
+## He came to the last checkpoint's barriers faster than they wave through
+## (GDD 10.4): he is stopped and searched, as at the Checkpoint (GDD 10.2).
+func _search_at_the_barriers() -> void:
+	var minutes: float = GameData.as_float(GameData.as_dict(GameData.as_dict(data.record("bosses", boss.kind).get(boss.kind)).get("checkpoint")).get("search_minutes"))
+	car.speed = 0.0
+	car.v_lat = 0.0
+	clock_minutes_owed += minutes
+	clock.add_minutes(minutes)
+	var taken_ids: Array[String] = []
+	for id: StringName in items.take_visible_contraband():
+		taken_ids.append(String(id))
+	_fit_cabin()
+	_emit("pulled_over", {"released": true, "paid": "search", "cost": 0.0, "minutes": minutes, "taken": taken_ids})
+
+
+## The key is turned in the bay (GDD 10.5): the Clock is read at that moment.
+func _turn_the_key() -> void:
+	if boss.kind != BossSim.ARRIVAL or not boss.in_bay:
+		return
+	_arrive()
+
+
+## The end of the road (GDD 10.5): the Clock is read.
 func _arrive() -> void:
-	run.arrive()
-	_emit("arrived", {"table": run.table, "clock": clock.text(), "clock_minutes": clock.minutes, "late": clock.late()})
+	var table: String = run.table
+	var told_true: bool = run.call_answered
+	if run.active:
+		run.arrive()
+	effects.hold(IN_BAY, SET_PIECE, false)
+	_in_bay = false
+	boss.stop()
+	leg.stop()
+	_sync_anchors()
+	_emit("arrived", {"table": table, "clock": clock.text(), "clock_minutes": clock.minutes, "late": clock.late(), "call": told_true})
 
 
 # --- Wreck, save and replay --------------------------------------------------
@@ -852,6 +965,7 @@ func capture() -> Dictionary:
 		"item_state": items.telling_state(),
 		"shady": _shady_here,
 		"boss_sign": run.boss_on_sign,
+		"call_answered": run.call_answered,
 		# For people: rounded. What is loaded are the exact bits below.
 		"clock_min": snappedf(clock.minutes, 0.001),
 		"cash": snappedf(cash, 0.001),
@@ -915,6 +1029,7 @@ func restore(telling: Dictionary) -> bool:
 	run.resume(GameData.as_string(telling.get("table")), Save.seed_in(telling.get("seed")), GameData.as_int(telling.get("retellings")),
 			GameData.as_int(telling.get("act"), 1), GameData.as_int(telling.get("leg")), stage, _side)
 	run.boss_on_sign = GameData.as_bool(telling.get("boss_sign"))
+	run.call_answered = GameData.as_bool(telling.get("call_answered"))
 	if run.stage == RunState.Stage.STOP:
 		# At the stall of the leg he is on.
 		_set_stretch(RunGenerator.plan(data, run.branch, run.act))
@@ -1150,7 +1265,8 @@ func _blow(direction: int, push: float) -> void:
 ## The Heavy floor now (GDD 6.1): by act, plus what the Table or a pill adds.
 func heavy_floor() -> float:
 	var index: int = clampi(act, 1, _heavy_floors.size()) - 1
-	return _heavy_floors[index] + heavy_floor_bonus + effects.total(HEAVY_FLOOR)
+	var base: float = _floor_of_road if _floor_of_road >= 0.0 else _heavy_floors[index]
+	return base + heavy_floor_bonus + effects.total(HEAVY_FLOOR)
 
 
 ## How far he can see along the road, in metres (GDD 9.1, 9.4): the
@@ -1169,7 +1285,9 @@ func visibility() -> float:
 
 ## The Glare on his view now, 0 to 1 (GDD 5.8), after what he wears against it.
 func glare() -> float:
-	return encounter.glare * items.passive("glare_mult")
+	# The visor, while it is down, blocks the sun (GDD 4.6): not a spotlight.
+	var sun: float = 0.0 if effects.has(ItemSim.VISOR_DOWN) else boss.glare
+	return maxf(encounter.glare, sun) * items.passive("glare_mult")
 
 
 ## How far the headlights reach at night, in metres (GDD 4.6, 6.3).
@@ -1221,8 +1339,21 @@ func snapshot() -> Dictionary:
 		"anchor_moves": items.anchor_moves(),
 		"mirror_scale": items.passive("mirror_scale"),
 		"mirror_shift": encounter.tell_shift,
-		"caller": String(items.caller),
-		"ring_left": items.ring_left,
+		"caller": NOOR if boss.call == BossSim.CALL_RINGING else String(items.caller),
+		"ring_left": boss.call_left if boss.call == BossSim.CALL_RINGING else items.ring_left,
+		"call": boss.call,
+		"call_left": boss.call_left,
+		"call_taken": boss.call_taken,
+		"at_ear": hand.at_ear,
+		"dawn_phase": boss.phase,
+		"sun": boss.glare,
+		"sun_side": boss.sun_side,
+		"glow": boss.glow,
+		"glow_side": boss.glow_side,
+		"corridor": boss.corridor(),
+		"corridor_gap": boss.corridor_gap(),
+		"bay": Vector2(boss.bay_from, boss.bay_to),
+		"in_bay": boss.in_bay,
 		"call_taps": items.call_taps,
 		"sway": _sway,
 		"lag": wheel.lag,
@@ -1353,6 +1484,7 @@ func _signs_in_view() -> Array[Dictionary]:
 		return none
 	var ahead: float = minf(tuning.f("road_draw_ahead"), visibility())
 	var signs: Array[Dictionary] = leg.signs_near(ahead)
+	signs.append_array(boss.signs_near(ahead))
 	if not run.active:
 		return signs
 	var par_ms: float = tuning.fi("gear_speeds", 2) / 3.6
@@ -1815,9 +1947,11 @@ func _resolve_gesture(button_down: bool) -> void:
 	if gesture.phase == Gesture.Phase.DONE:
 		_run_drag_steps()
 		_complete_ritual()
-	elif gesture.phase == Gesture.Phase.CANCELLED and gesture.kind == Gesture.Kind.HOLD and not _tap_instead.is_empty() \
-			and not button_down and hand.at_index == _active_anchor and gesture.elapsed <= tuning.f("tap_max_time") + DT * 0.5:
-		# Let go within a TAP's time: it was the TAP that is offered there too.
+	elif gesture.phase == Gesture.Phase.CANCELLED and (gesture.kind == Gesture.Kind.HOLD or gesture.kind == Gesture.Kind.DRAG_TO) \
+			and not _tap_instead.is_empty() and not button_down and hand.at_index == _active_anchor \
+			and gesture.elapsed <= tuning.f("tap_max_time") + DT * 0.5:
+		# Let go within a TAP's time, the hand still there: it was the TAP that
+		# is offered there too.
 		_active_ritual = _tap_instead
 		_complete_ritual()
 	if gesture.phase != Gesture.Phase.IDLE:
@@ -1856,6 +1990,10 @@ func _complete_ritual() -> void:
 		items.complete(_active_ritual, gesture.direction)
 		if items.paid != &"":
 			_pay_the_officer(items.paid)
+		if items.call_taken != &"":
+			_take_the_call(items.call_taken)
+		if items.key_turned:
+			_turn_the_key()
 	_emit("ritual_completed", {
 		"ritual": ritual_id,
 		"anchor": String(hand.anchor_id(_active_anchor)),

@@ -38,6 +38,8 @@ var boss_modifier: String = ""
 ## He has stopped for tea: the next fork's sign also shows the modifier of
 ## the boss ahead (GDD 9.6).
 var boss_on_sign: bool = false
+## He answered the Call (GDD 10.4, 11.4).
+var call_answered: bool = false
 ## The stop he is at, else "".
 var stop: String = ""
 
@@ -58,6 +60,7 @@ func begin(table_id: String, telling_seed: int) -> void:
 	boss = ""
 	boss_modifier = ""
 	boss_on_sign = false
+	call_answered = false
 	stop = ""
 	branch = {}
 	_approach()
