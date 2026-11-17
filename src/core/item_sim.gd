@@ -274,6 +274,11 @@ func restock(item_instance: Item) -> void:
 	item_instance.hot_left = _param(item_instance, "hot_for_s", 0.0)
 
 
+## True for a drink that was hot and no longer is: worth refilling though full.
+func gone_cold(item_instance: Item) -> bool:
+	return _param(item_instance, "hot_for_s", 0.0) > 0.0 and item_instance.hot_left <= 0.0
+
+
 ## True when something can be done at this anchor at all (a control, or an
 ## item sitting in a slot there). The hand only snaps to such anchors.
 func anchor_in_use(anchor: String) -> bool:

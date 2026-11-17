@@ -149,7 +149,7 @@ func _lay_out(record: Dictionary) -> void:
 			var supply: Dictionary = GameData.as_dict(owned.record.get("supply"))
 			var uses: int = GameData.as_int(supply.get("uses"))
 			var restock: float = GameData.as_float(supply.get("restock"))
-			if uses > 0 and restock > 0.0 and owned.supply < uses:
+			if uses > 0 and restock > 0.0 and (owned.supply < uses or _items.gone_cold(owned)):
 				var refill: Offer = Offer.new()
 				refill.kind = RESTOCK
 				refill.id = String(owned.id)

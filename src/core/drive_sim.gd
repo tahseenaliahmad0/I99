@@ -959,6 +959,33 @@ func _step_leg_hazards() -> void:
 		_emit("sfx_requested", {"id": "scrape", "hazard": String(kind)})
 
 
+## Puts an item in the cabin outside a stop (debug key F5, a Table's starting
+## cabin, a gift): in `slot`, or in the first free slot it fits, else in the
+## first it fits. What was in the slot is taken out, and so is one he already
+## has. Null when the item is unknown or does not fit the slot named.
+func give_item(id: StringName, slot: StringName = &"") -> ItemSim.Item:
+	if not data.has_record("items", String(id)):
+		push_error("DriveSim: unknown item '%s'" % id)
+		return null
+	var slots: Array = GameData.as_array(data.record("items", String(id)).get("slots"))
+	var place: StringName = slot
+	if place == &"":
+		for candidate: Variant in slots:
+			if items.item_in_slot(StringName(GameData.as_string(candidate))) == null:
+				place = StringName(GameData.as_string(candidate))
+				break
+		if place == &"" and not slots.is_empty():
+			place = StringName(GameData.as_string(slots[0]))
+	elif not slots.has(String(place)):
+		return null
+	items.remove_item(items.item(id))
+	if place != &"":
+		items.remove_item(items.item_in_slot(place))
+	var given: ItemSim.Item = items.add_item(id, place)
+	_sync_anchors()
+	return given
+
+
 ## Sets the road the car is on: 1 to 3 lanes, divided or not (GDD 5.1).
 func set_road(lanes: int, divided: bool) -> void:
 	car.set_road(lanes, divided)
