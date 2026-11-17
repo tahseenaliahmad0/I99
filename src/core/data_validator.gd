@@ -449,6 +449,15 @@ func _boss_modifier_schema() -> Dictionary:
 	})
 
 
+## A tuning constant for a rule that spans files: `fallback` where the
+## constant is missing or is no number (that is reported where tuning.json
+## itself is checked; the rule then has nothing to compare with).
+func _tuning_number(name: String, fallback: float) -> float:
+	if _data.tuning.has(name) and GameData.is_number(_data.tuning.raw(name)):
+		return GameData.as_float(_data.tuning.raw(name))
+	return fallback
+
+
 ## A boss lists its own modifiers, and has the numbers of its set piece.
 func _check_bosses() -> void:
 	if _data.roots.has("legs"):
@@ -459,7 +468,7 @@ func _check_bosses() -> void:
 			_check(street, _arrival_schema(), "legs.json", "arrival")
 			var arrival: Dictionary = GameData.as_dict(street)
 			if GameData.is_number(arrival.get("bay_m")) and GameData.is_number(arrival.get("length_m")) \
-					and (GameData.as_float(arrival.get("bay_m")) < _data.tuning.f("car_length") or GameData.as_float(arrival.get("bay_m")) > GameData.as_float(arrival.get("length_m"))):
+					and (GameData.as_float(arrival.get("bay_m")) < _tuning_number("car_length", 0.0) or GameData.as_float(arrival.get("bay_m")) > GameData.as_float(arrival.get("length_m"))):
 				_err("E_RANGE", "legs.json", "arrival.bay_m", "the bay must hold the car and fit in the street")
 	for boss: Dictionary in _data.records("bosses"):
 		var id: String = GameData.as_string(boss.get("id"))
@@ -485,7 +494,7 @@ func _check_bosses() -> void:
 			var call_at: float = length - GameData.as_float(call.get("from_end_m"))
 			if not (sunrise < corridor_from and corridor_to < call_at and call_at < length):
 				_err("E_RULE", "legs.json", "%s.dawn" % label, "the order along the road must be: sunrise, the last checkpoint, the Call, the end")
-			if GameData.as_float(check.get("gap_m")) <= _data.tuning.f("car_width") or GameData.as_float(check.get("gap_m")) > _data.tuning.f("lane_width"):
+			if GameData.as_float(check.get("gap_m")) <= _tuning_number("car_width", 0.0) or GameData.as_float(check.get("gap_m")) > _tuning_number("lane_width", INF):
 				_err("E_RANGE", "legs.json", "%s.dawn.checkpoint.gap_m" % label, "must be wider than the car and no wider than a lane")
 		var storm: Dictionary = GameData.as_dict(boss.get("storm"))
 		var gaps: Array = GameData.as_array(GameData.as_dict(storm.get("tail_lights")).get("gap_m"))

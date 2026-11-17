@@ -1257,3 +1257,176 @@ Format: `D-NNN (milestone, date) Title` then Context / Decision / Why.
   Rain or a Night leg, once.
 - **Heavy floor.** The Storm has Act 2's (GDD 6.1) because its plan is of
   Act 2; an empty road calms him there as on any road that is no encounter.
+
+## D-047 (M7, 2026-11-17) Dawn, the Call, the Arrival
+
+- **Dawn's road** is laid out by the leg generator (`LegGenerator.
+  generate_road`): the Rush leg's beat weights, 3,333 m with the last 150 m
+  left empty, heavy traffic (16 vehicles per km in all), under the rules of
+  GDD 9.2, around a stretch reserved for the last checkpoint: no beat is
+  laid there, no vehicle is beside him there at par, and the planned line
+  runs through it in the middle lane. "Rush traffic builds": of what the
+  generator puts before sunrise, `builds_from` (a quarter) is kept at the
+  very start and all of it at sunrise, by a seeded draw per vehicle.
+  Market day multiplies the density by 1.3 before that. (At a base of 16
+  per km plus the act's 4, a Market day's road took up to 39 draws and over
+  a second to generate; at 12 plus 4 it takes two at most.)
+- **Phases** go by where he is: the false dawn to `sunrise_at_m` (1,250 m),
+  the sunrise from there, the Call from 833 m before the end. The glow of
+  the false dawn is on the right all through Dawn (`glow`, `glow_side` in
+  the snapshot); the sun is ahead and to the left (`sun_side`).
+- **Heavy floor** in Dawn and on the street of the Arrival is the road's own
+  (0, GDD 6.1), not Act 3's: a plan may carry `heavy_floor`.
+- **Glare.** The sun comes up over `glare_ramp_m` (60 m, about 2 s at par):
+  it is seen before it blinds (GDD 5.8). Then Glare 60% to the end of Dawn.
+  With Early sun it begins at the start of the road. The visor blocks it
+  while it is down (`visor_time`, 3 s) and not a spotlight: GDD 4.6 says
+  "blocks sun glare". What he wears against Glare works on the sun as well.
+- **The last checkpoint** stands at 1,900 m: over a taper of 60 m barriers
+  close in from every lane's own lines to 2.34 m apart about the lane's
+  middle, and stay so for 150 m. Every lane has its corridor, so traffic
+  keeps its lanes. Its sign ([CHECKPOINT / 70]) stands 5 s short of the
+  taper at par. Touching a barrier is a scrape; the car is put back at most
+  to the middle of the corridor, never into the other barrier
+  (`CarSim.wall_left`, `wall_right`).
+- **"Waves him through at 70 km/h"** has teeth: his speed is judged once, as
+  the car reaches the barriers at their narrowest. Above `max_kmh` he is
+  stopped and searched as GDD 10.2 has it for a checkpoint: 15 game minutes
+  and the contraband in view taken (`pulled_over` with `paid: "search"`).
+  The GDD names no consequence; without one the 70 would mean nothing, and
+  the lever is what the hand must leave the wheel for under the low sun.
+- **The Call** rings in his pocket for `ring_s` (8 s) of his own time (Focus
+  does not slow it). While it rings the pocket offers a TAP (`call_answer`)
+  and, with a passenger beside him, a DRAG_TO to their shoulder
+  (`call_hand_over`); a DRAG_TO let go within a TAP's time with the hand
+  still there is the TAP (the rule that makes a slap of a short press on
+  his face now holds for DRAG_TO too).
+  - Ignored: `call_resolved` unanswered, and no cost at all.
+  - Alone: the hand goes to his ear (point `ear`) and stays there for
+    `talk_s` (30 s). It can reach nothing and grip nothing. His wrist is on
+    the wheel: the pointer steers at `wrist_steer` (40%) with no button
+    held, and the wheel does not return to centre.
+  - With a passenger: nothing is in his hand; he grips and steers as ever
+    but can reach for nothing for 30 s.
+  - Pulled over: answered in a car that is stopped (1 km/h or less), wholly
+    off the lanes, with the hazard lights on (GDD 4.6: "needed to stop
+    safely on the shoulder"), the car stands until he hangs up, whatever
+    his foot does, and the Clock runs: 30 s are 10 game minutes. Stopped
+    anywhere else, or dark, it is a call taken alone in a car that is free.
+  - The end of Dawn's road hangs up. That he answered is in `arrived`
+    (`call`) and in the save (`call_answered`). Until M8 "a passenger
+    beside him" is the cabin switch `passenger`.
+- **The Arrival** is a street (`arrival` in legs.json; `arrival_length` left
+  tuning.json): 300 m, one lane each way, nothing on it. The bay is its
+  last 12 m, across its whole width. He is in the bay when the car stands
+  (1 km/h or less) with its tail past the bay's line. Then the key (a new
+  anchor, `key`, under the wheel) can be turned with a TAP, and the Clock
+  is read at that moment. The street's end is solid: met at more than
+  5 km/h it is a hit of the class of that speed (first gear unbraked is a
+  crash), and the car stands against it, which is in the bay. So there is
+  no place on the street from which he cannot arrive.
+- **The scripted driver of T-RUN-01** now drives the Storm (looking where
+  he goes, braking behind what he cannot pass), Dawn (the planned line to
+  the checkpoint, second gear between its closing barriers, then looking
+  where he goes: after 150 m at 70 he is off the plan's pace) and the
+  Arrival (brake into the bay, hand to the key).
+
+## D-048 (M7, 2026-11-17) The Checkpoint: decided, not yet built
+
+The design below is settled and is what T-BOSS-01 is to establish. None of
+it is in the tree yet (the session paused here); the records are given so
+that the next session can put them in as they stand.
+
+- **The road** (500 m, three lanes): a sign 5 s short of a 60 m taper; from
+  200 m every lane is a corridor between barriers 2.34 m apart (the walls of
+  D-047) for 150 m, to the bar at 350 m; then open road to the boss stop.
+  Suspicion is watched from the start of the Checkpoint to the verdict and
+  does not wear off there (`SuspicionSim` gets a switch for the decay); the
+  Patrol's rows of GDD 6.5 do not apply, only the Checkpoint's own, and
+  nobody is pulled over at 100. Touching a barrier (a registered scrape with
+  `car.wall_touched`) is +25. The bar holds the car (as the street's end
+  does) until he is let through; met at more than 5 km/h it is a barrier
+  touch.
+- **Queue.** Six vehicles stand in each lane's corridor, nose to tail 2.5 m
+  apart, the first at the bar (types drawn into the plan by the boss seed).
+  The one at the bar is served for 4 s and leaves at up to 40 km/h; the
+  rest pull up behind it (speed = room x `pull_up_per_s`, at most 12 km/h):
+  stop and go, about 7.4 s a vehicle, some 45 s in all. `BossSim` moves them
+  itself after `TrafficSim.step` (their cruise is 0 for TrafficSim, whose
+  12 m follow gap would spread the queue out). Long queue: nine vehicles.
+- **Stow.** He is first in line when no queue vehicle of his lane is left
+  ahead and he stands (1 km/h or less) within 8 m of the bar. The soldier
+  then takes `stow_s` (10 s) to reach his window. At the end of them: +40
+  for each contraband item not in a glovebox cell and +15 for each Courage
+  stack the soldier notices (`courage_noticed()`: none with mints).
+  Stowing is a DRAG_TO from the item to the glovebox, offered instead of the
+  item's own rituals while the glovebox is open and a cell is free (`stow`,
+  a ritual contraband items share; `ItemSim.ritual_at` hands it out with the
+  item's id). What is in a cell is out of use: its rituals are not offered.
+  Taking it out is a DRAG_TO from the open glovebox to a free slot it fits
+  (`unstow`, `"to": "@home"`); a short press there is still the TAP that
+  shuts the glovebox (the TAP beside a DRAG_TO of D-047).
+- **Papers.** The soldier's sign names one of three documents (two, one
+  after the other, when Thorough), drawn into the plan by the seed. The
+  status `at_window` is held while he waits. Licence: DRAG_TO from `dash_1`
+  (before whatever sits there); ID: DRAG_TO from `pocket`; registration: in
+  the open glovebox, after the letter has been moved aside (a HOLD of 0.4 s
+  there, cabin switch `letter_aside`), DRAG_TO from `glovebox`. All go to
+  `driver_window` and are offered only with the window open (CRANK(3) at
+  the crank, or the window switch); with it shut the soldier taps on the
+  glass (`soldier.window`). The wrong document is refused and costs only
+  its time. Every full 5 s since a sign went up: +10. Forged papers pass
+  the phase the moment it begins and are gone (after the Stow count, where
+  out of the glovebox they are contraband like any other).
+- **Verdict**, when the last document is handed over: under 50 he passes;
+  from 50 he is searched (15 game minutes, every piece of contraband taken,
+  stowed or not: `take_all_contraband`), then let through; at 100 he is
+  turned back: 30 game minutes, the car at the start of the Checkpoint's
+  road again in first gear, a new queue, Suspicion from 0. 60 cash
+  (`checkpoint_bribe`, DRAG_TO from `cash` to the window while the soldier
+  waits) passes at any level; without 60 he is refused. Each is announced
+  as `pulled_over` with `paid`: pass, search, turned_back or bribe.
+  Dawn's last checkpoint (D-047) should then also take everything on a
+  search, as here.
+- **Records.** In legs.json, in the checkpoint's record:
+
+      "checkpoint": {
+        "corridor": {"at_m": 200, "length_m": 150, "taper_m": 60, "gap_m": 2.34, "sign_lead_s": 5},
+        "barrier_suspicion": 25,
+        "queue": {"cars": 6, "gap_m": 2.5, "creep_kmh": 12, "pull_up_per_s": 2.0, "serve_s": 4,
+                  "leave_kmh": 40, "clear_m": 4, "vehicles": ["car", "taxi", "pickup", "minibus"]},
+        "stop_zone_m": 8, "stopped_kmh": 1, "bump_kmh": 5,
+        "stow_s": 10, "contraband_suspicion": 40, "courage_suspicion": 15,
+        "documents": ["licence", "id", "registration"],
+        "delay_every_s": 5, "delay_suspicion": 10,
+        "pass_under": 50, "turned_back_at": 100,
+        "search_minutes": 15, "turned_back_minutes": 30 }
+
+  In rituals.json (ops `hand:<what>`, `stow`, `unstow`; conditions
+  `glovebox_room`, `stowed`; switch `letter_aside`; status `at_window`):
+
+      { "id": "papers_licence", "anchor": "dash_1", "gesture": "DRAG_TO", "to": "driver_window", "eyes_down": true,
+        "over_items": true, "requires": ["at_window", "flag:window_open"], "on_complete": ["hand:licence"] },
+      { "id": "papers_id", "anchor": "pocket", "gesture": "DRAG_TO", "to": "driver_window", "eyes_down": true,
+        "over_items": true, "requires": ["at_window", "flag:window_open"], "on_complete": ["hand:id"] },
+      { "id": "letter_aside", "anchor": "glovebox", "gesture": "HOLD", "hold_s": 0.4, "eyes_down": true, "over_items": true,
+        "requires": ["at_window", "flag:glovebox_open", "!flag:letter_aside"], "on_complete": ["toggle:letter_aside"] },
+      { "id": "papers_registration", "anchor": "glovebox", "gesture": "DRAG_TO", "to": "driver_window", "eyes_down": true,
+        "over_items": true, "requires": ["at_window", "flag:glovebox_open", "flag:letter_aside", "flag:window_open"],
+        "on_complete": ["hand:registration"] },
+      { "id": "checkpoint_bribe", "anchor": "cash", "gesture": "DRAG_TO", "to": "driver_window", "eyes_down": false,
+        "over_items": true, "requires": ["at_window", "flag:window_open"], "on_complete": ["hand:banknotes"] },
+      { "id": "stow", "anchor": "@slot", "shared": true, "gesture": "DRAG_TO", "to": "glovebox", "eyes_down": true,
+        "requires": ["flag:glovebox_open", "glovebox_room"], "on_complete": ["stow"] },
+      { "id": "unstow", "anchor": "glovebox", "gesture": "DRAG_TO", "to": "@home", "eyes_down": true, "over_items": true,
+        "requires": ["flag:glovebox_open", "stowed"], "on_complete": ["unstow"] }
+
+  `stow` goes first in the rituals of `arak_flask` and `forged_papers`.
+  Lines: `sign.document.licence`, `.id`, `.registration`, `soldier.window`,
+  `soldier.wrong`.
+- **Tests.** T-BOSS-01 on `CabinSuite` (`_crank`, `_drag`, `_tap_at`,
+  `_begin_quiet_boss`); the owed checks of T-ITEM-BREATH-MINTS and
+  T-ITEM-FORGED-PAPERS at the real Checkpoint; the scripted driver of
+  T-RUN-01 through the queue, the window and the papers. A car set down
+  beyond the bar by a test is not held by it (only crossing it is), so the
+  suites that jump a Telling forward keep working.
