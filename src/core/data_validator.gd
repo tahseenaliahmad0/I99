@@ -45,10 +45,18 @@ const REQUIRED_RECORDS: Dictionary = {
 	"modifiers": ["crosswind", "potholes", "sheep", "wedding", "melon_truck", "dust_haze"],
 	"vehicles": ["car", "taxi", "pickup", "minibus", "truck", "tanker", "tuk_tuk"],
 	"faults": ["rattle", "cracked_windscreen", "dead_headlight", "pulling_steering", "slipping_clutch", "stuck_wiper", "cracked_mirror"],
+	"stops": ["fuel_station", "fitter", "tea_stall", "roadside_find", "hitcher", "shady_guy", "boss_stop"],
+	"bosses": ["checkpoint", "storm", "dawn"],
 	# The controls that are always in the car (GDD 4.6) and that the code names.
 	"anchors": ["gear_lever", "horn", "wiper_stalk", "indicator_stalk", "headlight_knob", "hazard_button", "radio", "window_crank", "glovebox", "visor", "face"],
 }
 const BEAT_TYPES: PackedStringArray = ["CALM", "CLUSTER", "SLOWPOKE", "MERGE", "CURVE", "GUST", "HAZARD", "SPECIAL"]
+const STOP_SERVICES: PackedStringArray = ["shop", "repair", "tea", "find", "passenger", "deals", "boss"]
+## The stops of GDD 9.6 and the names GDD 15 gives their minutes and weights.
+const STOP_TUNING_KEYS: Dictionary = {
+	"fuel_station": "fuel", "fitter": "fitter", "tea_stall": "tea",
+	"roadside_find": "find", "hitcher": "hitcher", "shady_guy": "shady",
+}
 const HECKLE_TYPES: PackedStringArray = ["TWIST", "DARE", "DOUBT", "QUESTION", "ORDER", "FIB"]
 const FLICK_DIRS: PackedStringArray = ["up", "down", "left", "right"]
 const PLACEHOLDER_SHAPES: PackedStringArray = ["box", "cylinder", "capsule", "sphere", "quad", "label"]
@@ -91,7 +99,9 @@ func run(data: GameData) -> PackedStringArray:
 	_check_record_set("modifiers", _modifier_schema())
 	_check_record_set("beats", _beat_schema())
 	_check_record_set("legs", _leg_schema())
+	_check_record_set("bosses", _boss_schema())
 	_check_record_set("stops", _stop_schema())
+	_check_stops()
 	_check_record_set("passengers", _passenger_schema())
 	_check_record_set("tables", _table_schema())
 	_check_record_set("heckles", _heckle_schema())
@@ -291,11 +301,53 @@ func _modifier_schema() -> Dictionary:
 func _stop_schema() -> Dictionary:
 	return _obj({
 		"id": _str(),
-		"service": _str(),
-		"stock": _opt(_nullable(_obj({"count": _int(0.0), "pools": _list(_enum(ITEM_KINDS))}, true))),
+		"service": _enum(STOP_SERVICES),
+		"stock": _opt(_nullable(_obj({"count": _int(0.0), "pools": _list(_enum(ITEM_KINDS)), "free": _opt(_int(0.0))}))),
+		"restocks": _opt(_bool()),
+		"nerves_to": _opt(_num(0.0, 100.0)),
 		"clock_min": _num(0.0),
 		"weight": _num(0.0),
+		"line_ids": _opt(_map(_ref("lines"))),
+	})
+
+
+func _boss_schema() -> Dictionary:
+	return _obj({
+		"id": _str(),
+		"act": _int(1.0, 3.0),
+		"length_m": _above(0.0),
+		"par_s": _above(0.0),
+		"lanes": _int(1.0, 3.0),
+		"divided": _bool(),
+		"line_ids": _opt(_map(_ref("lines"))),
 	}, true)
+
+
+## A stop's minutes and weight are those GDD 15 gives (tuning stop_minutes and
+## stop_weights): the two tables may not drift apart.
+func _check_stops() -> void:
+	if not _data.tuning.has("stop_minutes") or not _data.tuning.has("stop_weights"):
+		return
+	var minutes: Dictionary = _data.tuning.d("stop_minutes")
+	var weights: Dictionary = _data.tuning.d("stop_weights")
+	for stop: Dictionary in _data.records("stops"):
+		var id: String = GameData.as_string(stop.get("id"))
+		if not STOP_TUNING_KEYS.has(id):
+			continue
+		var key: String = STOP_TUNING_KEYS[id]
+		if minutes.has(key) and GameData.is_number(stop.get("clock_min")) \
+				and not is_equal_approx(GameData.as_float(stop.get("clock_min")), GameData.as_float(minutes[key])):
+			_err("E_RULE", "stops.json", "stops[%s].clock_min" % id, "must equal stop_minutes.%s in tuning.json (GDD 15)" % key)
+		if weights.has(key) and GameData.is_number(stop.get("weight")) \
+				and not is_equal_approx(GameData.as_float(stop.get("weight")), GameData.as_float(weights[key])):
+			_err("E_RULE", "stops.json", "stops[%s].weight" % id, "must equal stop_weights.%s in tuning.json (GDD 15)" % key)
+	# One boss for each act.
+	var acts: Dictionary = {}
+	for boss: Dictionary in _data.records("bosses"):
+		var act: int = GameData.as_int(boss.get("act"))
+		if acts.has(act):
+			_err("E_RULE", "legs.json", "bosses[%s].act" % GameData.as_string(boss.get("id")), "act %d already has a boss" % act)
+		acts[act] = true
 
 
 func _passenger_schema() -> Dictionary:
@@ -456,6 +508,9 @@ func _tuning_schema() -> Dictionary:
 		"stop_weights": _obj({"fuel": pos, "fitter": pos, "tea": pos, "find": pos, "hitcher": pos}),
 		"rarity_by_act": _list_n(_list_n(pos, 3), 3),
 		"wreck_to_wheel": pos,
+		# The road between legs (M5)
+		"exit_slip_length": above, "missed_exit_nerves": pos, "stop_leave_grip": pos,
+		"fork_sign_lead": pos, "arrival_length": above,
 	}
 
 

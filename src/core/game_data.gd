@@ -16,6 +16,7 @@ const RECORD_SETS: Dictionary = {
 	"effects": ["items", "effects"],
 	"rituals": ["rituals", "rituals"],
 	"legs": ["legs", "legs"],
+	"bosses": ["legs", "bosses"],
 	"beats": ["beats", "beats"],
 	"vehicles": ["beats", "vehicles"],
 	"hazard_kinds": ["beats", "hazard_kinds"],

@@ -52,6 +52,11 @@ class Vehicle:
 	var cc_hit: bool = false
 	## Anything a leg wants to remember about this vehicle (police, motorcade...).
 	var role: StringName = &""
+	## Bookkeeping of TrafficSim.step: its place in the order along the road
+	## and its s when the tick began, and whether it has been taken off the road.
+	var rank: int = 0
+	var s_then: float = 0.0
+	var off_road: bool = false
 
 	func closing_speed(player_speed: float) -> float:
 		if direction < 0:
@@ -76,6 +81,13 @@ var _follow_gap: float = 0.0
 var _car_half_length: float = 0.0
 var _car_half_width: float = 0.0
 var _next_id: int = 1
+## The vehicles in the order they stood along the road when the tick began
+## (lowest s first), so that each looks only at what is just ahead of it.
+var _order: Array[Vehicle] = []
+var _order_stale: bool = true
+## How far ahead, centre to centre at the start of a tick, another vehicle
+## can be and still be within traffic_follow_gap: the gap and two half lengths.
+var _reach: float = 0.0
 
 
 func configure(data: GameData) -> void:
@@ -90,13 +102,17 @@ func configure(data: GameData) -> void:
 	_car_half_width = tuning.f("car_width") * 0.5
 	_type_ids.clear()
 	_type_records.clear()
+	var longest: float = 0.0
 	for record: Dictionary in data.records("vehicles"):
 		_type_ids.append(StringName(GameData.as_string(record.get("id"))))
 		_type_records.append(record)
+		longest = maxf(longest, GameData.as_float(record.get("length")))
+	_reach = _follow_gap + longest
 
 
 func clear() -> void:
 	vehicles.clear()
+	_order_stale = true
 	_next_id = 1
 
 
@@ -105,10 +121,12 @@ func clear() -> void:
 ## mistaken for one of these.
 func remove_all() -> void:
 	vehicles.clear()
+	_order_stale = true
 
 
 func remove(vehicle: Vehicle) -> void:
 	vehicles.erase(vehicle)
+	_order_stale = true
 
 
 func lane_center(lane: int) -> float:
@@ -138,6 +156,7 @@ func spawn(type_id: StringName, lane: int, s: float, speed_kmh: float, direction
 	vehicle.cruise = speed_kmh
 	vehicle.direction = direction
 	vehicles.append(vehicle)
+	_order_stale = true
 	return vehicle
 
 
@@ -163,6 +182,7 @@ func begin_lane_change(vehicle: Vehicle, to_lane: int, signal_time: float, durat
 
 
 func step(dt: float, player_s: float, player_x: float, player_speed: float) -> void:
+	_rank()
 	var index: int = 0
 	while index < vehicles.size():
 		var vehicle: Vehicle = vehicles[index]
@@ -170,9 +190,33 @@ func step(dt: float, player_s: float, player_x: float, player_speed: float) -> v
 		vehicle.s += vehicle.velocity() * KMH_TO_MS * dt
 		_step_lane_change(vehicle, dt)
 		if vehicle.s + vehicle.half_length < player_s - _despawn_behind:
+			vehicle.off_road = true
 			vehicles.remove_at(index)
+			_order_stale = true
 		else:
 			index += 1
+
+
+## Puts the vehicles in the order they stand along the road now. The order
+## barely changes from one tick to the next, so this is a pass over a list
+## that is already nearly sorted.
+func _rank() -> void:
+	if _order_stale or _order.size() != vehicles.size():
+		_order.assign(vehicles)
+		_order_stale = false
+	var count: int = _order.size()
+	for place: int in range(1, count):
+		var moving: Vehicle = _order[place]
+		var s: float = moving.s
+		var before: int = place - 1
+		while before >= 0 and _order[before].s > s:
+			_order[before + 1] = _order[before]
+			before -= 1
+		_order[before + 1] = moving
+	for place: int in count:
+		var vehicle: Vehicle = _order[place]
+		vehicle.rank = place
+		vehicle.s_then = vehicle.s
 
 
 ## True when the two lanes' worth of road beside `s` in `lane` is clear of
@@ -190,11 +234,23 @@ func lane_is_free(lane: int, s: float, clearance: float, ignore: Vehicle) -> boo
 func _step_speed(vehicle: Vehicle, player_s: float, player_x: float, player_speed: float) -> void:
 	var wanted: float = vehicle.cruise
 	# Follow whatever is just ahead in the same lane and going the same way:
-	# another vehicle...
-	for other: Vehicle in vehicles:
-		if other == vehicle or other.direction != vehicle.direction:
+	# another vehicle... Only what stood ahead of it along the road when the
+	# tick began, and no further than _reach, can be within the gap: nothing
+	# moves backwards, and nothing moves a half length in one tick.
+	var direction: int = vehicle.direction
+	var x: float = vehicle.x
+	var half_width: float = vehicle.half_width
+	var s_then: float = vehicle.s_then
+	var count: int = _order.size()
+	var place: int = vehicle.rank + direction
+	while place >= 0 and place < count:
+		var other: Vehicle = _order[place]
+		place += direction
+		if absf(other.s_then - s_then) > _reach:
+			break
+		if other.off_road or other.direction != direction:
 			continue
-		if absf(other.x - vehicle.x) >= vehicle.half_width + other.half_width:
+		if absf(other.x - x) >= half_width + other.half_width:
 			continue
 		var gap: float = _gap_ahead(vehicle, other)
 		if gap >= 0.0 and gap < _follow_gap:

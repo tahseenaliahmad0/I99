@@ -35,6 +35,12 @@ const FLAG_HIGH_BEAM: StringName = &"high_beam"
 const PULLED_OVER: StringName = &"pulled_over"
 const LAW: StringName = &"law"
 
+const EXIT_NONE: int = 0
+const EXIT_AHEAD: int = 1
+## The slip lane is open on the right.
+const EXIT_OPEN: int = 2
+const EXIT_BEHIND: int = 3
+
 var data: GameData
 var tuning: Tuning
 var space: CabinSpace = CabinSpace.new()
@@ -54,6 +60,8 @@ var encounter: EncounterSim = EncounterSim.new()
 var suspicion: SuspicionSim = SuspicionSim.new()
 var clock: ClockSim = ClockSim.new()
 var rng: Rng = Rng.new()
+## The Telling he is in, if any (GDD 11.1); the sandbox and single legs have none.
+var run: RunState = RunState.new()
 
 var tick: int = 0
 ## Thousands of dinars (GDD 6). Never below zero.
@@ -72,6 +80,8 @@ var in_encounter: bool = false
 var pulled_over: bool = false
 ## Game minutes his dealings with the law have cost (the Clock takes them).
 var clock_minutes_owed: float = 0.0
+## True while the car stands at a stop (GDD 9.6): the night waits.
+var stopped: bool = false
 ## Curve strength now: k of GDD 5.4, signed (+ pushes toward the right shoulder).
 var curve_k: float = 0.0
 ## Sandbox only, until legs exist (M4): vehicles per km spawned ahead on an
@@ -113,12 +123,57 @@ var _legal_gears: Array[int] = []
 var _snapped: bool = false
 ## Lamps lit since the leg began (a clean leg lights none).
 var _leg_lamps_lit: int = 0
+## The Exit of the leg he is on (GDD 9.5): where its slip lane opens, where
+## the stall is, and how far he is with it.
+var _exit: int = EXIT_NONE
+var _exit_at: float = 0.0
+var _stall_at: float = 0.0
+## Seconds the hand has held the wheel at a stop: stop_leave_grip of it leaves.
+var _leave_grip: float = 0.0
+## The hand has been off the wheel since he stopped: only then can a grip leave.
+var _let_go_at_stop: bool = false
 
 
 func _init(game_data: GameData) -> void:
 	data = game_data
 	tuning = game_data.tuning
 	space.configure(data)
+	_gust_strength = tuning.f("gust_push")
+	_gust_duration = tuning.f("gust_duration")
+	_grind_nerves = tuning.f("gate_grind_nerves")
+	_forced_gear = tuning.i("hit_forced_gear")
+	_heavy_floors = tuning.floats("heavy_floor")
+	_pound_mult = tuning.f("hand_pound_mult")
+	_shoulder_rate = tuning.f("shoulder_nerves_rate")
+	_traffic_radius = tuning.f("traffic_radius")
+	_empty_radius = tuning.f("empty_road_radius")
+	_rain_response = tuning.f("rain_response_mult")
+	for legal: Variant in tuning.a("suspicion_legal_gears"):
+		_legal_gears.append(GameData.as_int(legal))
+	_build()
+	reseed(0)
+
+
+## Everything the simulation is made of, made new: nothing of an earlier
+## drive is left in it. A Telling begins with this, and so does every stop,
+## so that a Telling loaded from a save is the one that was saved.
+func _build() -> void:
+	hand = HandSim.new()
+	wheel = WheelSim.new()
+	gate = GearGate.new()
+	gesture = Gesture.new()
+	car = CarSim.new()
+	traffic = TrafficSim.new()
+	collision = Collision.new()
+	effects = EffectSystem.new()
+	nerves = NervesSim.new()
+	faults = FaultSim.new()
+	items = ItemSim.new()
+	leg = LegSim.new()
+	encounter = EncounterSim.new()
+	suspicion = SuspicionSim.new()
+	clock = ClockSim.new()
+	run = RunState.new()
 	hand.configure(data, space)
 	wheel.configure(tuning)
 	gate.configure(tuning)
@@ -134,20 +189,31 @@ func _init(game_data: GameData) -> void:
 	encounter.configure(data, car, traffic, leg)
 	suspicion.configure(tuning)
 	clock.configure(tuning)
+	run.configure(data)
 
 	cash = tuning.f("cash_start")
-	_gust_strength = tuning.f("gust_push")
-	_gust_duration = tuning.f("gust_duration")
-	_grind_nerves = tuning.f("gate_grind_nerves")
-	_forced_gear = tuning.i("hit_forced_gear")
-	_heavy_floors = tuning.floats("heavy_floor")
-	_pound_mult = tuning.f("hand_pound_mult")
-	_shoulder_rate = tuning.f("shoulder_nerves_rate")
-	_traffic_radius = tuning.f("traffic_radius")
-	_empty_radius = tuning.f("empty_road_radius")
-	_rain_response = tuning.f("rain_response_mult")
-	for legal: Variant in tuning.a("suspicion_legal_gears"):
-		_legal_gears.append(GameData.as_int(legal))
+	wrecked = false
+	act = 1
+	heavy_floor_bonus = 0.0
+	in_encounter = false
+	pulled_over = false
+	stopped = false
+	clock_minutes_owed = 0.0
+	curve_k = 0.0
+	_active_ritual = {}
+	_active_anchor = HandSim.NO_ANCHOR
+	_lever_in_hand = false
+	_pinned_until_release = false
+	_drag_destination = HandSim.NO_ANCHOR
+	_gust_ticks_left = 0
+	_gust_push = 0.0
+	_braking = false
+	_next_free_spawn_s = 0.0
+	_snapped = false
+	_leg_lamps_lit = 0
+	_exit = EXIT_NONE
+	_leave_grip = 0.0
+	_let_go_at_stop = false
 
 	var start_gear: int = tuning.i("start_gear")
 	wheel.reset()
@@ -155,7 +221,6 @@ func _init(game_data: GameData) -> void:
 	car.reset(car.lanes / 2, start_gear)
 	_lane = car.lane_of(car.x)
 	_lever_anchor = hand.anchor_index(GEAR_LEVER)
-	reseed(0)
 	_sync_anchors()
 
 
@@ -210,7 +275,7 @@ func step(input: DriveInput) -> void:
 		nerves.add(_grind_nerves)
 		_emit("sfx_requested", {"id": "grind"})
 	_braking = input.rmb
-	if not pulled_over:
+	if not _standing():
 		car.step(DT, wheel.steer(), gate.gear, _braking, _extra_drift())
 	var lane: int = car.lane_of(car.x)
 	if lane != _lane:
@@ -223,12 +288,13 @@ func step(input: DriveInput) -> void:
 	# 6. Traffic.
 	if free_traffic_per_km > 0.0:
 		_step_free_traffic()
-	leg.step_traffic(DT)
-	traffic.step(DT, car.s, car.x, car.speed)
+	if not stopped:
+		leg.step_traffic(DT)
+		traffic.step(DT, car.s, car.x, car.speed)
 
 	# 7. Collisions and close calls.
 	var lamps_before: int = faults.lamps
-	if not pulled_over:
+	if not _standing():
 		collision.step(DT, car, traffic, gate.gear)
 		_apply_collisions()
 		_step_leg_hazards()
@@ -238,11 +304,13 @@ func step(input: DriveInput) -> void:
 	_step_encounter()
 	_step_suspicion()
 
-	# 9. Effect timers, Nerves, faults.
-	effects.step(DT)
-	items.step(DT)
-	_feed_nerves()
-	nerves.step(DT)
+	# 9. Effect timers, Nerves, faults. At a stop the night waits: nothing
+	# burns down, cools, drifts or calms while he shops (GDD 6.4).
+	if not stopped:
+		effects.step(DT)
+		items.step(DT)
+		_feed_nerves()
+		nerves.step(DT)
 	_report_nerves()
 	_report_effects()
 	cash = maxf(cash + items.cash_delta, 0.0)
@@ -251,19 +319,53 @@ func step(input: DriveInput) -> void:
 	items.events.clear()
 
 	# 10. Clock: it runs while he drives, not while he stands (GDD 6.4).
-	if not pulled_over:
+	if not _standing():
 		clock.step(DT)
 
-	# 12. Leg progress.
-	if leg.step_progress():
+	# 12. Leg progress: Exit, Fork, boss and ending transitions.
+	if run.active:
+		_step_telling()
+	elif leg.step_progress():
 		_end_leg()
 
 	tick += 1
 
 
+## True while the car stands and the road does not move: with the officer,
+## or at a stop.
+func _standing() -> bool:
+	return pulled_over or stopped
+
+
 ## Starts a leg from its plan (LegGenerator): the road, the car at the start
 ## in the plan's start lane, an empty road ahead, and the leg's weather.
 func begin_leg(plan: Dictionary) -> void:
+	_set_stretch(plan)
+	_arm_exit()
+	_announce_leg(plan)
+
+
+## In a Telling every leg ends in an Exit (GDD 9.5): the slip lane opens
+## leg_tail short of the leg's end and the stall is exit_slip_length on.
+func _arm_exit() -> void:
+	if not run.active or run.stage != RunState.Stage.LEG:
+		return
+	_exit = EXIT_AHEAD
+	_exit_at = leg.length - tuning.f("leg_tail")
+	_stall_at = _exit_at + tuning.f("exit_slip_length")
+
+
+func _announce_leg(plan: Dictionary) -> void:
+	_emit("leg_started", {
+		"leg": leg.leg_id,
+		"modifier": GameData.as_string(plan.get("modifier")),
+		"act": act,
+		"par": leg.par,
+	})
+
+
+## Puts the car at the start of a stretch of road: a leg, or a blank plan.
+func _set_stretch(plan: Dictionary) -> void:
 	set_road(GameData.as_int(plan.get("lanes"), 3), GameData.as_bool(plan.get("divided"), true))
 	traffic.clear()
 	collision.reset()
@@ -280,12 +382,19 @@ func begin_leg(plan: Dictionary) -> void:
 	items.dust_rate = leg.dust_rate
 	car.lat_tau_mult = _rain_response if leg.raining else 1.0
 	_leg_lamps_lit = 0
-	_emit("leg_started", {
-		"leg": leg.leg_id,
-		"modifier": GameData.as_string(plan.get("modifier")),
-		"act": act,
-		"par": leg.par,
-	})
+	_exit = EXIT_NONE
+
+
+## The same for a car that drives on from one stretch into the next: it
+## keeps its speed and its place across its lane.
+func _roll_into(plan: Dictionary) -> void:
+	var speed: float = car.speed
+	var off_centre: float = car.x - car.lane_center(clampi(car.lane_of(car.x), 0, car.lanes - 1))
+	_set_stretch(plan)
+	var room: float = (car.lane_width() - tuning.f("car_width")) * 0.5
+	car.speed = speed
+	car.x += clampf(off_centre, -room, room)
+	_lane = car.lane_of(car.x)
 
 
 ## The car passed the end of the leg: what it earned (GDD 12.1).
@@ -315,7 +424,7 @@ func _end_leg() -> void:
 
 ## The leg's bend and gusts, before the car moves.
 func _step_leg_road() -> void:
-	if not leg.active or pulled_over:
+	if not leg.active or _standing():
 		return
 	leg.step_road(DT)
 	curve_k = leg.curve_k
@@ -323,11 +432,174 @@ func _step_leg_road() -> void:
 		start_gust(leg.gust_started)
 
 
+# --- A Telling (GDD 9.5, 11.1) -----------------------------------------------
+
+## Starts a Telling of `table` from Baghdad: the starting cabin, 22:00, the
+## car rolling in first gear toward the first fork with nobody at the wheel.
+func begin_telling(table: String, telling_seed: int) -> void:
+	_build()
+	reseed(telling_seed)
+	run.begin(table, telling_seed)
+	_enter_approach()
+
+
+## The road to a fork: nothing on it but the sign and the split.
+func _enter_approach() -> void:
+	var length: float = tuning.f("leg_tail") - tuning.f("exit_slip_length")
+	_set_stretch(RunGenerator.blank_plan(run.act, RunGenerator.ROAD_LANES, true, length))
+
+
+func _step_telling() -> void:
+	if stopped:
+		_step_stop()
+		return
+	match run.stage:
+		RunState.Stage.APPROACH:
+			if leg.step_progress():
+				_take_fork()
+		RunState.Stage.LEG:
+			_step_exit()
+			if not stopped and leg.step_progress():
+				_end_leg()
+				run.leg_done(_leg_lamps_lit == 0)
+				if run.fork_ahead():
+					_take_fork()
+				else:
+					_begin_boss()
+		RunState.Stage.BOSS:
+			if leg.step_progress():
+				_end_boss()
+		RunState.Stage.ARRIVAL:
+			if leg.step_progress():
+				_arrive()
+
+
+## The gore point (GDD 9.5): the branch is the side of the split the car is on.
+func _take_fork() -> void:
+	var side: int = RunState.LEFT if car.x < car.road_right() * 0.5 else RunState.RIGHT
+	var branch: Dictionary = run.take_branch(side)
+	var plan: Dictionary = RunGenerator.plan(data, branch, run.act)
+	_emit("fork_taken", {
+		"act": run.act,
+		"leg_index": run.legs_done,
+		"side": side,
+		"leg": GameData.as_string(branch.get("leg")),
+		"modifier": GameData.as_string(branch.get("modifier")),
+		"stop": GameData.as_string(branch.get("stop")),
+		"par": GameData.as_float(branch.get("par_s")),
+	})
+	_roll_into(plan)
+	_arm_exit()
+	_announce_leg(plan)
+
+
+## The Exit (GDD 9.5): a slip lane opens on the right; a car in it at the
+## stall, at exit_max_speed or less, stops. Any other car has missed it.
+func _step_exit() -> void:
+	if _exit == EXIT_AHEAD and car.s >= _exit_at:
+		_exit = EXIT_OPEN
+		car.set_road(car.lanes + 1, car.divided)
+		_lane = car.lane_of(car.x)
+	elif _exit == EXIT_OPEN and car.s >= _stall_at:
+		_exit = EXIT_BEHIND
+		var in_slip_lane: bool = car.lane_of(car.x) >= car.lanes - 1
+		car.set_road(car.lanes - 1, car.divided)
+		_lane = car.lane_of(car.x)
+		if in_slip_lane and car.speed <= tuning.f("exit_max_speed"):
+			_enter_stop()
+		else:
+			nerves.add(tuning.f("missed_exit_nerves"))
+
+
+## Where the Exit's slip lane runs while it is ahead of the car or beside
+## it; Vector2(-1, -1) otherwise.
+func exit_slip() -> Vector2:
+	if not run.active or run.stage != RunState.Stage.LEG or stopped or _exit == EXIT_NONE or _exit == EXIT_BEHIND:
+		return Vector2(-1.0, -1.0)
+	return Vector2(_exit_at, _stall_at)
+
+
+func _enter_stop() -> void:
+	run.enter_stop()
+	_park()
+	var minutes: float = GameData.as_float(data.record("stops", run.stop).get("clock_min")) if data.has_record("stops", run.stop) else 0.0
+	clock.add_minutes(minutes)
+	_emit("stop_entered", {"stop": run.stop, "minutes": minutes, "act": run.act, "leg_index": run.legs_done})
+
+
+## The car stands; the road is gone until he leaves.
+func _park() -> void:
+	stopped = true
+	car.speed = 0.0
+	car.v_lat = 0.0
+	traffic.remove_all()
+	encounter.road_cleared()
+	_leave_grip = 0.0
+	_let_go_at_stop = false
+
+
+## At a stop: gripping the wheel for stop_leave_grip leaves (GDD 9.6). The
+## grip he drove in with does not count: the hand must have been off the wheel.
+func _step_stop() -> void:
+	if not hand.gripping:
+		_let_go_at_stop = true
+		_leave_grip = 0.0
+		return
+	if not _let_go_at_stop:
+		return
+	_leave_grip += DT
+	if _leave_grip >= tuning.f("stop_leave_grip") - DT * 0.5:
+		_leave_stop()
+
+
+func _leave_stop() -> void:
+	_emit("stop_left", {"stop": run.stop})
+	stopped = false
+	_leave_grip = 0.0
+	gate.reset(tuning.i("start_gear"))
+	if run.stage == RunState.Stage.BOSS_STOP:
+		run.leave_boss_stop()
+		if run.stage == RunState.Stage.ARRIVAL:
+			_set_stretch(RunGenerator.blank_plan(run.act, RunGenerator.ROAD_LANES, true, tuning.f("arrival_length")))
+		else:
+			_enter_approach()
+	else:
+		# Back on the road beside the stall, in its right lane.
+		run.leave_stop()
+		car.x = car.lane_center(car.lanes - 1)
+		_lane = car.lane_of(car.x)
+	car.speed = 0.0
+
+
+## The act's boss. Until the bosses are built (M7) it is an empty road of the
+## boss's length.
+func _begin_boss() -> void:
+	run.begin_boss()
+	var boss: Dictionary = run.boss_record()
+	_roll_into(RunGenerator.blank_plan(run.act, GameData.as_int(boss.get("lanes"), RunGenerator.ROAD_LANES),
+			GameData.as_bool(boss.get("divided"), true), GameData.as_float(boss.get("length_m")), GameData.as_float(boss.get("par_s"))))
+	_emit("boss_started", {"boss": run.boss, "act": run.act})
+
+
+func _end_boss() -> void:
+	_emit("boss_ended", {"boss": run.boss, "act": run.act, "time": leg.time})
+	run.enter_boss_stop()
+	_park()
+	_emit("stop_entered", {"stop": run.stop, "minutes": 0.0, "act": run.act, "leg_index": run.legs_done})
+
+
+## The end of the road (GDD 10.5): the Clock is read. Until the Arrival is
+## built (M7) the end of the street is the bay.
+func _arrive() -> void:
+	run.arrive()
+	_emit("arrived", {"table": run.table, "clock": clock.text(), "clock_minutes": clock.minutes, "late": clock.late()})
+
+
 # --- Encounters and the law --------------------------------------------------
 
 ## The leg's encounter: what it does to him this tick.
 func _step_encounter() -> void:
-	if pulled_over or not leg.active:
+	if _standing() or not leg.active:
 		return
 	encounter.step(DT, _braking, gate.gear)
 	nerves.add_rate(encounter.nerves_rate)
@@ -579,8 +851,16 @@ func snapshot() -> Dictionary:
 		"tailgater": encounter.tail_phase if encounter.kind == "tailgater" else 0,
 		"glare": encounter.glare,
 		"side_road": encounter.side_road if encounter.kind == "motorcade" else 0,
-		"slip": encounter.slip(),
-		"slip_open": encounter.kind == "motorcade" and encounter.side_road == EncounterSim.SIDE_ROAD_OPEN,
+		"slip": _slip_in_view(),
+		"slip_open": _exit == EXIT_OPEN or (encounter.kind == "motorcade" and encounter.side_road == EncounterSim.SIDE_ROAD_OPEN),
+		"telling": run.active,
+		"table": run.table,
+		"stage": run.stage_name(),
+		"act": run.act if run.active else act,
+		"legs_done": run.legs_done,
+		"stop": run.stop,
+		"stopped": stopped,
+		"boss": run.boss,
 		"pulled_over": pulled_over,
 		"visibility": visibility(),
 		# Unlit things show only inside what he can see: at night they appear late.
@@ -604,7 +884,30 @@ func _signs_in_view() -> Array[Dictionary]:
 	if not leg.active:
 		var none: Array[Dictionary] = []
 		return none
-	return leg.signs_near(minf(tuning.f("road_draw_ahead"), visibility()))
+	var ahead: float = minf(tuning.f("road_draw_ahead"), visibility())
+	var signs: Array[Dictionary] = leg.signs_near(ahead)
+	if not run.active:
+		return signs
+	var par_ms: float = tuning.fi("gear_speeds", 2) / 3.6
+	# The Exit is signed slip_sign_lead seconds ahead (GDD 9.5).
+	if run.stage == RunState.Stage.LEG and _exit == EXIT_AHEAD:
+		var to_exit: float = _exit_at - tuning.f("slip_sign_lead") * par_ms - car.s
+		if to_exit >= 0.0 and to_exit <= ahead:
+			signs.append({"kind": "exit", "ahead": to_exit, "stop": GameData.as_string(run.branch.get("stop"))})
+	# The fork's overhead sign: for each branch its leg, modifier, stop and par.
+	if run.fork_ahead():
+		var to_fork: float = maxf(leg.length - tuning.f("fork_sign_lead") * par_ms, 0.0) - car.s
+		if to_fork >= 0.0 and to_fork <= ahead:
+			signs.append({"kind": "fork", "ahead": to_fork, "left": run.branches[RunState.LEFT], "right": run.branches[RunState.RIGHT]})
+	return signs
+
+
+## The slip lane the road view draws: the Exit's, or the side road's.
+func _slip_in_view() -> Vector2:
+	var slip: Vector2 = exit_slip()
+	if slip.x >= 0.0:
+		return slip
+	return encounter.slip()
 
 
 func _vehicle_snapshots() -> Array[Dictionary]:

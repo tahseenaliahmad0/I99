@@ -129,7 +129,9 @@ func configure(data: GameData, car: CarSim, traffic: TrafficSim, leg: LegSim) ->
 
 ## Starts the encounter of the plan's leg type, if it has one.
 func begin(plan: Dictionary) -> void:
-	var leg: Dictionary = _data.record("legs", GameData.as_string(plan.get("leg")))
+	# A stretch that is no leg (an approach, a boss) has no encounter of this kind.
+	var leg_id: String = GameData.as_string(plan.get("leg"))
+	var leg: Dictionary = _data.record("legs", leg_id) if not leg_id.is_empty() else {}
 	_special = GameData.as_dict(leg.get("special"))
 	kind = GameData.as_string(_special.get("kind"))
 	active = false
@@ -167,6 +169,12 @@ func stop() -> void:
 	kind = ""
 	active = false
 	police_lights = false
+
+
+## Every vehicle was taken off the road (the car stands at a stop): the
+## motorcade's cars are put back where they belong when the road moves again.
+func road_cleared() -> void:
+	_convoy.clear()
 
 
 func begin_tick() -> void:

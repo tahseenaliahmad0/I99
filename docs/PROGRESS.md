@@ -28,7 +28,7 @@ Useful commands:
 ## Current state
 
 - **Milestone:** M5 (a whole Telling). M4 is complete but for its review.
-- **Tests:** 41 of 114 passing (M0: 2, M1: 8, M2: 10, M3: 7, M4: 13, M5: 1).
+- **Tests:** 42 of 114 passing (M0: 2, M1: 8, M2: 10, M3: 7, M4: 13, M5: 2).
 - **Reviews:** `m1-review` and `m2-review` reported on every lens (run ids wf_53ae3899-d40 and wf_d8c835c4-884; findings saved as JSON under the scratchpad `fixes/` folder, which does not survive the container: the lists below are what is left). Applied: M1 hand, wheel and gate; M2 car (D-028), traffic and collisions (D-029); M1 gesture pipeline code (D-030); M1 rules and the M2 view findings on indicators, vehicle ids, dashes, bend (D-035). **Still open:** (a) M2 views: glovebox and horn markers buried in props; pointer ring drawn at the hand's clamped target; the hand does not follow the gear knob; left sleeve placed behind the eye; forearm stretches beyond 0.30 m for five far anchors (decision not recorded); Cabin node names of GDD 13.5; `scene` in placeholders ignored for road strips, arm and pointer. (b) M1 test honesty (18): no test moves the pointer with relative motion; T-WHEEL-01 never releases a turned wheel; grip and ride on an off-centre wheel; gate engage radius and grind band probed from one side; FLICK time and direction limits; CRANK angle-not-distance; gate channel width; camera pitch and glance following the hand; pointer pixels to screen; steering sensitivity wiring; loose brackets on timing limits; literals standing in for tuning values. (c) M1 gesture: rituals.json is not checked against the table of GDD 4.6. (d) M2 test honesty leftovers (see D-028 and D-029 for what was done). M3 and M4 have not been reviewed. Background agents hit the usage limit on 2026-11-17 (resets 2026-11-20 01:00 UTC): until then work without workflows.
 - **Next step:** M5 (a whole Telling): Clock, run state and the Fork/Leg/Exit/Stop/Boss flow, stops and the shop, save and load, Wreck and restart, the input log and state hash. The open review items above are to be worked off alongside (the test-honesty ones are good work for parallel agents once they are available again).
 
@@ -94,7 +94,7 @@ Do not start a milestone until every test of the previous one passes (GDD 18).
 
 ### M5 A whole Telling: T-RUN-01..02, T-CLOCK-01, T-STOP-01, T-SAVE-01, T-REPLAY-01
 - [x] `ClockSim` (T-CLOCK-01): runs while he drives, stands while he is pulled over; fines and bribes charge it
-- [ ] `RunState` and the flow of a Telling in `DriveSim`: approach, Fork by the side of the gore, Leg, Exit slip lane and stall, boss stand-ins, boss stop, Arrival (T-RUN-01)
+- [x] `RunState` and the flow of a Telling in `DriveSim`: approach, Fork by the side of the gore, Leg, Exit slip lane and stall, boss stand-ins, boss stop, Arrival (T-RUN-01; DECISIONS D-036)
 - [ ] Stops and the shop: `stops.json`, the 32 item records, offers, TAP to buy, DRAG_TO to place, repairs, restocks, tea, find, shady guy, boss stop (T-STOP-01)
 - [ ] Wreck and restart (T-RUN-02)
 - [ ] `Save` (T-SAVE-01); input log and state hash (T-REPLAY-01)
@@ -123,7 +123,7 @@ Do not start a milestone until every test of the previous one passes (GDD 18).
 
 ## Known debts (builder)
 
-- Simulation speed: about 85 microseconds per tick with nine vehicles (measured at M3). A Telling of 20 minutes is about 12 s of CPU; the full balance run of GDD 13.8 (100 seeds x 3 skills x 7 Tables) would take hours. The per-tick Dictionary lookups in `ItemSim.step`, `FaultSim.param` and `EffectSystem.step` are the first things to tighten in M11.
+- Simulation speed (measured at M5): 45 microseconds per tick on an empty road, 95 on an Open road leg, 130 on a Rush leg with 23 vehicles; a whole Telling of 1,100 s of driving takes about 15 s. Traffic's follow rule was the worst of it and is linear now. A Telling of 20 minutes is about 12 s of CPU; the full balance run of GDD 13.8 (100 seeds x 3 skills x 7 Tables) would take hours. The per-tick Dictionary lookups in `ItemSim.step`, `FaultSim.param` and `EffectSystem.step` are the first things to tighten in M11.
 
 ## NEEDS OWNER
 
@@ -157,3 +157,5 @@ Two lines per slice, newest last.
   All thirteen M4 tests pass and are promoted: 40 of 114. Background agents are over the usage limit until 2026-11-20.
 - 2026-11-17 M4: wedding honk; one list of bus signals (D-034); views for hazards, signs, beacon, haze, slip lane; `--leg=` and `--bot=` (D-035).
   M1 rule findings applied (purity lint, countdowns, runner, settings, anchor indices, validator). Smoke now also runs three legs.
+- 2026-11-17 M5: the Clock (T-CLOCK-01); `RunState` and the road of a Telling: approach, fork, Exit and stall, stops entered and left, boss stand-ins, Arrival (T-RUN-01, D-036).
+  A scripted par Telling with seven stops parks at 05:34. Traffic's follow rule is linear with an identical trace. 42 of 114.

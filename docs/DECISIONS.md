@@ -758,3 +758,48 @@ Format: `D-NNN (milestone, date) Title` then Context / Decision / Why.
   index that is not an anchor; the validator knows the M1 constants,
   refuses zero where the code divides, and requires the controls of GDD 4.6.
 
+## D-036 (M5, 2026-11-17) The road of a Telling
+
+- **Stretches.** A Telling is driven as stretches of road, each with its own
+  `s` from 0: the approach to a fork, a leg, a boss, the street of the
+  Arrival. `RunState` knows which comes next; `DriveSim` drives it. The car
+  rolls from one into the next with its speed and its place across its lane.
+- **Start.** A Telling begins `leg_tail - exit_slip_length` (170 m) short of
+  its first fork, in the middle lane, rolling in first gear with nobody at
+  the wheel (GDD 10.1). Left alone, the car drifts onto the right-hand
+  branch: not choosing is a choice.
+- **Fork.** The gore is the end of the stretch (2,500 m of a leg). A car
+  whose middle is left of the middle of the road takes the left branch,
+  any other the right. Branches come from `RunGenerator.fork`, which now
+  also draws the stop at each branch's end by `stop_weights`. The sign
+  stands `fork_sign_lead` seconds short of the gore at par.
+- **Exit.** Every leg of a Telling ends in one. The slip lane opens at
+  `leg_length - leg_tail` (2,200 m) and the stall is `exit_slip_length`
+  (130 m) on. A car in the slip lane (or beyond it) at the stall, at
+  `exit_max_speed` or less after that tick's driving, is at the stop. Every
+  other car has missed it, whatever lane it was in: +`missed_exit_nerves`.
+  Not stopping is therefore never free (GDD 9.5 says "too fast or in the
+  wrong lane", which is every way of not stopping).
+- **At a stop** the night waits: the car, traffic, the leg's clock, the
+  Clock, effect timers, items and Nerves do not step; the hand, gestures
+  and rituals do. The stop's minutes are charged on entry. Gripping the
+  wheel for `stop_leave_grip` leaves, but only a grip taken at the stop:
+  the hand must have been off the wheel since he arrived. He pulls away
+  from rest in first gear, in the right lane beside the stall, and the
+  leg's last 170 m lead to the next fork or the boss.
+- **Bosses** are records in `legs.json` (`bosses`: id, act, length, par).
+  Until M7 builds them a boss is an empty road of its length. Its end is a
+  boss stop in every act, the third included (T-RUN-01's text), and after
+  the third comes the Arrival: until M7, `arrival_length` of street whose
+  end is the bay, where the Clock is read.
+- **Stops as data.** `stops.json` follows GDD 14; `clock_min` and `weight`
+  must equal `stop_minutes` and `stop_weights` of GDD 15 (the validator
+  checks), so the two tables cannot drift apart.
+- **A clean slate.** `DriveSim._build()` makes every part of the simulation
+  anew. A Telling begins with it, so nothing of an earlier drive can leak in.
+- **Traffic's follow rule** looks only at what stood just ahead along the
+  road when the tick began (vehicles are kept in order by a pass over a
+  nearly sorted list). The result is the same as looking at every vehicle,
+  to the bit, at a quarter of the cost.
+- **Why.** GDD 9.5, 9.6, 11.1; GDD 1.5 for what they leave open.
+

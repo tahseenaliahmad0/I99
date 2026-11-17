@@ -7,6 +7,8 @@ extends RefCounted
 const ACTS: int = 3
 const LEGS_PER_ACT: int = 3
 const BRANCHES: int = 2
+## The road between legs is the motorway of GDD 5.1: three lanes and a median.
+const ROAD_LANES: int = 3
 ## Salts that keep the fork draws and the leg seeds apart from other uses of
 ## the Telling seed.
 const FORK_SALT: int = 1000
@@ -23,8 +25,9 @@ static func leg_pool(data: GameData, act: int) -> PackedStringArray:
 
 
 ## The two branches of the fork before leg `leg_index` (0 to 2) of `act`
-## (1 to 3): [ { "leg", "modifier", "seed", "par_s" }, ... ]. The two branches
-## are different leg types. `modifier` is "" for none.
+## (1 to 3): [ { "leg", "modifier", "seed", "par_s", "stop" }, ... ], the left
+## branch first. The two branches are different leg types. `modifier` is ""
+## for none; `stop` is the stop at the leg's end.
 static func fork(data: GameData, telling_seed: int, act: int, leg_index: int) -> Array[Dictionary]:
 	var slot: int = (act - 1) * LEGS_PER_ACT + leg_index
 	var random: RandomNumberGenerator = Rng.seeded(Rng.derive(telling_seed, FORK_SALT + slot))
@@ -52,7 +55,52 @@ static func fork(data: GameData, telling_seed: int, act: int, leg_index: int) ->
 			"seed": leg_seed(telling_seed, act, leg_index, branch),
 			"par_s": GameData.as_float(leg.get("par_s")),
 		})
+	# The stop at the end of each branch (GDD 9.5), drawn after everything
+	# else so that the legs of a Telling do not depend on its stops.
+	for branch: Dictionary in branches:
+		branch["stop"] = _draw_stop(data, random)
 	return branches
+
+
+## One stop, by the weights of GDD 15. Stops with no weight (the shady guy,
+## the boss stop) are never at the end of a leg.
+static func _draw_stop(data: GameData, random: RandomNumberGenerator) -> String:
+	var total: float = 0.0
+	for stop: Dictionary in data.records("stops"):
+		total += maxf(GameData.as_float(stop.get("weight")), 0.0)
+	if total <= 0.0:
+		return ""
+	var roll: float = random.randf() * total
+	var last: String = ""
+	for stop: Dictionary in data.records("stops"):
+		var weight: float = maxf(GameData.as_float(stop.get("weight")), 0.0)
+		if weight <= 0.0:
+			continue
+		last = GameData.as_string(stop.get("id"))
+		if roll < weight:
+			return last
+		roll -= weight
+	return last
+
+
+## The boss that ends an act (GDD 11.1), or {}.
+static func boss_of(data: GameData, act: int) -> Dictionary:
+	for boss: Dictionary in data.records("bosses"):
+		if GameData.as_int(boss.get("act")) == act:
+			return boss
+	return {}
+
+
+## A stretch of road with nothing planned on it: the approach to a fork, a
+## boss until it is built, the street of the Arrival.
+static func blank_plan(act: int, lanes: int, divided: bool, length: float, par: float = 0.0) -> Dictionary:
+	return {
+		"leg": "", "act": act, "seed": 0, "modifier": "", "lanes": lanes, "divided": divided,
+		"condition": "clear", "par_s": par, "length": length, "beats_end": length,
+		"start_lane": lanes / 2, "attempts": 0, "sparse": false,
+		"beats": [], "spawns": [], "hazards": [], "curves": [], "gusts": [], "zones": [],
+		"flock": {}, "melons": {}, "motorcade": {}, "path": [[0.0, lanes / 2]],
+	}
 
 
 ## The seed of one leg of a Telling.
