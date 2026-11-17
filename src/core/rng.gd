@@ -89,7 +89,7 @@ func weighted_index(stream_name: StringName, weights: PackedFloat64Array) -> int
 
 
 ## Shuffles in place (Fisher-Yates) with this stream.
-func shuffle(stream_name: StringName, items: Array) -> void:
+func shuffle_array(stream_name: StringName, items: Array) -> void:
 	var generator: RandomNumberGenerator = stream(stream_name)
 	for index: int in range(items.size() - 1, 0, -1):
 		var other: int = generator.randi_range(0, index)

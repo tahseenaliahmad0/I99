@@ -47,7 +47,7 @@ var steer_px: float = 0.0
 var grip_toggle: bool = false
 ## Eyes-down rituals force the pitch (GDD 4.7).
 var eyes_down: bool = false
-## False while he can steer and cannot reach (a Snap), or cannot take hold.
+## False while he can steer and cannot reach for anything (a Snap, GDD 6.1).
 var can_reach: bool = true
 ## True while the hand can neither let go nor take hold (the weather cramp).
 var frozen: bool = false
@@ -250,7 +250,7 @@ func step(dt: float, input: DriveInput, wheel_angle_deg: float, speed_mult: floa
 		elif time - _press_time > _buffer:
 			_press_pending = false
 
-	if _wants_grip and can_reach and not frozen and pos.is_equal_approx(target) and (down or _grip_latched):
+	if _wants_grip and not frozen and pos.is_equal_approx(target) and (down or _grip_latched):
 		gripping = true
 		pinned = true
 		took_grip = true
@@ -277,7 +277,7 @@ func _choose_target(down: bool, pressed: bool) -> void:
 		_wants_grip = false
 		_grip_latched = false
 		return
-	var on_rim: bool = can_reach and _space.pointer_on_rim(pointer)
+	var on_rim: bool = _space.pointer_on_rim(pointer)
 	if on_rim and grip_toggle and pressed:
 		_grip_latched = true
 	if not on_rim:

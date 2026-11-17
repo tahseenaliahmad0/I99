@@ -19,3 +19,5 @@ hud.hand.wheel,,,true
 hud.hand.free,,,true
 hud.eyes,,,true
 hud.tick,,,true
+item.cigarettes.name,,,true
+item.tea_glass.name,,,true

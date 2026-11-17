@@ -11,12 +11,14 @@ extends RefCounted
 ##   CRANK(n)   press, then circle the pointer for n full turns one way;
 ##              counts cumulative heading change
 ##   BEAD       a TAP, counted at most bead_max_rate times per second
+##   DRAG       press and drag sideways (a dial): one step per `amount` pixels
+##              of travel; completes on release (DECISIONS D-021)
 ##
 ## DriveSim calls begin() when a press is applied at an anchor and step() every
 ## tick. When the phase is DONE or CANCELLED it reads the result and calls
 ## reset(). Pointer motion is in reference pixels, y downward.
 
-enum Kind { NONE, TAP, HOLD, FLICK, DRAG_TO, CRANK, BEAD }
+enum Kind { NONE, TAP, HOLD, FLICK, DRAG_TO, CRANK, BEAD, DRAG }
 enum Phase { IDLE, ACTIVE, DONE, CANCELLED }
 
 ## Direction flags for FLICK. Up is toward the top of the screen.
@@ -37,6 +39,8 @@ var direction: int = 0
 var crank_sign: int = 0
 ## DRAG_TO: set by DriveSim each tick; true while the hand rests on a destination.
 var over_destination: bool = false
+## DRAG: whole steps made since take_drag_steps(), + right, - left.
+var drag_steps: int = 0
 
 var _tap_max: float = 0.0
 var _flick_distance: float = 0.0
@@ -74,6 +78,7 @@ func begin(gesture_kind: Kind, amount: float = 0.0, dirs: int = 0) -> void:
 	direction = 0
 	crank_sign = 0
 	over_destination = false
+	drag_steps = 0
 	_amount = amount
 	_dirs = dirs
 	_travel = Vector2.ZERO
@@ -133,6 +138,24 @@ func step(dt: float, down: bool, delta: Vector2) -> void:
 					_finish()
 				else:
 					cancel()
+		Kind.DRAG:
+			if not down:
+				_finish()
+			elif _amount > 0.0:
+				_travel += delta
+				while _travel.x >= _amount:
+					_travel.x -= _amount
+					drag_steps += 1
+				while _travel.x <= -_amount:
+					_travel.x += _amount
+					drag_steps -= 1
+
+
+## DRAG: the steps made since the last call (+ right, - left).
+func take_drag_steps() -> int:
+	var steps: int = drag_steps
+	drag_steps = 0
+	return steps
 
 
 func _finish() -> void:

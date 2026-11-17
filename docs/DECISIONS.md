@@ -342,3 +342,63 @@ Format: `D-NNN (milestone, date) Title` then Context / Decision / Why.
   as yielding and "trucks and buses" as ignoring the base horn. Pickups and
   tuk-tuks are set not to yield; the Loud horn moves everything.
 - **Cash** is a float (a close call in second gear pays 1, chained 1.25).
+
+## D-024 (M3, 2026-11-17) How items and rituals are data
+
+- **Rituals** carry `on_complete` (and `on_step` for a DRAG) as a list of ops,
+  `"op"` or `"op:arg:arg"`: `nerves:<n>`, `cash:<n>`,
+  `add_effect:<id>[:<seconds>]`, `remove_effect:<id>`, `consume_supply`,
+  `give` (apply the owning item's `gives`), `toggle:<switch>`, `sfx:<id>`,
+  `line:<id>`, and the controls' own ops `horn`, `wipe`, `photo`, `indicate`,
+  `window`, `ash`, `radio_step`. `requires` holds conditions: an effect id,
+  `supply>0`, `hot`, `flag:<switch>`, each optionally negated with `!`.
+  The validator knows the op and condition vocabulary and checks every id.
+- A ritual with `"anchor": "@slot"` is performed wherever its item sits (the
+  tea glass may stand in either cup holder). Each anchor offers the first
+  ritual whose conditions hold, items before controls: the ashtray offers
+  "light" when nothing is lit and "ash" when something is.
+- **Effects** are registered in `items.json` (`"effects"`). An effect may
+  `imply` others: `lit` implies `awake` and `tremor_mute`; `news` implies
+  `awake`. That is how "while lit" and "while tuned" sources of GDD 6.1 work.
+- **The starting cabin** of GDD 7.3 is `"starting_cabin"` in `items.json`.
+- The numbers of the controls of GDD 4.6 live in the `cabin` group of
+  `tuning.json`; the numbers of an item live in its record (`gives`, `takes`,
+  `lapse`, `params`).
+- **Why.** GDD 13.3: items add, remove or query statuses and emit resource
+  changes, and never change other systems directly. GDD 14 gives the item
+  and ritual shapes; this fills in the vocabulary they imply.
+
+## D-025 (M3, 2026-11-17) Details of Nerves and the base cabin the GDD leaves open
+
+- **Blink and Nod rhythm.** The clock starts when he becomes Heavy: the
+  first blink comes one `blink_period` later and lasts `blink_length`; the
+  yawn comes `blink_tell` before each. At `nod_depth` or more below the floor
+  the Nod's rhythm replaces the Blink's. A spell above the floor, or Awake,
+  resets the rhythm. Lids open again at the rate they close.
+- **Nod depth with a low floor.** "15 or more below the floor" with the
+  Act 2 floor of 15 means Nerves 0. That is as written.
+- **Snap.** At 100 Nerves reset to `snap_reset` at once and for
+  `snap_duration` the pointer snaps to nothing and presses do nothing; the
+  wheel can still be gripped and steered (GDD 6.1). A gesture in progress is
+  cancelled.
+- **Tremor** is added to the gripped wheel's angle (the wheel itself
+  shakes); when he takes the wheel it does not jump, the shake starts from
+  the angle it has.
+- **Traffic near him** is counted by distance between centres.
+- **Radio dial.** DRAG on the radio steps through `radio_stations` in order,
+  one station per `radio_step_px` of sideways drag; from static, right finds
+  the station after the last one heard and left the one before. A station
+  becomes static `radio_drift_time` after it was tuned.
+- **Horn.** Yielding vehicles whose rear is within `horn_range` ahead in his
+  lane move to the right lane if it is free within `traffic_follow_gap`,
+  else the left, taking `horn_yield_time`. The calm (`horn_nerves`) comes at
+  most once per `horn_cooldown`; the yield works every time.
+- **Wipers.** Rain blur is `time since the last sweep / wiper_clear_time`,
+  capped at 1: clear just after a sweep, fully blurred at 6 s (GDD 4.6 and
+  9.1 read together).
+- **Cigarette ash.** It must be flicked once before `ash_by_s` (15 s) into
+  the burn, or it falls then (+5 Nerves). The craving timer starts when a
+  cigarette burns out, and only after the first one of the Telling.
+- **Tea.** It is hot for `hot_for_s` after it is poured; the starting glass
+  is poured at 22:00. It spills from a crash upward (`spills_on_hit`).
+- **Visor.** The visor comes down every time; the photo's calm is once per leg.

@@ -34,6 +34,7 @@ class Vehicle:
 	var change_from_x: float = 0.0
 	var change_to_x: float = 0.0
 	var change_to_lane: int = 0
+	var change_duration: float = 0.0
 	var changing: bool = false
 	## A scheduled lane change: starts signalling when the vehicle reaches plan_s.
 	var has_plan: bool = false
@@ -134,13 +135,15 @@ func plan_lane_change(vehicle: Vehicle, at_s: float, to_lane: int, late: bool = 
 	vehicle.plan_signal = _late_signal_time if late else _signal_time
 
 
-## Starts a lane change now (the horn).
-func begin_lane_change(vehicle: Vehicle, to_lane: int, signal_time: float) -> void:
+## Starts a lane change now. `duration` is how long the move itself takes
+## (0 means lane_change_time); the horn asks for a quicker one.
+func begin_lane_change(vehicle: Vehicle, to_lane: int, signal_time: float, duration: float = 0.0) -> void:
 	if vehicle.changing or vehicle.signalling != 0 or to_lane == vehicle.lane:
 		return
 	vehicle.signalling = 1 if to_lane > vehicle.lane else -1
 	vehicle.signal_left = signal_time
 	vehicle.change_to_lane = to_lane
+	vehicle.change_duration = duration if duration > 0.0 else _change_time
 
 
 func step(dt: float, player_s: float, player_x: float, player_speed: float) -> void:
@@ -196,12 +199,12 @@ func _step_lane_change(vehicle: Vehicle, dt: float) -> void:
 		vehicle.signal_left -= dt
 		if vehicle.signal_left <= 0.0:
 			vehicle.changing = true
-			vehicle.change_left = _change_time
+			vehicle.change_left = vehicle.change_duration
 			vehicle.change_from_x = vehicle.x
 			vehicle.change_to_x = lane_center(vehicle.change_to_lane)
 	if vehicle.changing:
 		vehicle.change_left -= dt
-		var done: float = 1.0 - clampf(vehicle.change_left / _change_time, 0.0, 1.0)
+		var done: float = 1.0 - clampf(vehicle.change_left / vehicle.change_duration, 0.0, 1.0)
 		vehicle.x = lerpf(vehicle.change_from_x, vehicle.change_to_x, done)
 		if vehicle.change_left <= 0.0:
 			vehicle.x = vehicle.change_to_x

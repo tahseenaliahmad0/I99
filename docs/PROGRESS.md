@@ -27,9 +27,10 @@ Useful commands:
 
 ## Current state
 
-- **Milestone:** M2 (Driving): simulation and tests done, views in progress. M1's review is still running.
-- **Tests:** 20 of 114 passing (M0: 2, M1: 8, M2: 10).
-- **Next step:** M2 road and vehicle views; then apply `m1-review` findings when the workflow reports.
+- **Milestone:** M3 (Nerves and the base cabin): simulation and tests done; cabin view additions next.
+- **Tests:** 27 of 114 passing (M0: 2, M1: 8, M2: 10, M3: 7).
+- **Reviews in flight:** `m1-review` (snapshot a7c3d8a) and `m2-review` (snapshot e197006) run in the background; apply their confirmed findings when they report. M3 has not been reviewed yet.
+- **Next step:** M3 cabin view (lamps, items, HUD), then M4 (legs and encounters).
 
 ## Milestones
 
@@ -61,12 +62,20 @@ Do not start a milestone until every test of the previous one passes (GDD 18).
 - [x] `DriveSim` steps 5 to 7; cash; events `hit`, `lamp_lit`, `close_call`, `wreck`
 - [x] Vehicle table (GDD 5.5) in `beats.json`; M2 tuning constants
 - [x] The ten M2 tests written, passing and promoted
-- [ ] Road view: recycled chunks, lane lines, shoulder, rails; `world_bend.gdshader`; pooled vehicle views; minimal sky
-- [ ] Sandbox traffic so the scene can be driven; screenshots
-- [ ] Review of the M2 core and tests
+- [x] Road view: uniform strips plus recycled dashes and posts; `world_bend.gdshader`; pooled vehicle views; flat sky
+- [x] Sandbox traffic so the scene can be driven; `artifacts/m2_road.png`
+- [ ] Review of the M2 core, tests and views (workflow `m2-review`, running on a snapshot of commit e197006): apply confirmed findings
 
 ### M3 Nerves and the base cabin: T-NERVES-01..04, T-FAULT-01..02, T-ITEM-BASE
-- [ ] not started
+- [x] `EffectSystem` (timed statuses, stacks, holds, implications from the effect registry in `items.json`)
+- [x] `NervesSim` in full: thresholds, Tremor, Tunnel, Pound, Snap, Heavy floor, Lids, Blink, Nod, ambient rates
+- [x] `FaultSim` in full: seeded fault deck, lamps, capacity bonus, per-fault params, repair
+- [x] `ItemSim`: slots, ritual choice per anchor, ritual ops, starting cabin; horn, wipers, radio (DRAG dial), cigarettes, tea, visor photo, slap, window, indicator, hazards, high beam
+- [x] `DriveSim` wires step 9 (effects, items, Nerves, faults); Tremor on the gripped wheel; fault effects (pull, rattle, clutch, wiper, cone, cracks, mirror)
+- [x] Data: `items.json` (effects, starting cabin, cigarettes, tea), ritual ops, slots, all sfx ids of GDD 16.5
+- [x] The seven M3 tests written, passing and promoted
+- [ ] Cabin view: dashboard lamps, items in their slots, cash stack, clock placeholder; HUD rows for Nerves, lamps, cash, effects
+- [ ] Review of the M3 core and tests
 
 ### M4 Legs and encounters: T-GEN-01..03, T-SUS-01, T-LEG-01..09
 - [ ] not started
@@ -119,3 +128,5 @@ Two lines per slice, newest last.
   Cabin sandbox scene renders under Xvfb (artifacts/m1_*.png). Review workflow running on a snapshot before promotion.
 - 2026-11-17 M2: car, traffic, collisions and close calls simulated; ten tests pass. M1 and M2 tests promoted: 20 of 114.
   M1 review still running in the background on a snapshot; its findings will be applied as their own commit.
+- 2026-11-17 M2: road, vehicle and sky views with the world-bend shader; sandbox traffic; `m2-review` launched.
+  M3: EffectSystem, full NervesSim and FaultSim, ItemSim with the base cabin; seven tests pass; 27 of 114.

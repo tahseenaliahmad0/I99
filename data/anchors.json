@@ -34,7 +34,23 @@
     { "id": "window_crank",       "pos": [-0.48, -0.10, 0.25],  "time_s": 0.70, "via_w": true }
   ],
 
-  "slots": [],
+  "slots": [
+    { "id": "ashtray",     "anchor": "ashtray",     "reach": "near", "holds": ["smoke"] },
+    { "id": "cup_a",       "anchor": "cup_a",       "reach": "near", "holds": ["drink"] },
+    { "id": "cup_b",       "anchor": "cup_b",       "reach": "mid",  "holds": ["drink"] },
+    { "id": "phone_mount", "anchor": "phone_mount", "reach": "mid",  "holds": ["phone"] },
+    { "id": "mirror",      "anchor": "mirror",      "reach": "mid",  "holds": ["hanging"] },
+    { "id": "dash_1",      "anchor": "dash_1",      "reach": "mid",  "holds": ["small"] },
+    { "id": "dash_2",      "anchor": "dash_2",      "reach": "mid",  "holds": ["small"] },
+    { "id": "tape",        "anchor": "tape",        "reach": "near", "holds": ["tape"] },
+    { "id": "seat",        "anchor": "seat",        "reach": "far",  "holds": ["large", "passenger"] },
+    { "id": "glovebox_a",  "anchor": "glovebox",    "reach": "far",  "holds": ["stowed"] },
+    { "id": "glovebox_b",  "anchor": "glovebox",    "reach": "far",  "holds": ["stowed"] },
+    { "id": "roof",        "anchor": null,          "reach": "none", "holds": ["roof"] },
+    { "id": "bay_1",       "anchor": null,          "reach": "none", "holds": ["adaptation"] },
+    { "id": "bay_2",       "anchor": null,          "reach": "none", "holds": ["adaptation"] },
+    { "id": "bay_3",       "anchor": null,          "reach": "none", "holds": ["adaptation"] }
+  ],
 
   "props": [
     { "id": "dash",          "placeholder": "cabin_dash",      "pos": [0.25, -0.02, -0.32] },

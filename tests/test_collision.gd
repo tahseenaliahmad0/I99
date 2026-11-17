@@ -28,12 +28,11 @@ func test_col_01() -> void:
 	var third: float = tuning.fi("gear_speeds", 2)
 	_start(3, 1)
 	var ahead: TrafficSim.Vehicle = _sim.traffic.spawn(&"car", 1, 40.0, third - 20.0)
-	var nerves_before: float = _sim.nerves.value
 	if not check(_run_until_hit(), "driving into a slower car hits it"):
 		return
 	check_eq(_sim.collision.hit, Collision.Hit.SCRAPE, "a closing speed of 20 km/h is a scrape")
 	check_eq(_sim.faults.lamps, int(tuning.fi("hit_lamps", 0)), "a scrape lights 1 lamp")
-	check_near(_sim.nerves.value - nerves_before, tuning.fi("hit_nerves", 0), 0.01, "a scrape adds 10 Nerves")
+	check_near(_hit_tick_nerves, tuning.fi("hit_nerves", 0), 0.01, "a scrape adds 10 Nerves")
 	check_near(_sim.car.speed, third * (1.0 - tuning.f("scrape_speed_loss")), 0.5, "a scrape takes 20% off the speed")
 	check_eq(_sim.gate.gear, 3, "a scrape does not force a gear")
 	var gap: float = (ahead.s - ahead.half_length) - (_sim.car.s + _sim.car.length() * 0.5)
@@ -78,12 +77,11 @@ func test_col_02() -> void:
 	var third: float = tuning.fi("gear_speeds", 2)
 	_start(3, 1)
 	var ahead: TrafficSim.Vehicle = _sim.traffic.spawn(&"truck", 1, 60.0, third - 50.0)
-	var nerves_before: float = _sim.nerves.value
 	if not check(_run_until_hit(), "driving into a much slower truck hits it"):
 		return
 	check_eq(_sim.collision.hit, Collision.Hit.CRASH, "a closing speed of 50 km/h is a crash")
 	check_eq(_sim.faults.lamps, int(tuning.fi("hit_lamps", 1)), "a crash lights 2 lamps")
-	check_near(_sim.nerves.value - nerves_before, tuning.fi("hit_nerves", 1), 0.01, "a crash adds 20 Nerves")
+	check_near(_hit_tick_nerves, tuning.fi("hit_nerves", 1), 0.01, "a crash adds 20 Nerves")
 	check_eq(_sim.gate.gear, tuning.i("hit_forced_gear"), "a crash forces first gear")
 	check(_sim.gate.lever.is_equal_approx(GearGate.gear_position(1)), "the lever jumps to first")
 	check(_sim.car.speed <= ahead.speed + 0.001, "having run into its back, he is no faster than the truck")
@@ -103,12 +101,11 @@ func test_col_03() -> void:
 	var fourth: float = tuning.fi("gear_speeds", 3)
 	_start(4, 1)
 	_sim.traffic.spawn(&"tuk_tuk", 1, 80.0, fourth - 90.0)
-	var nerves_before: float = _sim.nerves.value
 	if not check(_run_until_hit(), "fourth gear into a tuk-tuk hits it"):
 		return
 	check_eq(_sim.collision.hit, Collision.Hit.HEAD_ON, "a closing speed of 90 km/h is a head-on")
 	check_eq(_sim.faults.lamps, int(tuning.fi("hit_lamps", 2)), "a head-on lights 3 lamps")
-	check_near(_sim.nerves.value - nerves_before, tuning.fi("hit_nerves", 2), 0.01, "a head-on adds 30 Nerves")
+	check_near(_hit_tick_nerves, tuning.fi("hit_nerves", 2), 0.01, "a head-on adds 30 Nerves")
 	check_eq(_sim.gate.gear, tuning.i("hit_forced_gear"), "a head-on forces first gear")
 	check_eq(_sim.collision.classify(tuning.f("crash_max_closing") + 0.1, false), Collision.Hit.HEAD_ON, "just over crash_max_closing is a head-on")
 
@@ -119,11 +116,10 @@ func test_col_03() -> void:
 	_sim.car.x = _sim.traffic.lane_center(-1)
 	var oncoming: TrafficSim.Vehicle = _sim.traffic.spawn(&"car", -1, 12.0, 10.0, -1)
 	check(oncoming.closing_speed(_sim.car.speed) < tuning.f("scrape_max_closing"), "the two close at under scrape_max_closing")
-	nerves_before = _sim.nerves.value
 	if check(_run_until_hit(), "meeting an oncoming car in its lane hits it"):
 		check_eq(_sim.collision.hit, Collision.Hit.HEAD_ON, "any oncoming vehicle is a head-on")
 		check_eq(_sim.faults.lamps, int(tuning.fi("hit_lamps", 2)), "3 lamps")
-		check_near(_sim.nerves.value - nerves_before, tuning.fi("hit_nerves", 2), 0.01, "+30 Nerves")
+		check_near(_hit_tick_nerves, tuning.fi("hit_nerves", 2), 0.01, "+30 Nerves")
 		check_eq(_sim.car.speed, 0.0, "a head-on stops the car")
 
 	# Lamps add up to a Wreck (the full rules arrive with T-FAULT-01).
@@ -280,6 +276,7 @@ func _start(gear: int, lane: int) -> void:
 
 
 var _held_x: float = INF
+var _hit_tick_nerves: float = 0.0
 
 
 ## Call before each step: cancels the crown so a pass is made at a constant
@@ -291,11 +288,16 @@ func _hold_x() -> void:
 	_sim.car.x = _held_x - tuning.f("crown_drift") * DT
 
 
+## Drives straight on until something is hit. `_hit_tick_nerves` is then what
+## that one tick added to Nerves: the hit itself, give or take one tick of
+## the ambient rates of GDD 6.1 (under a hundredth of a point).
 func _run_until_hit() -> bool:
 	for _tick: int in int(MAX_SECONDS / DT):
 		var lane_x: float = _sim.car.x
+		var nerves_before: float = _sim.nerves.value
 		_sim.step(_input)
 		if _sim.collision.hit != Collision.Hit.NONE:
+			_hit_tick_nerves = _sim.nerves.value - nerves_before
 			return true
 		_sim.car.x = lane_x
 	return false
@@ -316,13 +318,16 @@ func _pass(gear: int, type: StringName, vehicle_speed: float, gap: float, direct
 	var side: float = -1.0 if direction > 0 else 1.0
 	_sim.car.x = vehicle.x + side * (vehicle.half_width + _sim.car.half_width() + gap)
 	var cash_before: float = _sim.cash
-	var nerves_before: float = _sim.nerves.value
 	var result: PassResult = PassResult.new()
 	var judged_after_overlap: bool = true
 	for _tick: int in int(MAX_SECONDS / DT):
 		_hold_x()
+		var nerves_before: float = _sim.nerves.value
 		_sim.step(_input)
 		if _sim.collision.close_calls > 0:
+			# What this one tick added: the close call, give or take one tick
+			# of the ambient rates of GDD 6.1 (under a hundredth of a point).
+			result.nerves += _sim.nerves.value - nerves_before
 			result.close_calls += _sim.collision.close_calls
 			var along: float = absf(vehicle.s - _sim.car.s)
 			if along < vehicle.half_length + _sim.car.length() * 0.5:
@@ -330,20 +335,9 @@ func _pass(gear: int, type: StringName, vehicle_speed: float, gap: float, direct
 		if _sim.car.s > vehicle.s + 40.0:
 			break
 	result.cash = _sim.cash - cash_before
-	result.nerves = _sim.nerves.value - nerves_before - _hit_nerves()
 	result.lamps = _sim.faults.lamps
 	result.judged_after_overlap = judged_after_overlap and result.close_calls > 0
 	return result
-
-
-## Nerves that came from hits in this pass (so close-call Nerves can be told apart).
-func _hit_nerves() -> float:
-	var total: float = 0.0
-	for event: Dictionary in _sim.drain_events():
-		if event.get("type") == "hit":
-			var kind: int = event["kind"]
-			total += tuning.fi("hit_nerves", kind - 1)
-	return total
 
 
 func _sum(values: Array[float]) -> float:

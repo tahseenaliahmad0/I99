@@ -1,5 +1,43 @@
 {
   "version": 1,
 
-  "items": []
+  "effects": [
+    { "id": "awake" },
+    { "id": "tremor_mute" },
+    { "id": "lit", "implies": ["awake", "tremor_mute"] },
+    { "id": "music" },
+    { "id": "news", "implies": ["awake"] },
+    { "id": "visor_down" }
+  ],
+
+  "synergy_tokens": ["music", "photo"],
+
+  "starting_cabin": [
+    { "item": "cigarettes", "slot": "ashtray", "supply": 5 },
+    { "item": "tea_glass",  "slot": "cup_a",   "supply": 3 }
+  ],
+
+  "items": [
+    { "id": "cigarettes", "kind": "habit", "slots": ["ashtray"], "tags": ["smoke"],
+      "rarity": "common", "price": 15, "contraband": false,
+      "supply": { "uses": 10, "restock": 15 },
+      "rituals": ["cig_light", "cig_ash"],
+      "gives": [ { "effect": "lit", "duration": 25 },
+                 { "resource": "nerves", "amount": -10, "over": 25 } ],
+      "takes": [ { "effect": "haze_rate", "amount": 0.02, "while": "lit" } ],
+      "lapse": { "after": 30, "resource": "nerves", "amount": 8, "once": true },
+      "params": { "ash_by_s": 15, "ash_nerves": 5 },
+      "line_ids": { "name": "item.cigarettes.name" } },
+
+    { "id": "tea_glass", "kind": "habit", "slots": ["cup_a", "cup_b"], "tags": ["drink", "tea"],
+      "rarity": "common", "price": 0, "contraband": false,
+      "supply": { "uses": 3, "restock": 2 },
+      "rituals": ["tea_sip"],
+      "gives": [ { "resource": "nerves", "amount": -12, "while": "hot" },
+                 { "effect": "awake", "duration": 40, "while": "hot" },
+                 { "resource": "nerves", "amount": -3, "while": "!hot" } ],
+      "takes": [],
+      "params": { "hot_for_s": 40, "spills_on_hit": 2 },
+      "line_ids": { "name": "item.tea_glass.name" } }
+  ]
 }

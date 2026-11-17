@@ -21,7 +21,19 @@ const LINE_ID_PATTERN: String = "^[a-z0-9_]+(\\.[a-z0-9_]+)+$"
 
 const ITEM_KINDS: PackedStringArray = ["habit", "keepsake", "adaptation", "deal", "fixture"]
 const RARITIES: PackedStringArray = ["common", "uncommon", "rare"]
-const GESTURES: PackedStringArray = ["TAP", "HOLD", "FLICK", "DRAG_TO", "CRANK", "BEAD", "GATE"]
+const GESTURES: PackedStringArray = ["TAP", "HOLD", "FLICK", "DRAG", "DRAG_TO", "CRANK", "BEAD", "GATE"]
+## A ritual's anchor may follow its item: "@slot" is wherever the item sits.
+const SLOT_ANCHOR: String = "@slot"
+## What a completed ritual may do (ItemSim runs these), "op" or "op:arg:arg".
+const RITUAL_OPS: PackedStringArray = [
+	"nerves", "cash", "add_effect", "remove_effect", "consume_supply", "give", "toggle",
+	"horn", "wipe", "photo", "indicate", "window", "ash", "radio_step", "sfx", "line",
+]
+## Cabin switches a "toggle:" op may flip and a "flag:" condition may read.
+const CABIN_FLAGS: PackedStringArray = ["hazards", "high_beam", "window_open", "glovebox_open", "passenger"]
+## Conditions that are not effect ids.
+const CONDITION_WORDS: PackedStringArray = ["supply>0", "hot"]
+const REACHES: PackedStringArray = ["near", "mid", "far", "none"]
 const BEAT_TYPES: PackedStringArray = ["CALM", "CLUSTER", "SLOWPOKE", "MERGE", "CURVE", "GUST", "HAZARD", "SPECIAL"]
 const HECKLE_TYPES: PackedStringArray = ["TWIST", "DARE", "DOUBT", "QUESTION", "ORDER", "FIB"]
 const FLICK_DIRS: PackedStringArray = ["up", "down", "left", "right"]
@@ -55,6 +67,7 @@ func run(data: GameData) -> PackedStringArray:
 	_check_anchor_file()
 	_check_registry("placeholders", _placeholder_schema())
 	_check_registry("sfx", _sfx_schema())
+	_check_record_set("effects", _effect_schema())
 	_check_record_set("slots", _slot_schema())
 	_check_record_set("vehicles", _vehicle_schema())
 	_check_record_set("faults", _fault_schema())
@@ -150,14 +163,24 @@ func _item_schema() -> Dictionary:
 		"takes": _list(_obj({}, true)),
 		"lapse": _opt(_nullable(_obj({}, true))),
 		"synergies": _opt(_list(_obj({"with": _str(), "rule": _str(), "amount": _opt(_num())}, true))),
+		"params": _opt(_map(_t("any"))),
 		"line_ids": _map(_ref("lines")),
+	})
+
+
+func _effect_schema() -> Dictionary:
+	return _obj({
+		"id": _str(),
+		"max_stacks": _opt(_int(1.0)),
+		"implies": _opt(_list(_ref("effects"))),
 	})
 
 
 func _ritual_schema() -> Dictionary:
 	return _obj({
 		"id": _str(),
-		"anchor": _ref("anchors"),
+		"anchor": _str(),
+		"item": _opt(_ref("items")),
 		"gesture": _enum(GESTURES),
 		"hold_s": _opt(_num(0.0)),
 		"flick_dirs": _opt(_list(_enum(FLICK_DIRS), 1)),
@@ -166,6 +189,7 @@ func _ritual_schema() -> Dictionary:
 		"blocks_view": _opt(_nullable(_str())),
 		"requires": _list(_str()),
 		"on_complete": _list(_str()),
+		"on_step": _opt(_list(_str())),
 		"sfx": _opt(_nullable(_ref("sfx"))),
 	}, true)
 
@@ -268,7 +292,12 @@ func _fault_schema() -> Dictionary:
 
 
 func _slot_schema() -> Dictionary:
-	return _obj({"id": _str()}, true)
+	return _obj({
+		"id": _str(),
+		"anchor": _opt(_nullable(_ref("anchors"))),
+		"reach": _opt(_enum(REACHES)),
+		"holds": _opt(_list(_str())),
+	})
 
 
 func _anchor_schema() -> Dictionary:
@@ -527,6 +556,20 @@ func _check_cross_rules() -> void:
 			_err("E_RULE", "passengers.json", "passengers[%s]" % GameData.as_string(passenger.get("id"), "?"),
 					"needs exactly one of rides_legs and rides_until")
 	for ritual: Dictionary in _data.records("rituals"):
+		var ritual_label: String = "rituals[%s]" % GameData.as_string(ritual.get("id"), "?")
+		var anchor: String = GameData.as_string(ritual.get("anchor"))
+		if anchor == SLOT_ANCHOR:
+			if not ritual.has("item"):
+				_err("E_RULE", "rituals.json", ritual_label, "a ritual at \"@slot\" needs the \"item\" it belongs to")
+		elif ritual.has("anchor") and ritual["anchor"] is String and not _data.has_record("anchors", anchor):
+			_err("E_REF", "rituals.json", ritual_label + ".anchor", "unknown anchors id '%s'" % anchor)
+		for key: String in ["on_complete", "on_step"]:
+			var ops: Array = GameData.as_array(ritual.get(key))
+			for index: int in ops.size():
+				_check_op(GameData.as_string(ops[index]), "rituals.json", "%s.%s[%d]" % [ritual_label, key, index])
+		var conditions: Array = GameData.as_array(ritual.get("requires"))
+		for index: int in conditions.size():
+			_check_condition(GameData.as_string(conditions[index]), "rituals.json", "%s.requires[%d]" % [ritual_label, index])
 		var needs: String = ""
 		match GameData.as_string(ritual.get("gesture")):
 			"HOLD":
@@ -538,8 +581,35 @@ func _check_cross_rules() -> void:
 		if not needs.is_empty() and not ritual.has(needs):
 			_err("E_RULE", "rituals.json", "rituals[%s]" % GameData.as_string(ritual.get("id"), "?"),
 					"a %s ritual needs \"%s\"" % [GameData.as_string(ritual.get("gesture")), needs])
+	for passenger: Dictionary in _data.records("passengers"):
+		var leave_ops: Array = GameData.as_array(passenger.get("on_leave"))
+		for index: int in leave_ops.size():
+			_check_op(GameData.as_string(leave_ops[index]), "passengers.json",
+					"passengers[%s].on_leave[%d]" % [GameData.as_string(passenger.get("id"), "?"), index])
+	var items_root: Dictionary = _data.root("items")
+	var starting: Array = GameData.as_array(items_root.get("starting_cabin"))
+	for index: int in starting.size():
+		var entry: Dictionary = GameData.as_dict(starting[index])
+		var where: String = "starting_cabin[%d]" % index
+		var entry_item: String = GameData.as_string(entry.get("item"))
+		var entry_slot: String = GameData.as_string(entry.get("slot"))
+		if not _data.has_record("items", entry_item):
+			_err("E_REF", "items.json", where + ".item", "unknown items id '%s'" % entry_item)
+		elif not GameData.as_array(_data.record("items", entry_item).get("slots")).has(entry_slot):
+			_err("E_RULE", "items.json", where + ".slot", "'%s' does not fit in slot '%s'" % [entry_item, entry_slot])
+		if not _data.has_record("slots", entry_slot):
+			_err("E_REF", "items.json", where + ".slot", "unknown slots id '%s'" % entry_slot)
+		if entry.has("supply") and not GameData.is_number(entry["supply"]):
+			_err("E_TYPE", "items.json", where + ".supply", "must be a whole number")
 	for item: Dictionary in _data.records("items"):
 		var item_id: String = GameData.as_string(item.get("id"), "?")
+		for ritual_id: Variant in GameData.as_array(item.get("rituals")):
+			var listed: String = GameData.as_string(ritual_id)
+			if _data.has_record("rituals", listed):
+				var owner: String = GameData.as_string(_data.record("rituals", listed).get("item"))
+				if not owner.is_empty() and owner != item_id:
+					_err("E_RULE", "items.json", "items[%s].rituals" % item_id,
+							"ritual '%s' belongs to item '%s'" % [listed, owner])
 		var synergies: Array = GameData.as_array(item.get("synergies"))
 		for index: int in synergies.size():
 			var synergy: Dictionary = GameData.as_dict(synergies[index])
@@ -549,6 +619,49 @@ func _check_cross_rules() -> void:
 			if not _data.has_record("items", with) and not _synergy_tokens().has(with):
 				_err("E_REF", "items.json", "items[%s].synergies[%d].with" % [item_id, index],
 						"unknown item id or synergy token '%s'" % with)
+
+
+## One ritual op: "op" or "op:arg:arg". The op must be known, and the ids it
+## names must exist.
+func _check_op(op: String, file_label: String, where: String) -> void:
+	var parts: PackedStringArray = op.split(":")
+	var head: String = parts[0]
+	if not RITUAL_OPS.has(head):
+		_err("E_ENUM", file_label, where, "'%s' is not a ritual op (%s)" % [head, ", ".join(RITUAL_OPS)])
+		return
+	var argument: String = parts[1] if parts.size() > 1 else ""
+	match head:
+		"add_effect", "remove_effect":
+			if not _data.has_record("effects", argument):
+				_err("E_REF", file_label, where, "unknown effects id '%s'" % argument)
+			if parts.size() > 2 and not parts[2].is_valid_float():
+				_err("E_TYPE", file_label, where, "the duration '%s' is not a number" % parts[2])
+		"nerves", "cash":
+			if not argument.is_valid_float():
+				_err("E_TYPE", file_label, where, "'%s' needs a number" % head)
+		"toggle":
+			if not CABIN_FLAGS.has(argument):
+				_err("E_ENUM", file_label, where, "'%s' is not a cabin switch (%s)" % [argument, ", ".join(CABIN_FLAGS)])
+		"sfx":
+			if not _data.root("sfx").has(argument):
+				_err("E_REF", file_label, where, "unknown sfx id '%s'" % argument)
+		"line":
+			if not _data.has_line(argument, "en"):
+				_err("E_REF", file_label, where, "unknown lines id '%s'" % argument)
+
+
+## One ritual condition: an effect id, "supply>0", "hot" or "flag:<switch>",
+## each optionally negated with "!".
+func _check_condition(condition: String, file_label: String, where: String) -> void:
+	var word: String = condition.trim_prefix("!")
+	if CONDITION_WORDS.has(word):
+		return
+	if word.begins_with("flag:"):
+		if not CABIN_FLAGS.has(word.substr(5)):
+			_err("E_ENUM", file_label, where, "'%s' is not a cabin switch" % word.substr(5))
+		return
+	if not _data.has_record("effects", word):
+		_err("E_REF", file_label, where, "'%s' is neither a condition word nor an effects id" % word)
 
 
 ## Things a synergy can pair with that are not items (GDD 7.8: music, the photo).

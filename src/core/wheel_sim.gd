@@ -11,6 +11,9 @@ extends RefCounted
 var angle: float = 0.0
 var command: float = 0.0
 var gripped: bool = false
+## Degrees the Tremor adds to the gripped wheel right now (GDD 5.8); set by
+## DriveSim before step().
+var tremor: float = 0.0
 
 ## Multipliers that adaptations change (GDD 7.6, Spinner knob).
 var turn_rate_mult: float = 1.0
@@ -20,6 +23,8 @@ var _max_angle: float = 0.0
 var _deg_per_px: float = 0.0
 var _smoothing_s: float = 0.0
 var _return_rate: float = 0.0
+## Where the hand holds the wheel, before the Tremor is added.
+var _held: float = 0.0
 
 
 func configure(tuning: Tuning) -> void:
@@ -32,13 +37,17 @@ func configure(tuning: Tuning) -> void:
 func reset(angle_deg: float = 0.0) -> void:
 	angle = clampf(angle_deg, -_max_angle, _max_angle)
 	command = angle
+	_held = angle
 	gripped = false
 
 
+## The hand takes the wheel at the angle it has. If his hand is shaking, the
+## shake starts from there: the wheel does not jump.
 func grip() -> void:
 	if not gripped:
 		gripped = true
-		command = angle
+		_held = angle - tremor
+		command = _held
 
 
 func release() -> void:
@@ -53,10 +62,12 @@ func step(dt: float, steer_px: float, sensitivity: float) -> void:
 		var blend: float = 1.0
 		if _smoothing_s > 0.0:
 			blend = 1.0 - exp(-dt / _smoothing_s)
-		angle += (command - angle) * blend
+		_held += (command - _held) * blend
+		angle = clampf(_held + tremor, -_max_angle, _max_angle)
 	else:
 		angle = move_toward(angle, 0.0, _return_rate * return_rate_mult * dt)
 		command = angle
+		_held = angle
 
 
 ## Steering input to the car: -1 (full left) to 1 (full right), GDD 5.3.

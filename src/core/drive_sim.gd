@@ -12,7 +12,7 @@ extends RefCounted
 ##    1. Gesture recogniser
 ##    2. Hand: target, travel, grip, held object
 ##    3. Rituals in progress; completed rituals emit effects
-##    4. Wheel
+##    4. Wheel: commanded angle, smoothing, Tremor, return
 ##    5. Car: gear, speed, sideways motion, drift
 ##    6. Traffic            7. Collisions and close calls
 ##    8. Encounters         9. Effect timers, Nerves, faults
@@ -23,7 +23,15 @@ const TICKS_PER_SECOND: int = 120
 const DT: float = 1.0 / TICKS_PER_SECOND
 
 const GEAR_LEVER: StringName = &"gear_lever"
-const TAPE_DECK: StringName = &"tape"
+const AWAKE: StringName = &"awake"
+const TREMOR_MUTE: StringName = &"tremor_mute"
+const FAULT_RATTLE: StringName = &"rattle"
+const FAULT_PULL: StringName = &"pulling_steering"
+const FAULT_CLUTCH: StringName = &"slipping_clutch"
+const FAULT_CRACKS: StringName = &"cracked_windscreen"
+const FAULT_HEADLIGHT: StringName = &"dead_headlight"
+const FAULT_MIRROR: StringName = &"cracked_mirror"
+const FLAG_HIGH_BEAM: StringName = &"high_beam"
 
 var data: GameData
 var tuning: Tuning
@@ -35,8 +43,10 @@ var gesture: Gesture = Gesture.new()
 var car: CarSim = CarSim.new()
 var traffic: TrafficSim = TrafficSim.new()
 var collision: Collision = Collision.new()
+var effects: EffectSystem = EffectSystem.new()
 var nerves: NervesSim = NervesSim.new()
 var faults: FaultSim = FaultSim.new()
+var items: ItemSim = ItemSim.new()
 var rng: Rng = Rng.new()
 
 var tick: int = 0
@@ -44,6 +54,12 @@ var tick: int = 0
 var cash: float = 0.0
 ## True once every lamp is lit: the Telling is over (GDD 6.3).
 var wrecked: bool = false
+## The act, 1 to 3: it sets the Heavy floor (GDD 6.1).
+var act: int = 1
+## Added to the Heavy floor (a Table's rule, painkillers).
+var heavy_floor_bonus: float = 0.0
+## True while an encounter is on: an empty road does not calm him then.
+var in_encounter: bool = false
 ## Curve strength now: k of GDD 5.4, signed (+ pushes toward the right shoulder).
 var curve_k: float = 0.0
 ## Sandbox only, until legs exist (M4): vehicles per km spawned ahead on an
@@ -55,8 +71,6 @@ var steer_sensitivity: float = 1.0
 var sequential_shift: bool = false
 
 var _events: Array[Dictionary] = []
-## anchor index -> ritual record performed there.
-var _ritual_at: Dictionary = {}
 var _active_ritual: Dictionary = {}
 var _active_anchor: int = HandSim.NO_ANCHOR
 var _lever_anchor: int = HandSim.NO_ANCHOR
@@ -69,6 +83,12 @@ var _grind_nerves: float = 0.0
 var _braking: bool = false
 var _next_free_spawn_s: float = 0.0
 var _forced_gear: int = 1
+var _lane: int = 0
+var _heavy_floors: PackedFloat64Array = PackedFloat64Array()
+var _pound_mult: float = 1.0
+var _shoulder_rate: float = 0.0
+var _traffic_radius: float = 0.0
+var _empty_radius: float = 0.0
 
 
 func _init(game_data: GameData) -> void:
@@ -82,24 +102,36 @@ func _init(game_data: GameData) -> void:
 	car.configure(tuning)
 	traffic.configure(data)
 	collision.configure(tuning)
+	effects.configure(data)
 	nerves.configure(tuning)
-	faults.configure(tuning)
+	faults.configure(data)
+	items.configure(data, effects, nerves, traffic, car, faults)
+
 	cash = tuning.f("cash_start")
 	_gust_strength = tuning.f("gust_push")
 	_gust_duration = tuning.f("gust_duration")
 	_grind_nerves = tuning.f("gate_grind_nerves")
 	_forced_gear = tuning.i("hit_forced_gear")
+	_heavy_floors = tuning.floats("heavy_floor")
+	_pound_mult = tuning.f("hand_pound_mult")
+	_shoulder_rate = tuning.f("shoulder_nerves_rate")
+	_traffic_radius = tuning.f("traffic_radius")
+	_empty_radius = tuning.f("empty_road_radius")
+
 	var start_gear: int = tuning.i("start_gear")
 	wheel.reset()
 	gate.reset(start_gear)
 	car.reset(car.lanes / 2, start_gear)
+	_lane = car.lane_of(car.x)
 	_lever_anchor = hand.anchor_index(GEAR_LEVER)
-	# The tape deck shares the radio's place; it opens when a Mixtape is fitted (GDD 7.4).
-	hand.set_anchor_active(hand.anchor_index(TAPE_DECK), false)
-	for ritual: Dictionary in data.records("rituals"):
-		var index: int = hand.anchor_index(StringName(GameData.as_string(ritual.get("anchor"))))
-		if index != HandSim.NO_ANCHOR and not _ritual_at.has(index):
-			_ritual_at[index] = ritual
+	reseed(0)
+	_sync_anchors()
+
+
+## Sets the Telling seed: the four streams and the fault deck follow from it.
+func reseed(telling_seed: int) -> void:
+	rng.reseed(telling_seed)
+	faults.shuffle_deck(rng)
 
 
 func seconds() -> float:
@@ -108,12 +140,16 @@ func seconds() -> float:
 
 func step(input: DriveInput) -> void:
 	gate.begin_tick()
+	nerves.begin_tick()
+	effects.begin_tick()
+	items.begin_tick()
 
 	# 1. Gesture recogniser.
 	gesture.step(DT, input.lmb, input.pointer_delta)
 
 	# 2. Hand.
-	hand.step(DT, input, wheel.angle, 1.0)
+	hand.can_reach = nerves.snap_left <= 0.0
+	hand.step(DT, input, wheel.angle, _pound_mult if nerves.pound else 1.0)
 
 	# 3. Rituals.
 	_resolve_gesture()
@@ -121,7 +157,7 @@ func step(input: DriveInput) -> void:
 		gate.release()
 		_lever_in_hand = false
 		hand.unpin()
-	if hand.press_applied:
+	if hand.press_applied and hand.can_reach:
 		_begin_at(hand.at_index)
 
 	# 4. Wheel.
@@ -129,15 +165,21 @@ func step(input: DriveInput) -> void:
 		wheel.grip()
 	if hand.let_go:
 		wheel.release()
+	wheel.tremor = nerves.tremor_offset
 	wheel.step(DT, hand.steer_px, steer_sensitivity)
 
 	# 5. Car: gear, speed, sideways motion, drift.
-	gate.step(DT, input.pointer_delta if _lever_in_hand else Vector2.ZERO, 1.0)
+	gate.step(DT, input.pointer_delta if _lever_in_hand else Vector2.ZERO,
+			faults.param(FAULT_CLUTCH, "lever_speed_mult", 1.0))
 	if gate.ground:
 		nerves.add(_grind_nerves)
 		_emit("sfx_requested", {"id": "grind"})
 	_braking = input.rmb
 	car.step(DT, wheel.steer(), gate.gear, _braking, _extra_drift())
+	var lane: int = car.lane_of(car.x)
+	if lane != _lane:
+		_lane = lane
+		items.on_lane_line_crossed()
 
 	# 6. Traffic.
 	if free_traffic_per_km > 0.0:
@@ -148,12 +190,25 @@ func step(input: DriveInput) -> void:
 	collision.step(DT, car, traffic, gate.gear)
 	_apply_collisions()
 
+	# 9. Effect timers, Nerves, faults.
+	effects.step(DT)
+	items.step(DT)
+	_feed_nerves()
+	nerves.step(DT)
+	_report_nerves()
+	_report_effects()
+	cash = maxf(cash + items.cash_delta, 0.0)
+	for event: Dictionary in items.events:
+		_events.append(event)
+	items.events.clear()
+
 	tick += 1
 
 
 ## Sets the road the car is on: 1 to 3 lanes, divided or not (GDD 5.1).
 func set_road(lanes: int, divided: bool) -> void:
 	car.set_road(lanes, divided)
+	_lane = car.lane_of(car.x)
 
 
 ## Starts one gust (GDD 5.4): gust_push for gust_duration. `direction` is +1
@@ -161,6 +216,18 @@ func set_road(lanes: int, divided: bool) -> void:
 func start_gust(direction: int, strength: float = 1.0) -> void:
 	_gust_left = _gust_duration
 	_gust_push = _gust_strength * strength * float(direction)
+
+
+## The Heavy floor now (GDD 6.1): by act, plus what the Table or a pill adds.
+func heavy_floor() -> float:
+	var index: int = clampi(act, 1, _heavy_floors.size()) - 1
+	return _heavy_floors[index] + heavy_floor_bonus
+
+
+## How far the headlights reach at night, in metres (GDD 4.6, 6.3).
+func headlight_cone() -> float:
+	var cone: float = tuning.f("high_beam_cone") if items.flag(FLAG_HIGH_BEAM) else tuning.f("low_beam_cone")
+	return cone * faults.param(FAULT_HEADLIGHT, "night_cone_mult", 1.0)
 
 
 ## What happened since the last call, oldest first.
@@ -207,12 +274,32 @@ func snapshot() -> Dictionary:
 		"on_shoulder": car.on_shoulder,
 		"braking": _braking,
 		"nerves": nerves.value,
+		"heavy_floor": nerves.heavy_floor,
+		"awake": nerves.awake,
+		"tremor": nerves.tremor_amplitude,
+		"tunnel": nerves.tunnel,
+		"pound": nerves.pound,
+		"lids": nerves.lids,
+		"eyes_shut": nerves.eyes_shut,
+		"snap": nerves.snap_left > 0.0,
+		"haze": items.haze,
+		"rain_blur": items.rain_blur(),
+		"visor_down": effects.has(ItemSim.VISOR_DOWN),
+		"radio": items.radio,
+		"indicator": items.indicator,
+		"flags": items.flags.duplicate(),
+		"effects": effects.active_ids(),
 		"lamps": faults.lamps,
 		"lamp_capacity": faults.capacity,
+		"faults": faults.active.duplicate(),
+		"cracks": faults.param(FAULT_CRACKS, "cracks", 0.0),
+		"headlight_cone": headlight_cone(),
+		"mirror_delay": faults.param(FAULT_MIRROR, "mirror_tell_delay_s", 0.0),
 		"cash": cash,
 		"chain": collision.chain,
 		"wrecked": wrecked,
 		"curve_k": curve_k,
+		"items": _item_snapshots(),
 		"vehicles": _vehicle_snapshots(),
 	}
 
@@ -233,11 +320,24 @@ func _vehicle_snapshots() -> Array[Dictionary]:
 	return out
 
 
+func _item_snapshots() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for item: ItemSim.Item in items.items:
+		out.append({
+			"id": item.id,
+			"slot": item.slot,
+			"supply": item.supply,
+			"hot": item.hot_left > 0.0,
+			"burning": item.burning,
+		})
+	return out
+
+
 # --- Car ---------------------------------------------------------------------
 
 ## Every sideways push but the road's crown (GDD 5.4), m/s toward the right.
 func _extra_drift() -> float:
-	var push: float = car.curve_push(curve_k)
+	var push: float = car.curve_push(curve_k) - faults.param(FAULT_PULL, "drift_left", 0.0)
 	if _gust_left > 0.0:
 		_gust_left -= DT
 		push += _gust_push
@@ -265,16 +365,18 @@ func _step_free_traffic() -> void:
 
 func _apply_collisions() -> void:
 	if collision.hit != Collision.Hit.NONE:
-		var lit: int = faults.light(collision.hit_lamps)
+		var drawn: Array[StringName] = faults.light(collision.hit_lamps)
+		nerves.jolt()
 		nerves.add(collision.hit_nerves)
+		items.on_hit(collision.hit)
 		if collision.hit_forces_gear:
 			gate.force_gear(_forced_gear)
 			if _lever_in_hand:
 				_lever_in_hand = false
 				hand.unpin()
-		_emit("hit", {"kind": collision.hit, "lamps": lit, "vehicle": collision.hit_vehicle_id})
-		if lit > 0:
-			_emit("lamp_lit", {"lamps": faults.lamps, "lit": lit})
+		_emit("hit", {"kind": collision.hit, "lamps": drawn.size(), "vehicle": collision.hit_vehicle_id})
+		if not drawn.is_empty():
+			_emit("lamp_lit", {"lamps": faults.lamps, "lit": drawn.size(), "faults": drawn})
 		if faults.is_wrecked() and not wrecked:
 			wrecked = true
 			_emit("wreck", {})
@@ -289,6 +391,59 @@ func _apply_collisions() -> void:
 		})
 
 
+# --- Nerves ------------------------------------------------------------------
+
+## Everything that raises or lowers Nerves by the second (GDD 6.1), and what
+## the meter needs to know before it steps.
+func _feed_nerves() -> void:
+	nerves.heavy_floor = heavy_floor()
+	nerves.awake = effects.has(AWAKE)
+	nerves.tremor_muted = effects.has(TREMOR_MUTE)
+
+	var near: int = 0
+	var nearest: float = INF
+	for vehicle: TrafficSim.Vehicle in traffic.vehicles:
+		var distance: float = Vector2(vehicle.s - car.s, vehicle.x - car.x).length()
+		nearest = minf(nearest, distance)
+		if distance <= _traffic_radius:
+			near += 1
+	nerves.add_rate(nerves.road_rate(near, nearest, in_encounter))
+	if car.on_shoulder:
+		nerves.add_rate(_shoulder_rate)
+	nerves.add_rate(faults.param(FAULT_RATTLE, "nerves_per_s", 0.0))
+	if car.on_rumble:
+		nerves.jolt()
+
+
+func _report_nerves() -> void:
+	if nerves.snapped:
+		_emit("snap", {"nerves": nerves.value})
+		_emit("sfx_requested", {"id": "horn"})
+		if gesture.is_active():
+			gesture.cancel()
+		if _lever_in_hand:
+			gate.release()
+			_lever_in_hand = false
+			hand.unpin()
+	for name: String in nerves.crossed:
+		_emit("nerves_threshold_crossed", {"threshold": name.substr(1), "on": name.begins_with("+")})
+	if nerves.yawned:
+		_emit("sfx_requested", {"id": "yawn"})
+	if nerves.yawned_long:
+		_emit("sfx_requested", {"id": "yawn_long"})
+	if nerves.blinked:
+		_emit("blink", {})
+	if nerves.nodded:
+		_emit("nod", {})
+
+
+func _report_effects() -> void:
+	for id: StringName in effects.added:
+		_emit("effect_added", {"effect": String(id)})
+	for id: StringName in effects.expired:
+		_emit("effect_expired", {"effect": String(id)})
+
+
 # --- Rituals -----------------------------------------------------------------
 
 func _begin_at(anchor: int) -> void:
@@ -297,9 +452,9 @@ func _begin_at(anchor: int) -> void:
 		_lever_in_hand = true
 		hand.pin()
 		return
-	if not _ritual_at.has(anchor):
+	var ritual: Dictionary = items.ritual_at(String(hand.anchor_id(anchor)))
+	if ritual.is_empty():
 		return
-	var ritual: Dictionary = _ritual_at[anchor]
 	var kind: Gesture.Kind = _gesture_kind(ritual)
 	if kind == Gesture.Kind.NONE:
 		return
@@ -315,25 +470,44 @@ func _resolve_gesture() -> void:
 		if gesture.kind != Gesture.Kind.DRAG_TO and hand.at_index != _active_anchor:
 			gesture.cancel()
 		else:
+			_run_drag_steps()
 			return
 	if gesture.phase == Gesture.Phase.DONE:
+		_run_drag_steps()
 		_complete_ritual()
 	if gesture.phase != Gesture.Phase.IDLE:
 		gesture.reset()
 		_active_ritual = {}
 		_active_anchor = HandSim.NO_ANCHOR
 		hand.unpin()
+		_sync_anchors()
+
+
+func _run_drag_steps() -> void:
+	if gesture.kind != Gesture.Kind.DRAG:
+		return
+	var steps: int = gesture.take_drag_steps()
+	for _step: int in absi(steps):
+		items.drag_step(_active_ritual, signi(steps))
 
 
 func _complete_ritual() -> void:
 	var ritual_id: String = GameData.as_string(_active_ritual.get("id"))
 	if _active_anchor == _lever_anchor and sequential_shift:
 		gate.shift_sequential(1 if gesture.direction == Gesture.DIR_UP else -1)
+	else:
+		items.complete(_active_ritual, gesture.direction)
 	_emit("ritual_completed", {
 		"ritual": ritual_id,
 		"anchor": String(hand.anchor_id(_active_anchor)),
 		"direction": gesture.direction,
 	})
+
+
+## The hand snaps only to anchors where something can be done now.
+func _sync_anchors() -> void:
+	for index: int in hand.anchor_count():
+		hand.set_anchor_active(index, items.anchor_in_use(String(hand.anchor_id(index))))
 
 
 func _gesture_kind(ritual: Dictionary) -> Gesture.Kind:
@@ -344,6 +518,8 @@ func _gesture_kind(ritual: Dictionary) -> Gesture.Kind:
 			return Gesture.Kind.HOLD
 		"FLICK":
 			return Gesture.Kind.FLICK
+		"DRAG":
+			return Gesture.Kind.DRAG
 		"DRAG_TO":
 			return Gesture.Kind.DRAG_TO
 		"CRANK":
@@ -360,6 +536,8 @@ func _gesture_amount(ritual: Dictionary, kind: Gesture.Kind) -> float:
 		return GameData.as_float(ritual.get("hold_s"))
 	if kind == Gesture.Kind.CRANK:
 		return GameData.as_float(ritual.get("turns"))
+	if kind == Gesture.Kind.DRAG:
+		return tuning.f("radio_step_px")
 	return 0.0
 
 

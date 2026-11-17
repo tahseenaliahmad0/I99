@@ -8,10 +8,12 @@ extends RefCounted
 
 ## Record sets: set name -> [file name, key of the array of records in that file].
 ## A record is an object with a unique "id". Most files hold one set; the road
-## vocabulary (beats.json) also holds vehicles, and anchors.json also holds the
-## slots and the static props that dress the cabin.
+## vocabulary (beats.json) also holds vehicles, anchors.json also holds the
+## slots and the static props that dress the cabin, and items.json also holds
+## the status effects that items and rituals name.
 const RECORD_SETS: Dictionary = {
 	"items": ["items", "items"],
+	"effects": ["items", "effects"],
 	"rituals": ["rituals", "rituals"],
 	"legs": ["legs", "legs"],
 	"beats": ["beats", "beats"],

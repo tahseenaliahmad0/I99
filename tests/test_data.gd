@@ -107,44 +107,46 @@ func _reset_fixture() -> void:
 	_roots = data.roots.duplicate(true)
 	_lines = data.lines.duplicate(true)
 
-	_list("anchors", "slots").append({"id": "ashtray"})
-	_list("anchors", "slots").append({"id": "cup_a"})
+	var items_root: Dictionary = _roots["items"]
+	items_root["starting_cabin"] = []
+	_put("slots", {"id": "ashtray", "anchor": "ashtray"})
+	_put("slots", {"id": "cup_a", "anchor": "cup_a"})
+	_put("effects", {"id": "lit"})
+	_put("effects", {"id": "blessing"})
 
-	_list("rituals", "rituals").append(_parse(GDD_RITUAL))
-	_list("rituals", "rituals").append({
+	_put("rituals", _parse(GDD_RITUAL))
+	_put("rituals", {
 		"id": "cig_ash", "anchor": "ashtray", "gesture": "FLICK", "flick_dirs": ["down"], "eyes_down": false,
 		"requires": ["lit"], "on_complete": ["ash"], "sfx": null})
-	_list("rituals", "rituals").append({
+	_put("rituals", {
 		"id": "tea_sip", "anchor": "cup_a", "gesture": "HOLD", "hold_s": 0.6, "eyes_down": false,
 		"requires": ["supply>0"], "on_complete": ["consume_supply"]})
 
-	_list("items", "items").append(_parse(GDD_ITEM))
-	_list("items", "items").append({
+	_put("items", _parse(GDD_ITEM))
+	_put("items", {
 		"id": "tea_glass", "kind": "habit", "slots": ["cup_a"], "price": 0, "contraband": false,
 		"rituals": ["tea_sip"], "gives": [], "takes": [], "line_ids": {"name": "item.tea_glass.name"}})
 
-	_list("modifiers", "modifiers").append({"id": "crosswind"})
-	_list("modifiers", "modifiers").append({"id": "potholes"})
-	_list("legs", "legs").append(_parse(GDD_LEG))
+	_put("modifiers", {"id": "crosswind"})
+	_put("modifiers", {"id": "potholes"})
+	_put("legs", _parse(GDD_LEG))
 
-	# The shipped data may already hold the truck the GDD example names.
-	if not data.has_record("vehicles", "truck"):
-		_list("beats", "vehicles").append({
-			"id": "truck", "width": 2.5, "length": 12.0, "speed_kmh": [60, 70],
-			"yields_to_horn": false, "honk_nerves": 0, "acts": [1, 2, 3], "placeholder": "veh_truck"})
-	_list("beats", "beats").append(_parse(GDD_BEAT))
+	_put("vehicles", {
+		"id": "truck", "width": 2.5, "length": 12.0, "speed_kmh": [60, 70],
+		"yields_to_horn": false, "honk_nerves": 0, "acts": [1, 2, 3], "placeholder": "veh_truck"})
+	_put("beats", _parse(GDD_BEAT))
 
-	_list("stops", "stops").append(_parse(GDD_STOP))
-	_list("passengers", "passengers").append(_parse(GDD_PASSENGER))
+	_put("stops", _parse(GDD_STOP))
+	_put("passengers", _parse(GDD_PASSENGER))
 
-	_list("tables", "tables").append({
+	_put("tables", {
 		"id": "drivers", "unlock": "start", "depart_min": 0, "rules": {},
 		"heckle_weights": {"DARE": 100}, "line_prefix": "table.drivers"})
-	_list("tables", "tables").append(_parse(GDD_TABLE))
-	_list("tables", "tables").append({
+	_put("tables", _parse(GDD_TABLE))
+	_put("tables", {
 		"id": "groom", "unlock": "win:uncles", "depart_min": 45, "rules": {},
 		"heckle_weights": {"DARE": 1, "DOUBT": 1, "ORDER": 1}, "line_prefix": "table.groom"})
-	_list("heckles", "heckles").append(_parse(GDD_HECKLE))
+	_put("heckles", _parse(GDD_HECKLE))
 
 	var placeholders: Dictionary = _roots["placeholders"]
 	placeholders.merge(_parse(GDD_PLACEHOLDER))
@@ -228,6 +230,42 @@ func _check_broken_records() -> void:
 	_reset_fixture()
 	_record("rituals", "cig_ash")["flick_dirs"] = ["sideways"]
 	_expect("E_ENUM", "rituals[cig_ash].flick_dirs[0]", "an unknown flick direction")
+
+	_reset_fixture()
+	_record("rituals", "cig_light")["on_complete"] = ["consume_supply", "explode"]
+	_expect("E_ENUM", "rituals[cig_light].on_complete[1]", "an unknown ritual op")
+
+	_reset_fixture()
+	_record("rituals", "cig_light")["on_complete"] = ["add_effect:glowing"]
+	_expect("E_REF", "rituals[cig_light].on_complete[0]", "an op that names an unknown effect")
+
+	_reset_fixture()
+	_record("rituals", "cig_light")["requires"] = ["supply>0", "!glowing"]
+	_expect("E_REF", "rituals[cig_light].requires[1]", "a condition that names an unknown effect")
+
+	_reset_fixture()
+	_record("rituals", "cig_light")["on_complete"] = ["toggle:sunroof"]
+	_expect("E_ENUM", "rituals[cig_light].on_complete[0]", "a toggle of an unknown cabin switch")
+
+	_reset_fixture()
+	_record("rituals", "tea_sip")["anchor"] = "@slot"
+	_expect("E_RULE", "rituals[tea_sip]", "a ritual at @slot with no item")
+
+	_reset_fixture()
+	_record("passengers", "hajjiya")["on_leave"] = ["nerves:-20", "add_effect:halo"]
+	_expect("E_REF", "passengers[hajjiya].on_leave[1]", "a passenger op that names an unknown effect")
+
+	_reset_fixture()
+	items_root_for_test()["starting_cabin"] = [{"item": "cigarettes", "slot": "cup_a", "supply": 5}]
+	_expect("E_RULE", "starting_cabin[0].slot", "a starting item in a slot it does not fit")
+
+	_reset_fixture()
+	items_root_for_test()["starting_cabin"] = [{"item": "cigars", "slot": "ashtray", "supply": 5}]
+	_expect("E_REF", "starting_cabin[0].item", "a starting item that does not exist")
+
+	_reset_fixture()
+	_record("slots", "ashtray")["anchor"] = "ash_tray"
+	_expect("E_REF", "slots[ashtray].anchor", "a slot at an unknown anchor")
 
 	# Legs and beats
 	_reset_fixture()
@@ -473,6 +511,20 @@ func _parse(json_text: String) -> Dictionary:
 	return {}
 
 
+## Adds a record to the fixture, replacing any shipped record with the same id
+## (the shipped data grows toward the GDD's examples; the fixture stays exact).
+func _put(set_name: String, record: Dictionary) -> void:
+	var where: Array = GameData.RECORD_SETS[set_name]
+	var file: String = where[0]
+	var key: String = where[1]
+	var list: Array = _list(file, key)
+	for index: int in range(list.size() - 1, -1, -1):
+		var existing: Dictionary = list[index]
+		if existing.get("id") == record.get("id"):
+			list.remove_at(index)
+	list.append(record)
+
+
 func _list(file: String, key: String) -> Array:
 	var root: Dictionary = _roots[file]
 	var list: Array = root[key]
@@ -489,6 +541,11 @@ func _record(set_name: String, id: String) -> Dictionary:
 			return record
 	fail("fixture has no %s record '%s'" % [set_name, id])
 	return {}
+
+
+func items_root_for_test() -> Dictionary:
+	var root: Dictionary = _roots["items"]
+	return root
 
 
 func _registry_entry(file: String, id: String) -> Dictionary:
