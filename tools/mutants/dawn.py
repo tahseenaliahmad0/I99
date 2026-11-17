@@ -1,6 +1,6 @@
 """Mutants of Dawn, the Call and the Arrival (GDD 10.4, 10.5) for T-BOSS-03 and T-CALL-01.
     python3 tools/mutants.py T-BOSS-03,T-CALL-01 tools/mutants/dawn.py
-Of the first 43, three live (see docs/PROGRESS.md); 44 to 67 have not been run yet.
+Of the first 43, three live (see docs/PROGRESS.md); 44 to 66 have not been run yet.
 """
 B = 'src/core/boss_sim.gd'
 D = 'src/core/drive_sim.gd'
