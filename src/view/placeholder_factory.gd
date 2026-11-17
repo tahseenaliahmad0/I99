@@ -10,8 +10,14 @@ extends RefCounted
 ## Sizes: box [x, y, z]; cylinder and capsule [radius, height]; sphere [radius];
 ## quad [width, height]; label [pixel size] with a "text" key.
 
+const WORLD_SHADER: Shader = preload("res://shaders/world_bend.gdshader")
+
 var _registry: Dictionary = {}
 var _materials: Dictionary = {}
+## Materials of things outside the cabin, which bend with the road.
+var _world_materials: Dictionary = {}
+var _bend: float = 0.0
+var _bend_origin_z: float = 0.0
 
 
 func _init(data: GameData) -> void:
@@ -20,6 +26,51 @@ func _init(data: GameData) -> void:
 
 func has(id: String) -> bool:
 	return _registry.has(id)
+
+
+## A new node for something outside the cabin: drawn with the world-bend
+## shader so it follows the curve of the road (GDD 13.5).
+func make_world(id: String) -> Node3D:
+	var node: Node3D = make(id)
+	_use_world_material(node)
+	return node
+
+
+## Sets how the world bends this frame: sideways offset per metre ahead,
+## squared, measured from `origin_z` toward -Z.
+func set_world_bend(bend: float, origin_z: float) -> void:
+	if is_equal_approx(bend, _bend) and is_equal_approx(origin_z, _bend_origin_z):
+		return
+	_bend = bend
+	_bend_origin_z = origin_z
+	for key: Variant in _world_materials:
+		var material: ShaderMaterial = _world_materials[key]
+		material.set_shader_parameter("bend", bend)
+		material.set_shader_parameter("bend_origin_z", origin_z)
+
+
+func world_material_for(color: Color) -> ShaderMaterial:
+	var key: String = color.to_html()
+	if _world_materials.has(key):
+		var cached: ShaderMaterial = _world_materials[key]
+		return cached
+	var material: ShaderMaterial = ShaderMaterial.new()
+	material.shader = WORLD_SHADER
+	material.set_shader_parameter("albedo", color)
+	material.set_shader_parameter("bend", _bend)
+	material.set_shader_parameter("bend_origin_z", _bend_origin_z)
+	_world_materials[key] = material
+	return material
+
+
+func _use_world_material(node: Node) -> void:
+	var instance: MeshInstance3D = node as MeshInstance3D
+	if instance != null:
+		var flat: StandardMaterial3D = instance.material_override as StandardMaterial3D
+		if flat != null:
+			instance.material_override = world_material_for(flat.albedo_color)
+	for child: Node in node.get_children():
+		_use_world_material(child)
 
 
 ## A new node for this id. Unknown ids are an error and give an empty node.

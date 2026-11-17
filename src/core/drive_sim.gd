@@ -46,6 +46,9 @@ var cash: float = 0.0
 var wrecked: bool = false
 ## Curve strength now: k of GDD 5.4, signed (+ pushes toward the right shoulder).
 var curve_k: float = 0.0
+## Sandbox only, until legs exist (M4): vehicles per km spawned ahead on an
+## endless road. 0 switches it off; tests leave it off.
+var free_traffic_per_km: float = 0.0
 
 ## Settings the simulation reads (GDD 17.1).
 var steer_sensitivity: float = 1.0
@@ -64,6 +67,7 @@ var _gust_strength: float = 0.0
 var _gust_duration: float = 0.0
 var _grind_nerves: float = 0.0
 var _braking: bool = false
+var _next_free_spawn_s: float = 0.0
 var _forced_gear: int = 1
 
 
@@ -136,6 +140,8 @@ func step(input: DriveInput) -> void:
 	car.step(DT, wheel.steer(), gate.gear, _braking, _extra_drift())
 
 	# 6. Traffic.
+	if free_traffic_per_km > 0.0:
+		_step_free_traffic()
 	traffic.step(DT, car.s, car.x, car.speed)
 
 	# 7. Collisions and close calls.
@@ -206,6 +212,7 @@ func snapshot() -> Dictionary:
 		"cash": cash,
 		"chain": collision.chain,
 		"wrecked": wrecked,
+		"curve_k": curve_k,
 		"vehicles": _vehicle_snapshots(),
 	}
 
@@ -235,6 +242,25 @@ func _extra_drift() -> float:
 		_gust_left -= DT
 		push += _gust_push
 	return push
+
+
+## Sandbox traffic: one vehicle every 1000 / free_traffic_per_km metres,
+## spawn_ahead in front, in a lane and at a speed drawn from the road stream.
+func _step_free_traffic() -> void:
+	if car.s < _next_free_spawn_s:
+		return
+	_next_free_spawn_s = car.s + 1000.0 / free_traffic_per_km
+	var types: PackedStringArray = data.record_ids("vehicles")
+	if types.is_empty():
+		return
+	var record: Dictionary = data.record("vehicles", types[rng.range_i(Rng.ROAD, 0, types.size() - 1)])
+	var speeds: Array = GameData.as_array(record.get("speed_kmh"))
+	var lane: int = rng.range_i(Rng.ROAD, 0, car.lanes - 1)
+	var at_s: float = car.s + tuning.f("spawn_ahead")
+	if not traffic.lane_is_free(lane, at_s, tuning.f("free_traffic_clearance"), null):
+		return
+	var speed: float = rng.range_f(Rng.ROAD, GameData.as_float(speeds[0]), GameData.as_float(speeds[1]))
+	traffic.spawn(StringName(GameData.as_string(record.get("id"))), lane, at_s, speed)
 
 
 func _apply_collisions() -> void:

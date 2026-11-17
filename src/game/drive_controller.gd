@@ -20,6 +20,8 @@ var _frames: int = 0
 @onready var _camera: Camera3D = $Camera3D
 @onready var _cabin: CabinView = $Cabin
 @onready var _hand: HandView = $Cabin/Hand
+@onready var _road: RoadView = $Road
+@onready var _sky: SkyView = $Sky
 @onready var _pointer: PointerView = $Overlay/Pointer
 @onready var _hud: DebugHud = $DebugHUD
 
@@ -38,7 +40,11 @@ func _ready() -> void:
 
 	_cabin.setup(data, _factory)
 	_hand.setup(data, _factory, sim.space)
+	_road.setup(data, _factory)
+	_sky.setup(data)
 	_pointer.setup(data, _factory)
+	sim.rng.reseed(int(str(Game.args.get("seed", "1"))))
+	sim.free_traffic_per_km = tuning.f("free_traffic_per_km")
 
 	if Game.args.has("aim"):
 		_aim_anchor = sim.hand.anchor_index(StringName(str(Game.args["aim"])))
@@ -47,6 +53,8 @@ func _ready() -> void:
 	if Game.args.has("shot"):
 		_shot_path = str(Game.args["shot"])
 		_shot_frame = tuning.i("screenshot_frame")
+		if Game.args.has("shot-frame"):
+			_shot_frame = maxi(1, str(Game.args["shot-frame"]).to_int())
 
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	print("[drive] ready anchors=%d rituals=%d" % [sim.hand.anchor_count(), data.records("rituals").size()])
@@ -81,7 +89,7 @@ func _physics_process(_delta: float) -> void:
 		Events.emit_event(GameData.as_string(event.get("type")), event)
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	var snapshot: Dictionary = sim.snapshot()
 	var cam_yaw: float = snapshot["cam_yaw"]
 	var cam_pitch: float = snapshot["cam_pitch"]
@@ -89,6 +97,8 @@ func _process(_delta: float) -> void:
 	_camera.rotation = Vector3(deg_to_rad(cam_pitch), -deg_to_rad(cam_yaw), 0.0)
 	_cabin.apply(snapshot)
 	_hand.apply(snapshot)
+	_road.apply(snapshot, delta)
+	_sky.apply(1.0)
 	_pointer.apply(snapshot, _camera, _cabin)
 	_hud.apply(snapshot)
 

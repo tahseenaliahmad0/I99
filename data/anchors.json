@@ -50,7 +50,7 @@
     { "id": "pillar_right",  "placeholder": "cabin_pillar",    "pos": [1.12, 0.42, -0.36] },
     { "id": "door_left",     "placeholder": "cabin_door",      "pos": [-0.60, -0.05, 0.25] },
     { "id": "door_right",    "placeholder": "cabin_door",      "pos": [1.15, -0.05, 0.25] },
-    { "id": "hood",          "placeholder": "cabin_hood",      "pos": [0.25, 0.02, -1.30] },
+    { "id": "hood",          "placeholder": "cabin_hood",      "pos": [0.275, -0.10, -1.05] },
     { "id": "left_sleeve",   "placeholder": "left_sleeve",     "pos": [-0.22, -0.04, 0.55] }
   ]
 }

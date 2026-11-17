@@ -1,10 +1,12 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://src/game/drive_controller.gd" id="1_drive"]
 [ext_resource type="Script" path="res://src/view/cabin_view.gd" id="2_cabin"]
 [ext_resource type="Script" path="res://src/view/hand_view.gd" id="3_hand"]
 [ext_resource type="Script" path="res://src/view/pointer_view.gd" id="4_pointer"]
 [ext_resource type="Script" path="res://src/view/debug_hud.gd" id="5_hud"]
+[ext_resource type="Script" path="res://src/view/road_view.gd" id="6_road"]
+[ext_resource type="Script" path="res://src/view/sky_view.gd" id="7_sky"]
 
 [node name="Drive" type="Node3D"]
 script = ExtResource("1_drive")
@@ -16,6 +18,14 @@ script = ExtResource("2_cabin")
 
 [node name="Hand" type="Node3D" parent="Cabin"]
 script = ExtResource("3_hand")
+
+[node name="Road" type="Node3D" parent="."]
+script = ExtResource("6_road")
+
+[node name="Vehicles" type="Node3D" parent="Road"]
+
+[node name="Sky" type="Node3D" parent="."]
+script = ExtResource("7_sky")
 
 [node name="Overlay" type="CanvasLayer" parent="."]
 
