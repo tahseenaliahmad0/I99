@@ -65,6 +65,13 @@
     { "id": "window_switch_hold", "anchor": "window_switch", "item": "window_switch", "gesture": "HOLD", "hold_s": 0.6,
       "eyes_down": false, "requires": [], "on_complete": ["window"] },
     { "id": "hook_arm",        "anchor": "hook",  "item": "wheel_ring", "gesture": "TAP", "perform_s": 0.3,
-      "eyes_down": false, "requires": ["!hook_armed", "!hook_set", "!hook_cooldown"], "on_complete": ["hook"] }
+      "eyes_down": false, "requires": ["!hook_armed", "!hook_set", "!hook_cooldown"], "on_complete": ["hook"] },
+
+    { "id": "call_hand_over",  "anchor": "pocket",             "gesture": "DRAG_TO", "to": "passenger_shoulder",
+      "eyes_down": false, "over_items": true, "requires": ["the_call", "flag:passenger"], "on_complete": ["call:passenger"] },
+    { "id": "call_answer",     "anchor": "pocket",             "gesture": "TAP",
+      "eyes_down": false, "over_items": true, "requires": ["the_call"], "on_complete": ["call:alone"] },
+    { "id": "key_turn",        "anchor": "key",                "gesture": "TAP",
+      "eyes_down": false, "requires": ["in_bay"], "on_complete": ["key"] }
   ]
 }

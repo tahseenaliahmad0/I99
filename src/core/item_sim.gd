@@ -165,6 +165,9 @@ var since_wipe: float = 0.0
 var raining: bool = false
 ## Dust in the air (the leg says so): haze per second while the window is open.
 var dust_rate: float = 0.0
+## Dust on the glass (the road says so): the share of the windscreen that one
+## sweep of the wipers smears.
+var wipe_haze: float = 0.0
 ## -1 signalling left, +1 right, 0 off.
 var indicator: int = 0
 var indicator_left: float = 0.0
@@ -177,6 +180,11 @@ var cash_delta: float = 0.0
 ## What he handed to the officer this tick: &"fine" (his licence) or
 ## &"bribe" (banknotes), else empty.
 var paid: StringName = &""
+## How he took the Call this tick (GDD 10.4): &"alone" (a TAP on his
+## pocket) or &"passenger" (the phone handed to them), else empty.
+var call_taken: StringName = &""
+## He turned the key this tick (GDD 10.5).
+var key_turned: bool = false
 ## True for the tick in which contraband, or the phone, was used.
 var contraband_used: bool = false
 var phone_used: bool = false
@@ -408,6 +416,8 @@ func begin_tick() -> void:
 	horn_blown = false
 	cash_delta = 0.0
 	paid = &""
+	call_taken = &""
+	key_turned = false
 	contraband_used = false
 	phone_used = false
 
@@ -589,12 +599,14 @@ func ritual_at(anchor: String) -> Dictionary:
 	return {}
 
 
-## Where a HOLD is offered, a control that is a TAP may be offered too (his
-## face: the pills are a HOLD, a slap is a TAP). A press let go within a
-## TAP's time is then that TAP. {} when `primary` is not a HOLD or there is
-## no such control.
+## Where a HOLD or a DRAG_TO is offered, a control that is a TAP may be
+## offered too (his face: the pills are a HOLD, a slap is a TAP; his pocket
+## in the Call: the phone is handed to a passenger, or a TAP answers it). A
+## press let go within a TAP's time, with the hand still there, is then that
+## TAP. {} when `primary` is neither, or there is no such control.
 func tap_alternative(anchor: String, primary: Dictionary) -> Dictionary:
-	if GameData.as_string(primary.get("gesture")) != "HOLD":
+	var gesture: String = GameData.as_string(primary.get("gesture"))
+	if gesture != "HOLD" and gesture != "DRAG_TO":
 		return {}
 	for offered: Variant in GameData.as_array(_controls.get(anchor)):
 		var control: Dictionary = offered
@@ -724,6 +736,9 @@ func _run(op: String, owner: Item, direction: int) -> void:
 			_horn()
 		"wipe":
 			since_wipe = 0.0
+			# In a dust storm the wipers smear what is on the glass (GDD 10.3).
+			if wipe_haze > 0.0:
+				haze = minf(haze + wipe_haze, _haze_cap)
 		"photo":
 			_effects.add(VISOR_DOWN, _visor_time)
 			# Flask + Photo (GDD 7.8): looked at with Courage, the photo calms
@@ -765,6 +780,10 @@ func _run(op: String, owner: Item, direction: int) -> void:
 			_radio_step(direction)
 		"pay":
 			paid = StringName(parts[1])
+		"call":
+			call_taken = StringName(parts[1])
+		"key":
+			key_turned = true
 		"sfx":
 			events.append({"type": "sfx_requested", "id": parts[1]})
 		"line":

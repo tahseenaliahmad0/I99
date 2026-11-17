@@ -33,6 +33,13 @@ var branches: Array[Dictionary] = []
 var branch: Dictionary = {}
 ## The boss of this act once he is in it, else "".
 var boss: String = ""
+## The modifier that boss has in this Telling ("" for none).
+var boss_modifier: String = ""
+## He has stopped for tea: the next fork's sign also shows the modifier of
+## the boss ahead (GDD 9.6).
+var boss_on_sign: bool = false
+## He answered the Call (GDD 10.4, 11.4).
+var call_answered: bool = false
 ## The stop he is at, else "".
 var stop: String = ""
 
@@ -51,6 +58,9 @@ func begin(table_id: String, telling_seed: int) -> void:
 	act = 1
 	legs_done = 0
 	boss = ""
+	boss_modifier = ""
+	boss_on_sign = false
+	call_answered = false
 	stop = ""
 	branch = {}
 	_approach()
@@ -72,6 +82,7 @@ func resume(table_id: String, telling_seed: int, told_again: int, in_act: int, l
 	act = clampi(in_act, 1, RunGenerator.ACTS)
 	legs_done = clampi(legs_behind, 0, RunGenerator.LEGS_PER_ACT)
 	boss = ""
+	boss_modifier = ""
 	stop = ""
 	if stage_id == STAGE_NAMES[Stage.BOSS_STOP]:
 		branch = {}
@@ -101,6 +112,8 @@ func take_branch(side: int) -> Dictionary:
 	branch = branches[clampi(side, 0, branches.size() - 1)]
 	stage = Stage.LEG
 	stop = ""
+	# The sign he has just passed was the one that showed it.
+	boss_on_sign = false
 	# The fork at the end of this leg, unless it is the act's third.
 	branches = _fork(legs_done + 1)
 	return branch
@@ -119,7 +132,13 @@ func boss_record() -> Dictionary:
 func begin_boss() -> void:
 	stage = Stage.BOSS
 	boss = GameData.as_string(boss_record().get("id"))
+	boss_modifier = modifier_ahead()
 	branches = []
+
+
+## The modifier of the boss this act ends in ("" for none).
+func modifier_ahead() -> String:
+	return RunGenerator.boss_modifier(_data, seed, act)
 
 
 func enter_stop() -> void:
@@ -142,6 +161,7 @@ func enter_boss_stop() -> void:
 func leave_boss_stop() -> void:
 	stop = ""
 	boss = ""
+	boss_modifier = ""
 	if act >= RunGenerator.ACTS:
 		stage = Stage.ARRIVAL
 		branches = []

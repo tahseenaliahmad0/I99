@@ -19,7 +19,9 @@
     { "id": "minty", "hides_courage": true },
     { "id": "hook_armed" },
     { "id": "hook_set" },
-    { "id": "hook_cooldown" }
+    { "id": "hook_cooldown" },
+    { "id": "the_call" },
+    { "id": "in_bay" }
   ],
 
   "synergy_tokens": ["music", "photo"],

@@ -59,6 +59,12 @@ var can_reach: bool = true
 var carrying: bool = false
 ## True while the hand can neither let go nor take hold (the weather cramp).
 var frozen: bool = false
+## True while the hand holds a phone to his ear (the Call taken alone, GDD
+## 10.4): it goes there and stays, it can reach for nothing and grip
+## nothing, and his wrist on the wheel steers at `wrist_steer` of what the
+## pointer's motion would.
+var at_ear: bool = false
+var wrist_steer: float = 0.0
 ## The Phantom's wrong-hand flinch (GDD 7.9). DriveSim says each tick whether
 ## a cross-reach begun now would flinch; the hand then leaves flinch_delay
 ## late. `flinch_left` is what is left of that wait and `ghost_anchor` the
@@ -256,6 +262,24 @@ func step(dt: float, input: DriveInput, wheel_angle_deg: float, speed_mult: floa
 	var down: bool = input.lmb
 	var pressed: bool = down and not _was_down
 	_was_down = down
+
+	if at_ear:
+		if gripping:
+			_let_go()
+		snap_index = NO_ANCHOR
+		at_index = NO_ANCHOR
+		_press_pending = false
+		_wants_grip = false
+		_grip_latched = false
+		flinch_left = 0.0
+		ghost_anchor = NO_ANCHOR
+		_cross_reach = NO_ANCHOR
+		target = _space.ear
+		_travel(dt, speed_mult)
+		pointer = _space.clamp_pointer(_space.point_to_pointer(pos))
+		steer_px = input.pointer_delta.x * wrist_steer
+		_update_glance(dt)
+		return
 
 	if gripping:
 		var release: bool = (pressed if _grip_latched else not down) and not frozen

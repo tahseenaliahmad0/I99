@@ -1,0 +1,354 @@
+diff --git a/data/items.json b/data/items.json
+index 706341d..a17ecc1 100644
+--- a/data/items.json
++++ b/data/items.json
+@@ -21,7 +21,8 @@
+     { "id": "hook_set" },
+     { "id": "hook_cooldown" },
+     { "id": "the_call" },
+-    { "id": "in_bay" }
++    { "id": "in_bay" },
++    { "id": "at_window" }
+   ],
+ 
+   "synergy_tokens": ["music", "photo"],
+@@ -126,7 +127,7 @@
+     { "id": "arak_flask", "kind": "deal", "slots": ["cup_a", "cup_b"], "tags": ["drink"],
+       "rarity": "uncommon", "price": 45, "contraband": true,
+       "supply": { "uses": 6, "restock": 20 },
+-      "rituals": ["flask_sip"],
++      "rituals": ["stow", "flask_sip"],
+       "gives": [ { "resource": "nerves", "amount": -5 },
+                  { "effect": "courage", "duration": 45 } ],
+       "takes": [],
+@@ -243,7 +244,7 @@
+       "line_ids": { "name": "item.wide_mirror.name" } },
+     { "id": "forged_papers", "kind": "deal", "slots": ["dash_1", "dash_2", "glovebox_a", "glovebox_b"], "tags": ["small", "papers", "stowed"],
+       "rarity": "rare", "price": 60, "contraband": true,
+-      "rituals": [],
++      "rituals": ["stow"],
+       "gives": [],
+       "takes": [],
+       "params": { "passes": "papers" },
+diff --git a/data/legs.json b/data/legs.json
+index d437bf8..180b6db 100644
+--- a/data/legs.json
++++ b/data/legs.json
+@@ -16,6 +16,18 @@
+   "bosses": [
+     {"id": "checkpoint", "act": 1, "length_m": 500, "par_s": 90, "lanes": 3, "divided": true,
+      "modifiers": ["long_queue", "thorough"],
++     "checkpoint": {
++       "corridor": {"at_m": 200, "length_m": 150, "taper_m": 60, "gap_m": 2.34, "sign_lead_s": 5},
++       "barrier_suspicion": 25,
++       "queue": {"cars": 6, "gap_m": 2.5, "creep_kmh": 12, "pull_up_per_s": 2.0, "serve_s": 4, "leave_kmh": 40, "clear_m": 4,
++                 "vehicles": ["car", "taxi", "pickup", "minibus"]},
++       "stop_zone_m": 8, "stopped_kmh": 1, "bump_kmh": 5,
++       "stow_s": 10, "contraband_suspicion": 40, "courage_suspicion": 15,
++       "documents": ["licence", "id", "registration"],
++       "delay_every_s": 5, "delay_suspicion": 10,
++       "pass_under": 50, "turned_back_at": 100,
++       "search_minutes": 15, "turned_back_minutes": 30
++     },
+      "line_ids": {"name": "boss.checkpoint.name"}},
+     {"id": "storm", "act": 2, "length_m": 2000, "par_s": 100, "lanes": 3, "divided": true,
+      "modifiers": ["crosswind", "night_storm"],
+diff --git a/data/lines_ar.csv b/data/lines_ar.csv
+index c41bb63..da09501 100644
+--- a/data/lines_ar.csv
++++ b/data/lines_ar.csv
+@@ -150,3 +150,12 @@ call.noor,,,true
+ sign.checkpoint,,,true
+ hud.the_call,,,true
+ hud.bay,,,true
++sign.document.licence,,,true
++sign.document.id,,,true
++sign.document.registration,,,true
++soldier.window,,,true
++soldier.wrong,,,true
++hud.checkpoint.queue,,,true
++hud.checkpoint.stow,,,true
++hud.checkpoint.papers,,,true
++hud.checkpoint.passed,,,true
+diff --git a/data/lines_en.csv b/data/lines_en.csv
+index 576af9f..55a495a 100644
+--- a/data/lines_en.csv
++++ b/data/lines_en.csv
+@@ -150,3 +150,12 @@ call.noor,,Noor,true
+ sign.checkpoint,,[CHECKPOINT / %s],false
+ hud.the_call,,The Call: %s,false
+ hud.bay,,In the bay: turn the key,false
++sign.document.licence,,[LICENCE],true
++sign.document.id,,[ID],true
++sign.document.registration,,[REGISTRATION],true
++soldier.window,,(he taps on the glass),true
++soldier.wrong,,(he shakes his head),true
++hud.checkpoint.queue,,Checkpoint: the queue,false
++hud.checkpoint.stow,,Checkpoint: the soldier is %s s away,false
++hud.checkpoint.papers,,Checkpoint: he wants %s (%s s),false
++hud.checkpoint.passed,,Checkpoint: through,false
+diff --git a/data/rituals.json b/data/rituals.json
+index 63c71ae..677e1ee 100644
+--- a/data/rituals.json
++++ b/data/rituals.json
+@@ -72,6 +72,22 @@
+     { "id": "call_answer",     "anchor": "pocket",             "gesture": "TAP",
+       "eyes_down": false, "over_items": true, "requires": ["the_call"], "on_complete": ["call:alone"] },
+     { "id": "key_turn",        "anchor": "key",                "gesture": "TAP",
+-      "eyes_down": false, "requires": ["in_bay"], "on_complete": ["key"] }
++      "eyes_down": false, "requires": ["in_bay"], "on_complete": ["key"] },
++
++    { "id": "papers_licence",  "anchor": "dash_1",             "gesture": "DRAG_TO", "to": "driver_window",
++      "eyes_down": true, "over_items": true, "requires": ["at_window", "flag:window_open"], "on_complete": ["hand:licence"] },
++    { "id": "papers_id",       "anchor": "pocket",             "gesture": "DRAG_TO", "to": "driver_window",
++      "eyes_down": true, "over_items": true, "requires": ["at_window", "flag:window_open"], "on_complete": ["hand:id"] },
++    { "id": "letter_aside",    "anchor": "glovebox",           "gesture": "HOLD", "hold_s": 0.4,
++      "eyes_down": true, "over_items": true, "requires": ["at_window", "flag:glovebox_open", "!flag:letter_aside"], "on_complete": ["toggle:letter_aside"] },
++    { "id": "papers_registration", "anchor": "glovebox",       "gesture": "DRAG_TO", "to": "driver_window",
++      "eyes_down": true, "over_items": true, "requires": ["at_window", "flag:glovebox_open", "flag:letter_aside", "flag:window_open"], "on_complete": ["hand:registration"] },
++    { "id": "checkpoint_bribe", "anchor": "cash",              "gesture": "DRAG_TO", "to": "driver_window",
++      "eyes_down": false, "over_items": true, "requires": ["at_window", "flag:window_open"], "on_complete": ["hand:banknotes"] },
++
++    { "id": "stow",            "anchor": "@slot", "shared": true, "gesture": "DRAG_TO", "to": "glovebox",
++      "eyes_down": true, "requires": ["flag:glovebox_open", "glovebox_room"], "on_complete": ["stow"] },
++    { "id": "unstow",          "anchor": "glovebox",           "gesture": "DRAG_TO", "to": "@home",
++      "eyes_down": true, "over_items": true, "requires": ["flag:glovebox_open", "stowed"], "on_complete": ["unstow"] }
+   ]
+ }
+diff --git a/src/core/item_sim.gd b/src/core/item_sim.gd
+index 70c8910..37ea214 100644
+--- a/src/core/item_sim.gd
++++ b/src/core/item_sim.gd
+@@ -24,6 +24,13 @@ extends RefCounted
+ ## "synergy" rule: when that synergy's partner is there, its amount is used.
+ 
+ const SLOT_ANCHOR: String = "@slot"
++## A DRAG_TO's destination: any free slot the thing carried fits in.
++const HOME_ANCHOR: String = "@home"
++## Slots whose id begins so are cells of the glovebox: what is in one is
++## stowed, out of sight and out of use (GDD 7.1, 10.2).
++const GLOVEBOX: String = "glovebox"
++const FLAG_GLOVEBOX: StringName = &"glovebox_open"
++const UNSTOW: String = "unstow"
+ const STATIC: StringName = &"static"
+ const AWAKE: StringName = &"awake"
+ const VISOR_DOWN: StringName = &"visor_down"
+@@ -148,6 +155,8 @@ class Condition:
+ 	const WARBLING: int = 5
+ 	const RINGING: int = 6
+ 	const TAG: int = 7
++	const GLOVEBOX_ROOM: int = 8
++	const STOWED: int = 9
+ 	var negated: bool = false
+ 	var word: int = EFFECT
+ 	var name: StringName = &""
+@@ -185,6 +194,9 @@ var paid: StringName = &""
+ var call_taken: StringName = &""
+ ## He turned the key this tick (GDD 10.5).
+ var key_turned: bool = false
++## What he handed out through the driver's window this tick (GDD 10.2):
++## &"licence", &"id", &"registration" or &"banknotes", else empty.
++var handed: StringName = &""
+ ## True for the tick in which contraband, or the phone, was used.
+ var contraband_used: bool = false
+ var phone_used: bool = false
+@@ -418,6 +430,7 @@ func begin_tick() -> void:
+ 	paid = &""
+ 	call_taken = &""
+ 	key_turned = false
++	handed = &""
+ 	contraband_used = false
+ 	phone_used = false
+ 
+@@ -457,12 +470,7 @@ func remove_item(item: Item) -> void:
+ 	if item == null:
+ 		return
+ 	# What it was doing stops with it: a smoke goes out, a tape falls silent.
+-	if item.burning and item.use_effect != &"" and _effects.has_own(item.use_effect):
+-		_effects.remove(item.use_effect)
+-	for standing: Standing in item.standing:
+-		if standing.held:
+-			standing.held = false
+-			_effects.hold(standing.effect, item.id, false)
++	_put_out(item)
+ 	items.erase(item)
+ 	_refresh_passives()
+ 
+@@ -526,6 +534,76 @@ func anchor_of_slot(slot: String) -> String:
+ 	return GameData.as_string(_slot_anchor.get(slot))
+ 
+ 
++# --- The glovebox (GDD 7.1, 10.2) --------------------------------------------
++
++func is_stowed(item_instance: Item) -> bool:
++	return String(item_instance.slot).begins_with(GLOVEBOX)
++
++
++## The first cell of the glovebox with nothing in it ("" when it is full).
++func free_cell() -> String:
++	for slot: Variant in _slot_anchor:
++		var id: String = str(slot)
++		if id.begins_with(GLOVEBOX) and item_in_slot(StringName(id)) == null:
++			return id
++	return ""
++
++
++## The first stowed thing that has a free place of its own to go back to
++## (null: nothing is stowed, or nothing stowed has room outside).
++func stowed_with_a_home() -> Item:
++	for candidate: Item in items:
++		if is_stowed(candidate) and not _free_homes(candidate).is_empty():
++			return candidate
++	return null
++
++
++## The anchors that thing may be put down on when it is taken out.
++func unstow_destinations() -> Array[String]:
++	var out: Array[String] = []
++	var candidate: Item = stowed_with_a_home()
++	if candidate == null:
++		return out
++	for slot: String in _free_homes(candidate):
++		var anchor: String = anchor_of_slot(slot)
++		if not anchor.is_empty() and not out.has(anchor):
++			out.append(anchor)
++	return out
++
++
++## It was taken out of the glovebox and put down on `anchor`.
++func unstow_to(anchor: String) -> bool:
++	var candidate: Item = stowed_with_a_home()
++	if candidate == null:
++		return false
++	for slot: String in _free_homes(candidate):
++		if anchor_of_slot(slot) == anchor:
++			candidate.slot = StringName(slot)
++			_refresh_passives()
++			return true
++	return false
++
++
++## The free slots outside the glovebox that an item fits in.
++func _free_homes(item_instance: Item) -> Array[String]:
++	var out: Array[String] = []
++	for slot: Variant in GameData.as_array(item_instance.record.get("slots")):
++		var id: String = GameData.as_string(slot)
++		if not id.begins_with(GLOVEBOX) and item_in_slot(StringName(id)) == null:
++			out.append(id)
++	return out
++
++
++## What an item was doing stops: a smoke goes out, a status it held is let go.
++func _put_out(item_instance: Item) -> void:
++	if item_instance.burning and item_instance.use_effect != &"" and _effects.has_own(item_instance.use_effect):
++		_effects.remove(item_instance.use_effect)
++	for standing: Standing in item_instance.standing:
++		if standing.held:
++			standing.held = false
++			_effects.hold(standing.effect, item_instance.id, false)
++
++
+ ## A full supply again; a drink is hot again.
+ func restock(item_instance: Item) -> void:
+ 	var supply: Dictionary = GameData.as_dict(item_instance.record.get("supply"))
+@@ -581,12 +659,18 @@ func ritual_at(anchor: String) -> Dictionary:
+ 		if GameData.as_bool(urgent.get("over_items")) and _requirements_hold(urgent, null):
+ 			return urgent
+ 	for candidate: Item in items:
+-		if anchor_of(candidate) != anchor:
++		# What is stowed in the glovebox is out of use until it is taken out.
++		if anchor_of(candidate) != anchor or is_stowed(candidate):
+ 			continue
+ 		for ritual_id: Variant in GameData.as_array(candidate.record.get("rituals")):
+ 			var ritual: Dictionary = _data.record("rituals", GameData.as_string(ritual_id))
+ 			if GameData.as_string(ritual.get("anchor")) == SLOT_ANCHOR and _requirements_hold(ritual, candidate):
+-				return ritual
++				if ritual.has("item"):
++					return ritual
++				# A ritual several items share (stowing): this time it is this item's.
++				var own: Dictionary = ritual.duplicate()
++				own["item"] = String(candidate.id)
++				return own
+ 	for offered: Variant in GameData.as_array(_placed.get(anchor)):
+ 		var placed: Dictionary = offered
+ 		var owner: Item = owner_of(placed)
+@@ -671,6 +755,10 @@ func _condition(text: String) -> Condition:
+ 		condition.word = Condition.SUPPLY
+ 	elif word == "ringing":
+ 		condition.word = Condition.RINGING
++	elif word == "glovebox_room":
++		condition.word = Condition.GLOVEBOX_ROOM
++	elif word == "stowed":
++		condition.word = Condition.STOWED
+ 	elif word == "hot":
+ 		condition.word = Condition.HOT
+ 	elif word == "playing":
+@@ -706,6 +794,10 @@ func _met(condition: Condition, owner: Item) -> bool:
+ 			met = caller != &""
+ 		Condition.TAG:
+ 			met = not tagged(String(condition.name)).is_empty()
++		Condition.GLOVEBOX_ROOM:
++			met = not free_cell().is_empty()
++		Condition.STOWED:
++			met = not unstow_destinations().is_empty()
+ 		_:
+ 			met = _effects.has(condition.name)
+ 	return met != condition.negated
+@@ -782,6 +874,18 @@ func _run(op: String, owner: Item, direction: int) -> void:
+ 			paid = StringName(parts[1])
+ 		"call":
+ 			call_taken = StringName(parts[1])
++		"hand":
++			handed = StringName(parts[1])
++		"stow":
++			# Into a free cell of the glovebox: out of sight, and out of use.
++			var cell: String = free_cell()
++			if owner != null and not cell.is_empty():
++				_put_out(owner)
++				owner.slot = StringName(cell)
++				_refresh_passives()
++		"unstow":
++			# DriveSim says where it was put down (unstow_to).
++			pass
+ 		"key":
+ 			key_turned = true
+ 		"sfx":
+@@ -1187,7 +1291,21 @@ func take_visible_contraband() -> Array[StringName]:
+ 	var index: int = 0
+ 	while index < items.size():
+ 		var candidate: Item = items[index]
+-		if GameData.as_bool(candidate.record.get("contraband")) and not String(candidate.slot).begins_with("glovebox"):
++		if GameData.as_bool(candidate.record.get("contraband")) and not is_stowed(candidate):
++			taken.append(candidate.id)
++			remove_item(candidate)
++		else:
++			index += 1
++	return taken
++
++
++## A search (GDD 10.2): every piece of contraband is taken, stowed or not.
++func take_all_contraband() -> Array[StringName]:
++	var taken: Array[StringName] = []
++	var index: int = 0
++	while index < items.size():
++		var candidate: Item = items[index]
++		if GameData.as_bool(candidate.record.get("contraband")):
+ 			taken.append(candidate.id)
+ 			remove_item(candidate)
+ 		else:
+@@ -1195,6 +1313,15 @@ func take_visible_contraband() -> Array[StringName]:
+ 	return taken
+ 
+ 
++## The contraband that is not stowed in the glovebox (GDD 10.2: left out).
++func contraband_in_view() -> int:
++	var count: int = 0
++	for candidate: Item in items:
++		if GameData.as_bool(candidate.record.get("contraband")) and not is_stowed(candidate):
++			count += 1
++	return count
++
++
+ ## The indicator comes on: +1 for right, -1 for left, for indicator_time.
+ func indicate(way: int) -> void:
+ 	indicator = way

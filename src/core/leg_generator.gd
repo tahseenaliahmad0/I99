@@ -153,6 +153,8 @@ var _weights: Dictionary = {}
 var _templates: Dictionary = {}
 var _first_within: float = 0.0
 var _beat_shifts: PackedFloat64Array = PackedFloat64Array()
+## Stretches kept for what a boss puts on its road (generate_road).
+var _reserved: Array = []
 var _late_share: float = 0.0
 
 
@@ -174,6 +176,19 @@ static func generate(data: GameData, leg_id: String, act: int, leg_seed: int, mo
 	var generator: LegGenerator = LegGenerator.new()
 	generator._setup(data, data.record("legs", leg_id), act, modifier_id)
 	return generator._generate(leg_id, leg_seed)
+
+
+## A road that is no leg (a boss's, GDD 10.4): `road` gives what a leg's
+## record gives (lanes, divided, density, condition, par_s, beat_weights) and
+## its own length_m and tail_m; density_mult scales its traffic. `reserved`
+## are stretches { kind, s, length, lane } kept for what the boss puts there:
+## no beat is laid in one, no vehicle is beside him in one, and the planned
+## line runs through it in `lane`.
+static func generate_road(data: GameData, road: Dictionary, act: int, road_seed: int, reserved: Array = []) -> Dictionary:
+	var generator: LegGenerator = LegGenerator.new()
+	generator._setup(data, road, act, "")
+	generator._reserved = reserved
+	return generator._generate(GameData.as_string(road.get("id")), road_seed)
 
 
 ## The plan as text, the same for the same plan on every machine (T-GEN-02).
@@ -201,8 +216,10 @@ func _setup(data: GameData, leg: Dictionary, act: int, modifier_id: String) -> v
 	_divided = GameData.as_bool(_leg.get("divided"), true)
 	_par = _tuning.fi("gear_speeds", 2)
 	_par_ms = _par * KMH_TO_MS
-	_leg_length = _tuning.f("leg_length")
-	_beats_end = _leg_length - _tuning.f("leg_tail")
+	# A leg is leg_length long with leg_tail of it for the Exit; a road that
+	# is no leg says its own.
+	_leg_length = GameData.as_float(_leg.get("length_m"), _tuning.f("leg_length"))
+	_beats_end = _leg_length - GameData.as_float(_leg.get("tail_m"), _tuning.f("leg_tail"))
 	_margin = _tuning.f("gen_block_margin")
 	_change_length = _tuning.f("gen_lane_change")
 	_clearance = _tuning.f("gen_spawn_clearance")
@@ -225,7 +242,7 @@ func _generate(leg_id: String, leg_seed: int) -> Dictionary:
 	_prepare_beat_types()
 	var kind: String = GameData.as_string(GameData.as_dict(_leg.get("special")).get("kind"))
 	# Two-lane and Motorcade take their traffic from their encounter (GDD 9.3).
-	_density_goal = 0 if kind == "two_lane" or kind == "motorcade" else density_target(_data, leg_id, _act)
+	_density_goal = 0 if kind == "two_lane" or kind == "motorcade" else _own_density()
 	var attempts: int = _tuning.i("gen_max_attempts")
 	var total: int = attempts + _tuning.i("gen_sparse_attempts")
 	var attempt: int = 0
@@ -239,6 +256,12 @@ func _generate(leg_id: String, leg_seed: int) -> Dictionary:
 		push_error("LegGenerator: no leg '%s' for seed %d in %d draws" % [leg_id, leg_seed, total])
 		_reset()
 	return _to_plan(leg_id, leg_seed, attempt)
+
+
+## Vehicles this road should carry (for a leg: density_target).
+func _own_density() -> int:
+	var per_km: float = GameData.as_float(_leg.get("density")) + _tuning.f("traffic_per_act") * float(_act - 1)
+	return roundi(per_km * GameData.as_float(_leg.get("density_mult"), 1.0) * _beats_end / 1000.0)
 
 
 func _to_plan(leg_id: String, leg_seed: int, attempts: int) -> Dictionary:
@@ -344,6 +367,7 @@ func _draw() -> bool:
 		if not _draw_two_lane(special):
 			return false
 	else:
+		_keep_reserved()
 		if kind == "roadworks":
 			_reserve_chicanes(special)
 		if not _reserve_modifier_zone():
@@ -976,9 +1000,32 @@ func _out_of_bounds(planned: Planned) -> bool:
 	if planned.direction < 0:
 		return false
 	for block: Vector3 in _blocks_of(planned):
-		if block.z > _beats_end or _in_calm(block.y, block.z):
+		if block.z > _beats_end or _in_calm(block.y, block.z) or _in_reserved(block.y, block.z):
 			return true
 	return false
+
+
+## True where a boss has kept the road for itself.
+func _in_reserved(from: float, to: float) -> bool:
+	for entry: Variant in _reserved:
+		var zone: Dictionary = GameData.as_dict(entry)
+		var start: float = GameData.as_float(zone.get("s"))
+		if to > start and from < start + GameData.as_float(zone.get("length")):
+			return true
+	return false
+
+
+## The reserved stretches become zones of the plan: the planned line runs
+## through each in its lane and in no other.
+func _keep_reserved() -> void:
+	for entry: Variant in _reserved:
+		var zone: Dictionary = GameData.as_dict(entry).duplicate(true)
+		var start: float = GameData.as_float(zone.get("s"))
+		var length: float = GameData.as_float(zone.get("length"))
+		_zones.append(zone)
+		for other: int in _lanes:
+			if other != GameData.as_int(zone.get("lane"), _start_lane):
+				_fixed.append(Vector3(float(other), start, start + length))
 
 
 func _in_calm(from: float, to: float) -> bool:

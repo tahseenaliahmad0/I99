@@ -52,11 +52,19 @@ var lat_speed_mult: float = 1.0
 ## Scales the time the car takes to respond sideways (Rain).
 var lat_tau_mult: float = 1.0
 
+## Barriers beside the car (a checkpoint's corridor, GDD 10.2): the x of the
+## one on its left and of the one on its right; -INF and INF where there is
+## none. Set by DriveSim before step().
+var wall_left: float = -INF
+var wall_right: float = INF
+
 # --- What happened this tick -------------------------------------------------
 var on_rumble: bool = false
 var on_shoulder: bool = false
 ## EDGE_LEFT or EDGE_RIGHT when the car touched a barrier or guardrail.
 var edge_touched: int = EDGE_NONE
+## The touch was on a barrier of a corridor.
+var wall_touched: bool = false
 
 var _lane_width: float = 0.0
 var _half_width: float = 0.0
@@ -117,6 +125,9 @@ func reset(lane: int, gear: int) -> void:
 	on_rumble = false
 	on_shoulder = false
 	edge_touched = EDGE_NONE
+	wall_touched = false
+	wall_left = -INF
+	wall_right = INF
 
 
 # --- Geometry ----------------------------------------------------------------
@@ -232,6 +243,7 @@ func _step_speed(dt: float, gear: int, braking: bool) -> void:
 
 func _step_edges() -> void:
 	edge_touched = EDGE_NONE
+	wall_touched = false
 	var right_edge: float = x + _half_width
 	var left_edge: float = x - _half_width
 	var strip_from: float = road_right()
@@ -245,4 +257,17 @@ func _step_edges() -> void:
 	elif left_edge <= left_limit_x():
 		edge_touched = EDGE_LEFT
 		x = left_limit_x() + _half_width + _pushback
+		v_lat = 0.0
+	elif right_edge >= wall_right or left_edge <= wall_left:
+		# A corridor's barrier: pushed clear of it, but never into the other
+		# one: at most to the middle of what room the two leave him.
+		var slack: float = maxf((wall_right - wall_left) * 0.5 - _half_width, 0.0)
+		var push: float = minf(_pushback, slack)
+		wall_touched = true
+		if right_edge >= wall_right:
+			edge_touched = EDGE_RIGHT
+			x = wall_right - _half_width - push
+		else:
+			edge_touched = EDGE_LEFT
+			x = wall_left + _half_width + push
 		v_lat = 0.0

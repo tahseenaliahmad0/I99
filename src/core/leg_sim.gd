@@ -51,6 +51,11 @@ var night: bool = false
 ## and how far he can see (INF: no dust).
 var dust_rate: float = 0.0
 var dust_visibility: float = INF
+## What one sweep of the wipers smears across the glass (the Storm), as a
+## share of the windscreen.
+var wipe_haze: float = 0.0
+## How hard this road's gusts push, in m/s.
+var gust_push: float = 0.0
 ## Curve strength now: k of GDD 5.4, signed (+ pushes toward the right shoulder).
 var curve_k: float = 0.0
 ## Seconds until the gust that has been announced (0: none announced).
@@ -141,14 +146,17 @@ func begin(leg_plan: Dictionary) -> void:
 	var condition: String = GameData.as_string(plan.get("condition"))
 	raining = condition == "rain"
 	night = condition == "night"
-	dust_rate = 0.0
+	# A plan may bring its own weather (a boss); a modifier brings its own.
+	dust_rate = GameData.as_float(plan.get("window_haze_per_s"))
 	dust_visibility = INF
+	wipe_haze = GameData.as_float(plan.get("wipe_haze"))
+	gust_push = GameData.as_float(plan.get("gust_push"), _data.tuning.f("gust_push"))
 	_wedding_honk = 0.0
 	var modifier_id: String = GameData.as_string(plan.get("modifier"))
 	if not modifier_id.is_empty():
 		var modifier: Dictionary = _data.record("modifiers", modifier_id)
 		_wedding_honk = GameData.as_float(modifier.get("honk_nerves"))
-		dust_rate = GameData.as_float(modifier.get("haze_per_s"))
+		dust_rate = GameData.as_float(modifier.get("haze_per_s"), dust_rate)
 		if modifier.has("visibility_m"):
 			dust_visibility = GameData.as_float(modifier.get("visibility_m"))
 	curve_k = 0.0
@@ -289,8 +297,10 @@ func step_road(dt: float, clock_dt: float = -1.0) -> void:
 		return
 	curve_k = curve_at(_car.s)
 	if gust_tell_left > 0.0:
+		# The tell lasts a whole number of ticks: it is over when less than
+		# half a tick of it is left (a bare countdown ran a tick over).
 		gust_tell_left -= dt
-		if gust_tell_left <= 0.0:
+		if gust_tell_left < dt * 0.5:
 			gust_tell_left = 0.0
 			gust_started = gust_tell_dir
 	if gust_tell_left <= 0.0 and _next_gust < _gusts.size():

@@ -21,6 +21,8 @@ var eye: Vector3 = Vector3.ZERO
 var grip_reference: Vector3 = Vector3.ZERO
 var waypoint: Vector3 = Vector3.ZERO
 var shoulder: Vector3 = Vector3.ZERO
+## Where his hand holds a phone to his ear (GDD 10.4).
+var ear: Vector3 = Vector3.ZERO
 
 var center: Vector2 = Vector2.ZERO
 var px_per_rad: float = 1.0
@@ -47,6 +49,7 @@ func configure(data: GameData) -> void:
 	grip_reference = GameData.as_vec3(points.get("G"))
 	waypoint = GameData.as_vec3(points.get("W"))
 	shoulder = GameData.as_vec3(points.get("shoulder"))
+	ear = GameData.as_vec3(points.get("ear"))
 
 	var ref_w: float = tuning.f("reference_width")
 	var ref_h: float = tuning.f("reference_height")
