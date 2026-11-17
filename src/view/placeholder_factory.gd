@@ -11,6 +11,14 @@ extends RefCounted
 ## quad [width, height]; label [pixel size] with a "text" key.
 
 const WORLD_SHADER: Shader = preload("res://shaders/world_bend.gdshader")
+## The global shader parameters of the world shader (project settings).
+const GLOBAL_BEND: StringName = &"world_bend"
+const GLOBAL_BEND_ORIGIN: StringName = &"world_bend_origin_z"
+const GLOBAL_FOG_COLOR: StringName = &"world_fog_color"
+const GLOBAL_FOG_NEAR: StringName = &"world_fog_near"
+const GLOBAL_FOG_FAR: StringName = &"world_fog_far"
+## A distance no road reaches: fog that begins here hides nothing.
+const NO_FOG: float = 1.0e9
 
 var _registry: Dictionary = {}
 var _materials: Dictionary = {}
@@ -18,6 +26,9 @@ var _materials: Dictionary = {}
 var _world_materials: Dictionary = {}
 var _bend: float = 0.0
 var _bend_origin_z: float = 0.0
+var _fog_color: Color = Color.BLACK
+var _fog_near: float = NO_FOG
+var _fog_far: float = NO_FOG * 2.0
 
 
 func _init(data: GameData) -> void:
@@ -32,45 +43,63 @@ func has(id: String) -> bool:
 ## shader so it follows the curve of the road (GDD 13.5).
 func make_world(id: String) -> Node3D:
 	var node: Node3D = make(id)
-	_use_world_material(node)
+	_use_world_material(node, false)
+	return node
+
+
+## The same for a light (a head lamp, a tail lamp, a beacon): it shows
+## through the dark and the haze.
+func make_world_light(id: String) -> Node3D:
+	var node: Node3D = make(id)
+	_use_world_material(node, true)
 	return node
 
 
 ## Sets how the world bends this frame: sideways offset per metre ahead,
 ## squared, measured from `origin_z` toward -Z.
 func set_world_bend(bend: float, origin_z: float) -> void:
-	if is_equal_approx(bend, _bend) and is_equal_approx(origin_z, _bend_origin_z):
+	if bend == _bend and origin_z == _bend_origin_z:
 		return
 	_bend = bend
 	_bend_origin_z = origin_z
-	for key: Variant in _world_materials:
-		var material: ShaderMaterial = _world_materials[key]
-		material.set_shader_parameter("bend", bend)
-		material.set_shader_parameter("bend_origin_z", origin_z)
+	RenderingServer.global_shader_parameter_set(GLOBAL_BEND, bend)
+	RenderingServer.global_shader_parameter_set(GLOBAL_BEND_ORIGIN, origin_z)
 
 
-func world_material_for(color: Color) -> ShaderMaterial:
-	var key: String = color.to_html()
+## Sets what hides the distance this frame: everything outside the cabin
+## fades into `color` between `near` and `far` metres. Lights do not.
+func set_world_fog(color: Color, near: float, far: float) -> void:
+	if color == _fog_color and near == _fog_near and far == _fog_far:
+		return
+	_fog_color = color
+	_fog_near = near
+	_fog_far = far
+	RenderingServer.global_shader_parameter_set(GLOBAL_FOG_COLOR, color)
+	RenderingServer.global_shader_parameter_set(GLOBAL_FOG_NEAR, near)
+	RenderingServer.global_shader_parameter_set(GLOBAL_FOG_FAR, far)
+
+
+func world_material_for(color: Color, light: bool = false) -> ShaderMaterial:
+	var key: String = color.to_html() + ("L" if light else "")
 	if _world_materials.has(key):
 		var cached: ShaderMaterial = _world_materials[key]
 		return cached
 	var material: ShaderMaterial = ShaderMaterial.new()
 	material.shader = WORLD_SHADER
 	material.set_shader_parameter("albedo", color)
-	material.set_shader_parameter("bend", _bend)
-	material.set_shader_parameter("bend_origin_z", _bend_origin_z)
+	material.set_shader_parameter("lit", 1.0 if light else 0.0)
 	_world_materials[key] = material
 	return material
 
 
-func _use_world_material(node: Node) -> void:
+func _use_world_material(node: Node, light: bool) -> void:
 	var instance: MeshInstance3D = node as MeshInstance3D
 	if instance != null:
 		var flat: StandardMaterial3D = instance.material_override as StandardMaterial3D
 		if flat != null:
-			instance.material_override = world_material_for(flat.albedo_color)
+			instance.material_override = world_material_for(flat.albedo_color, light)
 	for child: Node in node.get_children():
-		_use_world_material(child)
+		_use_world_material(child, light)
 
 
 ## A new node for this id. Unknown ids are an error and give an empty node.

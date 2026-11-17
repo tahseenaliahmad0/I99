@@ -35,6 +35,15 @@ func reseed(seed_value: int) -> void:
 		_streams[STREAMS[index]] = generator
 
 
+
+## A generator of one's own, seeded: the only way the simulation makes one
+## outside this file (an unseeded generator differs from run to run).
+static func seeded(seed_value: int) -> RandomNumberGenerator:
+	var generator: RandomNumberGenerator = RandomNumberGenerator.new()
+	generator.seed = seed_value
+	return generator
+
+
 ## A new seed from a seed and a salt, the same on every machine. Used for the
 ## four streams and for anything that needs its own repeatable sequence (one
 ## leg of a Telling, the daily Commute).

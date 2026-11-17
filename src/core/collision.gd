@@ -130,7 +130,9 @@ func chain_multiplier(links: int) -> float:
 ## the road's edges (car.edge_touched). `gear` is the engaged gear (0 neutral).
 func step(dt: float, car: CarSim, traffic: TrafficSim, gear: int) -> void:
 	_clear_results()
-	immunity_left = maxf(immunity_left - dt, 0.0)
+	immunity_left -= dt
+	if immunity_left < dt * 0.5:
+		immunity_left = 0.0
 	since_close_call += dt
 
 	if car.edge_touched != CarSim.EDGE_NONE and immunity_left <= 0.0:

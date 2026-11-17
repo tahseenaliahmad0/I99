@@ -40,3 +40,9 @@ sign.curve.left,,,true
 sign.curve.right,,,true
 sign.motorcade.keep_back,,,true
 sign.roadworks,,,true
+sign.side_road,,,true
+hud.leg,,,true
+hud.suspicion,,,true
+hud.sight,,,true
+hud.glare,,,true
+hud.blur,,,true

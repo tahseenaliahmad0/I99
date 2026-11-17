@@ -160,20 +160,36 @@ func anchor_id(index: int) -> StringName:
 
 
 func anchor_position(index: int) -> Vector3:
+	if not _is_anchor(index):
+		return Vector3.ZERO
 	return _anchor_pos[index]
 
 
 ## Where an anchor sits in pointer space.
 func anchor_pointer(index: int) -> Vector2:
+	if not _is_anchor(index):
+		return Vector2.ZERO
 	return _anchor_pointer[index]
 
 
 func set_anchor_active(index: int, active: bool) -> void:
+	if not _is_anchor(index):
+		return
 	_anchor_active[index] = 1 if active else 0
 
 
 func is_anchor_active(index: int) -> bool:
+	if not _is_anchor(index):
+		return false
 	return _anchor_active[index] != 0
+
+
+## NO_ANCHOR (-1) is not an index: in an array it would be the last element.
+func _is_anchor(index: int) -> bool:
+	if index >= 0 and index < _anchor_ids.size():
+		return true
+	push_error("HandSim: %d is not an anchor index (0 to %d)" % [index, _anchor_ids.size() - 1])
+	return false
 
 
 func snap_id() -> StringName:

@@ -40,3 +40,9 @@ sign.curve.left,,[BEND <],true
 sign.curve.right,,[BEND >],true
 sign.motorcade.keep_back,,[KEEP BACK 100 M],true
 sign.roadworks,,[ROADWORKS],true
+sign.side_road,,[SIDE ROAD / TWO-LANE],true
+hud.leg,,Leg %s: %s s (par %s),false
+hud.suspicion,,Suspicion %s,false
+hud.sight,,Sight %s m,false
+hud.glare,,Glare %s,false
+hud.blur,,Rain blur %s / haze %s,false

@@ -253,10 +253,14 @@ func _run_one(implementation: Dictionary) -> Dictionary:
 	suite.reset_case()
 	var started: int = Time.get_ticks_msec()
 	suite.before_each()
-	suite.call(method)
+	var returned: Variant = suite.call(method)
 	suite.after_each()
 	var msec: int = Time.get_ticks_msec() - started
 	var failures: PackedStringArray = suite.case_failures().duplicate()
+	# A test that awaits hands back a function state and has run only up to
+	# its first await: whatever it would check after that never happens.
+	if returned is Object and (returned as Object).get_class() == "GDScriptFunctionState":
+		failures.append("the test awaits: tests run in one go and must not await")
 	if _trap.count() > 0:
 		failures.append("%d engine or script error(s) were logged; first: %s" % [_trap.count(), _trap.first()])
 	if suite.case_checks() == 0:

@@ -204,7 +204,9 @@ func step(dt: float) -> void:
 		value = clampf(value + _rate * dt, MIN, MAX)
 		if value >= _snap_at:
 			_snap()
-	snap_left = maxf(snap_left - dt, 0.0)
+	snap_left -= dt
+	if snap_left < dt * 0.5:
+		snap_left = 0.0
 	_tremor_phase = fmod(_tremor_phase + TAU * _tremor_hz * dt, TAU)
 	_refresh_impairments()
 	_step_sleep(dt)

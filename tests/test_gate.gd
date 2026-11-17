@@ -227,6 +227,23 @@ func test_gate_02() -> void:
 	_gate.step(DT, Vector2(0.0, -_unit * 0.5), 1.0)
 	check_near(_gate.lever.y, 0.5, 0.000001, "after gate_grind_lock it moves again")
 
+	# The lock lasts gate_grind_lock to the tick: a hand that keeps pulling
+	# is ignored for exactly that many ticks and answered on the next.
+	var lock_ticks: int = roundi(lock / DT)
+	_gate.reset(GearGate.NEUTRAL)
+	_gate.press()
+	_drag(Vector2(0.0, mid))
+	_gate.release()
+	_gate.press()
+	var ignored: int = 0
+	for _tick: int in lock_ticks * 2:
+		_gate.begin_tick()
+		_gate.step(DT, Vector2(0.0, -_unit * 0.01), 1.0)
+		if not _gate.lever.is_equal_approx(Vector2.ZERO):
+			break
+		ignored += 1
+	check_eq(ignored, lock_ticks, "the lock lasts gate_grind_lock exactly: %d ticks" % lock_ticks)
+
 	# Pushed into a wall: toward the walled-off fifth gear. The lever first
 	# crosses its own channel (half a channel width), then meets the wall.
 	var half_width: float = tuning.f("gate_channel_half_width")

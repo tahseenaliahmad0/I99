@@ -26,9 +26,8 @@ static func leg_pool(data: GameData, act: int) -> PackedStringArray:
 ## (1 to 3): [ { "leg", "modifier", "seed", "par_s" }, ... ]. The two branches
 ## are different leg types. `modifier` is "" for none.
 static func fork(data: GameData, telling_seed: int, act: int, leg_index: int) -> Array[Dictionary]:
-	var random: RandomNumberGenerator = RandomNumberGenerator.new()
 	var slot: int = (act - 1) * LEGS_PER_ACT + leg_index
-	random.seed = Rng.derive(telling_seed, FORK_SALT + slot)
+	var random: RandomNumberGenerator = Rng.seeded(Rng.derive(telling_seed, FORK_SALT + slot))
 	var pool: PackedStringArray = leg_pool(data, act)
 	var chance: float = data.tuning.fi("modifier_chance", clampi(act, 1, ACTS) - 1)
 	var branches: Array[Dictionary] = []

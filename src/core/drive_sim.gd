@@ -569,11 +569,12 @@ func snapshot() -> Dictionary:
 		"glare": encounter.glare,
 		"side_road": encounter.side_road if encounter.kind == "motorcade" else 0,
 		"slip": encounter.slip(),
+		"slip_open": encounter.kind == "motorcade" and encounter.side_road == EncounterSim.SIDE_ROAD_OPEN,
 		"pulled_over": pulled_over,
 		"visibility": visibility(),
 		# Unlit things show only inside what he can see: at night they appear late.
-		"hazards": leg.hazards_near(tuning.f("road_draw_behind"), minf(tuning.f("road_draw_ahead"), visibility())) if leg.active else [],
-		"signs": leg.signs_near(minf(tuning.f("road_draw_ahead"), visibility())) if leg.active else [],
+		"hazards": _hazards_in_view(),
+		"signs": _signs_in_view(),
 		"items": _item_snapshots(),
 		"anchors_in_use": _anchors_in_use(),
 		"vehicles": _vehicle_snapshots(),
@@ -581,6 +582,20 @@ func snapshot() -> Dictionary:
 
 
 ## One small dictionary per vehicle, positions relative to the car.
+func _hazards_in_view() -> Array[Dictionary]:
+	if not leg.active:
+		var none: Array[Dictionary] = []
+		return none
+	return leg.hazards_near(tuning.f("road_draw_behind"), minf(tuning.f("road_draw_ahead"), visibility()))
+
+
+func _signs_in_view() -> Array[Dictionary]:
+	if not leg.active:
+		var none: Array[Dictionary] = []
+		return none
+	return leg.signs_near(minf(tuning.f("road_draw_ahead"), visibility()))
+
+
 func _vehicle_snapshots() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for vehicle: TrafficSim.Vehicle in traffic.vehicles:

@@ -58,6 +58,23 @@ func apply(snapshot: Dictionary) -> void:
 		Lines.format("hud.effects", [", ".join(effect_names)]),
 		Lines.format("hud.tick", [str(snapshot["tick"])]),
 	]
+	if snapshot["leg_active"]:
+		var leg_time: float = snapshot["leg_time"]
+		var leg_par: float = snapshot["leg_par"]
+		rows.append(Lines.format("hud.leg", [str(snapshot["leg"]), "%.0f" % leg_time, "%.0f" % leg_par]))
+	if snapshot["suspicion_watching"]:
+		var suspicion: float = snapshot["suspicion"]
+		rows.append(Lines.format("hud.suspicion", ["%.0f" % suspicion]))
+	var sight: float = snapshot["visibility"]
+	if is_finite(sight):
+		rows.append(Lines.format("hud.sight", ["%.0f" % sight]))
+	var glare: float = snapshot["glare"]
+	if glare > 0.0:
+		rows.append(Lines.format("hud.glare", ["%.0f" % (glare * 100.0)]))
+	var rain_blur: float = snapshot["rain_blur"]
+	var haze: float = snapshot["haze"]
+	if rain_blur > 0.0 or haze > 0.0:
+		rows.append(Lines.format("hud.blur", ["%.2f" % rain_blur, "%.2f" % haze]))
 	if snapshot["eyes_shut"]:
 		rows.append(Lines.get_text("hud.eyes_shut"))
 	_label.text = "\n".join(rows)

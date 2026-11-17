@@ -406,6 +406,31 @@ func _check_broken_tuning_anchors_lines() -> void:
 	_group("car")["gear_speeds"] = [40, 70, 100, 130]
 	_expect("E_RANGE", "gear_speeds", "four gear speeds instead of five")
 
+	# What the code divides by cannot be zero, and the constants the build
+	# added to GDD 15 are as required as the GDD's own.
+	for divisor: String in ["gate_unit", "wheel_max_angle", "bead_max_rate", "reference_height", "hand_speed"]:
+		_reset_fixture()
+		_group("hand_wheel")[divisor] = 0
+		_expect("E_RANGE", divisor, "a zero where the code divides (%s)" % divisor)
+	_reset_fixture()
+	_group("hand_wheel")["camera_fov"] = 0
+	_expect("E_RANGE", "camera_fov", "a field of view of nothing")
+	for added: String in ["gate_grind_lock", "tap_max_time", "hand_free_bounds_min"]:
+		_reset_fixture()
+		_group("hand_wheel").erase(added)
+		_expect("E_MISSING", added, "a missing constant of the build's own (%s)" % added)
+	_reset_fixture()
+	_group("hand_wheel")["flick_max_time"] = "soon"
+	_expect("E_TYPE", "flick_max_time", "a word where a time belongs")
+	_reset_fixture()
+	_group("hand_wheel")["hand_free_bounds_max"] = [1.0]
+	_expect("E_RANGE", "hand_free_bounds_max", "a corner with one number")
+
+	# A control the car always has, and the code names, cannot go missing.
+	_reset_fixture()
+	_list("anchors", "anchors").erase(_record("anchors", "window_crank"))
+	_expect("E_MISSING", "anchors[window_crank]", "a control of GDD 4.6 that is missing")
+
 	_reset_fixture()
 	_group("car")["lane_width"] = "wide"
 	_expect("E_TYPE", "lane_width", "a string where a number belongs")

@@ -717,3 +717,44 @@ Format: `D-NNN (milestone, date) Title` then Context / Decision / Why.
 - **Why.** GDD 9.4, 13.6; GDD 1.5 rule 4 (no signal the document does not
   name).
 
+## D-035 (M4, 2026-11-17) What a leg looks like; the world shader's globals
+
+- **Globals.** The bend of the road and the haze are global shader
+  parameters (`shader_globals` in project.godot: `world_bend`,
+  `world_bend_origin_z`, `world_fog_color`, `world_fog_near`,
+  `world_fog_far`). Any material that uses `world_bend.gdshader` follows
+  them, an artist's scene included. The bend is set exactly (the old guard
+  dropped small changes, so a straight road stayed bent).
+- **Seeing.** What he cannot see fades into the sky's colour between
+  `fog_near_share` of the snapshot's `visibility` and all of it: the dark
+  beyond the headlights on a Night leg, the haze of a dust haze. Lamps
+  (head, tail, indicator, beacon) are drawn through it. Until the Clock is
+  built the sky is the day's colour on other legs.
+- **Slip lane.** The snapshot gives `slip` (from where to where along the
+  leg) and `slip_open` (the car's road is one lane wider now). The road is
+  drawn as before and after, the slip lane with its own line, strip,
+  shoulder and rail on top, and the main rail's pieces are left out beside
+  it. The guardrail is drawn in `rail_period` pieces for that reason.
+  Taking the side road rebuilds the road in one frame: the main road is
+  gone at once. Drawing the two roads parting is left for M10.
+- **Signs** are a post inside the rail with a Label3D text in square
+  brackets from the line table; a text does not bend with the world shader,
+  so it is moved by hand. The last car of the motorcade carries its sign.
+- **Indicators** blink on each vehicle's own clock, lit from the first frame
+  of a signal. A police car's beacon blinks at `signal_blink_hz`, under the
+  three flashes a second GDD 16.4 allows.
+- **Command line.** `--leg=<id>[,act[,modifier]]` starts that leg in third
+  gear, and the next seed of it when it ends. `--bot=<anything>` holds the
+  car on the plan's line (lane middles; cones in a chicane get hit) until
+  the DriverBot of GDD 13.8 exists (M11).
+- **Review findings applied here** (M2 views, M1 rules): indicators' clock;
+  vehicle views checked against the vehicle's type; lane dashes centred on
+  the lane boundaries; the purity lint asks the engine whether a core
+  class is a Node and knows frame counters, machine facts and generators
+  made outside rng.gd (`Rng.seeded` is the one way to make one);
+  countdowns (grind lock, hit immunity, Snap, hot glass) end on their last
+  tick instead of one later; the test runner fails a test that awaits;
+  whole-number settings load back; the hand's anchor accessors refuse an
+  index that is not an anchor; the validator knows the M1 constants,
+  refuses zero where the code divides, and requires the controls of GDD 4.6.
+

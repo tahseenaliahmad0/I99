@@ -157,7 +157,10 @@ func begin_tick() -> void:
 ## while the lever is held; `speed_mult` slows the lever (slipping clutch).
 func step(dt: float, pointer_delta: Vector2, speed_mult: float = 1.0) -> void:
 	if lock_left > 0.0:
-		lock_left = maxf(lock_left - dt, 0.0)
+		lock_left -= dt
+		# What is left of a countdown after its last tick is rounding, not time.
+		if lock_left < dt * 0.5:
+			lock_left = 0.0
 		return
 	if not held:
 		return

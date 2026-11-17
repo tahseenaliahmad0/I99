@@ -541,7 +541,9 @@ func step(dt: float) -> void:
 
 	var haze_rate: float = 0.0
 	for candidate: Item in items:
-		candidate.hot_left = maxf(candidate.hot_left - dt, 0.0)
+		candidate.hot_left -= dt
+		if candidate.hot_left < dt * 0.5:
+			candidate.hot_left = 0.0
 		for take: Variant in GameData.as_array(candidate.record.get("takes")):
 			var entry: Dictionary = GameData.as_dict(take)
 			if GameData.as_string(entry.get("effect")) != HAZE_RATE:

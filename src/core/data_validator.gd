@@ -45,6 +45,8 @@ const REQUIRED_RECORDS: Dictionary = {
 	"modifiers": ["crosswind", "potholes", "sheep", "wedding", "melon_truck", "dust_haze"],
 	"vehicles": ["car", "taxi", "pickup", "minibus", "truck", "tanker", "tuk_tuk"],
 	"faults": ["rattle", "cracked_windscreen", "dead_headlight", "pulling_steering", "slipping_clutch", "stuck_wiper", "cracked_mirror"],
+	# The controls that are always in the car (GDD 4.6) and that the code names.
+	"anchors": ["gear_lever", "horn", "wiper_stalk", "indicator_stalk", "headlight_knob", "hazard_button", "radio", "window_crank", "glovebox", "visor", "face"],
 }
 const BEAT_TYPES: PackedStringArray = ["CALM", "CLUSTER", "SLOWPOKE", "MERGE", "CURVE", "GUST", "HAZARD", "SPECIAL"]
 const HECKLE_TYPES: PackedStringArray = ["TWIST", "DARE", "DOUBT", "QUESTION", "ORDER", "FIB"]
@@ -113,6 +115,11 @@ static func _num(minimum: float = -INF, maximum: float = INF) -> Dictionary:
 
 static func _int(minimum: float = -INF, maximum: float = INF) -> Dictionary:
 	return {"t": "int", "min": minimum, "max": maximum}
+
+
+## A number greater than `minimum`: for what the code divides by.
+static func _above(minimum: float = 0.0) -> Dictionary:
+	return {"t": "num", "min": minimum, "max": INF, "open": true}
 
 
 static func _bool() -> Dictionary:
@@ -388,14 +395,25 @@ func _sfx_schema() -> Dictionary:
 func _tuning_schema() -> Dictionary:
 	var n: Dictionary = _num()
 	var pos: Dictionary = _num(0.0)
+	# What the code divides by, or takes as a rate: never zero.
+	var above: Dictionary = _above(0.0)
 	return {
 		# Hand and wheel
-		"hand_speed": pos, "hand_left_side_mult": pos, "hand_pound_mult": pos,
+		"hand_speed": above, "hand_left_side_mult": pos, "hand_pound_mult": pos,
 		"anchor_snap_radius": pos, "input_buffer": pos, "grip_zone_half_width": pos,
-		"wheel_max_angle": pos, "steer_deg_per_px": pos, "wheel_smoothing": pos,
-		"wheel_return_rate": pos, "gate_unit": pos, "gate_channel_half_width": pos,
+		"wheel_max_angle": above, "steer_deg_per_px": pos, "wheel_smoothing": pos,
+		"wheel_return_rate": pos, "gate_unit": above, "gate_channel_half_width": pos,
 		"glance_start": pos, "glance_gain": pos, "glance_max_yaw": pos,
 		"glance_max_pitch": pos, "eyes_down_pitch": pos,
+		# The hand, the pointer, gestures and the gate as built (M1)
+		"hand_plane_distance": above, "hand_free_bounds_min": _list_n(n, 2), "hand_free_bounds_max": _list_n(n, 2),
+		"hand_arrive_epsilon": above, "wheel_radius": above, "glance_smoothing": pos,
+		"camera_fov": _num(1.0, 179.0), "reference_width": above, "reference_height": above,
+		"pointer_yaw_min": n, "pointer_yaw_max": n, "pointer_pitch_min": n, "pointer_pitch_max": n,
+		"tap_max_time": above, "flick_min_distance": above, "flick_max_time": above,
+		"bead_max_rate": above, "crank_min_step": above,
+		"gate_engage_radius": above, "gate_grind_min": pos, "gate_grind_max": pos,
+		"gate_wall_push": pos, "gate_grind_nerves": pos, "gate_grind_lock": pos,
 		# Car
 		"lane_width": pos, "car_width": pos, "car_length": pos,
 		"leg_length": pos, "leg_tail": pos,
@@ -900,6 +918,8 @@ func _check_range(number: float, spec: Dictionary, file_label: String, where: St
 	var maximum: float = GameData.as_float(spec.get("max"), INF)
 	if number < minimum or number > maximum:
 		_err("E_RANGE", file_label, where, "%s is outside %s to %s" % [str(number), str(minimum), str(maximum)])
+	elif GameData.as_bool(spec.get("open")) and number <= minimum:
+		_err("E_RANGE", file_label, where, "%s must be more than %s" % [str(number), str(minimum)])
 
 
 func _exists(target: String, id: String) -> bool:

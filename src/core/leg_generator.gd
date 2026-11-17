@@ -92,7 +92,7 @@ class Planned:
 
 var _data: GameData
 var _tuning: Tuning
-var _random: RandomNumberGenerator = RandomNumberGenerator.new()
+var _random: RandomNumberGenerator = Rng.seeded(0)
 
 var _leg: Dictionary = {}
 var _modifier: Dictionary = {}
