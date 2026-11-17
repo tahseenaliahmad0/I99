@@ -137,6 +137,7 @@
     "nod_wake_nerves": 15,
     "tunnel_min_view": 0.7,
     "shoulder_nerves_rate": 1.0,
+    "cut_off_nerves": 5,
     "haze_clear_rate": 0.03,
     "clean_leg_nerves": -10
   },
@@ -450,6 +451,7 @@
     "nod_wake_nerves": "points",
     "tunnel_min_view": "share of the view left at Nerves 100",
     "shoulder_nerves_rate": "points per s",
+    "cut_off_nerves": "points for being cut off (GDD 6.1)",
     "haze_clear_rate": "share per s",
     "clean_leg_nerves": "points",
     "horn_range": "m ahead in his lane",

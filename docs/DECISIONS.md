@@ -635,3 +635,24 @@ Format: `D-NNN (milestone, date) Title` then Context / Decision / Why.
   through whatever he got through and never touches him. When the Patrol is
   over it falls back like any other vehicle.
 - **Why.** GDD 6.5 gives the amounts; GDD 1.5 for the rest.
+
+## D-032 (M4, 2026-11-17) The Tailgater: what the GDD leaves open
+
+- **Arrival.** He appears `spawn_behind_m` behind `tell_s` before he is on
+  the bumper (headlights in the mirror), and is on it `at_s` into the leg,
+  `gap_m` behind the rear bumper, driving in the player's tracks.
+- **Nerves.** +`nerves_per_s` while he is behind in the player's lane, on
+  top of what any vehicle that near adds (GDD 6.1).
+- **Ramming.** Each time the brake is pressed while he is on the bumper he
+  rams: an ordinary scrape from behind through Collision (one lamp, +10
+  Nerves, 20% off the speed). Slowing down with the gears is not braking.
+  He cannot ram again until the hit's immunity and a second more have
+  passed.
+- **Leaving.** When the car's middle is in another lane he keeps his own,
+  level with where he was, and adds nothing. Back within `lane_hold_s`: he
+  is on the bumper again. Held for `lane_hold_s`: he passes at
+  `pass_speed_kmh` over the player's speed, cuts in `brake_gap_m` ahead,
+  sheds `brake_drop_kmh` in `brake_s` once (being cut off is +5 Nerves,
+  GDD 6.1) and drives away. A driver who simply holds third gear is not hit
+  by it. `gear_hold_s` unbroken seconds in fourth or fifth, or `duration_s`
+  on the bumper, and he falls back instead: no pass, no brake.

@@ -370,6 +370,183 @@ func test_leg_05() -> void:
 	check_eq(inside.cone_hits, 0, "%s m off the middle it still passes clean" % str(room - 0.05))
 
 
+## T-LEG-06: Tailgater: a driver sits on the bumper for 40 s, adds 1 Nerves
+## per second and rams (a scrape from behind) if the player brakes; he leaves
+## when the player changes lane and holds it for 3 s, then passes and brakes
+## hard in front once; fourth gear for 10 s also loses him.
+func test_leg_06() -> void:
+	var leg: Dictionary = data.record("legs", "tailgater")
+	var special: Dictionary = GameData.as_dict(leg.get("special"))
+	var at: float = GameData.as_float(special.get("at_s"))
+	var tell: float = GameData.as_float(special.get("tell_s"))
+	var duration: float = GameData.as_float(special.get("duration_s"))
+	var gap: float = GameData.as_float(special.get("gap_m"))
+	check_near(GameData.as_float(leg.get("par_s")), 90.0, 0.000001, "GDD 9.1: Tailgater has a par of 90 s")
+	check_near(duration, 40.0, 0.000001, "a driver sits on the bumper for 40 s")
+	check_near(GameData.as_float(special.get("nerves_per_s")), 1.0, 0.000001, "GDD 6.1: a Tailgater behind is +1 Nerves per second")
+	check_near(GameData.as_float(special.get("lane_hold_s")), 3.0, 0.000001, "GDD 9.3: a lane change held for 3 s loses him")
+	check_eq(GameData.as_int(special.get("gear")), 4, "so does fourth gear")
+	check_near(GameData.as_float(special.get("gear_hold_s")), 10.0, 0.000001, "held for 10 s")
+	check(not GameData.as_array(leg.get("acts")).has(1.0), "there is no Tailgater in Act 1")
+
+	# Doing nothing: he arrives, sits there for 40 s, and gives up.
+	_begin_quiet("tailgater", 2, 71)
+	var seen_from: float = -1.0
+	var on_from: float = -1.0
+	var gone_at: float = -1.0
+	var worst_gap: float = 0.0
+	var on_ticks: int = 0
+	var nerves_at_20: float = 0.0
+	var nerves_at_50: float = 0.0
+	var appeared_behind: float = 0.0
+	while _sim.leg.active and _sim.leg.time < at + duration + 8.0:
+		_hold_lane_and_step(1)
+		var now: float = _sim.leg.time
+		var driver: TrafficSim.Vehicle = _sim.encounter.tailgater()
+		if driver != null and seen_from < 0.0:
+			seen_from = now
+			appeared_behind = _sim.car.s - driver.s
+		if _sim.encounter.tail_phase == EncounterSim.TAIL_ON_BUMPER:
+			if on_from < 0.0:
+				on_from = now
+			on_ticks += 1
+			if driver != null:
+				var behind: float = (_sim.car.s - _sim.car.length() * 0.5) - (driver.s + driver.half_length)
+				worst_gap = maxf(worst_gap, absf(behind - gap))
+		if _sim.encounter.tail_phase == EncounterSim.TAIL_GONE and gone_at < 0.0:
+			gone_at = now
+		if absf(now - 20.0) < DT * 0.5:
+			nerves_at_20 = _sim.nerves.value
+		if absf(now - 50.0) < DT * 0.5:
+			nerves_at_50 = _sim.nerves.value
+	check_near(seen_from, at - tell, 2.0 * DT, "he shows up %s s before he is on the bumper (%s s)" % [str(tell), str(snappedf(seen_from, 0.01))])
+	check_near(appeared_behind, GameData.as_float(special.get("spawn_behind_m")), 2.0, "well behind, where the mirror shows him")
+	check_near(on_from, at, 2.0 * DT, "he is on the bumper %s s into the leg" % str(at))
+	check_near(gone_at - on_from, duration, 2.0 * DT, "and sits there for 40 s (%s s)" % str(snappedf(gone_at - on_from, 0.01)))
+	check(worst_gap < 0.2, "%s m behind his bumper, in his tracks (never more than %s m off)" % [str(gap), str(snappedf(worst_gap, 0.01))])
+	var per_second: float = (nerves_at_50 - nerves_at_20) / 30.0
+	check_near(per_second, GameData.as_float(special.get("nerves_per_s")) + tuning.f("traffic_rate"), 0.01,
+			"he adds 1 Nerves per second, on top of what any vehicle that near adds (%s a second)" % str(snappedf(per_second, 0.001)))
+	check_eq(_sim.faults.lamps, 0, "left alone, he never touches the car")
+	check(not _sim.encounter.active, "then the encounter is over")
+	check(not _has_event_named("hit"), "with no hit")
+
+	# He brakes: a scrape from behind.
+	_begin_quiet("tailgater", 2, 71)
+	_drive_quiet_until(20.0, 1)
+	var driver: TrafficSim.Vehicle = _sim.encounter.tailgater()
+	if not check(driver != null and _sim.encounter.tail_phase == EncounterSim.TAIL_ON_BUMPER, "(at 20 s he is on the bumper)"):
+		return
+	var driver_id: int = driver.id
+	_events = []
+	var nerves_before: float = _sim.nerves.value
+	_input.rmb = true
+	_drive_quiet_until(20.25, 1)
+	_input.rmb = false
+	_drive_quiet_until(20.5, 1)
+	var hits: Array[Dictionary] = _events_named("hit")
+	if check_eq(hits.size(), 1, "a touch of the brake and he rams: one hit"):
+		check_eq(GameData.as_int(hits[0].get("kind")), int(Collision.Hit.SCRAPE), "a scrape")
+		check_eq(GameData.as_int(hits[0].get("vehicle")), driver_id, "by the driver behind")
+	check_eq(_sim.faults.lamps, int(tuning.fi("hit_lamps", 0)), "one lamp")
+	check(_sim.nerves.value - nerves_before >= tuning.fi("hit_nerves", 0), "and +10 Nerves")
+	driver = _sim.encounter.tailgater()
+	check(driver != null and driver.s < _sim.car.s, "it came from behind: he is still behind the car")
+	_drive_quiet_until(23.5, 1)
+	check_eq(_sim.encounter.tail_phase, EncounterSim.TAIL_ON_BUMPER, "afterwards he is back on the bumper")
+	_input.rmb = true
+	_drive_quiet_until(23.7, 1)
+	_input.rmb = false
+	_drive_quiet_until(24.5, 1)
+	check_eq(_sim.faults.lamps, 2 * int(tuning.fi("hit_lamps", 0)), "braking again is rammed again")
+	# Slowing down without the brake is not braking.
+	_begin_quiet("tailgater", 2, 71)
+	_drive_quiet_until(20.0, 1)
+	_sim.gate.reset(2)
+	_drive_quiet_until(26.0, 1)
+	check_eq(_sim.faults.lamps, 0, "dropping to second gear is not braking: he does not ram")
+	check_eq(_sim.encounter.tail_phase, EncounterSim.TAIL_ON_BUMPER, "and he stays on the bumper")
+
+	# A lane change that is not held does not lose him.
+	_begin_quiet("tailgater", 2, 71)
+	_drive_quiet_until(20.0, 1)
+	_drive_quiet_until(22.0, 2)
+	driver = _sim.encounter.tailgater()
+	check(driver != null and absf(driver.x - _sim.traffic.lane_center(1)) < 0.01, "when he changes lane the driver behind keeps his own")
+	check_near(_sim.encounter.nerves_rate, 0.0, 0.000001, "and is no longer on his bumper: nothing is added to his Nerves")
+	_drive_quiet_until(25.0, 1)
+	check_eq(_sim.encounter.tail_phase, EncounterSim.TAIL_ON_BUMPER, "back in the lane after 2 s, he has him on the bumper again")
+	# Held for 3 s: he passes, cuts in and brakes hard once.
+	_events = []
+	var changed_at: float = _sim.leg.time
+	var passing_from: float = -1.0
+	var braking_from: float = -1.0
+	var cut_offs: int = 0
+	var slowest: float = INF
+	var speed_at_brake: float = 0.0
+	var gap_at_brake: float = 0.0
+	var nearest: float = INF
+	var nerves_cut: float = 0.0
+	while _sim.encounter.active and _sim.leg.time < changed_at + 20.0:
+		var nerves_tick: float = _sim.nerves.value
+		_hold_lane_and_step(2)
+		driver = _sim.encounter.tailgater()
+		if _sim.encounter.tail_phase == EncounterSim.TAIL_PASSING and passing_from < 0.0:
+			passing_from = _sim.leg.time
+		if _sim.encounter.cut_off:
+			cut_offs += 1
+			nerves_cut = _sim.nerves.value - nerves_tick
+		if _sim.encounter.tail_phase == EncounterSim.TAIL_BRAKING and driver != null:
+			if braking_from < 0.0:
+				braking_from = _sim.leg.time
+				speed_at_brake = _sim.car.speed
+				gap_at_brake = (driver.s - driver.half_length) - (_sim.car.s + _sim.car.length() * 0.5)
+				check(absf(driver.x - _sim.car.x) < 0.01, "he is in the player's lane when he brakes")
+			slowest = minf(slowest, driver.speed)
+			nearest = minf(nearest, (driver.s - driver.half_length) - (_sim.car.s + _sim.car.length() * 0.5))
+	check_near(passing_from - changed_at, GameData.as_float(special.get("lane_hold_s")), 3.0 * DT, "3 s after the lane change he pulls out to pass (%s s)" % str(snappedf(passing_from - changed_at, 0.01)))
+	check(braking_from > passing_from, "he passes, and then brakes in front")
+	check_near(gap_at_brake, GameData.as_float(special.get("brake_gap_m")), 0.5, "%s m ahead of his bumper" % str(GameData.as_float(special.get("brake_gap_m"))))
+	check_near(speed_at_brake - slowest, GameData.as_float(special.get("brake_drop_kmh")), 1.0, "hard: he sheds 40 km/h")
+	check_eq(cut_offs, 1, "once")
+	check_near(nerves_cut, tuning.f("cut_off_nerves"), 0.05, "being cut off is +5 Nerves (GDD 6.1)")
+	check(nearest > 0.5, "a driver who holds third gear is not hit (nearest %s m)" % str(snappedf(nearest, 0.1)))
+	check_eq(_sim.faults.lamps, 0, "no lamp is lit")
+	check(not _sim.encounter.active and _sim.encounter.tail_phase == EncounterSim.TAIL_GONE, "and then he is gone")
+	check(_sim.encounter.tailgater() == null, "nobody is on the bumper any more")
+
+	# Fourth gear for 10 s also loses him; 9 s do not.
+	_begin_quiet("tailgater", 2, 71)
+	_drive_quiet_until(20.0, 1)
+	_sim.gate.reset(4)
+	_drive_quiet_until(29.0, 1)
+	check_eq(_sim.encounter.tail_phase, EncounterSim.TAIL_ON_BUMPER, "after 9 s of fourth gear he is still there")
+	_drive_quiet_until(30.2, 1)
+	check_eq(_sim.encounter.tail_phase, EncounterSim.TAIL_GONE, "after 10 s he is lost")
+	check(not _sim.encounter.cut_off and not _has_event_named("hit"), "without a pass, a brake or a touch")
+	_begin_quiet("tailgater", 2, 71)
+	_drive_quiet_until(20.0, 1)
+	_sim.gate.reset(4)
+	_drive_quiet_until(29.0, 1)
+	_sim.gate.reset(3)
+	_drive_quiet_until(31.0, 1)
+	_sim.gate.reset(4)
+	_drive_quiet_until(40.0, 1)
+	check_eq(_sim.encounter.tail_phase, EncounterSim.TAIL_ON_BUMPER, "the 10 s must be unbroken: 9 s, third, and 9 s more do not lose him")
+
+	# Other legs have no Tailgater; the whole leg at par with its traffic lights no lamp.
+	_sim = DriveSim.new(fresh_data())
+	_events = []
+	var plan: Dictionary = _begin("tailgater", 3, 72)
+	var log: DriveLog = _drive(plan)
+	check_near(log.seconds, 90.0, 0.05, "in third gear on the plan's line the leg takes 90 s: par")
+	check_eq(_sim.faults.lamps, 0, "and lights no lamp, Tailgater and all")
+	_sim = DriveSim.new(fresh_data())
+	_begin("open_road", 2, 72)
+	_drive_to(LegGenerator.generate(data, "open_road", 2, 72, ""), 900.0)
+	check(_sim.encounter.tailgater() == null and not _sim.encounter.active, "the Open road has no Tailgater")
+
+
 ## T-LEG-07: Patrol: a police car follows for patrol_duration; blue lights
 ## show in the mirror 3 s before Suspicion starts, about 20 s into the leg; at
 ## 100 Suspicion he is pulled over and pays by licence (fine) or banknotes
@@ -679,6 +856,49 @@ func _response_time() -> float:
 	if not check(target > 0.0 and reached > 0.0 and reached < 1.0, "the car answers the wheel (%s of full sideways speed after 0.2 s)" % str(snappedf(reached, 0.001))):
 		return 1.0
 	return -(float(ticks) * DT) / log(1.0 - reached)
+
+
+# --- Encounters on an empty road ---------------------------------------------
+
+## Starts a leg with nothing on the road but its encounter: no traffic, no
+## hazards, no bends, no gusts.
+func _begin_quiet(leg_id: String, act: int, leg_seed: int) -> Dictionary:
+	_sim = DriveSim.new(fresh_data())
+	_input = DriveInput.new()
+	_events = []
+	var plan: Dictionary = LegGenerator.generate(data, leg_id, act, leg_seed, "")
+	plan["spawns"] = []
+	plan["hazards"] = []
+	plan["curves"] = []
+	plan["gusts"] = []
+	plan["zones"] = []
+	_sim.gate.reset(3)
+	_sim.begin_leg(plan)
+	_checker.load_plan(plan)
+	_collect()
+	return plan
+
+
+func _hold_lane_and_step(lane: int) -> void:
+	_sim.car.x = _sim.car.lane_center(lane)
+	_sim.step(_input)
+	_collect()
+
+
+## Steps until the leg's clock reads `seconds`, the car held in `lane`.
+func _drive_quiet_until(seconds: float, lane: int) -> void:
+	var guard: int = int(300.0 / DT)
+	while _sim.leg.time < seconds - DT * 0.5 and _sim.leg.active and guard > 0:
+		guard -= 1
+		_hold_lane_and_step(lane)
+
+
+func _events_named(type: String) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for event: Dictionary in _events:
+		if GameData.as_string(event.get("type")) == type:
+			out.append(event)
+	return out
 
 
 # --- The law -----------------------------------------------------------------

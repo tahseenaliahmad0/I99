@@ -323,8 +323,10 @@ func _step_leg_road() -> void:
 func _step_encounter() -> void:
 	if pulled_over or not leg.active:
 		return
-	encounter.step(DT)
+	encounter.step(DT, _braking, gate.gear)
 	nerves.add_rate(encounter.nerves_rate)
+	if encounter.cut_off:
+		nerves.add(tuning.f("cut_off_nerves"))
 	if encounter.watch_began:
 		suspicion.begin_watch()
 		_emit("suspicion_changed", {"value": 0.0, "watching": true})
@@ -560,6 +562,7 @@ func snapshot() -> Dictionary:
 		"suspicion": suspicion.value,
 		"suspicion_watching": suspicion.watching,
 		"police_lights": encounter.police_lights,
+		"tailgater": encounter.tail_phase if encounter.kind == "tailgater" else 0,
 		"pulled_over": pulled_over,
 		"visibility": visibility(),
 		# Unlit things show only inside what he can see: at night they appear late.
