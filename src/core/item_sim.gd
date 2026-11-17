@@ -45,6 +45,8 @@ var haze: float = 0.0
 var radio: StringName = STATIC
 ## Seconds since the last wiper sweep.
 var since_wipe: float = 0.0
+## True while it rains (the leg says so): only then does the view blur.
+var raining: bool = false
 ## -1 signalling left, +1 right, 0 off.
 var indicator: int = 0
 var indicator_left: float = 0.0
@@ -447,8 +449,11 @@ func _radio_step(direction: int) -> void:
 
 
 ## How blurred the rain has made the view: 0 just after a sweep, 1 after the
-## wiper's clear time (GDD 4.6, 9.1; a stuck wiper clears for less).
+## wiper's clear time (GDD 4.6, 9.1; a stuck wiper clears for less). In dry
+## weather there is nothing to blur it.
 func rain_blur() -> float:
+	if not raining:
+		return 0.0
 	var clear_time: float = _faults.param(&"stuck_wiper", "wiper_clear_s", _wiper_clear)
 	if clear_time <= 0.0:
 		return 1.0

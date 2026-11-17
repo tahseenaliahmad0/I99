@@ -27,10 +27,10 @@ Useful commands:
 
 ## Current state
 
-- **Milestone:** M3 (Nerves and the base cabin): simulation and tests done; cabin view additions next.
-- **Tests:** 27 of 114 passing (M0: 2, M1: 8, M2: 10, M3: 7).
-- **Reviews in flight:** `m1-review` (snapshot a7c3d8a) and `m2-review` (snapshot e197006) run in the background; apply their confirmed findings when they report. M3 has not been reviewed yet.
-- **Next step:** M3 cabin view (lamps, items, HUD), then M4 (legs and encounters).
+- **Milestone:** M4 (legs and encounters): generator, forks and the leg runtime are in; encounters, Suspicion and views are next.
+- **Tests:** 30 of 114 passing (M0: 2, M1: 8, M2: 10, M3: 7, M4: 3).
+- **Reviews in flight:** `m1-review` (snapshot a7c3d8a) and `m2-review` (snapshot e197006) have reported on every lens; their findings are in the workflow journals. `m2-fixes` applies the car and traffic/collision findings in worktrees (branches `fix/m2-car`, `fix/m2-traffic-collision`): merge them when they report. The M1 gesture, test-honesty and determinism findings and the M2 test-honesty and views findings are not applied yet. M3 and M4 have not been reviewed.
+- **Next step:** T-LEG-01..05 through `DriveSim`, then Suspicion and the three encounters.
 
 ## Milestones
 
@@ -78,7 +78,16 @@ Do not start a milestone until every test of the previous one passes (GDD 18).
 - [ ] Review of the M3 core and tests
 
 ### M4 Legs and encounters: T-GEN-01..03, T-SUS-01, T-LEG-01..09
-- [ ] not started
+- [x] Leg, modifier and beat data; validator schemas (`data/legs.json`, `modifiers.json`, `beats.json`)
+- [x] `LegGenerator`: par-frame plan, held-up traffic, never-a-wall line, zones, density (DECISIONS D-026)
+- [x] `RunGenerator`: forks by act (leg pool, modifier chance)
+- [x] `LegSim`: spawns by trigger, planned lane changes, curves, gusts, hazards, flock, melons, leg end
+- [x] `tests/support/leg_checker.gd`: independent rule checker and driven check; T-GEN-01..03 pass
+- [ ] T-LEG-01..05: Open road, Rush, Rain, Night, Roadworks driven through `DriveSim`
+- [ ] `SuspicionSim` and the pull-over (T-SUS-01); Patrol (T-LEG-07); Tailgater (T-LEG-06)
+- [ ] Two-lane (T-LEG-08); Motorcade with its side road (T-LEG-09); wedding honk
+- [ ] Views: hazards, signs, police lights, night and dust visibility, rain; `--leg=` starts a leg
+- [ ] Review of M3 and M4
 
 ### M5 A whole Telling: T-RUN-01..02, T-CLOCK-01, T-STOP-01, T-SAVE-01, T-REPLAY-01
 - [ ] not started

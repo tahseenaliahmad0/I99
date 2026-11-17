@@ -10,3 +10,6 @@ docs_api/
 *.log
 /build/
 /export/
+
+# Agent worktrees
+.claude/

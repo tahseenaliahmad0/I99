@@ -47,6 +47,7 @@ var effects: EffectSystem = EffectSystem.new()
 var nerves: NervesSim = NervesSim.new()
 var faults: FaultSim = FaultSim.new()
 var items: ItemSim = ItemSim.new()
+var leg: LegSim = LegSim.new()
 var rng: Rng = Rng.new()
 
 var tick: int = 0
@@ -89,6 +90,9 @@ var _pound_mult: float = 1.0
 var _shoulder_rate: float = 0.0
 var _traffic_radius: float = 0.0
 var _empty_radius: float = 0.0
+var _rain_response: float = 1.0
+## Lamps lit since the leg began (a clean leg lights none).
+var _leg_lamps_lit: int = 0
 
 
 func _init(game_data: GameData) -> void:
@@ -106,6 +110,7 @@ func _init(game_data: GameData) -> void:
 	nerves.configure(tuning)
 	faults.configure(data)
 	items.configure(data, effects, nerves, traffic, car, faults)
+	leg.configure(data, car, traffic)
 
 	cash = tuning.f("cash_start")
 	_gust_strength = tuning.f("gust_push")
@@ -117,6 +122,7 @@ func _init(game_data: GameData) -> void:
 	_shoulder_rate = tuning.f("shoulder_nerves_rate")
 	_traffic_radius = tuning.f("traffic_radius")
 	_empty_radius = tuning.f("empty_road_radius")
+	_rain_response = tuning.f("rain_response_mult")
 
 	var start_gear: int = tuning.i("start_gear")
 	wheel.reset()
@@ -143,6 +149,7 @@ func step(input: DriveInput) -> void:
 	nerves.begin_tick()
 	effects.begin_tick()
 	items.begin_tick()
+	leg.begin_tick()
 
 	# 1. Gesture recogniser.
 	gesture.step(DT, input.lmb, input.pointer_delta)
@@ -169,6 +176,7 @@ func step(input: DriveInput) -> void:
 	wheel.step(DT, hand.steer_px, steer_sensitivity)
 
 	# 5. Car: gear, speed, sideways motion, drift.
+	_step_leg_road()
 	gate.step(DT, input.pointer_delta if _lever_in_hand else Vector2.ZERO,
 			faults.param(FAULT_CLUTCH, "lever_speed_mult", 1.0))
 	if gate.ground:
@@ -184,11 +192,15 @@ func step(input: DriveInput) -> void:
 	# 6. Traffic.
 	if free_traffic_per_km > 0.0:
 		_step_free_traffic()
+	leg.step_traffic(DT)
 	traffic.step(DT, car.s, car.x, car.speed)
 
 	# 7. Collisions and close calls.
+	var lamps_before: int = faults.lamps
 	collision.step(DT, car, traffic, gate.gear)
 	_apply_collisions()
+	_step_leg_hazards()
+	_leg_lamps_lit += maxi(faults.lamps - lamps_before, 0)
 
 	# 9. Effect timers, Nerves, faults.
 	effects.step(DT)
@@ -202,7 +214,76 @@ func step(input: DriveInput) -> void:
 		_events.append(event)
 	items.events.clear()
 
+	# 12. Leg progress.
+	if leg.step_progress():
+		_end_leg()
+
 	tick += 1
+
+
+## Starts a leg from its plan (LegGenerator): the road, the car at the start
+## in the plan's start lane, an empty road ahead, and the leg's weather.
+func begin_leg(plan: Dictionary) -> void:
+	set_road(GameData.as_int(plan.get("lanes"), 3), GameData.as_bool(plan.get("divided"), true))
+	traffic.clear()
+	collision.reset()
+	car.reset(GameData.as_int(plan.get("start_lane")), gate.gear)
+	_lane = car.lane_of(car.x)
+	act = GameData.as_int(plan.get("act"), act)
+	curve_k = 0.0
+	items.begin_leg()
+	leg.begin(plan)
+	items.raining = leg.raining
+	car.lat_tau_mult = _rain_response if leg.raining else 1.0
+	_leg_lamps_lit = 0
+	_emit("leg_started", {
+		"leg": leg.leg_id,
+		"modifier": GameData.as_string(plan.get("modifier")),
+		"act": act,
+		"par": leg.par,
+	})
+
+
+## The car passed the end of the leg: what it earned (GDD 12.1).
+func _end_leg() -> void:
+	var clean: bool = _leg_lamps_lit == 0
+	var clean_bonus: float = tuning.f("clean_leg_bonus") if clean else 0.0
+	var par_bonus: float = floorf(maxf(leg.par - leg.time, 0.0) * tuning.f("par_bonus_rate"))
+	cash += clean_bonus + par_bonus
+	items.raining = false
+	car.lat_tau_mult = 1.0
+	curve_k = 0.0
+	_emit("leg_ended", {
+		"leg": leg.leg_id,
+		"time": leg.time,
+		"par": leg.par,
+		"clean": clean,
+		"clean_bonus": clean_bonus,
+		"par_bonus": par_bonus,
+		"cash": cash,
+	})
+
+
+## The leg's bend and gusts, before the car moves.
+func _step_leg_road() -> void:
+	if not leg.active:
+		return
+	leg.step_road(DT)
+	curve_k = leg.curve_k
+	if leg.gust_started != 0:
+		start_gust(leg.gust_started)
+
+
+## Cones, melons, sheep and potholes (GDD 5.6, 9.4): Nerves, and for a
+## pothole a share of his speed. No lamp.
+func _step_leg_hazards() -> void:
+	leg.step_hazards(DT)
+	if leg.hits.is_empty():
+		return
+	nerves.add(leg.hazard_nerves)
+	car.speed *= leg.speed_factor
+	for kind: StringName in leg.hits:
+		_emit("sfx_requested", {"id": "scrape", "hazard": String(kind)})
 
 
 ## Sets the road the car is on: 1 to 3 lanes, divided or not (GDD 5.1).
@@ -299,6 +380,17 @@ func snapshot() -> Dictionary:
 		"chain": collision.chain,
 		"wrecked": wrecked,
 		"curve_k": curve_k,
+		"leg": leg.leg_id,
+		"leg_active": leg.active,
+		"leg_time": leg.time,
+		"leg_par": leg.par,
+		"leg_length": leg.length,
+		"raining": leg.active and leg.raining,
+		"night": leg.active and leg.night,
+		"gust_tell": leg.gust_tell_left,
+		"gust_dir": leg.gust_tell_dir,
+		"hazards": leg.hazards_near(tuning.f("road_draw_behind"), tuning.f("road_draw_ahead")) if leg.active else [],
+		"signs": leg.signs_near(tuning.f("road_draw_ahead")) if leg.active else [],
 		"items": _item_snapshots(),
 		"anchors_in_use": _anchors_in_use(),
 		"vehicles": _vehicle_snapshots(),

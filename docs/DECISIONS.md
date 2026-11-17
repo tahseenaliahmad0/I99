@@ -423,3 +423,100 @@ Format: `D-NNN (milestone, date) Title` then Context / Decision / Why.
 - **Tea.** It is hot for `hot_for_s` after it is poured; the starting glass
   is poured at 22:00. It spills from a crash upward (`spills_on_hit`).
 - **Visor.** The visor comes down every time; the photo's calm is once per leg.
+
+## D-026 (M4, 2026-11-17) How a leg is generated
+
+- **Context.** GDD 9.2 names the beats and five rules, 5.5 says vehicles hold
+  a lane and a speed and appear 300 m ahead, and 9.1 gives a density. It does
+  not say how these fit together.
+- **The par frame.** A leg is planned for a player who holds third gear. A
+  vehicle of the plan is stored as "appears `ahead` metres in front when the
+  player passes `trigger_s`"; at par he is level with it at `meet_s`. In a
+  beat template `s_offset` is where the vehicle is, ahead of the beat's
+  start, when the player enters the beat (the GDD 14 example reads that way).
+  A vehicle that would have to appear before the leg starts is on the road
+  from the start. Driven slower or faster, the same vehicles are met later
+  or sooner; rule 3 is promised for third gear only, as the GDD words it.
+- **Traffic that holds its speed.** Two vehicles in one lane are never
+  planned to come within `gen_spawn_clearance` (more than the follow gap) of
+  each other before the player has passed both, so nothing in a plan has to
+  brake and the plan is exact when driven (T-GEN-01 drives a sample of legs
+  with the real traffic and compares). Where two would close up, the faster
+  is planned at the slower one's speed: it is "held up". So a pickup may be
+  planned at 60 km/h behind a tanker; the speed range of GDD 5.5 is what a
+  vehicle does on a free road.
+- **Rule 3, never a wall.** Each vehicle closes its lane for the stretch of
+  the player's progress in which it is level with him, plus
+  `gen_block_margin` at each end; a merging vehicle closes the lane it
+  leaves until it has left and the lane it enters from the moment it
+  signals. The generator keeps a line through the leg that is never in a
+  closed lane, changing lane only where both lanes are free for
+  `gen_lane_change` metres; the plan carries it as `path` (inside a chicane
+  the line is the corridor). A beat whose content would close the last way
+  through is drawn again.
+- **CALM** means no block of any vehicle or hazard overlaps the beat.
+  Oncoming traffic on the Two-lane keeps its own side and is not "in reach".
+  No vehicle is still beside him when the beats end at 2,200 m: the last
+  300 m stay clear for the Exit and the Fork.
+- **Beats that do not fit** where they are drawn (the lanes they need are
+  still taken) are tried a little later in the beat (`gen_beat_shifts`), then
+  drawn again as another template or type. A CALM beat that is owed
+  (`gen_calm_deadlines`) is waited for with quiet beats only. A whole leg is
+  redrawn only if nothing fits; after `gen_max_attempts` the generator would
+  fall back to a sparse leg, which T-GEN-01 shows never happens.
+- **Density (GDD 9.1, 12.3)** is the number of vehicles a leg puts on the
+  road ahead of him per km of beats: 6, 10 or 16, plus 2 per act after the
+  first, times 2.2 km. Beats come first; single vehicles top the count up:
+  queued behind a slow one, slow on their own, or faster than third gear
+  (`gen_filler_shares`). Those faster ones appear 300 m ahead and pull away;
+  in fourth gear he catches them. 44 vehicles that he must all pass in third
+  gear do not fit on three lanes with one always open, so on a heavy leg a
+  good share are of that kind.
+- **Two-lane and Motorcade** take their traffic from their encounter
+  (GDD 9.3): trucks at 60 and oncoming vehicles every 6 to 10 s at par; the
+  motorcade and nothing else. The density rule does not apply to them
+  (T-GEN-03 says so and T-LEG-08 and T-LEG-09 hold them to 9.3). On the
+  Two-lane each truck is met in the middle of a gap in the oncoming traffic
+  long enough to pass it in third gear, which is more than the fourth-gear
+  pass the GDD asks for.
+- **Lengths.** Beat lengths are whole metres and beats tile 0 to 2,200 m
+  exactly. The table of GDD 9.2 is `beat_lengths` in tuning; the validator
+  holds every template to it.
+- **Forks (GDD 9.5, 12.3).** The two branches of a fork are different leg
+  types drawn evenly from the act's pool; each carries a modifier with the
+  act's chance, drawn evenly from those the leg allows.
+- **Why.** GDD 1.5: the simplest model that makes rules 3 and 4 checkable
+  and keeps "the same seed gives the same leg" literal.
+
+## D-027 (M4, 2026-11-17) Hazards, zones and weather the GDD leaves open
+
+- **Cones, melons, sheep and potholes** light no lamp (GDD 5.6). Each cone,
+  melon or sheep adds 3 Nerves once, cones and melons also 10 Suspicion
+  during a Patrol; a pothole adds 3 Nerves and takes 30% of his speed, at
+  most once per `pothole_cooldown`. They are not passed for close-call
+  money: a chicane alone would pay some fifty close calls against the 16
+  cash a leg of GDD 12.1. A hulk on the shoulder is a parked vehicle and
+  does count.
+- **Chicanes (Roadworks).** Three zones of 150 m, each a corridor with 2.16 m
+  of clear road between the cones (inner edges), straight for 50 m, shifting
+  one lane over 50 m, straight for 50 m. The car does not turn in lane
+  space, so where the corridor shifts the cones stand back by what the car's
+  length sweeps sideways: the room each side is 0.18 m everywhere.
+- **Sheep.** A row across the road with one gap of `gap_m`, walking toward
+  the right at `speed_ms` from the moment he is `approach_s` short of it at
+  par; the gap is at a lane's centre when he arrives at par. Sheep that have
+  not come through the median yet are not on the road.
+- **Melon truck.** It sheds one melon every `melon_every_s` for `shed_s`
+  once he is `shed_gap_m` behind it. Melons roll toward the right shoulder
+  (the crown), so the lanes to the truck's left stay clear.
+- **Wedding.** Four decorated cars, two abreast in two lanes, at 60 km/h.
+- **Crosswind.** A gust every `gust_every_s` of driving at par.
+- **Potholes.** The HAZARD weight is doubled and HAZARD beats are potholes.
+- **Curves** come on and go off over `curve_ramp` metres; the sign stands
+  `curve_sign_lead` seconds before the bend at par.
+- **Gusts** are announced when he is `gust_tell` seconds short of them at par
+  and blow exactly `gust_tell` seconds after the tell, whatever his speed.
+- **Rain.** The view blurs only while it rains; `rain_response_mult` scales
+  the car's sideways response time (30% slower).
+- **Leg income (GDD 12.1).** At the end of a leg: `clean_leg_bonus` if no
+  lamp was lit in it, and one cash per whole 2 s under par.

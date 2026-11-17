@@ -4,9 +4,9 @@
   "modifiers": [
     {"id": "crosswind", "gust_every_s": 15, "line_ids": {"sign": "sign.modifier.crosswind"}},
     {"id": "potholes", "hazard_mult": 2, "line_ids": {"sign": "sign.modifier.potholes"}},
-    {"id": "sheep", "flock": {"count": 9, "gap_m": 3.2, "speed_ms": 1.2, "at": 0.55}, "line_ids": {"sign": "sign.modifier.sheep"}},
-    {"id": "wedding", "cars": 4, "lanes": 2, "speed_kmh": 60, "honk_nerves": -5, "at": 0.45, "line_ids": {"sign": "sign.modifier.wedding"}},
-    {"id": "melon_truck", "shed_s": 10, "melon_every_s": 0.7, "roll_ms": 1.4, "truck_speed_kmh": 62, "at": 0.4, "line_ids": {"sign": "sign.modifier.melon_truck"}},
+    {"id": "sheep", "flock": {"count": 9, "gap_m": 3.2, "pitch_m": 1.6, "speed_ms": 1.2, "approach_s": 5, "zone_m": 60, "at": 0.55}, "line_ids": {"sign": "sign.modifier.sheep"}},
+    {"id": "wedding", "cars": 4, "lanes": 2, "speed_kmh": 60, "honk_nerves": -5, "zone_m": 130, "at": 0.45, "line_ids": {"sign": "sign.modifier.wedding"}},
+    {"id": "melon_truck", "shed_s": 10, "melon_every_s": 0.7, "roll_ms": 1.4, "truck_speed_kmh": 62, "shed_gap_m": 140, "at": 0.3, "line_ids": {"sign": "sign.modifier.melon_truck"}},
     {"id": "dust_haze", "haze_per_s": 0.01, "visibility_m": 120, "line_ids": {"sign": "sign.modifier.dust_haze"}}
   ]
 }

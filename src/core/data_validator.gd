@@ -697,6 +697,18 @@ func _check_beats() -> void:
 					and GameData.as_float(span[0]) > 0.0 and GameData.as_float(span[1]) >= GameData.as_float(span[0])
 		if not length_ok:
 			_err("E_TYPE", "beats.json", label + ".length_m", "must be a length in metres or [shortest, longest]")
+		elif _data.tuning.has("beat_lengths"):
+			# Each template keeps to the length of its type (GDD 9.2).
+			var allowed: Array = GameData.as_array(_data.tuning.d("beat_lengths").get(GameData.as_string(beat.get("type"))))
+			var shortest: float = GameData.as_float(length)
+			var longest: float = shortest
+			if length is Array:
+				var own: Array = length
+				shortest = GameData.as_float(own[0])
+				longest = GameData.as_float(own[1])
+			if allowed.size() == 2 and (shortest < GameData.as_float(allowed[0]) or longest > GameData.as_float(allowed[1])):
+				_err("E_RULE", "beats.json", label + ".length_m", "a %s beat is %s to %s m long (GDD 9.2)" % [
+						GameData.as_string(beat.get("type")), str(allowed[0]), str(allowed[1])])
 		var spawns: Array = GameData.as_array(beat.get("spawns"))
 		for index: int in spawns.size():
 			var spawn: Dictionary = GameData.as_dict(spawns[index])

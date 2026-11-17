@@ -199,7 +199,9 @@ func _check_stuck_wiper() -> void:
 	_sim = DriveSim.new(fresh_data())
 	var clear: float = tuning.f("wiper_clear_time")
 	_sim.items.since_wipe = clear * 0.5
-	check_near(_sim.items.rain_blur(), 0.5, 0.000001, "half-way through wiper_clear_time the rain has half come back")
+	check_near(_sim.items.rain_blur(), 0.0, 0.000001, "in dry weather the wiper has nothing to clear")
+	_sim.items.raining = true
+	check_near(_sim.items.rain_blur(), 0.5, 0.000001, "in the rain, half-way through wiper_clear_time the rain has half come back")
 	_light(&"stuck_wiper")
 	var stuck: float = _sim.faults.param_of(&"stuck_wiper", "wiper_clear_s", clear)
 	check_near(stuck, 3.0, 0.000001, "GDD 6.3: a sweep clears rain for 3 s instead of 6")

@@ -114,7 +114,10 @@ func _check_wipers() -> void:
 	var clear: float = tuning.f("wiper_clear_time")
 	check_near(clear, 6.0, 0.000001, "GDD 4.6: a sweep keeps the rain clear for 6 s")
 	_run(clear + 1.0)
-	check_near(_sim.items.rain_blur(), 1.0, 0.000001, "with no sweep the view is fully blurred")
+	check_near(_sim.items.rain_blur(), 0.0, 0.000001, "in dry weather nothing blurs the view, sweep or no sweep")
+	check_near(GameData.as_float(_sim.snapshot()["rain_blur"]), 0.0, 0.000001, "and the snapshot says so")
+	_sim.items.raining = true
+	check_near(_sim.items.rain_blur(), 1.0, 0.000001, "in the rain, with no sweep the view is fully blurred")
 	_complete("wipers", Gesture.DIR_UP)
 	check_near(_sim.items.rain_blur(), 0.0, 0.000001, "one sweep clears it")
 	_run(clear * 0.5)
