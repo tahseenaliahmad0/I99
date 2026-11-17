@@ -32,6 +32,8 @@ const FAULT_CRACKS: StringName = &"cracked_windscreen"
 const FAULT_HEADLIGHT: StringName = &"dead_headlight"
 const FAULT_MIRROR: StringName = &"cracked_mirror"
 const FLAG_HIGH_BEAM: StringName = &"high_beam"
+const PULLED_OVER: StringName = &"pulled_over"
+const LAW: StringName = &"law"
 
 var data: GameData
 var tuning: Tuning
@@ -48,6 +50,8 @@ var nerves: NervesSim = NervesSim.new()
 var faults: FaultSim = FaultSim.new()
 var items: ItemSim = ItemSim.new()
 var leg: LegSim = LegSim.new()
+var encounter: EncounterSim = EncounterSim.new()
+var suspicion: SuspicionSim = SuspicionSim.new()
 var rng: Rng = Rng.new()
 
 var tick: int = 0
@@ -60,7 +64,13 @@ var act: int = 1
 ## Added to the Heavy floor (a Table's rule, painkillers).
 var heavy_floor_bonus: float = 0.0
 ## True while an encounter is on: an empty road does not calm him then.
+## (The leg's own encounter counts as well; this one is for set pieces.)
 var in_encounter: bool = false
+## True from the moment Suspicion reaches the top until he has handed the
+## officer his licence or banknotes (GDD 6.5). The car stands on the shoulder.
+var pulled_over: bool = false
+## Game minutes his dealings with the law have cost (the Clock takes them).
+var clock_minutes_owed: float = 0.0
 ## Curve strength now: k of GDD 5.4, signed (+ pushes toward the right shoulder).
 var curve_k: float = 0.0
 ## Sandbox only, until legs exist (M4): vehicles per km spawned ahead on an
@@ -97,6 +107,9 @@ var _shoulder_rate: float = 0.0
 var _traffic_radius: float = 0.0
 var _empty_radius: float = 0.0
 var _rain_response: float = 1.0
+var _legal_gears: Array[int] = []
+## A Snap happened last tick (Nerves step after Suspicion).
+var _snapped: bool = false
 ## Lamps lit since the leg began (a clean leg lights none).
 var _leg_lamps_lit: int = 0
 
@@ -117,6 +130,8 @@ func _init(game_data: GameData) -> void:
 	faults.configure(data)
 	items.configure(data, effects, nerves, traffic, car, faults)
 	leg.configure(data, car, traffic)
+	encounter.configure(data, car, traffic)
+	suspicion.configure(tuning)
 
 	cash = tuning.f("cash_start")
 	_gust_strength = tuning.f("gust_push")
@@ -129,6 +144,8 @@ func _init(game_data: GameData) -> void:
 	_traffic_radius = tuning.f("traffic_radius")
 	_empty_radius = tuning.f("empty_road_radius")
 	_rain_response = tuning.f("rain_response_mult")
+	for legal: Variant in tuning.a("suspicion_legal_gears"):
+		_legal_gears.append(GameData.as_int(legal))
 
 	var start_gear: int = tuning.i("start_gear")
 	wheel.reset()
@@ -156,6 +173,8 @@ func step(input: DriveInput) -> void:
 	effects.begin_tick()
 	items.begin_tick()
 	leg.begin_tick()
+	encounter.begin_tick()
+	suspicion.begin_tick()
 
 	# 1. Gesture recogniser.
 	gesture.step(DT, input.lmb, input.pointer_delta)
@@ -189,9 +208,13 @@ func step(input: DriveInput) -> void:
 		nerves.add(_grind_nerves)
 		_emit("sfx_requested", {"id": "grind"})
 	_braking = input.rmb
-	car.step(DT, wheel.steer(), gate.gear, _braking, _extra_drift())
+	if not pulled_over:
+		car.step(DT, wheel.steer(), gate.gear, _braking, _extra_drift())
 	var lane: int = car.lane_of(car.x)
 	if lane != _lane:
+		# Crossing a lane line without indicating that way (GDD 6.5).
+		if items.indicator != signi(lane - _lane):
+			suspicion.add(tuning.f("suspicion_lane_cross"))
 		_lane = lane
 		items.on_lane_line_crossed()
 
@@ -203,10 +226,15 @@ func step(input: DriveInput) -> void:
 
 	# 7. Collisions and close calls.
 	var lamps_before: int = faults.lamps
-	collision.step(DT, car, traffic, gate.gear)
-	_apply_collisions()
-	_step_leg_hazards()
+	if not pulled_over:
+		collision.step(DT, car, traffic, gate.gear)
+		_apply_collisions()
+		_step_leg_hazards()
 	_leg_lamps_lit += maxi(faults.lamps - lamps_before, 0)
+
+	# 8. Encounters and Suspicion.
+	_step_encounter()
+	_step_suspicion()
 
 	# 9. Effect timers, Nerves, faults.
 	effects.step(DT)
@@ -239,6 +267,9 @@ func begin_leg(plan: Dictionary) -> void:
 	curve_k = 0.0
 	items.begin_leg()
 	leg.begin(plan)
+	encounter.begin(plan)
+	suspicion.end_watch()
+	_release_from_pull_over()
 	items.raining = leg.raining
 	items.dust_rate = leg.dust_rate
 	car.lat_tau_mult = _rain_response if leg.raining else 1.0
@@ -261,6 +292,10 @@ func _end_leg() -> void:
 	items.dust_rate = 0.0
 	car.lat_tau_mult = 1.0
 	curve_k = 0.0
+	encounter.stop()
+	if suspicion.watching:
+		suspicion.end_watch()
+		_emit("suspicion_changed", {"value": 0.0, "watching": false})
 	_emit("leg_ended", {
 		"leg": leg.leg_id,
 		"time": leg.time,
@@ -274,12 +309,125 @@ func _end_leg() -> void:
 
 ## The leg's bend and gusts, before the car moves.
 func _step_leg_road() -> void:
-	if not leg.active:
+	if not leg.active or pulled_over:
 		return
 	leg.step_road(DT)
 	curve_k = leg.curve_k
 	if leg.gust_started != 0:
 		start_gust(leg.gust_started)
+
+
+# --- Encounters and the law --------------------------------------------------
+
+## The leg's encounter: what it does to him this tick.
+func _step_encounter() -> void:
+	if pulled_over or not leg.active:
+		return
+	encounter.step(DT)
+	nerves.add_rate(encounter.nerves_rate)
+	if encounter.watch_began:
+		suspicion.begin_watch()
+		_emit("suspicion_changed", {"value": 0.0, "watching": true})
+	if encounter.watch_ended:
+		suspicion.end_watch()
+		_emit("suspicion_changed", {"value": 0.0, "watching": false})
+
+
+## Suspicion (GDD 6.5): what he did this tick that the police saw.
+func _step_suspicion() -> void:
+	if not suspicion.watching or pulled_over:
+		_snapped = false
+		return
+	var before: float = suspicion.value
+	if gate.gear != GearGate.NEUTRAL and not _legal_gears.has(gate.gear):
+		suspicion.add_rate(tuning.f("suspicion_gear_rate"))
+	if leg.active and leg.night:
+		suspicion.add_rate(faults.param(FAULT_HEADLIGHT, "patrol_suspicion_per_s", 0.0))
+	if items.horn_blown:
+		suspicion.add(tuning.f("suspicion_honk"))
+	if items.contraband_used:
+		suspicion.add(tuning.f("suspicion_contraband"))
+	if items.phone_used:
+		suspicion.add(tuning.f("suspicion_phone"))
+	if _snapped:
+		suspicion.add(tuning.f("suspicion_snap"))
+	_snapped = false
+	suspicion.add(leg.hazard_suspicion)
+	suspicion.step(DT)
+	if suspicion.jumped != 0.0 or floorf(suspicion.value) != floorf(before):
+		_emit("suspicion_changed", {"value": suspicion.value, "watching": true})
+	if suspicion.reached_max:
+		_pull_over()
+
+
+## At the top of Suspicion he is pulled over (GDD 6.5): the car stands on the
+## shoulder, the police car behind it, and the officer waits at the window
+## for his licence (a fine) or banknotes (a bribe).
+func _pull_over() -> void:
+	pulled_over = true
+	effects.hold(PULLED_OVER, LAW, true)
+	car.speed = 0.0
+	car.v_lat = 0.0
+	car.x = car.road_right() + (car.guardrail_x() - car.road_right()) * 0.5 + tuning.f("rumble_strip_width") * 0.5
+	_lane = car.lane_of(car.x)
+	encounter.park_police_behind()
+	if gesture.is_active():
+		gesture.cancel()
+	_emit("pulled_over", {
+		"released": false,
+		"fine": fine(),
+		"bribe": bribe(),
+		"can_bribe": cash >= bribe(),
+	})
+	_sync_anchors()
+
+
+## What the licence costs him: fine_share of his cash, fine_min at least, and
+## never more than he has (GDD 6.5, 12.2).
+func fine() -> float:
+	return minf(maxf(roundf(cash * tuning.f("fine_share")), tuning.f("fine_min")), cash)
+
+
+## What banknotes cost him: bribe_base plus bribe_per_act for each act.
+func bribe() -> float:
+	return tuning.f("bribe_base") + tuning.f("bribe_per_act") * float(act)
+
+
+## He handed the officer something. A bribe he cannot pay is not taken.
+func _pay_the_officer(how: StringName) -> void:
+	if not pulled_over:
+		return
+	var cost: float = 0.0
+	var minutes: float = 0.0
+	var taken: Array[StringName] = []
+	if how == &"bribe":
+		cost = bribe()
+		if cash < cost:
+			_emit("pulled_over", {"released": false, "refused": true, "fine": fine(), "bribe": cost, "can_bribe": false})
+			return
+		minutes = tuning.f("bribe_minutes")
+	else:
+		cost = fine()
+		minutes = tuning.f("fine_minutes")
+		taken = items.take_visible_contraband()
+	cash = maxf(cash - cost, 0.0)
+	clock_minutes_owed += minutes
+	suspicion.end_watch()
+	encounter.end_patrol()
+	_release_from_pull_over()
+	var taken_ids: Array[String] = []
+	for id: StringName in taken:
+		taken_ids.append(String(id))
+	_emit("pulled_over", {"released": true, "paid": String(how), "cost": cost, "minutes": minutes, "taken": taken_ids})
+	_emit("suspicion_changed", {"value": 0.0, "watching": false})
+
+
+func _release_from_pull_over() -> void:
+	if not pulled_over and not effects.has(PULLED_OVER):
+		return
+	pulled_over = false
+	effects.hold(PULLED_OVER, LAW, false)
+	_sync_anchors()
 
 
 ## Cones, melons, sheep and potholes (GDD 5.6, 9.4): Nerves, and for a
@@ -409,6 +557,10 @@ func snapshot() -> Dictionary:
 		"night": leg.active and leg.night,
 		"gust_tell": leg.gust_tell_left,
 		"gust_dir": leg.gust_tell_dir,
+		"suspicion": suspicion.value,
+		"suspicion_watching": suspicion.watching,
+		"police_lights": encounter.police_lights,
+		"pulled_over": pulled_over,
 		"visibility": visibility(),
 		# Unlit things show only inside what he can see: at night they appear late.
 		"hazards": leg.hazards_near(tuning.f("road_draw_behind"), minf(tuning.f("road_draw_ahead"), visibility())) if leg.active else [],
@@ -535,7 +687,7 @@ func _feed_nerves() -> void:
 		nearest = minf(nearest, distance)
 		if distance <= _traffic_radius:
 			near += 1
-	nerves.add_rate(nerves.road_rate(near, nearest, in_encounter))
+	nerves.add_rate(nerves.road_rate(near, nearest, in_encounter or encounter.active or pulled_over))
 	if car.on_shoulder:
 		nerves.add_rate(_shoulder_rate)
 	nerves.add_rate(faults.param(FAULT_RATTLE, "nerves_per_s", 0.0))
@@ -545,6 +697,7 @@ func _feed_nerves() -> void:
 
 func _report_nerves() -> void:
 	if nerves.snapped:
+		_snapped = true
 		_emit("snap", {"nerves": nerves.value})
 		_emit("sfx_requested", {"id": "horn"})
 		if gesture.is_active():
@@ -651,6 +804,8 @@ func _complete_ritual() -> void:
 		gate.shift_sequential(1 if gesture.direction == Gesture.DIR_UP else -1)
 	else:
 		items.complete(_active_ritual, gesture.direction)
+		if items.paid != &"":
+			_pay_the_officer(items.paid)
 	_emit("ritual_completed", {
 		"ritual": ritual_id,
 		"anchor": String(hand.anchor_id(_active_anchor)),

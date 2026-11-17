@@ -28,9 +28,9 @@ Useful commands:
 ## Current state
 
 - **Milestone:** M4 (legs and encounters): generator, forks and the leg runtime are in; encounters, Suspicion and views are next.
-- **Tests:** 35 of 114 passing (M0: 2, M1: 8, M2: 10, M3: 7, M4: 8).
+- **Tests:** 37 of 114 passing (M0: 2, M1: 8, M2: 10, M3: 7, M4: 10).
 - **Reviews:** `m1-review` and `m2-review` have reported on every lens (journals under `/root/.claude/projects/-home-user-I99/.../subagents/workflows/`, run ids wf_53ae3899-d40 and wf_d8c835c4-884; the full results are also in the task output files). Applied: M1 hand, M1 wheel and gate, M2 car (DECISIONS D-028), M2 traffic and collisions (D-029; the fixer was cut off by the usage limit before its mutation pass and the independent verification never ran for either M2 fix). M1 gesture pipeline code defects (D-030: flick direction, crank reversal, bead rate, DRAG_TO, hand pinned until release). **Not applied yet** (findings saved as JSON under the scratchpad `fixes/` folder and in the workflow journals): the test-only findings of M1 gesture pipeline (loose thresholds, rituals.json against GDD 4.6, pointer_point in the snapshot), M1 test honesty (18), M1 determinism and rules (6: purity lint, grind lock 25 ticks, validator and the M1 constants, runner and `await`, whole-number settings, NO_ANCHOR as an index), M2 test honesty leftovers, M2 views (13: indicator blink clock, `scene` in placeholders, vehicle views keyed by id after `clear()`, world bend not returning to zero, and smaller ones). Background agents hit the model's usage limit on 2026-11-17 (resets 2026-11-20 01:00 UTC): until then work without workflows. M3 and M4 have not been reviewed.
-- **Next step:** Suspicion and the pull-over, then Patrol, Tailgater, Two-lane and Motorcade.
+- **Next step:** Tailgater (T-LEG-06), Two-lane (T-LEG-08), Motorcade with its side road (T-LEG-09), then the views and the unapplied review findings.
 
 ## Milestones
 
@@ -84,7 +84,8 @@ Do not start a milestone until every test of the previous one passes (GDD 18).
 - [x] `LegSim`: spawns by trigger, planned lane changes, curves, gusts, hazards, flock, melons, leg end
 - [x] `tests/support/leg_checker.gd`: independent rule checker and driven check; T-GEN-01..03 pass
 - [x] T-LEG-01..05: Open road, Rush, Rain, Night, Roadworks driven through `DriveSim` (dust haze and visibility in the snapshot)
-- [ ] `SuspicionSim` and the pull-over (T-SUS-01); Patrol (T-LEG-07); Tailgater (T-LEG-06)
+- [x] `SuspicionSim` and the pull-over (T-SUS-01); `EncounterSim` with the Patrol (T-LEG-07); DECISIONS D-031
+- [ ] Tailgater (T-LEG-06)
 - [ ] Two-lane (T-LEG-08); Motorcade with its side road (T-LEG-09); wedding honk
 - [ ] Views: hazards, signs, police lights, night and dust visibility, rain; `--leg=` starts a leg
 - [ ] Review of M3 and M4

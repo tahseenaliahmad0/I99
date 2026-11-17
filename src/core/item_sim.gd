@@ -58,6 +58,12 @@ var photo_used: bool = false
 var horn_blown: bool = false
 ## Cash earned or spent by ops this tick.
 var cash_delta: float = 0.0
+## What he handed to the officer this tick: &"fine" (his licence) or
+## &"bribe" (banknotes), else empty.
+var paid: StringName = &""
+## True for the tick in which contraband, or the phone, was used.
+var contraband_used: bool = false
+var phone_used: bool = false
 ## sfx and line requests, drained by DriveSim.
 var events: Array[Dictionary] = []
 
@@ -178,6 +184,9 @@ func begin_leg() -> void:
 func begin_tick() -> void:
 	horn_blown = false
 	cash_delta = 0.0
+	paid = &""
+	contraband_used = false
+	phone_used = false
 
 
 # --- Items and slots ---------------------------------------------------------
@@ -249,6 +258,11 @@ func anchor_in_use(anchor: String) -> bool:
 ## The ritual a press at this anchor would start now, or {} for none: the
 ## first one offered there whose conditions all hold (items before controls).
 func ritual_at(anchor: String) -> Dictionary:
+	# What must be done first (papers for the officer) comes before the items there.
+	for offered: Variant in GameData.as_array(_controls.get(anchor)):
+		var urgent: Dictionary = offered
+		if GameData.as_bool(urgent.get("over_items")) and _requirements_hold(urgent, null):
+			return urgent
 	for candidate: Item in items:
 		if anchor_of(candidate) != anchor:
 			continue
@@ -273,6 +287,12 @@ func owner_of(ritual: Dictionary) -> Item:
 ## Runs a completed ritual. `direction` is the Gesture.DIR_* flag of a FLICK.
 func complete(ritual: Dictionary, direction: int) -> void:
 	var owner: Item = owner_of(ritual)
+	if owner != null:
+		# Using contraband, or the phone, is something a police car sees (GDD 6.5).
+		if GameData.as_bool(owner.record.get("contraband")):
+			contraband_used = true
+		if GameData.as_array(owner.record.get("tags")).has("phone"):
+			phone_used = true
 	for op: Variant in GameData.as_array(ritual.get("on_complete")):
 		_run(GameData.as_string(op), owner, direction)
 	var sfx: String = GameData.as_string(ritual.get("sfx"))
@@ -352,6 +372,8 @@ func _run(op: String, owner: Item, direction: int) -> void:
 				owner.ashed = true
 		"radio_step":
 			_radio_step(direction)
+		"pay":
+			paid = StringName(parts[1])
 		"sfx":
 			events.append({"type": "sfx_requested", "id": parts[1]})
 		"line":
@@ -470,6 +492,21 @@ func on_hit(kind: int) -> void:
 		var spills_from: float = _param(candidate, "spills_on_hit", 0.0)
 		if spills_from > 0.0 and float(kind) >= spills_from and candidate.supply > 0:
 			candidate.supply = 0
+
+
+## The officer takes the contraband he can see (GDD 6.5): everything marked
+## contraband that is not hidden in the glovebox. Returns what was taken.
+func take_visible_contraband() -> Array[StringName]:
+	var taken: Array[StringName] = []
+	var index: int = 0
+	while index < items.size():
+		var candidate: Item = items[index]
+		if GameData.as_bool(candidate.record.get("contraband")) and not String(candidate.slot).begins_with("glovebox"):
+			taken.append(candidate.id)
+			items.remove_at(index)
+		else:
+			index += 1
+	return taken
 
 
 ## The car crossed a lane line: the indicator cancels (GDD 4.6).

@@ -27,6 +27,10 @@
     { "id": "window_crank",    "anchor": "window_crank",       "gesture": "CRANK", "turns": 3,
       "eyes_down": false, "requires": [], "on_complete": ["window"] },
 
+    { "id": "hand_licence",    "anchor": "dash_1",             "gesture": "DRAG_TO", "to": "driver_window",
+      "eyes_down": false, "over_items": true, "requires": ["pulled_over"], "on_complete": ["pay:fine"] },
+    { "id": "hand_banknotes",  "anchor": "cash",               "gesture": "DRAG_TO", "to": "driver_window",
+      "eyes_down": false, "over_items": true, "requires": ["pulled_over"], "on_complete": ["pay:bribe"] },
     { "id": "cig_light",       "anchor": "@slot", "item": "cigarettes", "gesture": "HOLD", "hold_s": 1.2,
       "eyes_down": false, "blocks_view": null, "requires": ["supply>0", "!lit"],
       "on_complete": ["consume_supply", "give"], "sfx": "lighter_click" },

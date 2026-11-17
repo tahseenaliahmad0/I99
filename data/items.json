@@ -7,7 +7,8 @@
     { "id": "lit", "implies": ["awake", "tremor_mute"] },
     { "id": "music" },
     { "id": "news", "implies": ["awake"] },
-    { "id": "visor_down" }
+    { "id": "visor_down" },
+    { "id": "pulled_over" }
   ],
 
   "synergy_tokens": ["music", "photo"],

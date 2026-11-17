@@ -597,3 +597,41 @@ Format: `D-NNN (milestone, date) Title` then Context / Decision / Why.
 - **After a gesture** the hand stays on the control until the button comes
   up, so the rest of a long flick does not drag the pointer off it: two
   flicks in a row both work the wipers, and three assisted shifts are three.
+
+## D-031 (M4, 2026-11-17) Suspicion, the pull-over and the Patrol: what the GDD leaves open
+
+- **Gears.** "Any gear but 2 or 3" means first, fourth and fifth. The lever
+  out of gear (neutral, or held between slots during a shift) is no gear
+  and counts as driving clean.
+- **Driving clean** is any tick with no offence that counts by the second
+  (illegal gear, dead headlight at night). One-off offences do not stop the
+  decay.
+- **Indicating** means the indicator shows the way he crosses at the moment
+  the car's middle crosses the lane line. The wrong way counts as none.
+- **Contraband and the phone** count when a ritual of an item marked
+  `contraband`, or tagged `phone`, completes. A Snap counts on the tick
+  after it happens (Nerves step after Suspicion).
+- **The pull-over.** At the top of Suspicion the car stands on the shoulder
+  and the police car behind it; a gesture in progress is cancelled. Nothing
+  moves on while the officer waits: the leg's clock and the encounter stop,
+  the car does not move, nothing can hit him. Two rituals are offered,
+  before any item at the same anchor: his licence, clipped at `dash_1`, and
+  the banknotes at the new anchor `cash`; each is a DRAG_TO to
+  `driver_window`.
+- **The fine** is `fine_share` of his cash, rounded, `fine_min` at least and
+  never more than he has; it costs `fine_minutes`. The officer takes every
+  item marked contraband that is not in a glovebox cell.
+- **The bribe** is `bribe_base` plus `bribe_per_act` for each act (50, 60,
+  70) and costs `bribe_minutes`. Banknotes he does not have are refused and
+  he stays pulled over.
+- **Game minutes** are added to `DriveSim.clock_minutes_owed` until the
+  Clock exists (M5).
+- **Afterwards** the Patrol is over: Suspicion is gone, the lights are out,
+  and he drives off from the shoulder in whatever gear the lever is in.
+- **The police car** appears `patrol_spawn_behind` metres behind him when
+  its lights come on, closes up to `gap_m` behind his bumper during the
+  three seconds of the tell, and from then on drives in his tracks: at his
+  speed, where he was when he was at that point of the road. So it gets
+  through whatever he got through and never touches him. When the Patrol is
+  over it falls back like any other vehicle.
+- **Why.** GDD 6.5 gives the amounts; GDD 1.5 for the rest.

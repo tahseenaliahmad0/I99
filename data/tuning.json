@@ -234,6 +234,10 @@
     "suspicion_lane_cross": 20,
     "suspicion_contraband": 40,
     "suspicion_phone": 30,
+    "suspicion_snap": 30,
+    "suspicion_honk": 15,
+    "patrol_catch_up": 30,
+    "patrol_spawn_behind": 60,
     "pothole_cooldown": 0.5
   },
 
@@ -535,6 +539,10 @@
     "suspicion_lane_cross": "points",
     "suspicion_contraband": "points",
     "suspicion_phone": "points",
+    "suspicion_snap": "points for a Snap during a Patrol",
+    "suspicion_honk": "points for honking during a Patrol",
+    "patrol_catch_up": "km/h the police car drops when the Patrol is over, to fall back",
+    "patrol_spawn_behind": "m behind him at which the police car appears",
     "pothole_cooldown": "s"
   }
 }

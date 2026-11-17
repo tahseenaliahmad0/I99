@@ -370,6 +370,208 @@ func test_leg_05() -> void:
 	check_eq(inside.cone_hits, 0, "%s m off the middle it still passes clean" % str(room - 0.05))
 
 
+## T-LEG-07: Patrol: a police car follows for patrol_duration; blue lights
+## show in the mirror 3 s before Suspicion starts, about 20 s into the leg; at
+## 100 Suspicion he is pulled over and pays by licence (fine) or banknotes
+## (bribe) as 6.5 states.
+func test_leg_07() -> void:
+	var leg: Dictionary = data.record("legs", "patrol")
+	var special: Dictionary = GameData.as_dict(leg.get("special"))
+	var at: float = GameData.as_float(special.get("at_s"))
+	var lead: float = GameData.as_float(special.get("lights_lead_s"))
+	var duration: float = tuning.f("patrol_duration")
+	var gap: float = GameData.as_float(special.get("gap_m"))
+	check_near(GameData.as_float(leg.get("par_s")), 90.0, 0.000001, "GDD 9.1: Patrol has a par of 90 s")
+	check_near(at, 20.0, 0.000001, "GDD 9.3: Suspicion starts about 20 s into the leg")
+	check_near(lead, 3.0, 0.000001, "the blue lights show 3 s before")
+	check_near(duration, 35.0, 0.000001, "GDD 9.1: the police car follows for 35 s")
+	check(not GameData.as_array(leg.get("acts")).has(1.0), "there is no Patrol in Act 1")
+
+	# A clean drive: third gear, indicating before every lane change.
+	var plan: Dictionary = _begin("patrol", 2, 555)
+	var lights_from: float = -1.0
+	var lights_to: float = -1.0
+	var watch_from: float = -1.0
+	var watch_to: float = -1.0
+	var police_from: float = -1.0
+	var most_suspicion: float = 0.0
+	var watched_ticks: int = 0
+	var in_place: int = 0
+	var in_lane: int = 0
+	var ahead_of_him: int = 0
+	var appeared_behind: float = 0.0
+	var guard: int = int(200.0 / DT)
+	while _sim.leg.active and guard > 0:
+		guard -= 1
+		_keep_to_the_line(true)
+		_sim.step(_input)
+		_collect()
+		var now: float = _sim.leg.time
+		var police: TrafficSim.Vehicle = _sim.encounter.police()
+		if police != null and police_from < 0.0:
+			police_from = now
+			appeared_behind = _sim.car.s - police.s
+		if _sim.encounter.police_lights and lights_from < 0.0:
+			lights_from = now
+		if not _sim.encounter.police_lights and lights_from >= 0.0 and lights_to < 0.0:
+			lights_to = now
+		if _sim.suspicion.watching and watch_from < 0.0:
+			watch_from = now
+		if not _sim.suspicion.watching and watch_from >= 0.0 and watch_to < 0.0:
+			watch_to = now
+		most_suspicion = maxf(most_suspicion, _sim.suspicion.value)
+		if police != null:
+			if police.s >= _sim.car.s:
+				ahead_of_him += 1
+			if _sim.suspicion.watching and now > at + 5.0:
+				watched_ticks += 1
+				var behind: float = (_sim.car.s - _sim.car.length() * 0.5) - (police.s + police.half_length)
+				if behind >= gap - 3.0 and behind <= gap + 8.0:
+					in_place += 1
+				if absf(police.x - _sim.car.x) < tuning.f("lane_width") * 0.5:
+					in_lane += 1
+	check(_sim.leg.finished, "the leg was driven to its end")
+	check_near(lights_from, at - lead, 2.0 * DT, "the blue lights come on 3 s before Suspicion starts (%s s)" % str(snappedf(lights_from, 0.01)))
+	check_near(police_from, lights_from, 2.0 * DT, "that is when the police car appears")
+	check_near(appeared_behind, tuning.f("patrol_spawn_behind"), 2.0, "behind him, where the mirror shows it")
+	check_near(watch_from, at, 2.0 * DT, "Suspicion starts 20 s into the leg (%s s)" % str(snappedf(watch_from, 0.01)))
+	check_near(watch_to - watch_from, duration, 2.0 * DT, "the police car follows for patrol_duration (%s s)" % str(snappedf(watch_to - watch_from, 0.01)))
+	check_near(lights_to, watch_to, 2.0 * DT, "then the lights go out")
+	check_eq(ahead_of_him, 0, "the police car is never ahead of him")
+	if check(watched_ticks > 0, "the police car was there while it watched"):
+		check(float(in_place) / float(watched_ticks) >= 0.9, "it keeps its place behind his bumper (%d%% of the time)" % roundi(100.0 * float(in_place) / float(watched_ticks)))
+		check(float(in_lane) / float(watched_ticks) >= 0.75, "and follows him from lane to lane (%d%% of the time in his lane)" % roundi(100.0 * float(in_lane) / float(watched_ticks)))
+	check_near(most_suspicion, 0.0, 0.000001, "third gear and an indicator before each lane change: no Suspicion at all")
+	check_eq(_sim.faults.lamps, 0, "and the police car never touched him")
+	check(_sim.encounter.police() == null, "after the Patrol the police car is no longer behind him")
+	var changes: Array[Dictionary] = []
+	for event: Dictionary in _events:
+		if GameData.as_string(event.get("type")) == "suspicion_changed":
+			changes.append(event)
+	if check_eq(changes.size(), 2, "a clean Patrol announces its beginning and its end only"):
+		check(GameData.as_bool(changes[0].get("watching")) and not GameData.as_bool(changes[1].get("watching")), "watching, then not")
+	check(not _has_event_named("pulled_over"), "and he is not pulled over")
+
+	# The same drive without indicating: every lane line costs 20.
+	_sim = DriveSim.new(fresh_data())
+	_events = []
+	plan = _begin("patrol", 2, 555)
+	var crossings: int = 0
+	var lane_before: int = _sim.car.lane_of(_sim.car.x)
+	most_suspicion = 0.0
+	guard = int(200.0 / DT)
+	while _sim.leg.active and guard > 0 and not _sim.pulled_over:
+		guard -= 1
+		_keep_to_the_line(false)
+		_sim.step(_input)
+		var lane_now: int = _sim.car.lane_of(_sim.car.x)
+		if lane_now != lane_before and _sim.suspicion.watching:
+			crossings += 1
+		lane_before = lane_now
+		most_suspicion = maxf(most_suspicion, _sim.suspicion.value)
+	check(crossings >= 1, "(the line through this leg changes lane while he is watched: %d times)" % crossings)
+	check(most_suspicion >= tuning.f("suspicion_lane_cross") - 1.0, "without the indicator the same drive raises Suspicion (to %s)" % str(snappedf(most_suspicion, 0.1)))
+
+	# First gear from the moment he is watched: +15 a second, pulled over at 100.
+	_sim = DriveSim.new(fresh_data())
+	_events = []
+	plan = _begin("patrol", 2, 555)
+	_sim.cash = 100.0
+	guard = int(60.0 / DT)
+	var offended_from: float = -1.0
+	while not _sim.pulled_over and guard > 0:
+		guard -= 1
+		_keep_to_the_line(true)
+		if _sim.suspicion.watching and offended_from < 0.0:
+			offended_from = _sim.leg.time
+			_sim.gate.reset(1)
+		_sim.step(_input)
+		_collect()
+	if not check(_sim.pulled_over, "in first gear under a police car's eyes he is pulled over"):
+		return
+	check_near(_sim.leg.time - offended_from, tuning.f("suspicion_max") / tuning.f("suspicion_gear_rate"), 0.1, "after 100 / 15 seconds")
+	var stopped: Dictionary = _event("pulled_over")
+	check(not GameData.as_bool(stopped.get("released")), "the stop is announced")
+	check_near(GameData.as_float(stopped.get("fine")), 25.0, 0.000001, "with the fine it would cost: 25% of his 100")
+	check_near(GameData.as_float(stopped.get("bribe")), tuning.f("bribe_base") + 2.0 * tuning.f("bribe_per_act"), 0.000001, "and the bribe: 40 plus 10 per act, 60 in Act 2")
+	check(GameData.as_bool(stopped.get("can_bribe")), "which he can pay")
+	check_near(_sim.car.speed, 0.0, 0.000001, "the car stands")
+	check(_sim.car.x > _sim.car.road_right(), "on the shoulder")
+	check(GameData.as_bool(_sim.snapshot()["pulled_over"]), "the snapshot says so")
+	var police: TrafficSim.Vehicle = _sim.encounter.police()
+	if check(police != null, "the police car is still there"):
+		check(police.s < _sim.car.s and is_equal_approx(police.x, _sim.car.x) and police.speed == 0.0, "parked behind him")
+	var anchors: Array = GameData.as_array(_sim.snapshot()["anchors_in_use"])
+	check(anchors.has(&"dash_1") and anchors.has(&"cash"), "his licence on the dash and the banknotes can be reached")
+	# Nothing moves on while the officer waits.
+	var leg_time: float = _sim.leg.time
+	var s_before: float = _sim.car.s
+	_input.clear()
+	_input.rmb = false
+	for _tick: int in int(3.0 / DT):
+		_sim.step(_input)
+	check_near(_sim.leg.time, leg_time, 0.000001, "the leg's clock stands while he is pulled over")
+	check_near(_sim.car.s, s_before, 0.000001, "and so does the car, whatever gear it is in")
+	check(_sim.pulled_over, "waiting changes nothing")
+
+	# His licence: a fine.
+	_hand_over(&"dash_1")
+	check(not _sim.pulled_over, "handing over his licence ends the stop")
+	var released: Dictionary = _event("pulled_over")
+	check(GameData.as_bool(released.get("released")), "which is announced")
+	check_eq(GameData.as_string(released.get("paid")), "fine", "as a fine")
+	check_near(_sim.cash, 75.0, 0.000001, "the fine is 25% of his cash")
+	check_near(_sim.clock_minutes_owed, tuning.f("fine_minutes"), 0.000001, "and 20 game minutes")
+	check(not _sim.suspicion.watching and not _sim.encounter.police_lights, "the Patrol is over")
+	check_near(_sim.suspicion.value, 0.0, 0.000001, "Suspicion is gone")
+	check(_has_event_named("ritual_completed"), "the hand did it: a ritual was completed")
+	_sim.gate.reset(1)
+	for _tick: int in int(3.0 / DT):
+		_sim.step(_input)
+	check(_sim.car.speed > 20.0 and _sim.car.s > s_before + 5.0, "and he drives on")
+	check(_sim.leg.time > leg_time + 2.0, "the leg's clock runs again")
+
+	# The fine has a floor, and he cannot pay what he does not have.
+	check_near(_fine_with(40.0), 20.0, 0.000001, "25% of 40 is under the minimum: the fine is 20")
+	check_near(_fine_with(200.0), 50.0, 0.000001, "25% of 200 is 50")
+	check_near(_fine_with(12.0), 12.0, 0.000001, "with 12 to his name the fine takes it all")
+
+	# Banknotes: a bribe.
+	_pull_over_with(fresh_data(), 100.0)
+	_hand_over(&"cash")
+	check(not _sim.pulled_over, "handing over banknotes ends the stop")
+	check_eq(GameData.as_string(_event("pulled_over").get("paid")), "bribe", "as a bribe")
+	check_near(_sim.cash, 100.0 - (tuning.f("bribe_base") + 2.0 * tuning.f("bribe_per_act")), 0.000001, "the bribe is 40 plus 10 per act")
+	check_near(_sim.clock_minutes_owed, tuning.f("bribe_minutes"), 0.000001, "and 5 game minutes")
+	_pull_over_with(fresh_data(), 50.0)
+	check(not GameData.as_bool(_event("pulled_over").get("can_bribe")), "with 50 he cannot pay a bribe of 60")
+	_hand_over(&"cash")
+	check(_sim.pulled_over, "banknotes he does not have do not end the stop")
+	check_near(_sim.cash, 50.0, 0.000001, "and cost nothing")
+	_hand_over(&"dash_1")
+	check(not _sim.pulled_over, "his licence still does")
+
+	# What the officer sees he takes with the fine; with a bribe he keeps everything.
+	var roots: Dictionary = data.roots.duplicate(true)
+	for entry: Variant in GameData.as_array(GameData.as_dict(roots["items"])["items"]):
+		var item: Dictionary = entry
+		if GameData.as_string(item["id"]) == "tea_glass":
+			item["contraband"] = true
+			GameData.as_array(item["slots"]).append("glovebox_a")
+	var private: GameData = GameData.from_parts(roots, data.lines.duplicate(true))
+	_pull_over_with(private, 100.0)
+	_sim.items.add_item(&"tea_glass", &"glovebox_a")
+	check_eq(_contraband_count(), 2, "(contraband in the cup holder and in the glovebox)")
+	_hand_over(&"dash_1")
+	check_eq(_contraband_count(), 1, "with the fine the officer takes the contraband he can see")
+	check(_sim.items.item_in_slot(&"glovebox_a") != null, "what is in the glovebox stays")
+	check_eq(GameData.as_array(_event("pulled_over").get("taken")).size(), 1, "the event names what was taken")
+	_pull_over_with(private, 100.0)
+	_sim.items.add_item(&"tea_glass", &"glovebox_a")
+	_hand_over(&"cash")
+	check_eq(_contraband_count(), 2, "with a bribe he keeps everything")
+
+
 # --- Driving -----------------------------------------------------------------
 
 func _begin(leg_id: String, act: int, leg_seed: int, modifier: String = "") -> Dictionary:
@@ -477,6 +679,80 @@ func _response_time() -> float:
 	if not check(target > 0.0 and reached > 0.0 and reached < 1.0, "the car answers the wheel (%s of full sideways speed after 0.2 s)" % str(snappedf(reached, 0.001))):
 		return 1.0
 	return -(float(ticks) * DT) / log(1.0 - reached)
+
+
+# --- The law -----------------------------------------------------------------
+
+## Puts the car on the plan's line for the next tick. With `indicating` he
+## works the indicator before each lane change, as the law asks.
+func _keep_to_the_line(indicating: bool) -> void:
+	_sim.car.x = _checker.line_x(_sim.car.s)
+	if not indicating or _sim.items.indicator != 0:
+		return
+	var here: int = _sim.car.lane_of(_checker.line_x(_sim.car.s))
+	var soon: int = _sim.car.lane_of(_checker.line_x(_sim.car.s + 45.0))
+	if soon != here:
+		_sim.items.complete(data.record("rituals", "indicator"), Gesture.DIR_UP if soon > here else Gesture.DIR_DOWN)
+
+
+## A Patrol leg in which he has just been pulled over, with `cash` to his name.
+func _pull_over_with(game_data: GameData, cash: float) -> void:
+	_sim = DriveSim.new(game_data)
+	_events = []
+	var plan: Dictionary = _begin("patrol", 2, 555)
+	_sim.cash = cash
+	var guard: int = int(60.0 / DT)
+	while not _sim.suspicion.watching and guard > 0:
+		guard -= 1
+		_keep_to_the_line(true)
+		_sim.step(_input)
+	_sim.suspicion.add(_sim.suspicion.maximum())
+	_keep_to_the_line(true)
+	_sim.step(_input)
+	_collect()
+	check(_sim.pulled_over and not plan.is_empty(), "(pulled over with %s cash)" % str(cash))
+
+
+## The fine his licence costs with `cash` to his name.
+func _fine_with(cash: float) -> float:
+	_pull_over_with(fresh_data(), cash)
+	_hand_over(&"dash_1")
+	return cash - _sim.cash
+
+
+## Carries what is at `from` to the driver's window and lets go (DRAG_TO).
+func _hand_over(from: StringName) -> void:
+	_input.clear()
+	_input.pointer_is_absolute = true
+	_input.pointer = _sim.hand.anchor_pointer(_sim.hand.anchor_index(from))
+	for _tick: int in int(1.5 / DT):
+		_sim.step(_input)
+	_input.lmb = true
+	for _tick: int in int(0.1 / DT):
+		_sim.step(_input)
+	_input.pointer = _sim.hand.anchor_pointer(_sim.hand.anchor_index(&"driver_window"))
+	for _tick: int in int(2.5 / DT):
+		_sim.step(_input)
+	_input.lmb = false
+	for _tick: int in int(0.2 / DT):
+		_sim.step(_input)
+	_input.clear()
+	_collect()
+
+
+func _contraband_count() -> int:
+	var count: int = 0
+	for item: ItemSim.Item in _sim.items.items:
+		if GameData.as_bool(item.record.get("contraband")):
+			count += 1
+	return count
+
+
+func _has_event_named(type: String) -> bool:
+	for event: Dictionary in _events:
+		if GameData.as_string(event.get("type")) == type:
+			return true
+	return false
 
 
 # --- Plans -------------------------------------------------------------------

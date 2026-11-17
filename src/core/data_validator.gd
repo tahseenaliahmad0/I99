@@ -27,7 +27,7 @@ const SLOT_ANCHOR: String = "@slot"
 ## What a completed ritual may do (ItemSim runs these), "op" or "op:arg:arg".
 const RITUAL_OPS: PackedStringArray = [
 	"nerves", "cash", "add_effect", "remove_effect", "consume_supply", "give", "toggle",
-	"horn", "wipe", "photo", "indicate", "window", "ash", "radio_step", "sfx", "line",
+	"horn", "wipe", "photo", "indicate", "window", "ash", "radio_step", "sfx", "line", "pay",
 ]
 ## Cabin switches a "toggle:" op may flip and a "flag:" condition may read.
 const CABIN_FLAGS: PackedStringArray = ["hazards", "high_beam", "window_open", "glovebox_open", "passenger"]
@@ -199,6 +199,7 @@ func _ritual_schema() -> Dictionary:
 		"flick_dirs": _opt(_list(_enum(FLICK_DIRS), 1)),
 		"turns": _opt(_num(0.0)),
 		"to": _opt(_ref("anchors")),
+		"over_items": _opt(_bool()),
 		"eyes_down": _bool(),
 		"blocks_view": _opt(_nullable(_str())),
 		"requires": _list(_str()),
@@ -745,6 +746,9 @@ func _check_op(op: String, file_label: String, where: String) -> void:
 		"nerves", "cash":
 			if not argument.is_valid_float():
 				_err("E_TYPE", file_label, where, "'%s' needs a number" % head)
+		"pay":
+			if argument != "fine" and argument != "bribe":
+				_err("E_ENUM", file_label, where, "'pay' takes fine or bribe, not '%s'" % argument)
 		"toggle":
 			if not CABIN_FLAGS.has(argument):
 				_err("E_ENUM", file_label, where, "'%s' is not a cabin switch (%s)" % [argument, ", ".join(CABIN_FLAGS)])
