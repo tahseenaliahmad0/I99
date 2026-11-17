@@ -300,6 +300,7 @@ func snapshot() -> Dictionary:
 		"wrecked": wrecked,
 		"curve_k": curve_k,
 		"items": _item_snapshots(),
+		"anchors_in_use": _anchors_in_use(),
 		"vehicles": _vehicle_snapshots(),
 	}
 
@@ -317,6 +318,14 @@ func _vehicle_snapshots() -> Array[Dictionary]:
 			"signalling": vehicle.signalling,
 			"role": vehicle.role,
 		})
+	return out
+
+
+func _anchors_in_use() -> Array[StringName]:
+	var out: Array[StringName] = []
+	for index: int in hand.anchor_count():
+		if hand.is_anchor_active(index):
+			out.append(hand.anchor_id(index))
 	return out
 
 

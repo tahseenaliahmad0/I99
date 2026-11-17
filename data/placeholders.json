@@ -523,5 +523,112 @@
       "color": "#D8D8D0"
     },
     "scene": null
+  },
+  "cabin_lamp_off": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.022,
+        0.022,
+        0.01
+      ],
+      "color": "#3A3A3E"
+    },
+    "scene": null
+  },
+  "cabin_lamp_on": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.022,
+        0.022,
+        0.01
+      ],
+      "color": "#FF5A36"
+    },
+    "scene": null
+  },
+  "cabin_cash": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.07,
+        0.004,
+        0.035
+      ],
+      "color": "#7FA36B"
+    },
+    "scene": null
+  },
+  "item_cigarettes": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.03,
+        0.012,
+        0.05
+      ],
+      "color": "#F4F4F0"
+    },
+    "scene": null
+  },
+  "item_cigarette_lit": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.008,
+        0.008,
+        0.05
+      ],
+      "color": "#FF7A1A"
+    },
+    "scene": null
+  },
+  "item_tea_glass": {
+    "placeholder": {
+      "shape": "cylinder",
+      "size": [
+        0.018,
+        0.05
+      ],
+      "color": "#B5651D"
+    },
+    "scene": null
+  },
+  "item_default": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.03,
+        0.03,
+        0.03
+      ],
+      "color": "#F2C230"
+    },
+    "scene": null
+  },
+  "cabin_visor_down": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        1.2,
+        0.16,
+        0.01
+      ],
+      "color": "#1E1E22"
+    },
+    "scene": null
+  },
+  "cabin_floor": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        1.9,
+        0.04,
+        1.9
+      ],
+      "color": "#17171A"
+    },
+    "scene": null
   }
 }

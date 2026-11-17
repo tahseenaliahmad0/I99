@@ -212,7 +212,13 @@
     "anchor_marker_default": "anchor_marker",
     "gate_view_scale": 0.03,
     "pointer_ring_width": 2,
-    "screenshot_frame": 45
+    "screenshot_frame": 45,
+    "lamp_row_pos": [-0.10, 0.215, -0.19],
+    "lamp_spacing": 0.035,
+    "cash_stack_pos": [0.30, 0.185, -0.26],
+    "cash_per_note": 10,
+    "item_lift": 0.03,
+    "visor_down_pos": [0.25, 0.52, -0.12]
   },
 
   "road_view": {
@@ -275,6 +281,12 @@
     "gate_view_scale": "m of knob travel per gate unit",
     "pointer_ring_width": "px",
     "screenshot_frame": "rendered frames before a --shot capture",
+    "lamp_row_pos": "m, the first dashboard lamp",
+    "lamp_spacing": "m",
+    "cash_stack_pos": "m",
+    "cash_per_note": "cash each note in the stack stands for",
+    "item_lift": "m an item is drawn above its slot's anchor",
+    "visor_down_pos": "m, the lowered visor",
 
     "hand_speed": "m/s",
     "hand_left_side_mult": "multiplier",

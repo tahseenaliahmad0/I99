@@ -74,7 +74,7 @@ Do not start a milestone until every test of the previous one passes (GDD 18).
 - [x] `DriveSim` wires step 9 (effects, items, Nerves, faults); Tremor on the gripped wheel; fault effects (pull, rattle, clutch, wiper, cone, cracks, mirror)
 - [x] Data: `items.json` (effects, starting cabin, cigarettes, tea), ritual ops, slots, all sfx ids of GDD 16.5
 - [x] The seven M3 tests written, passing and promoted
-- [ ] Cabin view: dashboard lamps, items in their slots, cash stack, clock placeholder; HUD rows for Nerves, lamps, cash, effects
+- [x] Cabin view: dashboard lamps, items in their slots, cash stack, lowered visor; only anchors in use are drawn; HUD rows for Nerves, lamps, cash, speed, radio, effects (`artifacts/m3_cabin.png`). Lids, tunnel, haze and blink are numbers in the HUD until the post effect of M10.
 - [ ] Review of the M3 core and tests
 
 ### M4 Legs and encounters: T-GEN-01..03, T-SUS-01, T-LEG-01..09
@@ -103,6 +103,10 @@ Do not start a milestone until every test of the previous one passes (GDD 18).
 
 ### M12 Touch and export: T-TOUCH-01
 - [ ] not started
+
+## Known debts (builder)
+
+- Simulation speed: about 85 microseconds per tick with nine vehicles (measured at M3). A Telling of 20 minutes is about 12 s of CPU; the full balance run of GDD 13.8 (100 seeds x 3 skills x 7 Tables) would take hours. The per-tick Dictionary lookups in `ItemSim.step`, `FaultSim.param` and `EffectSystem.step` are the first things to tighten in M11.
 
 ## NEEDS OWNER
 

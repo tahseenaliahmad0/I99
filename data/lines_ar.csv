@@ -21,3 +21,12 @@ hud.eyes,,,true
 hud.tick,,,true
 item.cigarettes.name,,,true
 item.tea_glass.name,,,true
+hud.nerves,,,true
+hud.lamps,,,true
+hud.cash,,,true
+hud.speed,,,true
+hud.effects,,,true
+hud.radio,,,true
+hud.eyes_shut,,,true
+hud.awake,,,true
+hud.none,,,true

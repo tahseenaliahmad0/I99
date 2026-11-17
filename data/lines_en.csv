@@ -21,3 +21,12 @@ hud.eyes,,Eyes %s / %s deg,false
 hud.tick,,Tick %s,false
 item.cigarettes.name,,Cigarettes,true
 item.tea_glass.name,,Tea glass,true
+hud.nerves,,Nerves %s (floor %s),false
+hud.lamps,,Lamps %s of %s %s,false
+hud.cash,,Cash %s,false
+hud.speed,,%s km/h,false
+hud.effects,,Effects: %s,false
+hud.radio,,Radio: %s,false
+hud.eyes_shut,,EYES SHUT,false
+hud.awake,,Awake,false
+hud.none,,none,false
