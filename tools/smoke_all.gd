@@ -11,6 +11,8 @@ const WITH_ARGUMENTS: Array = [
 	["res://scenes/drive.tscn", ["--leg=night,2", "--bot=line"]],
 	["res://scenes/drive.tscn", ["--leg=roadworks,2", "--bot=line"]],
 	["res://scenes/drive.tscn", ["--leg=motorcade,3", "--bot=line"]],
+	# What is said (GDD 16.6): a line of two lines, an exchange, a line shown in parts.
+	["res://scenes/drive.tscn", ["--leg=open_road,1", "--bot=line", "--say=narrator.start,wreck.drivers.1,subtitle.test.long"], 900],
 	# A cabin full of things: every kind of item drawn, the HUD's rows for them.
 	["res://scenes/drive.tscn", ["--leg=rain,1", "--bot=line", "--hud",
 			"--give=beads,seeds,phone,arak_flask,mixtape,thermos,forged_papers,tissue_box,bull_bar,fog_lamps,taxi_sign,spinner_knob,wheel_ring,crossover_stalk,thumb_keypad,wide_mirror,tinted_glass,turbo,good_stuff"], 3000],

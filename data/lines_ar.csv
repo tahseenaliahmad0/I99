@@ -11,6 +11,16 @@ passenger.hajjiya.board,,,true
 radio.news.patrol,,,true
 noor.call.1,,,true
 finale.proverb,,,true
+speaker.abu_noor,,,true
+speaker.noor,,,true
+speaker.guest,,,true
+speaker.child,,,true
+speaker.driver,,,true
+speaker.uncle,,,true
+speaker.aunt,,,true
+speaker.old_woman,,,true
+speaker.newsreader,,,true
+subtitle.test.long,,,true
 hud.gear,,,true
 hud.neutral,,,true
 hud.wheel,,,true

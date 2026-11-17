@@ -8,6 +8,7 @@
 [ext_resource type="Script" path="res://src/view/road_view.gd" id="6_road"]
 [ext_resource type="Script" path="res://src/view/sky_view.gd" id="7_sky"]
 [ext_resource type="Script" path="res://src/view/stop_view.gd" id="8_stop"]
+[ext_resource type="Script" path="res://src/view/subtitles_view.gd" id="9_subtitles"]
 
 [node name="Drive" type="Node3D"]
 script = ExtResource("1_drive")
@@ -30,6 +31,9 @@ script = ExtResource("6_road")
 
 [node name="Sky" type="Node3D" parent="."]
 script = ExtResource("7_sky")
+
+[node name="Subtitles" type="CanvasLayer" parent="."]
+script = ExtResource("9_subtitles")
 
 [node name="Overlay" type="CanvasLayer" parent="."]
 

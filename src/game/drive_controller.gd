@@ -36,6 +36,7 @@ var _bot_stood: float = 0.0
 @onready var _stop: StopView = $Cabin/Stop
 @onready var _sky: SkyView = $Sky
 @onready var _pointer: PointerView = $Overlay/Pointer
+@onready var _subtitles: SubtitlesView = $Subtitles
 @onready var _hud: DebugHud = $DebugHUD
 
 
@@ -57,6 +58,7 @@ func _ready() -> void:
 	_stop.setup(data, _factory)
 	_sky.setup(data, _factory)
 	_pointer.setup(data, _factory)
+	_subtitles.setup(data)
 	sim.rng.reseed(int(str(Game.args.get("seed", "1"))))
 	_bot = Game.args.has("bot")
 	if Game.args.has("continue") and not Game.saved_telling.is_empty() and sim.restore(Game.saved_telling):
@@ -77,6 +79,10 @@ func _ready() -> void:
 				push_error("Drive: --give names an item that cannot be put in the cabin: '%s'" % item_id)
 	if Game.args.has("hud") and not _hud.visible:
 		_hud.toggle()
+	if Game.args.has("say"):
+		# `--say=<line id>[,<line id>...]`: lines to look at, asked for as the simulation asks.
+		for line_id: String in str(Game.args["say"]).split(",", false):
+			Events.emit_event("line_requested", {"id": line_id})
 	if Game.args.has("aim"):
 		_aim_anchor = sim.hand.anchor_index(StringName(str(Game.args["aim"])))
 		if _aim_anchor == HandSim.NO_ANCHOR:
@@ -130,6 +136,7 @@ func _physics_process(_delta: float) -> void:
 		elif type == "arrived":
 			# Until the wedding room exists (M9) the night simply begins again.
 			Game.write_save({})
+			_subtitles.clear()
 			sim.begin_telling(sim.run.table, sim.run.seed + 1)
 
 
