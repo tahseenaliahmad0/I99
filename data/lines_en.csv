@@ -30,3 +30,13 @@ hud.radio,,Radio: %s,false
 hud.eyes_shut,,EYES SHUT,false
 hud.awake,,Awake,false
 hud.none,,none,false
+sign.modifier.crosswind,,[CROSSWIND],true
+sign.modifier.potholes,,[POTHOLES],true
+sign.modifier.sheep,,[SHEEP],true
+sign.modifier.wedding,,[WEDDING],true
+sign.modifier.melon_truck,,[MELONS],true
+sign.modifier.dust_haze,,[DUST],true
+sign.curve.left,,[BEND <],true
+sign.curve.right,,[BEND >],true
+sign.motorcade.keep_back,,[KEEP BACK 100 M],true
+sign.roadworks,,[ROADWORKS],true

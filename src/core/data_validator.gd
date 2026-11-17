@@ -34,6 +34,18 @@ const CABIN_FLAGS: PackedStringArray = ["hazards", "high_beam", "window_open", "
 ## Conditions that are not effect ids.
 const CONDITION_WORDS: PackedStringArray = ["supply>0", "hot"]
 const REACHES: PackedStringArray = ["near", "mid", "far", "none"]
+## Lanes a beat may name: relative to the lane the player is expected in.
+const BEAT_LANES: PackedStringArray = ["player", "left_of_player", "right_of_player", "shoulder", "oncoming"]
+const HAZARD_CLASSES: PackedStringArray = ["soft", "pothole"]
+const LEG_CONDITIONS: PackedStringArray = ["clear", "rain", "night"]
+const SPECIAL_KINDS: PackedStringArray = ["roadworks", "tailgater", "patrol", "two_lane", "motorcade"]
+## Content rows of GDD Part II that must exist as data (GDD 1.1), per record set.
+const REQUIRED_RECORDS: Dictionary = {
+	"legs": ["open_road", "rush", "rain", "night", "roadworks", "tailgater", "patrol", "two_lane", "motorcade"],
+	"modifiers": ["crosswind", "potholes", "sheep", "wedding", "melon_truck", "dust_haze"],
+	"vehicles": ["car", "taxi", "pickup", "minibus", "truck", "tanker", "tuk_tuk"],
+	"faults": ["rattle", "cracked_windscreen", "dead_headlight", "pulling_steering", "slipping_clutch", "stuck_wiper", "cracked_mirror"],
+}
 const BEAT_TYPES: PackedStringArray = ["CALM", "CLUSTER", "SLOWPOKE", "MERGE", "CURVE", "GUST", "HAZARD", "SPECIAL"]
 const HECKLE_TYPES: PackedStringArray = ["TWIST", "DARE", "DOUBT", "QUESTION", "ORDER", "FIB"]
 const FLICK_DIRS: PackedStringArray = ["up", "down", "left", "right"]
@@ -70,6 +82,7 @@ func run(data: GameData) -> PackedStringArray:
 	_check_record_set("effects", _effect_schema())
 	_check_record_set("slots", _slot_schema())
 	_check_record_set("vehicles", _vehicle_schema())
+	_check_record_set("hazard_kinds", _hazard_kind_schema())
 	_check_record_set("faults", _fault_schema())
 	_check_record_set("rituals", _ritual_schema())
 	_check_record_set("items", _item_schema())
@@ -201,22 +214,38 @@ func _leg_schema() -> Dictionary:
 		"lanes": _int(1.0, 3.0),
 		"divided": _bool(),
 		"density": _num(0.0),
-		"condition": _str(),
+		"condition": _enum(LEG_CONDITIONS),
 		"par_s": _num(0.0),
 		"beat_weights": _map_keyed(_enum(BEAT_TYPES), _num(0.0)),
-		"special": _opt(_nullable(_obj({"kind": _str()}, true))),
+		"calm_adjacent": _opt(_bool()),
+		"special": _opt(_nullable(_obj({"kind": _enum(SPECIAL_KINDS)}, true))),
 		"modifiers_allowed": _list(_ref("modifiers")),
-	}, true)
+	})
 
 
 func _beat_schema() -> Dictionary:
 	return _obj({
 		"id": _str(),
 		"type": _enum(BEAT_TYPES),
-		"length_m": _num(0.0),
+		"length_m": _t("any"),
 		"min_lanes": _opt(_int(1.0, 3.0)),
-		"spawns": _list(_obj({"vehicle": _ref("vehicles")}, true)),
-	}, true)
+		"acts": _opt(_list(_int(1.0, 3.0), 1)),
+		"spawns": _opt(_list(_obj({
+			"vehicle": _ref("vehicles"),
+			"lane": _enum(BEAT_LANES),
+			"s_offset": _num(),
+			"speed_kmh": _num(0.0),
+			"lane_change": _opt(_obj({"to": _enum(BEAT_LANES), "at_s_offset": _num()})),
+		}))),
+		"hazards": _opt(_list(_obj({
+			"kind": _ref("hazard_kinds"),
+			"lane": _enum(BEAT_LANES),
+			"s_offset": _num(),
+			"x_offset": _opt(_num()),
+		}))),
+		"curve": _opt(_obj({"k_index": _int(0.0, 2.0), "dir": _enum(PackedStringArray(["left", "right"]))})),
+		"gust": _opt(_obj({"dir": _enum(PackedStringArray(["left", "right"]))})),
+	})
 
 
 func _vehicle_schema() -> Dictionary:
@@ -229,11 +258,25 @@ func _vehicle_schema() -> Dictionary:
 		"honk_nerves": _num(0.0),
 		"acts": _list(_int(1.0, 3.0), 1),
 		"placeholder": _ref("placeholders"),
+		"traffic": _opt(_bool()),
+	})
+
+
+func _hazard_kind_schema() -> Dictionary:
+	return _obj({
+		"id": _str(),
+		"class": _enum(HAZARD_CLASSES),
+		"width": _num(0.05),
+		"length": _num(0.05),
+		"nerves": _num(0.0),
+		"suspicion": _opt(_num(0.0)),
+		"speed_loss": _opt(_num(0.0, 1.0)),
+		"placeholder": _ref("placeholders"),
 	})
 
 
 func _modifier_schema() -> Dictionary:
-	return _obj({"id": _str()}, true)
+	return _obj({"id": _str(), "line_ids": _opt(_map(_ref("lines")))}, true)
 
 
 func _stop_schema() -> Dictionary:
@@ -538,6 +581,8 @@ func _check_record_set(set_name: String, schema: Dictionary) -> void:
 
 ## Rules that span fields or files.
 func _check_cross_rules() -> void:
+	_check_required_records()
+	_check_beats()
 	for table: Dictionary in _data.records("tables"):
 		var unlock: String = GameData.as_string(table.get("unlock"))
 		var label: String = "tables[%s].unlock" % GameData.as_string(table.get("id"), "?")
@@ -619,6 +664,52 @@ func _check_cross_rules() -> void:
 			if not _data.has_record("items", with) and not _synergy_tokens().has(with):
 				_err("E_REF", "items.json", "items[%s].synergies[%d].with" % [item_id, index],
 						"unknown item id or synergy token '%s'" % with)
+
+
+## Every content row of Part II that a finished milestone owes (GDD 1.1).
+## A record set that is still empty is not owed yet.
+func _check_required_records() -> void:
+	for set_name: Variant in REQUIRED_RECORDS:
+		var set_id: String = str(set_name)
+		if _data.records(set_id).is_empty():
+			continue
+		var where: Array = GameData.RECORD_SETS[set_id]
+		var required: Array = REQUIRED_RECORDS[set_name]
+		for id: Variant in required:
+			if not _data.has_record(set_id, str(id)):
+				_err("E_MISSING", "%s.json" % str(where[0]), "%s[%s]" % [str(where[1]), str(id)], "this row of the GDD is missing")
+
+
+## Beat templates: lengths, speeds below par, lane changes ahead of the vehicle.
+func _check_beats() -> void:
+	var par: float = INF
+	if _data.tuning.has("gear_speeds") and _data.tuning.raw("gear_speeds") is Array and _data.tuning.a("gear_speeds").size() >= 3:
+		par = _data.tuning.fi("gear_speeds", 2)
+	var typed: Dictionary = {}
+	for beat: Dictionary in _data.records("beats"):
+		var label: String = "beats[%s]" % GameData.as_string(beat.get("id"), "?")
+		typed[GameData.as_string(beat.get("type"))] = true
+		var length: Variant = beat.get("length_m")
+		var length_ok: bool = GameData.is_number(length) and GameData.as_float(length) > 0.0
+		if length is Array:
+			var span: Array = length
+			length_ok = span.size() == 2 and GameData.is_number(span[0]) and GameData.is_number(span[1]) \
+					and GameData.as_float(span[0]) > 0.0 and GameData.as_float(span[1]) >= GameData.as_float(span[0])
+		if not length_ok:
+			_err("E_TYPE", "beats.json", label + ".length_m", "must be a length in metres or [shortest, longest]")
+		var spawns: Array = GameData.as_array(beat.get("spawns"))
+		for index: int in spawns.size():
+			var spawn: Dictionary = GameData.as_dict(spawns[index])
+			var where: String = "%s.spawns[%d]" % [label, index]
+			if GameData.as_string(spawn.get("lane")) != "oncoming" and GameData.as_float(spawn.get("speed_kmh")) >= par:
+				_err("E_RULE", "beats.json", where + ".speed_kmh", "a vehicle to be met in third gear must be slower than third gear (%s km/h)" % str(par))
+			var change: Dictionary = GameData.as_dict(spawn.get("lane_change"))
+			if change.has("at_s_offset") and GameData.as_float(change.get("at_s_offset")) <= GameData.as_float(spawn.get("s_offset")):
+				_err("E_RULE", "beats.json", where + ".lane_change.at_s_offset", "must lie ahead of the vehicle's s_offset")
+	if not _data.records("beats").is_empty():
+		for type: String in BEAT_TYPES:
+			if type != "SPECIAL" and not typed.has(type):
+				_err("E_MISSING", "beats.json", "beats", "no beat of type %s" % type)
 
 
 ## One ritual op: "op" or "op:arg:arg". The op must be known, and the ids it

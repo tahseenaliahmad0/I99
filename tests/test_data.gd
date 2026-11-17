@@ -285,8 +285,40 @@ func _check_broken_records() -> void:
 	_expect("E_RANGE", "legs[patrol].acts[1]", "an act outside 1 to 3")
 
 	_reset_fixture()
-	_record("beats", "merge_right_truck")["spawns"] = [{"vehicle": "hovercraft"}]
+	_record("beats", "merge_right_truck")["spawns"] = [{"vehicle": "hovercraft", "lane": "player", "s_offset": 60, "speed_kmh": 65}]
 	_expect("E_REF", "beats[merge_right_truck].spawns[0].vehicle", "an unknown vehicle id")
+
+	_reset_fixture()
+	_record("beats", "merge_right_truck")["spawns"] = [{"vehicle": "truck", "lane": "middle", "s_offset": 60, "speed_kmh": 65}]
+	_expect("E_ENUM", "beats[merge_right_truck].spawns[0].lane", "an unknown lane word")
+
+	_reset_fixture()
+	_record("beats", "merge_right_truck")["spawns"] = [{"vehicle": "truck", "lane": "player", "s_offset": 60, "speed_kmh": 140}]
+	_expect("E_RULE", "beats[merge_right_truck].spawns[0].speed_kmh", "a beat vehicle faster than third gear")
+
+	_reset_fixture()
+	_record("beats", "merge_right_truck")["spawns"] = [{"vehicle": "truck", "lane": "right_of_player", "s_offset": 60, "speed_kmh": 65, "lane_change": {"to": "player", "at_s_offset": 40}}]
+	_expect("E_RULE", "beats[merge_right_truck].spawns[0].lane_change.at_s_offset", "a lane change behind the vehicle")
+
+	_reset_fixture()
+	_record("beats", "merge_right_truck")["length_m"] = [200, 120]
+	_expect("E_TYPE", "beats[merge_right_truck].length_m", "a length range written backwards")
+
+	_reset_fixture()
+	_record("legs", "patrol")["condition"] = "fog"
+	_expect("E_ENUM", "legs[patrol].condition", "an unknown road condition")
+
+	_reset_fixture()
+	_record("legs", "patrol")["special"] = {"kind": "ambush"}
+	_expect("E_ENUM", "legs[patrol].special.kind", "an unknown encounter")
+
+	_reset_fixture()
+	_list("legs", "legs").erase(_record("legs", "motorcade"))
+	_expect("E_MISSING", "legs[motorcade]", "a leg type of GDD 9.1 that is missing")
+
+	_reset_fixture()
+	_list("beats", "vehicles").erase(_record("vehicles", "tanker"))
+	_expect("E_MISSING", "vehicles[tanker]", "a vehicle of GDD 5.5 that is missing")
 
 	_reset_fixture()
 	_record("beats", "merge_right_truck")["type"] = "AMBUSH"

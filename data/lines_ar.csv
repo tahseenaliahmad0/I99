@@ -30,3 +30,13 @@ hud.radio,,,true
 hud.eyes_shut,,,true
 hud.awake,,,true
 hud.none,,,true
+sign.modifier.crosswind,,,true
+sign.modifier.potholes,,,true
+sign.modifier.sheep,,,true
+sign.modifier.wedding,,,true
+sign.modifier.melon_truck,,,true
+sign.modifier.dust_haze,,,true
+sign.curve.left,,,true
+sign.curve.right,,,true
+sign.motorcade.keep_back,,,true
+sign.roadworks,,,true

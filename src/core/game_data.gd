@@ -18,6 +18,7 @@ const RECORD_SETS: Dictionary = {
 	"legs": ["legs", "legs"],
 	"beats": ["beats", "beats"],
 	"vehicles": ["beats", "vehicles"],
+	"hazard_kinds": ["beats", "hazard_kinds"],
 	"modifiers": ["modifiers", "modifiers"],
 	"stops": ["stops", "stops"],
 	"passengers": ["passengers", "passengers"],
