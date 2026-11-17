@@ -11,3 +11,11 @@ passenger.hajjiya.board,Old woman,"God keep you, my son. Not so fast.",true
 radio.news.patrol,Newsreader,Traffic police are out on the southern road tonight.,true
 noor.call.1,Noor,Baba? Are you awake?,true
 finale.proverb,"Noor, then Abu Noor",They say one hand doesn't clap. / No. But it drives.,true
+hud.gear,,Gear %s,false
+hud.neutral,,N,false
+hud.wheel,,Wheel %s deg,false
+hud.hand,,Hand: %s,false
+hud.hand.wheel,,on the wheel,false
+hud.hand.free,,free,false
+hud.eyes,,Eyes %s / %s deg,false
+hud.tick,,Tick %s,false

@@ -268,6 +268,16 @@ func _anchor_schema() -> Dictionary:
 		"pos": _t("vec3"),
 		"time_s": _num(0.0),
 		"via_w": _opt(_bool()),
+		"placeholder": _opt(_nullable(_ref("placeholders"))),
+	})
+
+
+func _prop_schema() -> Dictionary:
+	return _obj({
+		"id": _str(),
+		"placeholder": _ref("placeholders"),
+		"pos": _t("vec3"),
+		"rot": _opt(_t("vec3")),
 	})
 
 
@@ -441,6 +451,7 @@ func _check_anchor_file() -> void:
 	else:
 		_err("E_MISSING", "anchors.json", "points", "required object is missing")
 	_check_record_set("anchors", _anchor_schema())
+	_check_record_set("props", _prop_schema())
 
 
 func _check_registry(file: String, schema: Dictionary) -> void:

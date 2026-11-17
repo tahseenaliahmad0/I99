@@ -197,3 +197,118 @@ Format: `D-NNN (milestone, date) Title` then Context / Decision / Why.
   T-TOUCH-01 says so.
 - **Why.** Touch is already in scope (GDD 17.4), so an iOS preset adds no
   system. Shipping both readings of the brief costs one preset.
+
+## D-017 (M1, 2026-11-17) The pointer is a direction into the cabin
+
+- **Context.** GDD 4.2 calls the pointer "a 2D position on screen" that snaps
+  to anchors within 60 px. But half the anchors of GDD 16.2 are not on the
+  screen when he looks straight ahead with a 75 degree view: the gear lever
+  and the cups are below it, the driver's window is left of it, and the
+  passenger's shoulder is exactly beside the eye (90 degrees off the forward
+  axis), where no flat projection reaches. The glance (GDD 4.7) also turns
+  the camera as the hand moves, which would slide every anchor out from under
+  a screen-fixed pointer mid-reach.
+- **Decision.** The pointer is kept in reference pixels (the pixels of a
+  1080-high view) as an angular map of directions from the eye:
+  `yaw = (x - cx) / k`, `pitch = -(y - cy) / k`, with `k = 540 / tan(fov / 2)`.
+  At the centre of the view one pointer pixel is one screen pixel.
+  The pointer may leave the screen rectangle; its range is
+  `pointer_yaw_min/max`, `pointer_pitch_min/max`. `anchor_snap_radius` is
+  measured in this space. The pointer does not move when the eyes glance: it
+  stays on the same spot of the cabin, and the view draws it where that spot
+  is on screen. With no anchor in range the hand goes to the point under the
+  pointer on the plane `hand_plane_distance` in front of the eye, clamped to
+  the box `hand_free_bounds_min/max` so a sideways pointer cannot send the
+  hand out of the car.
+- **Why.** It is the simplest model in which every anchor of GDD 16.2 can be
+  pointed at with mouse motion alone, on any window shape (GDD 1.1), and in
+  which a reach is stable while the eyes follow the hand. `CabinSpace` holds
+  all of it.
+
+## D-018 (M1, 2026-11-17) How the gear gate reads GDD 4.5
+
+- **Decision.**
+  - The lever rides rails: the neutral channel (y = 0) and one vertical
+    channel per column. `gate_channel_half_width` is how close to a junction
+    the lever must be to change rail.
+  - Per tick the lever follows the stronger component of the pointer motion
+    along its rail. If that way is shut it slides the other way, as a real
+    lever slides along a gate wall.
+  - "Pushes more than 1 unit into a wall" counts only motion that moves the
+    lever not at all. The stop at the far end of a gear's own slot is not a
+    wall: pushing the lever home, however hard, never grinds.
+  - The engaged gear becomes neutral as soon as the held lever leaves
+    `gate_engage_radius` of it; a gear engages only on release.
+  - A release at 0.3 to 0.8 units along a vertical channel grinds and springs
+    back to neutral; below 0.3 it springs back silently; from 0.8 it engages.
+  - With the assist setting, FLICK up and FLICK down on the lever shift one
+    gear at a time and never grind (`GearGate.shift_sequential`).
+- **Why.** GDD 4.9 asks for the generous reading of the fiddly dials. A
+  literal reading would grind on every enthusiastic shift and on every
+  diagonal stroke, which punishes the player for the mouse, not for a
+  mistake. Mis-aimed shifts (the wrong slot, a push at a wall, a release
+  half-way) still grind, which is what 4.5 describes.
+
+## D-019 (M1, 2026-11-17) `--aim=` and `--shot=` for pictures
+
+- **Decision.** Two more arguments for the build's own use: `--aim=<anchor>`
+  holds the pointer on an anchor without a mouse, and `--shot=<file.png>`
+  saves one rendered frame (after `screenshot_frame` frames) and quits.
+- **Why.** GDD 1.4 rule 5 asks for screenshots in `artifacts/`. There is no
+  mouse on the build machine, and the screenshots must be repeatable.
+
+## D-020 (M1, 2026-11-17) Details of the hand the GDD leaves open
+
+- **Buffered press.** A press is remembered for the anchor the pointer was
+  snapped to when it was made. It is applied when the hand arrives there
+  within `input_buffer`; it is dropped if the pointer leaves that anchor. A
+  click made and released during the reach still counts as a TAP on arrival.
+- **Left side.** Any straight stretch with an end left of the hub (x < 0)
+  runs at `hand_left_side_mult`; W itself (x = 0) counts as the right side.
+  The hand changes sides only through W, in both directions, also when it is
+  following a free pointer.
+- **Wheel.** The wheel is a disc in the plane z = 0. "Pointer on the wheel"
+  means the pointer's ray meets that plane inside the grip zone
+  (`wheel_radius` plus or minus `grip_zone_half_width`). An anchor in range
+  wins over the rim (the wiper stalk sits inside the zone).
+- **Glance.** The camera turns toward the hand along the shortest arc by
+  `glance_gain` of the angle beyond `glance_start`; the result is then
+  clamped to `glance_max_yaw` and to `glance_max_pitch` downward. The eyes
+  never glance upward (GDD 4.7 only caps downward pitch).
+- **Pinning.** While a gesture other than DRAG_TO is in progress the pointer
+  is pinned, as it is while gripping (GDD 4.3), so a FLICK or a CRANK moves
+  the object, not the hand.
+- **Co-located anchors.** `radio` and `tape` share a position (GDD 16.2).
+  The tape deck stays inactive until a Mixtape is fitted (M6).
+
+## D-021 (M1, 2026-11-17) Details of the gestures the GDD leaves open
+
+- **FLICK** must reach `flick_min_distance` while the button is down; a
+  release before that cancels. A ritual may accept several directions (the
+  indicator: up and down); the recogniser reports which was made.
+- **CRANK** counts the cumulative change of heading of the pointer's motion,
+  sampled every `crank_min_step` pixels, so the size and centre of the
+  circle do not matter. Turning back unwinds. Either direction completes.
+  Releasing early cancels.
+- **BEAD** is a TAP that counts at most `bead_max_rate` times per second;
+  faster taps are ignored.
+- **HOLD** completes at its time while the button is still down.
+- **GATE** is not a gesture of the recogniser; the lever has its own class.
+- **DRAG** (the radio dial, the mixtape, the tissue: "DRAG" without "_TO" in
+  GDD 4.6 and 7.4) is not in the list of GDD 4.4. It is added in M3 with the
+  radio as a pinned drag that reports its travel.
+- **Order within a tick.** GDD 13.3 puts the gesture recogniser before the
+  hand. So a press applied by the hand in tick N starts a gesture that the
+  recogniser first advances in tick N+1; a HOLD of t seconds completes
+  exactly t after the press was applied.
+
+## D-022 (M1, 2026-11-17) Controls are rituals; cabin dressing is data
+
+- **Decision.** The controls of GDD 4.6 are rows in `rituals.json` with no
+  owning item (anchor, gesture, flick directions, crank turns). Their effects
+  (`on_complete`) arrive in M3. The static shapes that dress the cabin (dash,
+  console, seat, roof, pillars, doors) are `"props"` in `anchors.json`, each
+  naming a placeholder; an anchor may name its own placeholder, or `null` to
+  draw nothing (his own face).
+- **Why.** GDD 1.3 (content and numbers in data), GDD 1.1 (an artist changes
+  a registry file, not code).

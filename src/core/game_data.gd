@@ -8,7 +8,8 @@ extends RefCounted
 
 ## Record sets: set name -> [file name, key of the array of records in that file].
 ## A record is an object with a unique "id". Most files hold one set; the road
-## vocabulary (beats.json) also holds vehicles, and anchors.json also holds slots.
+## vocabulary (beats.json) also holds vehicles, and anchors.json also holds the
+## slots and the static props that dress the cabin.
 const RECORD_SETS: Dictionary = {
 	"items": ["items", "items"],
 	"rituals": ["rituals", "rituals"],
@@ -23,6 +24,7 @@ const RECORD_SETS: Dictionary = {
 	"faults": ["faults", "faults"],
 	"anchors": ["anchors", "anchors"],
 	"slots": ["anchors", "slots"],
+	"props": ["anchors", "props"],
 }
 ## The fourteen JSON files of GDD 13.2. placeholders and sfx are registries:
 ## the root object maps an id straight to its entry (GDD 14).

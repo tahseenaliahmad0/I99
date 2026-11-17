@@ -1,1 +1,307 @@
-{}
+{
+  "anchor_marker": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.034,
+        0.034,
+        0.034
+      ],
+      "color": "#F2C230"
+    },
+    "scene": null
+  },
+  "anchor_outline": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.046,
+        0.046,
+        0.046
+      ],
+      "color": "#FFFFFF"
+    },
+    "scene": null
+  },
+  "cabin_wheel": {
+    "placeholder": {
+      "shape": "cylinder",
+      "size": [
+        0.19,
+        0.022
+      ],
+      "color": "#38383E"
+    },
+    "scene": null
+  },
+  "cabin_wheel_spoke": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.36,
+        0.034,
+        0.026
+      ],
+      "color": "#4A4A52"
+    },
+    "scene": null
+  },
+  "cabin_wheel_mark": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.03,
+        0.05,
+        0.03
+      ],
+      "color": "#B8B8C0"
+    },
+    "scene": null
+  },
+  "cabin_column": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.07,
+        0.07,
+        0.2
+      ],
+      "color": "#1E1E22"
+    },
+    "scene": null
+  },
+  "cabin_stalk": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.2,
+        0.014,
+        0.014
+      ],
+      "color": "#4A4A52"
+    },
+    "scene": null
+  },
+  "cabin_dash": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        1.9,
+        0.4,
+        0.28
+      ],
+      "color": "#2A2A2E"
+    },
+    "scene": null
+  },
+  "cabin_console": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.3,
+        0.32,
+        0.12
+      ],
+      "color": "#38383E"
+    },
+    "scene": null
+  },
+  "cabin_tunnel": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.26,
+        0.16,
+        0.5
+      ],
+      "color": "#1E1E22"
+    },
+    "scene": null
+  },
+  "cabin_gear_stick": {
+    "placeholder": {
+      "shape": "cylinder",
+      "size": [
+        0.008,
+        0.1
+      ],
+      "color": "#8A8A92"
+    },
+    "scene": null
+  },
+  "cabin_gear_knob": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.036,
+        0.036,
+        0.036
+      ],
+      "color": "#F2C230"
+    },
+    "scene": null
+  },
+  "cabin_seat": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.45,
+        0.12,
+        0.45
+      ],
+      "color": "#5A4636"
+    },
+    "scene": null
+  },
+  "cabin_seat_back": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.45,
+        0.6,
+        0.1
+      ],
+      "color": "#5A4636"
+    },
+    "scene": null
+  },
+  "cabin_roof": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        1.9,
+        0.06,
+        1.2
+      ],
+      "color": "#1E1E22"
+    },
+    "scene": null
+  },
+  "cabin_pillar": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.06,
+        0.6,
+        0.06
+      ],
+      "color": "#1E1E22"
+    },
+    "scene": null
+  },
+  "cabin_door": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.06,
+        0.5,
+        1.0
+      ],
+      "color": "#2A2A2E"
+    },
+    "scene": null
+  },
+  "cabin_mirror": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.24,
+        0.07,
+        0.02
+      ],
+      "color": "#F2C230"
+    },
+    "scene": null
+  },
+  "cabin_visor": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.3,
+        0.12,
+        0.015
+      ],
+      "color": "#F2C230"
+    },
+    "scene": null
+  },
+  "cabin_hood": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        1.7,
+        0.1,
+        1.5
+      ],
+      "color": "#D8D2C4"
+    },
+    "scene": null
+  },
+  "hand": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.075,
+        0.095,
+        0.03
+      ],
+      "color": "#C68642"
+    },
+    "scene": null
+  },
+  "arm_forearm": {
+    "placeholder": {
+      "shape": "capsule",
+      "size": [
+        0.028,
+        0.3
+      ],
+      "color": "#C68642"
+    },
+    "scene": null
+  },
+  "arm_upper": {
+    "placeholder": {
+      "shape": "capsule",
+      "size": [
+        0.034,
+        0.3
+      ],
+      "color": "#C68642"
+    },
+    "scene": null
+  },
+  "left_sleeve": {
+    "placeholder": {
+      "shape": "capsule",
+      "size": [
+        0.04,
+        0.16
+      ],
+      "color": "#7A7A80"
+    },
+    "scene": null
+  },
+  "ui_pointer": {
+    "placeholder": {
+      "shape": "quad",
+      "size": [
+        14.0,
+        14.0
+      ],
+      "color": "#FFFFFF"
+    },
+    "scene": null
+  },
+  "ui_progress": {
+    "placeholder": {
+      "shape": "quad",
+      "size": [
+        26.0,
+        26.0
+      ],
+      "color": "#F2C230"
+    },
+    "scene": null
+  }
+}

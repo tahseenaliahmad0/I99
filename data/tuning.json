@@ -152,7 +152,31 @@
     "wreck_to_wheel": 3
   },
 
+  "cabin_view": {
+    "arm_upper_length": 0.30,
+    "arm_forearm_length": 0.30,
+    "shoulder_slide_max": 0.25,
+    "arm_pole": [0.35, -1.0, 0.25],
+    "camera_near": 0.02,
+    "camera_far": 600,
+    "anchor_marker_default": "anchor_marker",
+    "gate_view_scale": 0.03,
+    "pointer_ring_width": 2,
+    "screenshot_frame": 45
+  },
+
   "_units": {
+    "arm_upper_length": "m",
+    "arm_forearm_length": "m",
+    "shoulder_slide_max": "m",
+    "arm_pole": "direction the elbow leans, cabin frame",
+    "camera_near": "m",
+    "camera_far": "m",
+    "anchor_marker_default": "placeholder id",
+    "gate_view_scale": "m of knob travel per gate unit",
+    "pointer_ring_width": "px",
+    "screenshot_frame": "rendered frames before a --shot capture",
+
     "hand_speed": "m/s",
     "hand_left_side_mult": "multiplier",
     "hand_pound_mult": "multiplier",

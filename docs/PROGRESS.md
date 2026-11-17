@@ -27,9 +27,9 @@ Useful commands:
 
 ## Current state
 
-- **Milestone:** M0 (Harness) is complete. M1 (The Hand and the wheel) is next.
-- **Tests:** 2 of 114 passing (T-DATA-01, T-SMOKE-BOOT).
-- **Next step:** M1, first step.
+- **Milestone:** M1 (The Hand and the wheel), in review.
+- **Tests:** 2 of 114 registered passing; the eight M1 tests pass and wait for the review before promotion.
+- **Next step:** apply the findings of the `m1-review` workflow, promote, commit, push. Then M2.
 
 ## Milestones
 
@@ -47,7 +47,14 @@ Do not start a milestone until every test of the previous one passes (GDD 18).
 - [x] T-SMOKE-BOOT: boot.tscn runs 600 frames headless with five autoloads, all data loaded, no error output
 
 ### M1 The Hand and the wheel: T-HAND-01..03, T-WHEEL-01..02, T-GATE-01..02, T-GEST-01
-- [ ] not started
+- [x] `DriveInput`, `CabinSpace` (pointer map, free target, rim zone, glance), M1 tuning constants
+- [x] `HandSim`: snap, travel through W, left-side speed, input buffer, fly-and-grip, riding the wheel
+- [x] `WheelSim`, `Gesture` (TAP, HOLD, FLICK, DRAG_TO, CRANK, BEAD), `GearGate`
+- [x] `DriveSim` stepping them in the order of GDD 13.3; control rituals of GDD 4.6 in `rituals.json`
+- [x] The eight M1 tests written and passing (not yet promoted)
+- [x] Cabin sandbox: `scenes/drive.tscn`, `drive_controller.gd`, `CabinView`, `HandView` (analytic arm), `PointerView`, `DebugHud` (F1); screenshots in `artifacts/m1_*.png`
+- [ ] Adversarial review of the M1 core and tests (workflow `m1-review`), fixes applied
+- [ ] Tests promoted; M1 committed and pushed
 
 ### M2 Driving: T-CAR-01..05, T-COL-01..03, T-CC-01..02
 - [ ] not started
@@ -102,3 +109,5 @@ Two lines per slice, newest last.
   Test runner with error trap and append-only guard; 114 ids registered as failing; `tools/check.sh` green.
 - 2026-11-17 M0: T-DATA-01 (validator proven on shipped data, GDD 14 examples and broken variants) and T-SMOKE-BOOT pass and are promoted.
   Tools started with `--script` use `user://test_runs/tool` and ignore game arguments. M0 complete: 2 of 114.
+- 2026-11-17 M1: core simulation of the hand, wheel, gestures and gear gate with `DriveSim`; eight tests written and passing.
+  Cabin sandbox scene renders under Xvfb (artifacts/m1_*.png). Review workflow running on a snapshot before promotion.
