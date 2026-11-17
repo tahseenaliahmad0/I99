@@ -38,15 +38,7 @@ signal arrived(data: Dictionary)
 signal line_requested(data: Dictionary)
 signal sfx_requested(data: Dictionary)
 
-const NAMES: PackedStringArray = [
-	"leg_started", "leg_ended", "fork_taken", "stop_entered", "stop_left",
-	"boss_started", "boss_ended", "ritual_completed", "item_bought",
-	"effect_added", "effect_expired", "nerves_threshold_crossed", "snap",
-	"blink", "nod", "lamp_lit", "fault_repaired", "hit", "close_call",
-	"suspicion_changed", "pulled_over", "heckle_started", "heckle_resolved",
-	"passenger_boarded", "passenger_left", "call_started", "call_resolved",
-	"wreck", "arrived", "line_requested", "sfx_requested",
-]
+const NAMES: PackedStringArray = EventNames.ALL
 
 
 ## Forwards one simulation event. `event_name` must be one of NAMES.

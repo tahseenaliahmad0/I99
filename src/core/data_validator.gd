@@ -21,9 +21,44 @@ const LINE_ID_PATTERN: String = "^[a-z0-9_]+(\\.[a-z0-9_]+)+$"
 
 const ITEM_KINDS: PackedStringArray = ["habit", "keepsake", "adaptation", "deal", "fixture"]
 const RARITIES: PackedStringArray = ["common", "uncommon", "rare"]
-const GESTURES: PackedStringArray = ["TAP", "HOLD", "FLICK", "DRAG_TO", "CRANK", "BEAD", "GATE"]
+const GESTURES: PackedStringArray = ["TAP", "HOLD", "FLICK", "DRAG", "DRAG_TO", "CRANK", "BEAD", "GATE"]
+## A ritual's anchor may follow its item: "@slot" is wherever the item sits.
+const SLOT_ANCHOR: String = "@slot"
+## What a completed ritual may do (ItemSim runs these), "op" or "op:arg:arg".
+const RITUAL_OPS: PackedStringArray = [
+	"nerves", "cash", "add_effect", "remove_effect", "consume_supply", "give", "toggle",
+	"horn", "wipe", "photo", "indicate", "window", "ash", "radio_step", "sfx", "line", "pay",
+]
+## Cabin switches a "toggle:" op may flip and a "flag:" condition may read.
+const CABIN_FLAGS: PackedStringArray = ["hazards", "high_beam", "window_open", "glovebox_open", "passenger"]
+## Conditions that are not effect ids.
+const CONDITION_WORDS: PackedStringArray = ["supply>0", "hot"]
+const REACHES: PackedStringArray = ["near", "mid", "far", "none"]
+## Lanes a beat may name: relative to the lane the player is expected in.
+const BEAT_LANES: PackedStringArray = ["player", "left_of_player", "right_of_player", "shoulder", "oncoming"]
+const HAZARD_CLASSES: PackedStringArray = ["soft", "pothole"]
+const LEG_CONDITIONS: PackedStringArray = ["clear", "rain", "night"]
+const SPECIAL_KINDS: PackedStringArray = ["roadworks", "tailgater", "patrol", "two_lane", "motorcade"]
+## Content rows of GDD Part II that must exist as data (GDD 1.1), per record set.
+const REQUIRED_RECORDS: Dictionary = {
+	"legs": ["open_road", "rush", "rain", "night", "roadworks", "tailgater", "patrol", "two_lane", "motorcade"],
+	"modifiers": ["crosswind", "potholes", "sheep", "wedding", "melon_truck", "dust_haze"],
+	"vehicles": ["car", "taxi", "pickup", "minibus", "truck", "tanker", "tuk_tuk"],
+	"faults": ["rattle", "cracked_windscreen", "dead_headlight", "pulling_steering", "slipping_clutch", "stuck_wiper", "cracked_mirror"],
+	"stops": ["fuel_station", "fitter", "tea_stall", "roadside_find", "hitcher", "shady_guy", "boss_stop"],
+	"bosses": ["checkpoint", "storm", "dawn"],
+	# The controls that are always in the car (GDD 4.6) and that the code names.
+	"anchors": ["gear_lever", "horn", "wiper_stalk", "indicator_stalk", "headlight_knob", "hazard_button", "radio", "window_crank", "glovebox", "visor", "face"],
+}
 const BEAT_TYPES: PackedStringArray = ["CALM", "CLUSTER", "SLOWPOKE", "MERGE", "CURVE", "GUST", "HAZARD", "SPECIAL"]
+const STOP_SERVICES: PackedStringArray = ["shop", "repair", "tea", "find", "passenger", "deals", "boss"]
+## The stops of GDD 9.6 and the names GDD 15 gives their minutes and weights.
+const STOP_TUNING_KEYS: Dictionary = {
+	"fuel_station": "fuel", "fitter": "fitter", "tea_stall": "tea",
+	"roadside_find": "find", "hitcher": "hitcher", "shady_guy": "shady",
+}
 const HECKLE_TYPES: PackedStringArray = ["TWIST", "DARE", "DOUBT", "QUESTION", "ORDER", "FIB"]
+const FLICK_DIRS: PackedStringArray = ["up", "down", "left", "right"]
 const PLACEHOLDER_SHAPES: PackedStringArray = ["box", "cylinder", "capsule", "sphere", "quad", "label"]
 const REQUIRED_POINTS: PackedStringArray = ["G", "W", "eye", "shoulder"]
 
@@ -54,15 +89,19 @@ func run(data: GameData) -> PackedStringArray:
 	_check_anchor_file()
 	_check_registry("placeholders", _placeholder_schema())
 	_check_registry("sfx", _sfx_schema())
+	_check_record_set("effects", _effect_schema())
 	_check_record_set("slots", _slot_schema())
 	_check_record_set("vehicles", _vehicle_schema())
+	_check_record_set("hazard_kinds", _hazard_kind_schema())
 	_check_record_set("faults", _fault_schema())
 	_check_record_set("rituals", _ritual_schema())
 	_check_record_set("items", _item_schema())
 	_check_record_set("modifiers", _modifier_schema())
 	_check_record_set("beats", _beat_schema())
 	_check_record_set("legs", _leg_schema())
+	_check_record_set("bosses", _boss_schema())
 	_check_record_set("stops", _stop_schema())
+	_check_stops()
 	_check_record_set("passengers", _passenger_schema())
 	_check_record_set("tables", _table_schema())
 	_check_record_set("heckles", _heckle_schema())
@@ -86,6 +125,11 @@ static func _num(minimum: float = -INF, maximum: float = INF) -> Dictionary:
 
 static func _int(minimum: float = -INF, maximum: float = INF) -> Dictionary:
 	return {"t": "int", "min": minimum, "max": maximum}
+
+
+## A number greater than `minimum`: for what the code divides by.
+static func _above(minimum: float = 0.0) -> Dictionary:
+	return {"t": "num", "min": minimum, "max": INF, "open": true}
 
 
 static func _bool() -> Dictionary:
@@ -149,20 +193,35 @@ func _item_schema() -> Dictionary:
 		"takes": _list(_obj({}, true)),
 		"lapse": _opt(_nullable(_obj({}, true))),
 		"synergies": _opt(_list(_obj({"with": _str(), "rule": _str(), "amount": _opt(_num())}, true))),
+		"params": _opt(_map(_t("any"))),
 		"line_ids": _map(_ref("lines")),
+	})
+
+
+func _effect_schema() -> Dictionary:
+	return _obj({
+		"id": _str(),
+		"max_stacks": _opt(_int(1.0)),
+		"implies": _opt(_list(_ref("effects"))),
 	})
 
 
 func _ritual_schema() -> Dictionary:
 	return _obj({
 		"id": _str(),
-		"anchor": _ref("anchors"),
+		"anchor": _str(),
+		"item": _opt(_ref("items")),
 		"gesture": _enum(GESTURES),
 		"hold_s": _opt(_num(0.0)),
+		"flick_dirs": _opt(_list(_enum(FLICK_DIRS), 1)),
+		"turns": _opt(_num(0.0)),
+		"to": _opt(_ref("anchors")),
+		"over_items": _opt(_bool()),
 		"eyes_down": _bool(),
 		"blocks_view": _opt(_nullable(_str())),
 		"requires": _list(_str()),
 		"on_complete": _list(_str()),
+		"on_step": _opt(_list(_str())),
 		"sfx": _opt(_nullable(_ref("sfx"))),
 	}, true)
 
@@ -174,40 +233,121 @@ func _leg_schema() -> Dictionary:
 		"lanes": _int(1.0, 3.0),
 		"divided": _bool(),
 		"density": _num(0.0),
-		"condition": _str(),
+		"condition": _enum(LEG_CONDITIONS),
 		"par_s": _num(0.0),
 		"beat_weights": _map_keyed(_enum(BEAT_TYPES), _num(0.0)),
-		"special": _opt(_nullable(_obj({"kind": _str()}, true))),
+		"calm_adjacent": _opt(_bool()),
+		"special": _opt(_nullable(_obj({"kind": _enum(SPECIAL_KINDS)}, true))),
 		"modifiers_allowed": _list(_ref("modifiers")),
-	}, true)
+	})
 
 
 func _beat_schema() -> Dictionary:
 	return _obj({
 		"id": _str(),
 		"type": _enum(BEAT_TYPES),
-		"length_m": _num(0.0),
+		"length_m": _t("any"),
 		"min_lanes": _opt(_int(1.0, 3.0)),
-		"spawns": _list(_obj({"vehicle": _ref("vehicles")}, true)),
-	}, true)
+		"acts": _opt(_list(_int(1.0, 3.0), 1)),
+		"spawns": _opt(_list(_obj({
+			"vehicle": _ref("vehicles"),
+			"lane": _enum(BEAT_LANES),
+			"s_offset": _num(),
+			"speed_kmh": _num(0.0),
+			"lane_change": _opt(_obj({"to": _enum(BEAT_LANES), "at_s_offset": _num()})),
+		}))),
+		"hazards": _opt(_list(_obj({
+			"kind": _ref("hazard_kinds"),
+			"lane": _enum(BEAT_LANES),
+			"s_offset": _num(),
+			"x_offset": _opt(_num()),
+		}))),
+		"curve": _opt(_obj({"k_index": _int(0.0, 2.0), "dir": _enum(PackedStringArray(["left", "right"]))})),
+		"gust": _opt(_obj({"dir": _enum(PackedStringArray(["left", "right"]))})),
+	})
 
 
 func _vehicle_schema() -> Dictionary:
-	return _obj({"id": _str()}, true)
+	return _obj({
+		"id": _str(),
+		"width": _num(0.1),
+		"length": _num(0.1),
+		"speed_kmh": _list_n(_num(0.0), 2),
+		"yields_to_horn": _bool(),
+		"honk_nerves": _num(0.0),
+		"acts": _list(_int(1.0, 3.0), 1),
+		"placeholder": _ref("placeholders"),
+		"traffic": _opt(_bool()),
+	})
+
+
+func _hazard_kind_schema() -> Dictionary:
+	return _obj({
+		"id": _str(),
+		"class": _enum(HAZARD_CLASSES),
+		"width": _num(0.05),
+		"length": _num(0.05),
+		"nerves": _num(0.0),
+		"suspicion": _opt(_num(0.0)),
+		"speed_loss": _opt(_num(0.0, 1.0)),
+		"placeholder": _ref("placeholders"),
+	})
 
 
 func _modifier_schema() -> Dictionary:
-	return _obj({"id": _str()}, true)
+	return _obj({"id": _str(), "line_ids": _opt(_map(_ref("lines")))}, true)
 
 
 func _stop_schema() -> Dictionary:
 	return _obj({
 		"id": _str(),
-		"service": _str(),
-		"stock": _opt(_nullable(_obj({"count": _int(0.0), "pools": _list(_enum(ITEM_KINDS))}, true))),
+		"service": _enum(STOP_SERVICES),
+		"stock": _opt(_nullable(_obj({"count": _int(0.0), "pools": _list(_enum(ITEM_KINDS)), "free": _opt(_int(0.0))}))),
+		"restocks": _opt(_bool()),
+		"nerves_to": _opt(_num(0.0, 100.0)),
 		"clock_min": _num(0.0),
 		"weight": _num(0.0),
+		"line_ids": _opt(_map(_ref("lines"))),
+	})
+
+
+func _boss_schema() -> Dictionary:
+	return _obj({
+		"id": _str(),
+		"act": _int(1.0, 3.0),
+		"length_m": _above(0.0),
+		"par_s": _above(0.0),
+		"lanes": _int(1.0, 3.0),
+		"divided": _bool(),
+		"line_ids": _opt(_map(_ref("lines"))),
 	}, true)
+
+
+## A stop's minutes and weight are those GDD 15 gives (tuning stop_minutes and
+## stop_weights): the two tables may not drift apart.
+func _check_stops() -> void:
+	if not _data.tuning.has("stop_minutes") or not _data.tuning.has("stop_weights"):
+		return
+	var minutes: Dictionary = _data.tuning.d("stop_minutes")
+	var weights: Dictionary = _data.tuning.d("stop_weights")
+	for stop: Dictionary in _data.records("stops"):
+		var id: String = GameData.as_string(stop.get("id"))
+		if not STOP_TUNING_KEYS.has(id):
+			continue
+		var key: String = STOP_TUNING_KEYS[id]
+		if minutes.has(key) and GameData.is_number(stop.get("clock_min")) \
+				and not is_equal_approx(GameData.as_float(stop.get("clock_min")), GameData.as_float(minutes[key])):
+			_err("E_RULE", "stops.json", "stops[%s].clock_min" % id, "must equal stop_minutes.%s in tuning.json (GDD 15)" % key)
+		if weights.has(key) and GameData.is_number(stop.get("weight")) \
+				and not is_equal_approx(GameData.as_float(stop.get("weight")), GameData.as_float(weights[key])):
+			_err("E_RULE", "stops.json", "stops[%s].weight" % id, "must equal stop_weights.%s in tuning.json (GDD 15)" % key)
+	# One boss for each act.
+	var acts: Dictionary = {}
+	for boss: Dictionary in _data.records("bosses"):
+		var act: int = GameData.as_int(boss.get("act"))
+		if acts.has(act):
+			_err("E_RULE", "legs.json", "bosses[%s].act" % GameData.as_string(boss.get("id")), "act %d already has a boss" % act)
+		acts[act] = true
 
 
 func _passenger_schema() -> Dictionary:
@@ -256,7 +396,12 @@ func _fault_schema() -> Dictionary:
 
 
 func _slot_schema() -> Dictionary:
-	return _obj({"id": _str()}, true)
+	return _obj({
+		"id": _str(),
+		"anchor": _opt(_nullable(_ref("anchors"))),
+		"reach": _opt(_enum(REACHES)),
+		"holds": _opt(_list(_str())),
+	})
 
 
 func _anchor_schema() -> Dictionary:
@@ -265,6 +410,16 @@ func _anchor_schema() -> Dictionary:
 		"pos": _t("vec3"),
 		"time_s": _num(0.0),
 		"via_w": _opt(_bool()),
+		"placeholder": _opt(_nullable(_ref("placeholders"))),
+	})
+
+
+func _prop_schema() -> Dictionary:
+	return _obj({
+		"id": _str(),
+		"placeholder": _ref("placeholders"),
+		"pos": _t("vec3"),
+		"rot": _opt(_t("vec3")),
 	})
 
 
@@ -292,14 +447,25 @@ func _sfx_schema() -> Dictionary:
 func _tuning_schema() -> Dictionary:
 	var n: Dictionary = _num()
 	var pos: Dictionary = _num(0.0)
+	# What the code divides by, or takes as a rate: never zero.
+	var above: Dictionary = _above(0.0)
 	return {
 		# Hand and wheel
-		"hand_speed": pos, "hand_left_side_mult": pos, "hand_pound_mult": pos,
+		"hand_speed": above, "hand_left_side_mult": pos, "hand_pound_mult": pos,
 		"anchor_snap_radius": pos, "input_buffer": pos, "grip_zone_half_width": pos,
-		"wheel_max_angle": pos, "steer_deg_per_px": pos, "wheel_smoothing": pos,
-		"wheel_return_rate": pos, "gate_unit": pos, "gate_channel_half_width": pos,
+		"wheel_max_angle": above, "steer_deg_per_px": pos, "wheel_smoothing": pos,
+		"wheel_return_rate": pos, "gate_unit": above, "gate_channel_half_width": pos,
 		"glance_start": pos, "glance_gain": pos, "glance_max_yaw": pos,
 		"glance_max_pitch": pos, "eyes_down_pitch": pos,
+		# The hand, the pointer, gestures and the gate as built (M1)
+		"hand_plane_distance": above, "hand_free_bounds_min": _list_n(n, 2), "hand_free_bounds_max": _list_n(n, 2),
+		"hand_arrive_epsilon": above, "wheel_radius": above, "glance_smoothing": pos,
+		"camera_fov": _num(1.0, 179.0), "reference_width": above, "reference_height": above,
+		"pointer_yaw_min": n, "pointer_yaw_max": n, "pointer_pitch_min": n, "pointer_pitch_max": n,
+		"tap_max_time": above, "flick_min_distance": above, "flick_max_time": above,
+		"bead_max_rate": above, "crank_min_step": above,
+		"gate_engage_radius": above, "gate_grind_min": pos, "gate_grind_max": pos,
+		"gate_wall_push": pos, "gate_grind_nerves": pos, "gate_grind_lock": pos,
 		# Car
 		"lane_width": pos, "car_width": pos, "car_length": pos,
 		"leg_length": pos, "leg_tail": pos,
@@ -342,6 +508,9 @@ func _tuning_schema() -> Dictionary:
 		"stop_weights": _obj({"fuel": pos, "fitter": pos, "tea": pos, "find": pos, "hitcher": pos}),
 		"rarity_by_act": _list_n(_list_n(pos, 3), 3),
 		"wreck_to_wheel": pos,
+		# The road between legs (M5)
+		"exit_slip_length": above, "missed_exit_nerves": pos, "stop_leave_grip": pos,
+		"fork_sign_lead": pos, "arrival_length": above,
 	}
 
 
@@ -438,6 +607,7 @@ func _check_anchor_file() -> void:
 	else:
 		_err("E_MISSING", "anchors.json", "points", "required object is missing")
 	_check_record_set("anchors", _anchor_schema())
+	_check_record_set("props", _prop_schema())
 
 
 func _check_registry(file: String, schema: Dictionary) -> void:
@@ -486,6 +656,8 @@ func _check_record_set(set_name: String, schema: Dictionary) -> void:
 
 ## Rules that span fields or files.
 func _check_cross_rules() -> void:
+	_check_required_records()
+	_check_beats()
 	for table: Dictionary in _data.records("tables"):
 		var unlock: String = GameData.as_string(table.get("unlock"))
 		var label: String = "tables[%s].unlock" % GameData.as_string(table.get("id"), "?")
@@ -503,8 +675,63 @@ func _check_cross_rules() -> void:
 		if has_legs == has_until:
 			_err("E_RULE", "passengers.json", "passengers[%s]" % GameData.as_string(passenger.get("id"), "?"),
 					"needs exactly one of rides_legs and rides_until")
+	for ritual: Dictionary in _data.records("rituals"):
+		var ritual_label: String = "rituals[%s]" % GameData.as_string(ritual.get("id"), "?")
+		var anchor: String = GameData.as_string(ritual.get("anchor"))
+		if anchor == SLOT_ANCHOR:
+			if not ritual.has("item"):
+				_err("E_RULE", "rituals.json", ritual_label, "a ritual at \"@slot\" needs the \"item\" it belongs to")
+		elif ritual.has("anchor") and ritual["anchor"] is String and not _data.has_record("anchors", anchor):
+			_err("E_REF", "rituals.json", ritual_label + ".anchor", "unknown anchors id '%s'" % anchor)
+		for key: String in ["on_complete", "on_step"]:
+			var ops: Array = GameData.as_array(ritual.get(key))
+			for index: int in ops.size():
+				_check_op(GameData.as_string(ops[index]), "rituals.json", "%s.%s[%d]" % [ritual_label, key, index])
+		var conditions: Array = GameData.as_array(ritual.get("requires"))
+		for index: int in conditions.size():
+			_check_condition(GameData.as_string(conditions[index]), "rituals.json", "%s.requires[%d]" % [ritual_label, index])
+		var needs: String = ""
+		match GameData.as_string(ritual.get("gesture")):
+			"HOLD":
+				needs = "hold_s"
+			"FLICK":
+				needs = "flick_dirs"
+			"CRANK":
+				needs = "turns"
+			"DRAG_TO":
+				needs = "to"
+		if not needs.is_empty() and not ritual.has(needs):
+			_err("E_RULE", "rituals.json", "rituals[%s]" % GameData.as_string(ritual.get("id"), "?"),
+					"a %s ritual needs \"%s\"" % [GameData.as_string(ritual.get("gesture")), needs])
+	for passenger: Dictionary in _data.records("passengers"):
+		var leave_ops: Array = GameData.as_array(passenger.get("on_leave"))
+		for index: int in leave_ops.size():
+			_check_op(GameData.as_string(leave_ops[index]), "passengers.json",
+					"passengers[%s].on_leave[%d]" % [GameData.as_string(passenger.get("id"), "?"), index])
+	var items_root: Dictionary = _data.root("items")
+	var starting: Array = GameData.as_array(items_root.get("starting_cabin"))
+	for index: int in starting.size():
+		var entry: Dictionary = GameData.as_dict(starting[index])
+		var where: String = "starting_cabin[%d]" % index
+		var entry_item: String = GameData.as_string(entry.get("item"))
+		var entry_slot: String = GameData.as_string(entry.get("slot"))
+		if not _data.has_record("items", entry_item):
+			_err("E_REF", "items.json", where + ".item", "unknown items id '%s'" % entry_item)
+		elif not GameData.as_array(_data.record("items", entry_item).get("slots")).has(entry_slot):
+			_err("E_RULE", "items.json", where + ".slot", "'%s' does not fit in slot '%s'" % [entry_item, entry_slot])
+		if not _data.has_record("slots", entry_slot):
+			_err("E_REF", "items.json", where + ".slot", "unknown slots id '%s'" % entry_slot)
+		if entry.has("supply") and not GameData.is_number(entry["supply"]):
+			_err("E_TYPE", "items.json", where + ".supply", "must be a whole number")
 	for item: Dictionary in _data.records("items"):
 		var item_id: String = GameData.as_string(item.get("id"), "?")
+		for ritual_id: Variant in GameData.as_array(item.get("rituals")):
+			var listed: String = GameData.as_string(ritual_id)
+			if _data.has_record("rituals", listed):
+				var owner: String = GameData.as_string(_data.record("rituals", listed).get("item"))
+				if not owner.is_empty() and owner != item_id:
+					_err("E_RULE", "items.json", "items[%s].rituals" % item_id,
+							"ritual '%s' belongs to item '%s'" % [listed, owner])
 		var synergies: Array = GameData.as_array(item.get("synergies"))
 		for index: int in synergies.size():
 			var synergy: Dictionary = GameData.as_dict(synergies[index])
@@ -514,6 +741,110 @@ func _check_cross_rules() -> void:
 			if not _data.has_record("items", with) and not _synergy_tokens().has(with):
 				_err("E_REF", "items.json", "items[%s].synergies[%d].with" % [item_id, index],
 						"unknown item id or synergy token '%s'" % with)
+
+
+## Every content row of Part II that a finished milestone owes (GDD 1.1).
+## A record set that is still empty is not owed yet.
+func _check_required_records() -> void:
+	for set_name: Variant in REQUIRED_RECORDS:
+		var set_id: String = str(set_name)
+		if _data.records(set_id).is_empty():
+			continue
+		var where: Array = GameData.RECORD_SETS[set_id]
+		var required: Array = REQUIRED_RECORDS[set_name]
+		for id: Variant in required:
+			if not _data.has_record(set_id, str(id)):
+				_err("E_MISSING", "%s.json" % str(where[0]), "%s[%s]" % [str(where[1]), str(id)], "this row of the GDD is missing")
+
+
+## Beat templates: lengths, speeds below par, lane changes ahead of the vehicle.
+func _check_beats() -> void:
+	var par: float = INF
+	if _data.tuning.has("gear_speeds") and _data.tuning.raw("gear_speeds") is Array and _data.tuning.a("gear_speeds").size() >= 3:
+		par = _data.tuning.fi("gear_speeds", 2)
+	var typed: Dictionary = {}
+	for beat: Dictionary in _data.records("beats"):
+		var label: String = "beats[%s]" % GameData.as_string(beat.get("id"), "?")
+		typed[GameData.as_string(beat.get("type"))] = true
+		var length: Variant = beat.get("length_m")
+		var length_ok: bool = GameData.is_number(length) and GameData.as_float(length) > 0.0
+		if length is Array:
+			var span: Array = length
+			length_ok = span.size() == 2 and GameData.is_number(span[0]) and GameData.is_number(span[1]) \
+					and GameData.as_float(span[0]) > 0.0 and GameData.as_float(span[1]) >= GameData.as_float(span[0])
+		if not length_ok:
+			_err("E_TYPE", "beats.json", label + ".length_m", "must be a length in metres or [shortest, longest]")
+		elif _data.tuning.has("beat_lengths"):
+			# Each template keeps to the length of its type (GDD 9.2).
+			var allowed: Array = GameData.as_array(_data.tuning.d("beat_lengths").get(GameData.as_string(beat.get("type"))))
+			var shortest: float = GameData.as_float(length)
+			var longest: float = shortest
+			if length is Array:
+				var own: Array = length
+				shortest = GameData.as_float(own[0])
+				longest = GameData.as_float(own[1])
+			if allowed.size() == 2 and (shortest < GameData.as_float(allowed[0]) or longest > GameData.as_float(allowed[1])):
+				_err("E_RULE", "beats.json", label + ".length_m", "a %s beat is %s to %s m long (GDD 9.2)" % [
+						GameData.as_string(beat.get("type")), str(allowed[0]), str(allowed[1])])
+		var spawns: Array = GameData.as_array(beat.get("spawns"))
+		for index: int in spawns.size():
+			var spawn: Dictionary = GameData.as_dict(spawns[index])
+			var where: String = "%s.spawns[%d]" % [label, index]
+			if GameData.as_string(spawn.get("lane")) != "oncoming" and GameData.as_float(spawn.get("speed_kmh")) >= par:
+				_err("E_RULE", "beats.json", where + ".speed_kmh", "a vehicle to be met in third gear must be slower than third gear (%s km/h)" % str(par))
+			var change: Dictionary = GameData.as_dict(spawn.get("lane_change"))
+			if change.has("at_s_offset") and GameData.as_float(change.get("at_s_offset")) <= GameData.as_float(spawn.get("s_offset")):
+				_err("E_RULE", "beats.json", where + ".lane_change.at_s_offset", "must lie ahead of the vehicle's s_offset")
+	if not _data.records("beats").is_empty():
+		for type: String in BEAT_TYPES:
+			if type != "SPECIAL" and not typed.has(type):
+				_err("E_MISSING", "beats.json", "beats", "no beat of type %s" % type)
+
+
+## One ritual op: "op" or "op:arg:arg". The op must be known, and the ids it
+## names must exist.
+func _check_op(op: String, file_label: String, where: String) -> void:
+	var parts: PackedStringArray = op.split(":")
+	var head: String = parts[0]
+	if not RITUAL_OPS.has(head):
+		_err("E_ENUM", file_label, where, "'%s' is not a ritual op (%s)" % [head, ", ".join(RITUAL_OPS)])
+		return
+	var argument: String = parts[1] if parts.size() > 1 else ""
+	match head:
+		"add_effect", "remove_effect":
+			if not _data.has_record("effects", argument):
+				_err("E_REF", file_label, where, "unknown effects id '%s'" % argument)
+			if parts.size() > 2 and not parts[2].is_valid_float():
+				_err("E_TYPE", file_label, where, "the duration '%s' is not a number" % parts[2])
+		"nerves", "cash":
+			if not argument.is_valid_float():
+				_err("E_TYPE", file_label, where, "'%s' needs a number" % head)
+		"pay":
+			if argument != "fine" and argument != "bribe":
+				_err("E_ENUM", file_label, where, "'pay' takes fine or bribe, not '%s'" % argument)
+		"toggle":
+			if not CABIN_FLAGS.has(argument):
+				_err("E_ENUM", file_label, where, "'%s' is not a cabin switch (%s)" % [argument, ", ".join(CABIN_FLAGS)])
+		"sfx":
+			if not _data.root("sfx").has(argument):
+				_err("E_REF", file_label, where, "unknown sfx id '%s'" % argument)
+		"line":
+			if not _data.has_line(argument, "en"):
+				_err("E_REF", file_label, where, "unknown lines id '%s'" % argument)
+
+
+## One ritual condition: an effect id, "supply>0", "hot" or "flag:<switch>",
+## each optionally negated with "!".
+func _check_condition(condition: String, file_label: String, where: String) -> void:
+	var word: String = condition.trim_prefix("!")
+	if CONDITION_WORDS.has(word):
+		return
+	if word.begins_with("flag:"):
+		if not CABIN_FLAGS.has(word.substr(5)):
+			_err("E_ENUM", file_label, where, "'%s' is not a cabin switch" % word.substr(5))
+		return
+	if not _data.has_record("effects", word):
+		_err("E_REF", file_label, where, "'%s' is neither a condition word nor an effects id" % word)
 
 
 ## Things a synergy can pair with that are not items (GDD 7.8: music, the photo).
@@ -642,6 +973,8 @@ func _check_range(number: float, spec: Dictionary, file_label: String, where: St
 	var maximum: float = GameData.as_float(spec.get("max"), INF)
 	if number < minimum or number > maximum:
 		_err("E_RANGE", file_label, where, "%s is outside %s to %s" % [str(number), str(minimum), str(maximum)])
+	elif GameData.as_bool(spec.get("open")) and number <= minimum:
+		_err("E_RANGE", file_label, where, "%s must be more than %s" % [str(number), str(minimum)])
 
 
 func _exists(target: String, id: String) -> bool:

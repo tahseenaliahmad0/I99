@@ -111,3 +111,26 @@ debug_half_speed={
 [physics]
 
 common/physics_ticks_per_second=120
+
+[shader_globals]
+
+world_bend={
+"type": "float",
+"value": 0.0
+}
+world_bend_origin_z={
+"type": "float",
+"value": 0.0
+}
+world_fog_color={
+"type": "color",
+"value": Color(0, 0, 0, 1)
+}
+world_fog_near={
+"type": "float",
+"value": 1e+09
+}
+world_fog_far={
+"type": "float",
+"value": 2e+09
+}

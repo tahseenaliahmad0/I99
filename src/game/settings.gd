@@ -64,9 +64,20 @@ func _load() -> void:
 		return
 	var stored: Dictionary = parsed
 	for key: Variant in stored:
-		# Unknown keys are dropped; a type that does not match the default is ignored.
-		if _defaults.has(key) and typeof(stored[key]) == typeof(_defaults[key]):
-			_values[key] = stored[key]
+		# Unknown keys are dropped; a type that does not match the default is
+		# ignored. JSON knows one kind of number, so a whole-number setting
+		# comes back as a float and is turned into what its default is.
+		if not _defaults.has(key):
+			continue
+		var value: Variant = stored[key]
+		var default_value: Variant = _defaults[key]
+		if GameData.is_number(value) and GameData.is_number(default_value):
+			if typeof(default_value) == TYPE_INT:
+				_values[key] = GameData.as_int(value)
+			else:
+				_values[key] = GameData.as_float(value)
+		elif typeof(value) == typeof(default_value):
+			_values[key] = value
 
 
 func _path() -> String:

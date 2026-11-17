@@ -11,3 +11,105 @@ passenger.hajjiya.board,Old woman,"God keep you, my son. Not so fast.",true
 radio.news.patrol,Newsreader,Traffic police are out on the southern road tonight.,true
 noor.call.1,Noor,Baba? Are you awake?,true
 finale.proverb,"Noor, then Abu Noor",They say one hand doesn't clap. / No. But it drives.,true
+hud.gear,,Gear %s,false
+hud.neutral,,N,false
+hud.wheel,,Wheel %s deg,false
+hud.hand,,Hand: %s,false
+hud.hand.wheel,,on the wheel,false
+hud.hand.free,,free,false
+hud.eyes,,Eyes %s / %s deg,false
+hud.tick,,Tick %s,false
+item.cigarettes.name,,Cigarettes,true
+item.tea_glass.name,,Tea glass,true
+hud.nerves,,Nerves %s (floor %s),false
+hud.lamps,,Lamps %s of %s %s,false
+hud.cash,,Cash %s,false
+hud.speed,,%s km/h,false
+hud.effects,,Effects: %s,false
+hud.radio,,Radio: %s,false
+hud.eyes_shut,,EYES SHUT,false
+hud.awake,,Awake,false
+hud.none,,none,false
+sign.modifier.crosswind,,[CROSSWIND],true
+sign.modifier.potholes,,[POTHOLES],true
+sign.modifier.sheep,,[SHEEP],true
+sign.modifier.wedding,,[WEDDING],true
+sign.modifier.melon_truck,,[MELONS],true
+sign.modifier.dust_haze,,[DUST],true
+sign.curve.left,,[BEND <],true
+sign.curve.right,,[BEND >],true
+sign.motorcade.keep_back,,[KEEP BACK 100 M],true
+sign.roadworks,,[ROADWORKS],true
+sign.side_road,,[SIDE ROAD / TWO-LANE],true
+hud.leg,,Leg %s: %s s (par %s),false
+hud.suspicion,,Suspicion %s,false
+hud.sight,,Sight %s m,false
+hud.glare,,Glare %s,false
+hud.blur,,Rain blur %s / haze %s,false
+leg.open_road.name,,OPEN ROAD,true
+leg.rush.name,,RUSH,true
+leg.rain.name,,RAIN,true
+leg.night.name,,NIGHT,true
+leg.roadworks.name,,ROADWORKS,true
+leg.tailgater.name,,TAILGATER,true
+leg.patrol.name,,PATROL,true
+leg.two_lane.name,,TWO-LANE,true
+leg.motorcade.name,,MOTORCADE,true
+modifier.crosswind.name,,CROSSWIND,true
+modifier.potholes.name,,POTHOLES,true
+modifier.sheep.name,,SHEEP,true
+modifier.wedding.name,,WEDDING,true
+modifier.melon_truck.name,,MELONS,true
+modifier.dust_haze.name,,DUST,true
+stop.fuel_station.name,,FUEL,true
+stop.fitter.name,,FITTER,true
+stop.tea_stall.name,,TEA,true
+stop.roadside_find.name,,FIND,true
+stop.hitcher.name,,HITCHER,true
+stop.shady_guy.name,,A MAN IN THE SHADE,true
+stop.boss_stop.name,,REST,true
+boss.checkpoint.name,,CHECKPOINT,true
+boss.storm.name,,STORM,true
+boss.dawn.name,,DAWN,true
+sign.exit,,[EXIT / %s],false
+sign.fork,,[%s],false
+sign.fork.branch,,%s / %s / %s,false
+sign.fork.branch_plain,,%s / %s / %s,false
+hud.clock,,Clock %s,false
+hud.telling,,"Act %s, leg %s: %s",false
+item.beads.name,,Worry beads,true
+item.seeds.name,,Sunflower seeds,true
+item.phone.name,,Phone,true
+item.energy_drink.name,,Energy drink,true
+item.painkillers.name,,Painkillers,true
+item.mixtape.name,,Mixtape,true
+item.tissue_box.name,,Tissue box,true
+item.breath_mints.name,,Breath mints,true
+item.arak_flask.name,,Arak flask,true
+item.charm.name,,Seven-eyed charm,true
+item.air_freshener.name,,Air freshener,true
+item.thermos.name,,Thermos,true
+item.duct_tape.name,,Duct tape,true
+item.lucky_note.name,,Lucky note,true
+item.sunglasses.name,,Cracked sunglasses,true
+item.taxi_sign.name,,Taxi sign,true
+item.crossover_stalk.name,,Crossover stalk,true
+item.window_switch.name,,Console window switch,true
+item.spinner_knob.name,,Spinner knob,true
+item.wheel_ring.name,,Wheel ring,true
+item.thumb_keypad.name,,Thumb keypad,true
+item.fifth_gear.name,,Fifth gear,true
+item.loud_horn.name,,Loud horn,true
+item.bull_bar.name,,Bull bar,true
+item.fog_lamps.name,,Fog lamps,true
+item.wide_mirror.name,,Wide mirror,true
+item.forged_papers.name,,Forged papers,true
+item.tinted_glass.name,,Tinted glass,true
+item.turbo.name,,Turbo,true
+item.good_stuff.name,,The good stuff,true
+stop.offer.price,,"%s: %s",false
+stop.offer.free,,"%s: free",false
+stop.offer.repair,,"Repair %s: %s",false
+stop.offer.restock,,"Restock %s: %s",false
+stop.offer.bought,,"%s: yours",false
+hud.stop,,"Stop: %s",false

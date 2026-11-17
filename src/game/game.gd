@@ -11,9 +11,12 @@ extends Node
 
 enum AppState { BOOT, TITLE, PROLOGUE, WEDDING, TELLING, WRECK_CUT, ENDING, FINALE, CREDITS }
 
-## Command-line arguments after `--` (GDD 13.9), plus `--user-dir=` which the
-## test harness uses to keep saves and settings out of the player's folder.
-const VALUE_ARGS: PackedStringArray = ["table", "seed", "leg", "boss", "bot", "user-dir"]
+## Command-line arguments after `--` (GDD 13.9), plus three for the build's own
+## use: `--user-dir=` keeps saves and settings out of the player's folder,
+## `--aim=<anchor id>` points the hand at an anchor without a mouse, and
+## `--shot=<file.png>` saves one rendered frame and quits, after
+## `--shot-frame=<n>` frames (DECISIONS D-014, D-019).
+const VALUE_ARGS: PackedStringArray = ["table", "seed", "leg", "boss", "bot", "user-dir", "aim", "shot", "shot-frame"]
 const FLAG_ARGS: PackedStringArray = ["skip-prologue"]
 
 ## Tools and tests started with `--script` never touch the player's files.

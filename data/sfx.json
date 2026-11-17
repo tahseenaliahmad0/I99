@@ -1,1 +1,277 @@
-{}
+{
+  "engine": {
+    "synth": {
+      "wave": "saw",
+      "freq": 60,
+      "freq_to": 180,
+      "duration": 1.0,
+      "loop": true,
+      "note": "60 Hz at 40 km/h to 180 Hz at 160; a harmonic per gear"
+    },
+    "stream": null
+  },
+  "rumble_strip": {
+    "synth": {
+      "wave": "noise",
+      "freq": 30,
+      "duration": 0.5,
+      "loop": true,
+      "functional": true
+    },
+    "stream": null
+  },
+  "indicator_tick": {
+    "synth": {
+      "wave": "click",
+      "freq": 1200,
+      "duration": 0.03,
+      "functional": true
+    },
+    "stream": null
+  },
+  "lighter_click": {
+    "synth": {
+      "wave": "click",
+      "freq": 2400,
+      "duration": 0.03
+    },
+    "stream": null
+  },
+  "bead_click": {
+    "synth": {
+      "wave": "click",
+      "freq": 1800,
+      "duration": 0.02
+    },
+    "stream": null
+  },
+  "horn": {
+    "synth": {
+      "wave": "square",
+      "freqs": [
+        400,
+        500
+      ],
+      "duration": 0.4
+    },
+    "stream": null
+  },
+  "wiper": {
+    "synth": {
+      "wave": "noise_sweep",
+      "freq": 300,
+      "freq_to": 900,
+      "duration": 0.5
+    },
+    "stream": null
+  },
+  "grind": {
+    "synth": {
+      "wave": "ratchet",
+      "freq": 90,
+      "duration": 0.25
+    },
+    "stream": null
+  },
+  "scrape": {
+    "synth": {
+      "wave": "noise",
+      "duration": 0.3
+    },
+    "stream": null
+  },
+  "crash": {
+    "synth": {
+      "wave": "noise",
+      "duration": 0.8
+    },
+    "stream": null
+  },
+  "squeal_1": {
+    "synth": {
+      "wave": "sine",
+      "freq": 810,
+      "duration": 0.18
+    },
+    "stream": null
+  },
+  "squeal_2": {
+    "synth": {
+      "wave": "sine",
+      "freq": 920,
+      "duration": 0.18
+    },
+    "stream": null
+  },
+  "squeal_3": {
+    "synth": {
+      "wave": "sine",
+      "freq": 1030,
+      "duration": 0.18
+    },
+    "stream": null
+  },
+  "squeal_4": {
+    "synth": {
+      "wave": "sine",
+      "freq": 1140,
+      "duration": 0.18
+    },
+    "stream": null
+  },
+  "squeal_5": {
+    "synth": {
+      "wave": "sine",
+      "freq": 1250,
+      "duration": 0.18
+    },
+    "stream": null
+  },
+  "squeal_6": {
+    "synth": {
+      "wave": "sine",
+      "freq": 1360,
+      "duration": 0.18
+    },
+    "stream": null
+  },
+  "squeal_7": {
+    "synth": {
+      "wave": "sine",
+      "freq": 1470,
+      "duration": 0.18
+    },
+    "stream": null
+  },
+  "squeal_8": {
+    "synth": {
+      "wave": "sine",
+      "freq": 1580,
+      "duration": 0.18
+    },
+    "stream": null
+  },
+  "heartbeat": {
+    "synth": {
+      "wave": "thump",
+      "freq": 55,
+      "duration": 0.12,
+      "note": "60 to 120 per minute with Nerves"
+    },
+    "stream": null
+  },
+  "yawn": {
+    "synth": {
+      "wave": "sine",
+      "freq": 400,
+      "freq_to": 200,
+      "duration": 0.8,
+      "functional": true
+    },
+    "stream": null
+  },
+  "yawn_long": {
+    "synth": {
+      "wave": "sine",
+      "freq": 400,
+      "freq_to": 200,
+      "duration": 1.3,
+      "functional": true
+    },
+    "stream": null
+  },
+  "phantom_hum": {
+    "synth": {
+      "wave": "sine",
+      "freq": 55,
+      "duration": 1.5
+    },
+    "stream": null
+  },
+  "siren_chirp": {
+    "synth": {
+      "wave": "notes",
+      "notes": [
+        880,
+        660
+      ],
+      "duration": 0.3
+    },
+    "stream": null
+  },
+  "phone_ring": {
+    "synth": {
+      "wave": "notes",
+      "notes": [
+        1320,
+        1100
+      ],
+      "duration": 0.5
+    },
+    "stream": null
+  },
+  "radio_music": {
+    "synth": {
+      "wave": "notes",
+      "notes": [
+        330,
+        392,
+        440,
+        392
+      ],
+      "duration": 1.6,
+      "loop": true
+    },
+    "stream": null
+  },
+  "radio_news": {
+    "synth": {
+      "wave": "blips",
+      "freq": 220,
+      "duration": 1.2,
+      "loop": true
+    },
+    "stream": null
+  },
+  "radio_callin": {
+    "synth": {
+      "wave": "blips",
+      "freq": 280,
+      "duration": 0.9,
+      "loop": true
+    },
+    "stream": null
+  },
+  "radio_static": {
+    "synth": {
+      "wave": "noise",
+      "duration": 1.0,
+      "loop": true
+    },
+    "stream": null
+  },
+  "clap": {
+    "synth": {
+      "wave": "click",
+      "freq": 900,
+      "duration": 0.05
+    },
+    "stream": null
+  },
+  "ululation": {
+    "synth": {
+      "wave": "trill",
+      "freq": 1100,
+      "duration": 0.9
+    },
+    "stream": null
+  },
+  "heckle": {
+    "synth": {
+      "wave": "sine",
+      "freq": 880,
+      "duration": 0.25
+    },
+    "stream": null
+  }
+}
