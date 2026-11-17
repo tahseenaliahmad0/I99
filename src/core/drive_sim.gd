@@ -498,9 +498,14 @@ func _apply_collisions() -> void:
 		if faults.is_wrecked() and not wrecked:
 			wrecked = true
 			_emit("wreck", {})
+	# A vehicle passed closely honks (a taxi), close call or not (GDD 5.5).
+	if not collision.honk_vehicle_ids.is_empty():
+		nerves.add(collision.honk_nerves)
+		for vehicle_id: int in collision.honk_vehicle_ids:
+			_emit("sfx_requested", {"id": "horn", "vehicle": vehicle_id})
 	if collision.close_calls > 0:
 		cash += collision.close_call_cash
-		nerves.add(collision.close_call_nerves + collision.honk_nerves)
+		nerves.add(collision.close_call_nerves)
 		_emit("close_call", {
 			"count": collision.close_calls,
 			"cash": collision.close_call_cash,

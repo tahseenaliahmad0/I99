@@ -548,3 +548,34 @@ Format: `D-NNN (milestone, date) Title` then Context / Decision / Why.
   follows its command as an exact first-order response; the rail left of
   the oncoming lane scrapes like the guardrail.
 - **Why.** GDD 4.8, 4.6, 10.2 and 10.3 all need a car that can stand still.
+
+## D-029 (M2 review, 2026-11-17) One contact is one hit; "clear" is clear of everything
+
+- **Context.** The M2 review found that one oncoming truck or tanker hit the
+  stopped car twice (the immunity ran out while it was still driving through
+  him): a single head-on was a Wreck. A push "clear" could throw the car
+  through the median barrier or into another vehicle, and during the
+  immunity the car could drive through a truck.
+- **One contact, one hit.** A vehicle that has hit the car cannot hit it
+  again until the two no longer overlap along the road and the immunity has
+  run out. A second vehicle can hit him once the immunity is over.
+- **The car never stays inside a vehicle.** An overlap that cannot be a hit
+  (he is immune, or that vehicle has already hit him in this contact) is
+  undone every tick: the car is moved out on the side it came from, with no
+  lamp, no Nerves and no speed loss, so pressing on a vehicle is a slide
+  along it.
+- **Clear is clear of everything.** A push sideways must end outside every
+  other vehicle and inside the rails; where it cannot, the car is put along
+  the road instead: `hit_pushback` behind the vehicle's rear bumper, or in
+  front of it when the vehicle hit him from behind. Behind a vehicle going
+  his way he is no faster than it is.
+- **The taxi's honk** (GDD 5.5) is judged when the pass is judged: the taxi
+  is behind him, the smallest sideways gap was under `close_call_gap`, there
+  was no contact; the closing speed does not matter (in third gear he closes
+  on no taxi fast enough for a close call). It adds the honk's Nerves once
+  per pass and is announced as an `sfx_requested` with the vehicle's id.
+- **Traffic.** Oncoming vehicles follow each other as traffic going his way
+  does; they do not react to him. Signal and lane-change times are counted
+  in whole ticks.
+- **Why.** GDD 5.6 ("pushed 0.5 m clear and cannot be hit again for 0.8 s")
+  and GDD 6 (five lamps are a Wreck; a head-on is three).

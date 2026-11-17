@@ -4,10 +4,12 @@ extends RefCounted
 ##
 ## Vehicles hold a lane at a set speed. Every lane change is scheduled by the
 ## beat that spawned the vehicle, or caused by the horn. A lane change is
-## signalled for signal_time and takes lane_change_time. A vehicle that
-## catches up with another in its lane, or with the player from behind,
-## follows at its speed instead of driving through it (DECISIONS D-023).
-## Vehicles are removed despawn_behind metres behind the player.
+## signalled for signal_time and takes lane_change_time, both counted in
+## whole ticks. A vehicle that catches up with another in its lane, or with
+## the player from behind, follows at its speed instead of driving through
+## it (DECISIONS D-023). Oncoming vehicles follow each other the same way;
+## they do not react to the player. Vehicles are removed despawn_behind
+## metres behind the player.
 
 class Vehicle:
 	extends RefCounted
@@ -45,6 +47,9 @@ class Vehicle:
 	var cc_overlap: bool = false
 	var cc_min_gap: float = INF
 	var cc_contact: bool = false
+	## True from the tick this vehicle hits the car until that contact is over
+	## (Collision): one contact, one hit.
+	var cc_hit: bool = false
 	## Anything a leg wants to remember about this vehicle (police, motorcade...).
 	var role: StringName = &""
 
@@ -173,40 +178,54 @@ func lane_is_free(lane: int, s: float, clearance: float, ignore: Vehicle) -> boo
 
 func _step_speed(vehicle: Vehicle, player_s: float, player_x: float, player_speed: float) -> void:
 	var wanted: float = vehicle.cruise
-	if vehicle.direction > 0:
-		# Follow whatever is just ahead in the same lane: another vehicle...
-		for other: Vehicle in vehicles:
-			if other == vehicle or other.direction < 0:
-				continue
-			if absf(other.x - vehicle.x) >= vehicle.half_width + other.half_width:
-				continue
-			var gap: float = (other.s - other.half_length) - (vehicle.s + vehicle.half_length)
-			if gap >= 0.0 and gap < _follow_gap:
-				wanted = minf(wanted, other.speed)
-		# ...or the player, so ordinary traffic never rams him from behind.
-		if absf(player_x - vehicle.x) < vehicle.half_width + _car_half_width:
-			var gap_to_player: float = (player_s - _car_half_length) - (vehicle.s + vehicle.half_length)
-			if gap_to_player >= 0.0 and gap_to_player < _follow_gap:
-				wanted = minf(wanted, player_speed)
+	# Follow whatever is just ahead in the same lane and going the same way:
+	# another vehicle...
+	for other: Vehicle in vehicles:
+		if other == vehicle or other.direction != vehicle.direction:
+			continue
+		if absf(other.x - vehicle.x) >= vehicle.half_width + other.half_width:
+			continue
+		var gap: float = _gap_ahead(vehicle, other)
+		if gap >= 0.0 and gap < _follow_gap:
+			wanted = minf(wanted, other.speed)
+	# ...or the player, so ordinary traffic never rams him from behind. An
+	# oncoming vehicle does not react to him.
+	if vehicle.direction > 0 and absf(player_x - vehicle.x) < vehicle.half_width + _car_half_width:
+		var gap_to_player: float = (player_s - _car_half_length) - (vehicle.s + vehicle.half_length)
+		if gap_to_player >= 0.0 and gap_to_player < _follow_gap:
+			wanted = minf(wanted, player_speed)
 	vehicle.speed = wanted
+
+
+## Metres of road between `vehicle` and `other`, measured along the way the
+## vehicle is going: positive when `other` is ahead of it, negative when the
+## two overlap along the road or `other` is behind.
+func _gap_ahead(vehicle: Vehicle, other: Vehicle) -> float:
+	if vehicle.direction > 0:
+		return (other.s - other.half_length) - (vehicle.s + vehicle.half_length)
+	return (vehicle.s - vehicle.half_length) - (other.s + other.half_length)
 
 
 func _step_lane_change(vehicle: Vehicle, dt: float) -> void:
 	if vehicle.has_plan and vehicle.s * float(vehicle.direction) >= vehicle.plan_s * float(vehicle.direction):
 		vehicle.has_plan = false
 		begin_lane_change(vehicle, vehicle.plan_lane, vehicle.plan_signal)
+	# Both times are counted in whole ticks: a countdown is over when less
+	# than half a tick of it is left, whatever rounding did to the rest.
+	var over: float = dt * 0.5
 	if vehicle.signalling != 0 and not vehicle.changing:
-		vehicle.signal_left -= dt
-		if vehicle.signal_left <= 0.0:
+		if vehicle.signal_left < over:
 			vehicle.changing = true
 			vehicle.change_left = vehicle.change_duration
 			vehicle.change_from_x = vehicle.x
 			vehicle.change_to_x = lane_center(vehicle.change_to_lane)
+		else:
+			vehicle.signal_left -= dt
 	if vehicle.changing:
 		vehicle.change_left -= dt
 		var done: float = 1.0 - clampf(vehicle.change_left / vehicle.change_duration, 0.0, 1.0)
 		vehicle.x = lerpf(vehicle.change_from_x, vehicle.change_to_x, done)
-		if vehicle.change_left <= 0.0:
+		if vehicle.change_left < over:
 			vehicle.x = vehicle.change_to_x
 			vehicle.lane = vehicle.change_to_lane
 			vehicle.changing = false
