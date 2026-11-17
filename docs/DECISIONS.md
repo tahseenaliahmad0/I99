@@ -803,3 +803,51 @@ Format: `D-NNN (milestone, date) Title` then Context / Decision / Why.
   to the bit, at a quarter of the cost.
 - **Why.** GDD 9.5, 9.6, 11.1; GDD 1.5 for what they leave open.
 
+## D-037 (M5, 2026-11-17) Stops and the shop
+
+- **`StopSim`** (core) is the stop: the vendor's tray and what the hand does
+  with it. It is not in the file list of GDD 13.2; it is the part of the
+  simulation that `stop_view.gd` shows.
+- **The tray** lies at the passenger window: five anchors, `offer_1` to
+  `offer_5` (anchors.json; travel times by T-HAND-01). One offer at each;
+  what does not fit waits and moves up as room is made.
+- **Rituals of the tray** exist only while an offer lies at an anchor and
+  are not in rituals.json: a TAP buys, and a DRAG_TO carries what was
+  bought to the anchor of any slot the item can go in (a DRAG_TO may now
+  have several destinations).
+- **Buying.** A TAP buys when his cash covers the price; otherwise nothing
+  happens. An item that goes in a slot the hand can reach is then his to
+  place; an Adaptation goes into the first free bay at once (none free: it
+  cannot be bought); what the hand cannot carry anywhere (the taxi sign on
+  the roof, a Deal that changes the car) is his at once. What sat in a slot
+  he drops an item into stays with the vendor. What he has paid for and not
+  placed when he leaves is paid back.
+- **Catalogue.** items.json holds the 32 items with kind, slots, rarity,
+  price and supply; what they do is M6. Ids are those of the tests
+  (`beads`, `seeds`, `charm`, `sunglasses`, `window_switch`, `good_stuff`).
+  Rarity follows the price bands of GDD 12.2. The arak flask has kind
+  `deal`: only the shady guy sells it. The Thermos has no restock price and
+  is not restocked at a fuel station.
+- **Stock.** For each item a rarity is drawn by the act's shares, then any
+  item of it from the stop's pools that he does not own and that is not on
+  the tray already. A rarity the pools lack gives the nearest one they
+  have (a commoner one first): a fuel station has nothing rare, a fitter
+  nothing common. Restocks are offered for what he has used up of things
+  with a restock price.
+- **Fitter.** Two Adaptations, and a repair for each lit fault at
+  `repair_price`; each repair is `repair_minutes` on the Clock.
+- **Tea stall.** On entry his Nerves are set to the stop's `nerves_to` and
+  every tea glass is filled, hot. (The boss modifier on the next fork sign
+  comes with the bosses, M7.)
+- **Roadside find, boss stop.** Free picks: he may take as many as the
+  stock's `free` says (one); when none is left the rest are taken away.
+- **Shady guy.** He is at the stop that ends a leg which lit no lamp so far
+  (the stop is at 2,330 m of the leg it belongs to), with two Deals. The
+  first thing bought from him adds `stop_minutes.shady`, once.
+- **Boss stop.** No minutes on entry; three items of which one is free; when
+  that pick is off the tray, the five stops that can end a leg are held out
+  as services and a TAP on one makes the boss stop that stop. Nothing at a
+  boss stop costs Clock minutes, a repair there included.
+- **Hitcher.** Two minutes and nothing to buy until the passengers of M8.
+- **Why.** GDD 9.6, 12.2, 14; GDD 1.5 for the rest.
+

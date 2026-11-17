@@ -32,7 +32,12 @@
     { "id": "indicator_stalk",    "pos": [-0.22, 0.02, 0.02],   "time_s": 0.41, "via_w": true },
     { "id": "headlight_knob",     "pos": [-0.30, -0.02, -0.12], "time_s": 0.53, "via_w": true },
     { "id": "driver_window",      "pos": [-0.50, 0.15, 0.20],   "time_s": 0.62, "via_w": true },
-    { "id": "window_crank",       "pos": [-0.48, -0.10, 0.25],  "time_s": 0.70, "via_w": true }
+    { "id": "window_crank",       "pos": [-0.48, -0.10, 0.25],  "time_s": 0.70, "via_w": true },
+    { "id": "offer_1",            "pos": [0.98, 0.14, 0.02],    "time_s": 0.57 },
+    { "id": "offer_2",            "pos": [0.98, 0.14, 0.14],    "time_s": 0.57 },
+    { "id": "offer_3",            "pos": [0.98, 0.14, 0.26],    "time_s": 0.59 },
+    { "id": "offer_4",            "pos": [0.98, 0.14, 0.38],    "time_s": 0.62 },
+    { "id": "offer_5",            "pos": [0.98, 0.14, 0.50],    "time_s": 0.66 }
   ],
 
   "slots": [

@@ -62,6 +62,8 @@ var clock: ClockSim = ClockSim.new()
 var rng: Rng = Rng.new()
 ## The Telling he is in, if any (GDD 11.1); the sandbox and single legs have none.
 var run: RunState = RunState.new()
+## The stop he is at (GDD 9.6).
+var stop: StopSim = StopSim.new()
 
 var tick: int = 0
 ## Thousands of dinars (GDD 6). Never below zero.
@@ -100,8 +102,8 @@ var _lever_in_hand: bool = false
 ## The hand stays on a control after its gesture until the button comes up,
 ## so the rest of a long flick does not drag the pointer off it.
 var _pinned_until_release: bool = false
-## While something is carried: the anchor it must be released on.
-var _drag_destination: int = HandSim.NO_ANCHOR
+## While something is carried: the anchors it may be released on.
+var _drag_destinations: Array[int] = []
 ## Ticks the gust still has to push: a gust lasts a whole number of ticks.
 var _gust_ticks_left: int = 0
 var _gust_push: float = 0.0
@@ -174,6 +176,7 @@ func _build() -> void:
 	suspicion = SuspicionSim.new()
 	clock = ClockSim.new()
 	run = RunState.new()
+	stop = StopSim.new()
 	hand.configure(data, space)
 	wheel.configure(tuning)
 	gate.configure(tuning)
@@ -190,6 +193,7 @@ func _build() -> void:
 	suspicion.configure(tuning)
 	clock.configure(tuning)
 	run.configure(data)
+	stop.configure(data, items, faults, nerves, clock, rng)
 
 	cash = tuning.f("cash_start")
 	wrecked = false
@@ -204,7 +208,7 @@ func _build() -> void:
 	_active_anchor = HandSim.NO_ANCHOR
 	_lever_in_hand = false
 	_pinned_until_release = false
-	_drag_destination = HandSim.NO_ANCHOR
+	_drag_destinations = []
 	_gust_ticks_left = 0
 	_gust_push = 0.0
 	_braking = false
@@ -317,6 +321,9 @@ func step(input: DriveInput) -> void:
 	for event: Dictionary in items.events:
 		_announce(event)
 	items.events.clear()
+	for event: Dictionary in stop.events:
+		_announce(event)
+	stop.events.clear()
 
 	# 10. Clock: it runs while he drives, not while he stands (GDD 6.4).
 	if not _standing():
@@ -461,7 +468,7 @@ func _step_telling() -> void:
 			_step_exit()
 			if not stopped and leg.step_progress():
 				_end_leg()
-				run.leg_done(_leg_lamps_lit == 0)
+				run.leg_done()
 				if run.fork_ahead():
 					_take_fork()
 				else:
@@ -524,7 +531,16 @@ func _enter_stop() -> void:
 	_park()
 	var minutes: float = GameData.as_float(data.record("stops", run.stop).get("clock_min")) if data.has_record("stops", run.stop) else 0.0
 	clock.add_minutes(minutes)
-	_emit("stop_entered", {"stop": run.stop, "minutes": minutes, "act": run.act, "leg_index": run.legs_done})
+	# The shady guy is there after a leg that lit no lamp (GDD 9.6).
+	_open_stop(_leg_lamps_lit == 0)
+	_emit("stop_entered", {"stop": run.stop, "minutes": minutes, "act": run.act, "leg_index": run.legs_done,
+			"shady": _leg_lamps_lit == 0, "offers": stop.offers_view()})
+
+
+func _open_stop(shady: bool) -> void:
+	if data.has_record("stops", run.stop):
+		stop.begin(run.stop, run.act, shady)
+	_sync_anchors()
 
 
 ## The car stands; the road is gone until he leaves.
@@ -554,6 +570,7 @@ func _step_stop() -> void:
 
 func _leave_stop() -> void:
 	_emit("stop_left", {"stop": run.stop})
+	cash = stop.leave(cash)
 	stopped = false
 	_leave_grip = 0.0
 	gate.reset(tuning.i("start_gear"))
@@ -569,6 +586,7 @@ func _leave_stop() -> void:
 		car.x = car.lane_center(car.lanes - 1)
 		_lane = car.lane_of(car.x)
 	car.speed = 0.0
+	_sync_anchors()
 
 
 ## The act's boss. Until the bosses are built (M7) it is an empty road of the
@@ -585,7 +603,9 @@ func _end_boss() -> void:
 	_emit("boss_ended", {"boss": run.boss, "act": run.act, "time": leg.time})
 	run.enter_boss_stop()
 	_park()
-	_emit("stop_entered", {"stop": run.stop, "minutes": 0.0, "act": run.act, "leg_index": run.legs_done})
+	_open_stop(false)
+	_emit("stop_entered", {"stop": run.stop, "minutes": 0.0, "act": run.act, "leg_index": run.legs_done,
+			"shady": false, "offers": stop.offers_view()})
 
 
 ## The end of the road (GDD 10.5): the Clock is read. Until the Arrival is
@@ -860,6 +880,7 @@ func snapshot() -> Dictionary:
 		"legs_done": run.legs_done,
 		"stop": run.stop,
 		"stopped": stopped,
+		"offers": _offers_in_view(),
 		"boss": run.boss,
 		"pulled_over": pulled_over,
 		"visibility": visibility(),
@@ -873,6 +894,13 @@ func snapshot() -> Dictionary:
 
 
 ## One small dictionary per vehicle, positions relative to the car.
+func _offers_in_view() -> Array[Dictionary]:
+	if not stopped:
+		var none: Array[Dictionary] = []
+		return none
+	return stop.offers_view()
+
+
 func _hazards_in_view() -> Array[Dictionary]:
 	if not leg.active:
 		var none: Array[Dictionary] = []
@@ -1082,7 +1110,10 @@ func _begin_at(anchor: int, button_down: bool) -> void:
 			_lever_in_hand = true
 			hand.pin()
 		return
-	var ritual: Dictionary = items.ritual_at(String(hand.anchor_id(anchor)))
+	# At a stop the vendor's tray comes first; the cabin is his as ever.
+	var ritual: Dictionary = stop.ritual_at(String(hand.anchor_id(anchor))) if stopped else {}
+	if ritual.is_empty():
+		ritual = items.ritual_at(String(hand.anchor_id(anchor)))
 	if ritual.is_empty():
 		return
 	var kind: Gesture.Kind = _gesture_kind(ritual)
@@ -1094,9 +1125,16 @@ func _begin_at(anchor: int, button_down: bool) -> void:
 	# Eyes-down rituals pull the eyes off the road while performed (GDD 4.7).
 	hand.eyes_down = GameData.as_bool(ritual.get("eyes_down"))
 	if kind == Gesture.Kind.DRAG_TO:
-		# The object goes with the hand to the anchor the ritual names.
+		# The object goes with the hand to the anchor the ritual names, or to
+		# any of several (the slots a bought item can go in).
 		hand.carrying = true
-		_drag_destination = hand.anchor_index(StringName(GameData.as_string(ritual.get("to"))))
+		_drag_destinations = []
+		if ritual.has("to"):
+			_drag_destinations.append(hand.anchor_index(StringName(GameData.as_string(ritual.get("to")))))
+		for to: Variant in GameData.as_array(ritual.get("to_any")):
+			var index: int = hand.anchor_index(StringName(GameData.as_string(to)))
+			if index != HandSim.NO_ANCHOR:
+				_drag_destinations.append(index)
 		_sync_anchors()
 	else:
 		hand.pin()
@@ -1109,7 +1147,7 @@ func _resolve_gesture(button_down: bool) -> void:
 	if gesture.phase == Gesture.Phase.ACTIVE:
 		if gesture.kind == Gesture.Kind.DRAG_TO:
 			# Released with the hand resting on the destination, the object is handed over.
-			gesture.over_destination = hand.at_index != HandSim.NO_ANCHOR and hand.at_index == _drag_destination
+			gesture.over_destination = hand.at_index != HandSim.NO_ANCHOR and _drag_destinations.has(hand.at_index)
 			return
 		if hand.at_index != _active_anchor:
 			gesture.cancel()
@@ -1126,7 +1164,7 @@ func _resolve_gesture(button_down: bool) -> void:
 		_active_anchor = HandSim.NO_ANCHOR
 		hand.eyes_down = false
 		hand.carrying = false
-		_drag_destination = HandSim.NO_ANCHOR
+		_drag_destinations = []
 		if carried or not button_down:
 			hand.unpin()
 		else:
@@ -1146,6 +1184,10 @@ func _complete_ritual() -> void:
 	var ritual_id: String = GameData.as_string(_active_ritual.get("id"))
 	if _active_anchor == _lever_anchor and sequential_shift:
 		gate.shift_sequential(1 if gesture.direction == Gesture.DIR_UP else -1)
+	elif ritual_id == StopSim.BUY:
+		cash = stop.buy(String(hand.anchor_id(_active_anchor)), cash)
+	elif ritual_id == StopSim.PLACE:
+		stop.place(String(hand.anchor_id(_active_anchor)), String(hand.anchor_id(hand.at_index)))
 	else:
 		items.complete(_active_ritual, gesture.direction)
 		if items.paid != &"":
@@ -1160,9 +1202,10 @@ func _complete_ritual() -> void:
 ## The hand snaps only to anchors where something can be done now.
 func _sync_anchors() -> void:
 	for index: int in hand.anchor_count():
-		var in_use: bool = items.anchor_in_use(String(hand.anchor_id(index)))
+		var anchor: String = String(hand.anchor_id(index))
+		var in_use: bool = items.anchor_in_use(anchor) or (stopped and stop.anchor_in_use(anchor))
 		# What is carried can be put down where its ritual says.
-		hand.set_anchor_active(index, in_use or (hand.carrying and index == _drag_destination))
+		hand.set_anchor_active(index, in_use or (hand.carrying and _drag_destinations.has(index)))
 
 
 func _gesture_kind(ritual: Dictionary) -> Gesture.Kind:

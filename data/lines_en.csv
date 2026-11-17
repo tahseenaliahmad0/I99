@@ -77,3 +77,39 @@ sign.fork.branch,,%s / %s / %s,false
 sign.fork.branch_plain,,%s / %s / %s,false
 hud.clock,,Clock %s,false
 hud.telling,,"Act %s, leg %s: %s",false
+item.beads.name,,Worry beads,true
+item.seeds.name,,Sunflower seeds,true
+item.phone.name,,Phone,true
+item.energy_drink.name,,Energy drink,true
+item.painkillers.name,,Painkillers,true
+item.mixtape.name,,Mixtape,true
+item.tissue_box.name,,Tissue box,true
+item.breath_mints.name,,Breath mints,true
+item.arak_flask.name,,Arak flask,true
+item.charm.name,,Seven-eyed charm,true
+item.air_freshener.name,,Air freshener,true
+item.thermos.name,,Thermos,true
+item.duct_tape.name,,Duct tape,true
+item.lucky_note.name,,Lucky note,true
+item.sunglasses.name,,Cracked sunglasses,true
+item.taxi_sign.name,,Taxi sign,true
+item.crossover_stalk.name,,Crossover stalk,true
+item.window_switch.name,,Console window switch,true
+item.spinner_knob.name,,Spinner knob,true
+item.wheel_ring.name,,Wheel ring,true
+item.thumb_keypad.name,,Thumb keypad,true
+item.fifth_gear.name,,Fifth gear,true
+item.loud_horn.name,,Loud horn,true
+item.bull_bar.name,,Bull bar,true
+item.fog_lamps.name,,Fog lamps,true
+item.wide_mirror.name,,Wide mirror,true
+item.forged_papers.name,,Forged papers,true
+item.tinted_glass.name,,Tinted glass,true
+item.turbo.name,,Turbo,true
+item.good_stuff.name,,The good stuff,true
+stop.offer.price,,"%s: %s",false
+stop.offer.free,,"%s: free",false
+stop.offer.repair,,"Repair %s: %s",false
+stop.offer.restock,,"Restock %s: %s",false
+stop.offer.bought,,"%s: yours",false
+hud.stop,,"Stop: %s",false

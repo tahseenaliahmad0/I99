@@ -329,7 +329,10 @@ func _check_exit_cases(exit_at: float, stall_at: float, third: float) -> void:
 				continue
 			check_eq(_sim.run.stage, RunState.Stage.STOP, "the Telling is at a stop")
 			check_near(_sim.car.speed, 0.0, 0.000001, "the car stands")
-			check(jump < 0.01, "and it costs him no Nerves")
+			# (A tea stall sets his Nerves to its own number; nothing else moves them.)
+			var tea: bool = GameData.as_string(data.record("stops", _sim.run.stop).get("service")) == "tea"
+			check(jump < 0.01 or (tea and is_equal_approx(_sim.nerves.value, GameData.as_float(data.record("stops", _sim.run.stop).get("nerves_to")))),
+					"and it costs him no Nerves")
 			check_near(_sim.clock.minutes - clock_before, GameData.as_float(data.record("stops", _sim.run.stop).get("clock_min")), 0.01, "but the stop's game minutes")
 			check_eq(_sim.exit_slip(), Vector2(-1.0, -1.0), "(the slip lane is behind him)")
 			check_eq(GameData.as_string(_event("stop_entered").get("stop")), GameData.as_string(_sim.run.branch.get("stop")), "the stop his branch named")

@@ -35,8 +35,6 @@ var branch: Dictionary = {}
 var boss: String = ""
 ## The stop he is at, else "".
 var stop: String = ""
-## True after a leg with no lamp lit: the shady guy is at the next stop (GDD 9.6).
-var shady_next: bool = false
 
 var _data: GameData
 
@@ -55,7 +53,6 @@ func begin(table_id: String, telling_seed: int) -> void:
 	boss = ""
 	stop = ""
 	branch = {}
-	shady_next = false
 	_approach()
 
 
@@ -86,10 +83,9 @@ func take_branch(side: int) -> Dictionary:
 	return branch
 
 
-## The leg is behind him. `clean` when it lit no lamp.
-func leg_done(clean: bool) -> void:
+## The leg is behind him.
+func leg_done() -> void:
 	legs_done += 1
-	shady_next = clean
 
 
 ## The boss this act ends in, as data.
@@ -112,7 +108,6 @@ func enter_stop() -> void:
 func leave_stop() -> void:
 	stage = Stage.LEG
 	stop = ""
-	shady_next = false
 
 
 func enter_boss_stop() -> void:
@@ -124,7 +119,6 @@ func enter_boss_stop() -> void:
 func leave_boss_stop() -> void:
 	stop = ""
 	boss = ""
-	shady_next = false
 	if act >= RunGenerator.ACTS:
 		stage = Stage.ARRIVAL
 		branches = []

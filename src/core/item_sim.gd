@@ -216,6 +216,11 @@ func add_item(id: StringName, slot: StringName, supply: int = -1) -> Item:
 
 
 func remove_item(item: Item) -> void:
+	if item == null:
+		return
+	# What it had switched on goes with it.
+	if item.use_effect != &"" and _effects.has_own(item.use_effect):
+		_effects.remove(item.use_effect)
 	items.erase(item)
 
 
@@ -240,6 +245,19 @@ func flag(flag_name: StringName) -> bool:
 ## The anchor an item's rituals are performed at: its slot's anchor.
 func anchor_of(item_instance: Item) -> String:
 	return GameData.as_string(_slot_anchor.get(String(item_instance.slot)))
+
+
+## The anchor of a slot ("" for a slot the hand cannot reach).
+func anchor_of_slot(slot: String) -> String:
+	return GameData.as_string(_slot_anchor.get(slot))
+
+
+## A full supply again; a drink is hot again.
+func restock(item_instance: Item) -> void:
+	var supply: Dictionary = GameData.as_dict(item_instance.record.get("supply"))
+	if supply.has("uses"):
+		item_instance.supply = GameData.as_int(supply.get("uses"))
+	item_instance.hot_left = _param(item_instance, "hot_for_s", 0.0)
 
 
 ## True when something can be done at this anchor at all (a control, or an
