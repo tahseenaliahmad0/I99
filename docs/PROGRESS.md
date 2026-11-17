@@ -27,9 +27,9 @@ Useful commands:
 
 ## Current state
 
-- **Milestone:** M0 (Harness), in progress.
-- **Tests:** 0 of 114 passing.
-- **Next step:** T-DATA-01, then T-SMOKE-BOOT.
+- **Milestone:** M0 (Harness) is complete. M1 (The Hand and the wheel) is next.
+- **Tests:** 2 of 114 passing (T-DATA-01, T-SMOKE-BOOT).
+- **Next step:** M1, first step.
 
 ## Milestones
 
@@ -43,8 +43,8 @@ Do not start a milestone until every test of the previous one passes (GDD 18).
 - [x] Test runner, registry with all 114 ids as failing, append-only guard
 - [x] `tools/check.sh`: import, parse check and core purity lint, data, tests, smoke
 - [x] `docs/PROGRESS.md`, `docs/DECISIONS.md`
-- [ ] T-DATA-01
-- [ ] T-SMOKE-BOOT
+- [x] T-DATA-01: shipped data validates; GDD 14 examples validate; 65 broken variants are each rejected with the right code
+- [x] T-SMOKE-BOOT: boot.tscn runs 600 frames headless with five autoloads, all data loaded, no error output
 
 ### M1 The Hand and the wheel: T-HAND-01..03, T-WHEEL-01..02, T-GATE-01..02, T-GEST-01
 - [ ] not started
@@ -100,3 +100,5 @@ Two lines per slice, newest last.
 
 - 2026-11-17 M0: project, folders, autoload skeletons, `GameData`/`Tuning`/`DataValidator`, tuning + anchors + faults + first lines.
   Test runner with error trap and append-only guard; 114 ids registered as failing; `tools/check.sh` green.
+- 2026-11-17 M0: T-DATA-01 (validator proven on shipped data, GDD 14 examples and broken variants) and T-SMOKE-BOOT pass and are promoted.
+  Tools started with `--script` use `user://test_runs/tool` and ignore game arguments. M0 complete: 2 of 114.

@@ -27,14 +27,16 @@ var state: AppState = AppState.BOOT
 
 
 func _ready() -> void:
-	var problems: PackedStringArray = []
-	args = parse_user_args(OS.get_cmdline_user_args(), problems)
-	for problem: String in problems:
-		push_error("Game: %s" % problem)
-	if args.has("user-dir"):
-		user_dir = str(args["user-dir"])
-	elif _runs_as_tool():
+	if _runs_as_tool():
+		# Started with --script: the arguments after `--` belong to that tool.
 		user_dir = TOOL_USER_DIR
+	else:
+		var problems: PackedStringArray = []
+		args = parse_user_args(OS.get_cmdline_user_args(), problems)
+		for problem: String in problems:
+			push_error("Game: %s" % problem)
+		if args.has("user-dir"):
+			user_dir = str(args["user-dir"])
 	if user_dir != "user://":
 		DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(user_dir))
 

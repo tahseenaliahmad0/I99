@@ -2,8 +2,8 @@
   "version": 1,
   "note": "Append-only (GDD 1.4). One entry per line. Status is failing or passing; the runner promotes with --promote and never demotes.",
   "tests": [
-    {"id": "T-DATA-01", "milestone": "M0", "status": "failing", "source": "GDD 18.1", "passes_when": "All JSON validates; every referenced id and line id exists."},
-    {"id": "T-SMOKE-BOOT", "milestone": "M0", "status": "failing", "source": "builder (DECISIONS D-005)", "passes_when": "boot.tscn launched headless runs 600 frames at a fixed 60 fps and exits 0 with no error output; the five autoloads exist and every data file loads and validates."},
+    {"id": "T-DATA-01", "milestone": "M0", "status": "passing", "source": "GDD 18.1", "passes_when": "All JSON validates; every referenced id and line id exists."},
+    {"id": "T-SMOKE-BOOT", "milestone": "M0", "status": "passing", "source": "builder (DECISIONS D-005)", "passes_when": "boot.tscn launched headless runs 600 frames at a fixed 60 fps and exits 0 with no error output; the five autoloads exist and every data file loads and validates."},
     {"id": "T-HAND-01", "milestone": "M1", "status": "failing", "source": "GDD 18.1", "passes_when": "Travel time from G to every anchor matches section 16.2 within 0.02 s."},
     {"id": "T-HAND-02", "milestone": "M1", "status": "failing", "source": "GDD 18.1", "passes_when": "Hand speed left of the hub is 70% of normal."},
     {"id": "T-HAND-03", "milestone": "M1", "status": "failing", "source": "builder (DECISIONS D-005)", "passes_when": "Pointer and hand rules of 4.2 and 4.7: the pointer snaps to the nearest anchor within anchor_snap_radius and to none beyond it; with no anchor in range the hand targets the point under the pointer on the plane in front of the eye; a press made up to input_buffer before the hand arrives is applied on arrival and an older press is not; holding grip with the pointer on the wheel makes the hand fly there and grip; the glance turns the camera by glance_gain of the excess over glance_start, capped at glance_max_yaw and glance_max_pitch."},
