@@ -37,6 +37,7 @@ passenger.apprentice.radio,Boy,(he turns the dial),true
 sign.hitcher,,[%s],false
 radio.news.patrol,Newsreader,Traffic police are out on the southern road tonight.,true
 noor.call.1,Noor,Baba? Are you awake?,true
+noor.call.bye,Noor,"Go on, Baba. Drive.",true
 finale.proverb,"Noor, then Abu Noor",They say one hand doesn't clap. / No. But it drives.,true
 speaker.abu_noor,,Abu Noor,true
 speaker.noor,,Noor,true

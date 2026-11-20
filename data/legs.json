@@ -47,7 +47,7 @@
        "road": {"density": 12, "tail_m": 150, "builds_from": 0.25,
                 "beat_weights": {"CALM": 2, "CLUSTER": 4, "SLOWPOKE": 3, "MERGE": 4, "CURVE": 1, "HAZARD": 1}},
        "checkpoint": {"at_m": 1900, "length_m": 150, "taper_m": 60, "gap_m": 2.34, "max_kmh": 70, "sign_lead_s": 5, "search_minutes": 15},
-       "call": {"from_end_m": 833, "ring_s": 8, "talk_s": 30, "wrist_steer": 0.4, "stopped_kmh": 1}
+       "call": {"from_end_m": 833, "ring_s": 8, "talk_s": 30, "talk_end_tell_s": 1.5, "wrist_steer": 0.4, "stopped_kmh": 1}
      },
      "line_ids": {"name": "boss.dawn.name"}}
   ],

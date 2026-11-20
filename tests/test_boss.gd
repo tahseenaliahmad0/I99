@@ -2818,6 +2818,7 @@ func test_call_01() -> void:
 	_check_call_with_a_passenger()
 	_check_call_pulled_over()
 	_check_call_and_the_ending()
+	_check_the_end_of_the_talk()
 
 
 ## Dawn at the moment the phone begins to ring, on an empty road.
@@ -2944,6 +2945,80 @@ func _check_call_alone() -> void:
 	_release()
 
 
+## The end of the talk (the review of M7): it is announced a moment ahead,
+## in a line and a sound; when it ends his hand comes back to the wheel by
+## itself instead of dropping where the pointer was carried; and a car that
+## stood for the call stands until his hand has the wheel again.
+func _check_the_end_of_the_talk() -> void:
+	var ring: Dictionary = GameData.as_dict(_dawn().get("call"))
+	var talk: float = GameData.as_float(ring.get("talk_s"))
+	var tell: float = GameData.as_float(ring.get("talk_end_tell_s"))
+	check(tell >= 1.0, "GDD 2.2, pillar 4: the end of the talk has a tell at least 1 s ahead (%s s)" % str(tell))
+	check(data.has_line("noor.call.bye"), "(her last words are a line)")
+
+	# Answered alone.
+	_to_the_call()
+	_reach(POCKET)
+	_input.lmb = true
+	_ticks(TAP_TICKS)
+	_input.lmb = false
+	var guard: int = SETTLE * 2
+	while _event("call_resolved").is_empty() and guard > 0:
+		guard -= 1
+		_tick()
+	_input.clear()
+	var answered_at: int = _sim.tick
+	_events = []
+	var said_at: int = -1
+	var heard_at: int = -1
+	guard = _ticks_in(talk + 2.0)
+	while _sim.boss.call == BossSim.CALL_TALKING and guard > 0:
+		guard -= 1
+		if _sim.car.s > _sim.leg.length - 100.0:
+			_sim.car.s -= 400.0
+		_tick()
+		if said_at < 0 and _count_events("line_requested", "id", "noor.call.bye") > 0:
+			said_at = _sim.tick
+		if heard_at < 0 and _count_events("sfx_requested", "id", "phone_ring") > 0:
+			heard_at = _sim.tick
+	var ended_at: int = _sim.tick
+	check(absi((ended_at - answered_at) - _ticks_in(talk)) <= 1, "(the talk lasts its 30 s)")
+	check(said_at > 0 and absi((ended_at - said_at) - _ticks_in(tell)) <= 1, "%s s before the talk ends she says goodbye: a line (%.2f s before)" % [str(tell), float(ended_at - said_at) * DT])
+	check(heard_at == said_at, "and a sound with it")
+	check_eq(_count_events("line_requested", "id", "noor.call.bye"), 1, "(once)")
+	# The hand comes back to the wheel by itself: nothing is asked of the pointer.
+	_ticks(_ticks_in(1.5))
+	check(not GameData.as_bool(_sim.snapshot()["at_ear"]), "(the phone is put away)")
+	check(_sim.hand.pos.distance_to(_sim.space.grip_reference) < 0.1, "when the talk ends his hand comes back to the wheel (%.2f m from its place on the rim)" % _sim.hand.pos.distance_to(_sim.space.grip_reference))
+	check(absf(_sim.hand.cam_yaw) < 1.0, "(and his eyes stay on the road: %.1f degrees)" % _sim.hand.cam_yaw)
+	_input.lmb = true
+	_ticks(_ticks_in(0.25))
+	check(_sim.hand.gripping, "a press takes the wheel where the hand already is: no pointer has to be brought back")
+	_input.clear()
+
+	# Pulled over: the car stands until his hand has the wheel again.
+	_to_the_call()
+	_stand_on_the_shoulder(true)
+	_answer_with_the_brake_held()
+	check_eq(GameData.as_string(_event("call_resolved").get("taken")), BossSim.TAKEN_PARKED, "(the Call taken pulled over)")
+	_input.clear()
+	guard = _ticks_in(talk + 2.0)
+	while _sim.boss.call == BossSim.CALL_TALKING and guard > 0:
+		guard -= 1
+		_tick()
+	check_eq(_sim.boss.call, BossSim.CALL_OVER, "(the talk is over)")
+	var stood_at: float = _sim.car.s
+	_ticks(_ticks_in(3.0))
+	check_near(_sim.car.s, stood_at, 0.000001, "after the talk the car does not drive off by itself: it stands until he takes the wheel")
+	check_near(_sim.car.speed, 0.0, 0.000001, "(foot off the brake, in gear, 3 s on: still standing)")
+	check_eq(_sim.faults.lamps, 0, "(and nothing has scraped the guardrail)")
+	_grip()
+	check(_sim.hand.gripping, "(his hand takes the wheel)")
+	_ticks(_ticks_in(1.0))
+	check(_sim.car.speed > 0.0, "with the wheel in his hand again the car moves off")
+	_release()
+
+
 ## Answered alone, his hand is at his ear for 30 s, but his eyes are on the
 ## road: the Glance (GDD 4.7) follows a reach, and this is none (D-050).
 func _check_call_and_the_eyes() -> void:
@@ -3052,8 +3127,11 @@ func _check_call_pulled_over() -> void:
 	check(absi(_sim.tick - answered_at - _ticks_in(talk)) <= 1, "for 30 s (%.3f s)" % (float(_sim.tick - answered_at) * DT))
 	check_near(_sim.clock.minutes - clock, 10.0, 0.01, "which is 10 game minutes on the Clock (%.3f)" % (_sim.clock.minutes - clock))
 	check_eq(_sim.faults.lamps, 0, "(and nothing else: no lamp)")
+	# (It stands until his hand has the wheel again: see _check_the_end_of_the_talk.)
+	_grip()
 	_ticks(_ticks_in(1.0))
 	check(_sim.car.speed > 0.0, "then the car moves off again")
+	_release()
 
 	# The fourth response costs its 10 minutes and nothing more (the review
 	# of M7): standing on the rough shoulder does not fray him, and a

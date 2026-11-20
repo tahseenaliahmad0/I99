@@ -127,9 +127,11 @@ var in_bay: bool = false
 var rear_end_tell: bool = false
 ## It hit him.
 var rear_end: bool = false
-## The phone began to ring; it rang out unanswered; the talk ended.
+## The phone began to ring; it rang out unanswered; the talk is about to end
+## (its tell, talk_end_tell_s ahead); the talk ended.
 var call_began: bool = false
 var call_missed: bool = false
+var call_ending: bool = false
 var call_ended: bool = false
 ## He came to the last checkpoint's barriers too fast: he is stopped and
 ## searched.
@@ -185,6 +187,11 @@ var _glare_ramp: float = 0.0
 var _call_at: float = 0.0
 var _ring_s: float = 0.0
 var _talk_s: float = 0.0
+var _talk_end_tell: float = 0.0
+## The end of this talk has been announced.
+var _bye_said: bool = false
+## The car stood for the talk and stands on until his hand has the wheel.
+var _stands_after_call: bool = false
 var _bump_kmh: float = 0.0
 ## The Checkpoint's queue: for each lane the vehicles still waiting, the one
 ## at the bar first; the seconds that one has been served; and the vehicle
@@ -450,6 +457,7 @@ func begin(plan_of_road: Dictionary) -> void:
 		_call_at = _length - GameData.as_float(ring.get("from_end_m"))
 		_ring_s = GameData.as_float(ring.get("ring_s"))
 		_talk_s = GameData.as_float(ring.get("talk_s"))
+		_talk_end_tell = GameData.as_float(ring.get("talk_end_tell_s"))
 		wrist_steer = GameData.as_float(ring.get("wrist_steer"), 1.0)
 		_stopped_kmh = GameData.as_float(ring.get("stopped_kmh"))
 		phase = FALSE_DAWN
@@ -492,6 +500,8 @@ func stop() -> void:
 	call_left = 0.0
 	call_taken = ""
 	call_answered = false
+	_bye_said = false
+	_stands_after_call = false
 	bay_from = 0.0
 	bay_to = 0.0
 	in_bay = false
@@ -522,6 +532,7 @@ func begin_tick() -> void:
 	rear_end = false
 	call_began = false
 	call_missed = false
+	call_ending = false
 	call_ended = false
 	searched = false
 	wall_speed = 0.0
@@ -844,6 +855,7 @@ func answer(how: String) -> bool:
 	call_left = _talk_s
 	call_taken = how
 	call_answered = true
+	_bye_said = false
 	return true
 
 
@@ -859,7 +871,13 @@ func pulled_over_safely(hazards_on: bool) -> bool:
 func holds_car() -> bool:
 	if kind == CHECKPOINT:
 		return phase == STOW or phase == PAPERS
-	return call == CALL_TALKING and call_taken == TAKEN_PARKED
+	return (call == CALL_TALKING and call_taken == TAKEN_PARKED) or _stands_after_call
+
+
+## His hand has the wheel: a car that stood on after a call taken pulled
+## over is his to drive again.
+func wheel_taken() -> void:
+	_stands_after_call = false
 
 
 ## True while the phone is at his ear in his own hand.
@@ -888,6 +906,10 @@ func _step_call(dt: float) -> void:
 	if call != CALL_RINGING and call != CALL_TALKING:
 		return
 	call_left -= dt
+	if call == CALL_TALKING and not _bye_said and call_left < _talk_end_tell + dt * 0.5:
+		# The end of the talk is announced (GDD 2.2, pillar 4).
+		_bye_said = true
+		call_ending = true
 	if call_left >= dt * 0.5:
 		return
 	call_left = 0.0
@@ -895,6 +917,8 @@ func _step_call(dt: float) -> void:
 		call_missed = true
 	else:
 		call_ended = true
+		# Pulled over, nobody is at the wheel yet: the car stands on.
+		_stands_after_call = call_taken == TAKEN_PARKED
 	call = CALL_OVER
 
 

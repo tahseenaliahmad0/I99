@@ -457,6 +457,7 @@ func _dawn_schema() -> Dictionary:
 			"from_end_m": _above(0.0),
 			"ring_s": _above(0.0),
 			"talk_s": _above(0.0),
+			"talk_end_tell_s": _num(0.0),
 			"wrist_steer": _num(0.0, 1.0),
 			"stopped_kmh": _num(0.0),
 		}),

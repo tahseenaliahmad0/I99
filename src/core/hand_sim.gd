@@ -65,6 +65,7 @@ var frozen: bool = false
 ## pointer's motion would.
 var at_ear: bool = false
 var wrist_steer: float = 0.0
+var _was_at_ear: bool = false
 ## The Phantom's wrong-hand flinch (GDD 7.9). DriveSim says each tick whether
 ## a cross-reach begun now would flinch; the hand then leaves flinch_delay
 ## late. `flinch_left` is what is left of that wait and `ghost_anchor` the
@@ -279,7 +280,14 @@ func step(dt: float, input: DriveInput, wheel_angle_deg: float, speed_mult: floa
 		pointer = _space.clamp_pointer(_space.point_to_pointer(pos))
 		steer_px = input.pointer_delta.x * wrist_steer
 		_update_glance(dt)
+		_was_at_ear = true
 		return
+	if _was_at_ear:
+		# The phone is put away: the pointer, which went with the hand to his
+		# ear and beyond the edge of the view, is on the wheel again, so the
+		# hand comes back to where a press takes hold of it.
+		_was_at_ear = false
+		pointer = _space.clamp_pointer(_space.point_to_pointer(_space.grip_reference))
 
 	if gripping:
 		var release: bool = (pressed if _grip_latched else not down) and not frozen

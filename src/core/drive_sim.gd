@@ -422,6 +422,8 @@ func step(input: DriveInput) -> void:
 		effects.remove(ItemSim.HOOK_SET)
 		# Whoever held the wheel for him lets go of it.
 		passengers.wheel_taken()
+		# And a car that stood on after the Call is his to drive again.
+		boss.wheel_taken()
 	if hand.at_ear != _wrist_on_wheel:
 		# The Call taken alone: his wrist is on the wheel while his hand holds
 		# the phone to his ear (GDD 10.4).
@@ -975,6 +977,11 @@ func _report_call() -> void:
 		effects.hold(THE_CALL, SET_PIECE, false)
 		_emit("call_resolved", {"caller": NOOR, "answered": false, "taken": ""})
 		_sync_anchors()
+	if boss.call_ending:
+		# The end of the talk has its tell (GDD 2.2, pillar 4; 17.2): her
+		# last words, and the phone's two notes.
+		_emit("line_requested", {"id": "noor.call.bye"})
+		_emit("sfx_requested", {"id": "phone_ring"})
 
 
 ## He took the phone from his pocket (GDD 10.4): a TAP answers it alone, and
