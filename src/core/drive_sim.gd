@@ -1980,6 +1980,10 @@ func _feed_nerves() -> void:
 ## cabin now has it. Runs whenever the cabin has changed.
 func _fit_cabin() -> void:
 	_cabin_seen = items.cabin_serial
+	# What has left the cabin has left his hand: a gesture on a thing that
+	# is gone (a search took the flask he was carrying) is over.
+	if gesture.is_active() and _active_ritual.has("item") and items.owner_of(_active_ritual) == null:
+		gesture.cancel()
 	wheel.turn_rate_mult = items.passive("turn_rate_mult")
 	wheel.return_rate_mult = items.passive("return_rate_mult")
 	car.lat_speed_mult = items.passive("lat_speed_mult")

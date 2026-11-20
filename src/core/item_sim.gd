@@ -788,6 +788,9 @@ func owner_of(ritual: Dictionary) -> Item:
 ## TAP): false, and nothing is done, when it no longer holds.
 func complete(ritual: Dictionary, direction: int) -> bool:
 	var owner: Item = owner_of(ritual)
+	if ritual.has("item") and owner == null:
+		# The thing it was to be done with is no longer in the cabin.
+		return false
 	if not _requirements_hold(ritual, owner):
 		return false
 	# A use is what gives the item's effect. Putting a thing away in the

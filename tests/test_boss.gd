@@ -1192,6 +1192,70 @@ func _check_checkpoint_rows() -> void:
 		earliest = minf(earliest, at)
 	check(earliest >= road_end - 1.0, "each drove to the road's end before it was gone (the first to go was last seen %.1f m along; the road ends at %.1f m)" % [earliest, road_end])
 
+	# What a search takes is taken out of his hand too. (With forged papers
+	# the verdict falls as the soldier arrives, while the hand may be busy:
+	# the flask he was carrying stayed in his hand and was then "stowed".)
+	_begin_checkpoint("", 1, false)
+	_give("arak_flask", "cup_b")
+	_give("forged_papers", "glovebox_a")
+	_sim.items.flags[ItemSim.FLAG_GLOVEBOX] = true
+	check(_stand_at_the_bar(), "(first in line: forged papers stowed, the flask in its cup holder)")
+	_sim.suspicion.add(20.0)
+	guard = _ticks_in(_checkpoint_number("stow_s"))
+	while _sim.boss.stow_left > 1.0 and guard > 0:
+		guard -= 1
+		_tick()
+	check(_reach("cup_b"), "(a second before the soldier arrives his hand goes to the flask)")
+	_input.lmb = true
+	_ticks(_ticks_in(0.2))
+	check_eq(GameData.as_string(_sim.snapshot()["carrying"]), "arak_flask", "(and picks it up)")
+	_events = []
+	guard = _ticks_in(2.0)
+	while _event("pulled_over").is_empty() and guard > 0:
+		guard -= 1
+		_tick()
+	check_eq(GameData.as_string(_event("pulled_over").get("paid")), "search", "(the flask in his hand is in view: 20 and 40, he is searched)")
+	check(GameData.as_array(_event("pulled_over").get("taken")).has("arak_flask"), "(and it is taken)")
+	_ticks(2)
+	check_eq(GameData.as_string(_sim.snapshot()["carrying"]), "", "what the search took is not in his hand any more")
+	check(not _sim.hand.carrying, "(the hand carries nothing)")
+	_events = []
+	_input.pointer = _sim.hand.anchor_pointer(_sim.hand.anchor_index(&"glovebox"))
+	_ticks(_ticks_in(1.5))
+	_input.lmb = false
+	_ticks(_ticks_in(0.3))
+	_input.clear()
+	check_eq(_count_events("ritual_completed", "ritual", "stow"), 0, "and nothing is stowed with an empty hand")
+
+	# Concrete stands between the lanes: no horn moves anyone through it,
+	# not even the Loud horn that every vehicle yields to (GDD 7.6).
+	var loud_seed: int = 0
+	for candidate: int in range(1, 60):
+		var line: Array = GameData.as_array(GameData.as_array(BossSim.plan(data, CHECKPOINT, "", candidate).get("queue"))[1])
+		if not GameData.as_bool(data.record("vehicles", GameData.as_string(line[line.size() - 1])).get("yields_to_horn")):
+			loud_seed = candidate
+			break
+	check(loud_seed > 0, "(a queue whose last vehicle yields to no ordinary horn)")
+	_begin_checkpoint_with(_lone_queue(loud_seed))
+	_give("loud_horn")
+	check(_sim.items.passive("horn_yields_all") > 0.0, "(the Loud horn is fitted)")
+	var loud_tail: TrafficSim.Vehicle = _queue_tail(1)
+	_cruise(1, 1)
+	_sim.car.s = loud_tail.s - loud_tail.half_length - _sim.car.length() * 0.5 - 8.0
+	_sim.car.speed = 0.0
+	_input.rmb = true
+	_tick()
+	_events = []
+	_tap_at("horn")
+	_input.rmb = true
+	_ticks(_ticks_in(2.0))
+	check_eq(_count_events("ritual_completed", "ritual", "horn"), 1, "(he sounds it right behind the queue, with free road beside it)")
+	var slid: int = 0
+	for vehicle: TrafficSim.Vehicle in _sim.traffic.vehicles:
+		if vehicle.signalling != 0 or vehicle.changing or absf(vehicle.x - _sim.car.lane_center(1)) > 0.001:
+			slid += 1
+	check_eq(slid, 0, "the Loud horn moves nobody out of a queue either: there are barriers between")
+
 
 ## A number of the Checkpoint's queue (data/legs.json).
 func _checkpoint_number_of_queue(key: String) -> float:
@@ -1823,6 +1887,7 @@ func test_boss_03() -> void:
 	_check_dawn_glare()
 	_check_where_the_sun_stands()
 	_check_last_checkpoint()
+	_check_nobody_leaves_a_corridor()
 	_check_call_rings()
 	_check_dawn_modifiers()
 	_check_arrival()
@@ -1976,6 +2041,42 @@ func _met_at(spawn: Dictionary) -> float:
 	if met >= 0.0:
 		return met
 	return GameData.as_float(spawn.get("trigger_s")) + GameData.as_float(spawn.get("ahead"))
+
+
+## Between Dawn's barriers a honk moves nobody into the next corridor: the
+## vehicle ahead has concrete on both sides (found by the review of M7).
+func _check_nobody_leaves_a_corridor() -> void:
+	var check_data: Dictionary = GameData.as_dict(_dawn().get("checkpoint"))
+	var at: float = GameData.as_float(check_data.get("at_m"))
+	var taper: float = GameData.as_float(check_data.get("taper_m"))
+	var horn_range: float = tuning.f("horn_range")
+	for where: String in ["between the barriers", "in the taper"]:
+		_begin_quiet_boss(DAWN)
+		_cruise(2, 1)
+		var ahead: TrafficSim.Vehicle = _sim.traffic.spawn(&"car", 1, 0.0, 60.0)
+		check(ahead != null and ahead.yields_to_horn, "(a car that moves over for a horn on the open road)")
+		_sim.car.s = (at + 5.0) if where == "between the barriers" else (at - taper + 5.0)
+		ahead.s = _sim.car.s + horn_range * 0.5
+		ahead.cruise = 60.0
+		_sim.car.speed = 60.0
+		_tick()
+		_events = []
+		_tap_at("horn")
+		_ticks(_ticks_in(tuning.f("horn_yield_time") + 1.0))
+		check_eq(_count_events("ritual_completed", "ritual", "horn"), 1, "(%s he honks at the car ahead of him)" % where)
+		check(ahead.signalling == 0 and not ahead.changing and absf(ahead.x - _sim.car.lane_center(1)) < 0.001, "%s a honk moves nobody over: there is concrete between the lanes" % where)
+	# On the open road before them the same car does move over.
+	_begin_quiet_boss(DAWN)
+	_cruise(2, 1)
+	var free: TrafficSim.Vehicle = _sim.traffic.spawn(&"car", 1, 0.0, 60.0)
+	_sim.car.s = 300.0
+	free.s = _sim.car.s + horn_range * 0.5
+	free.cruise = 60.0
+	_sim.car.speed = 60.0
+	_tick()
+	_tap_at("horn")
+	_ticks(_ticks_in(tuning.f("horn_yield_time") + 1.0))
+	check(absf(free.x - _sim.car.lane_center(1)) > 1.0, "(on the open road before the barriers the same car moves over for the same honk)")
 
 
 ## The sun has one place, said by the simulation, for the disc in the sky

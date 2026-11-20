@@ -764,6 +764,9 @@ func _set_corridor(check: Dictionary) -> void:
 	_corridor_half_gap = GameData.as_float(check.get("gap_m")) * 0.5
 	_corridor_sign_at = maxf(_corridor_from - GameData.as_float(check.get("sign_lead_s")) * _data.tuning.fi("gear_speeds", 2) * KMH_TO_MS, 0.0)
 	_corridor_judged = false
+	# Concrete stands between the lanes from the taper's mouth to the
+	# corridors' end: no vehicle changes lane there, whatever honks.
+	_traffic.walled = Vector2(_corridor_from, _corridor_to)
 
 
 ## The barriers beside a car at `s` whose middle is at `x` (GDD 10.2, 10.4),
