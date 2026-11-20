@@ -1049,6 +1049,26 @@ func _check_checkpoint_rows() -> void:
 	check_eq(_sim.faults.lamps, lamps, "(no lamp)")
 	check_near(_sim.suspicion.value, 0.0, 0.000001, "(and no Suspicion)")
 
+	# Forged papers pass the Papers of the visit that gets him through. A
+	# visit that turns him back does not spend them (GDD 7.7: 60 cash).
+	_begin_checkpoint("", 2, false)
+	_give("forged_papers", "glovebox_a")
+	check(_stand_at_the_bar(), "(first in line, forged papers stowed)")
+	_sim.suspicion.add(_checkpoint_number("turned_back_at"))
+	_events = []
+	var guard: int = _ticks_in(_checkpoint_number("stow_s") + 1.0)
+	while _event("pulled_over").is_empty() and guard > 0:
+		guard -= 1
+		_tick()
+	check_eq(GameData.as_string(_event("pulled_over").get("paid")), "turned_back", "at the top of Suspicion he is turned back, forged papers or not")
+	check(_item("forged_papers") != null, "and the papers are not spent on the visit that turned him back")
+	check_eq(_sim.boss.wanted, "", "(no document was asked for)")
+	check(_stand_at_the_bar(), "(the queue again: first in line once more)")
+	_events = []
+	check(_until_checkpoint_phase(BossSim.THROUGH, _checkpoint_number("stow_s") + 1.0), "on the next visit they pass the Papers by themselves")
+	check_eq(GameData.as_string(_event("pulled_over").get("paid")), "pass", "(and he passes)")
+	check(_item("forged_papers") == null, "(now they are used up)")
+
 
 ## The Checkpoint's plan for `boss_seed` with a queue in the middle lane only.
 func _lone_queue(boss_seed: int) -> Dictionary:

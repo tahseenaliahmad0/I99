@@ -58,6 +58,34 @@ func test_item_forged_papers() -> void:
 	_ticks(_ticks_in(2.0))
 	check_eq(_sim.boss.phase, BossSim.PAPERS, "without them he must hand over what the sign asks for")
 	check(not _sim.boss.wanted.is_empty(), "(the soldier waits for the %s)" % _sim.boss.wanted)
+	_check_forged_papers_have_a_job()
+
+
+## Every item has a job (GDD 12.4): forged papers pass the Checkpoint's
+## Papers, and the Checkpoint ends Act 1. The shady guy holds them out only
+## while it is still ahead (the review of M7: he sold them in Acts 2 and 3).
+func _check_forged_papers_have_a_job() -> void:
+	var record: Dictionary = _record("forged_papers")
+	check_eq(GameData.as_string(record.get("until_boss")), BossSim.CHECKPOINT, "forged papers are for the Checkpoint")
+	check_eq(GameData.as_int(data.record("bosses", BossSim.CHECKPOINT).get("act")), 1, "(which ends Act 1)")
+	_sim = DriveSim.new(fresh_data())
+	var samples: int = 300
+	for act: int in [1, 2, 3]:
+		var held_out: int = 0
+		var deals: int = 0
+		for sample: int in samples:
+			_sim.reseed(7000 * act + sample)
+			_sim.stop.begin("fuel_station", act, true)
+			for offer: Dictionary in _sim.stop.offers_view():
+				if GameData.as_bool(offer["shady"]) and offer["kind"] == StopSim.ITEM:
+					deals += 1
+					if GameData.as_string(offer["id"]) == "forged_papers":
+						held_out += 1
+		check(deals >= samples, "(act %d: the shady guy holds Deals out: %d over %d stops)" % [act, deals, samples])
+		if act == 1:
+			check(held_out > 0, "before the Checkpoint the shady guy has forged papers some nights (%d of %d stops)" % [held_out, samples])
+		else:
+			check_eq(held_out, 0, "in Act %d, with the Checkpoint behind him, he does not sell them" % act)
 
 	# 60 cash, from the shady guy.
 	_buy_from_the_shady_guy("forged_papers", 60.0, "dash_2")

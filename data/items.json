@@ -244,7 +244,7 @@
       "takes": [ { "passive": "mirror_scale", "amount": 1.5 } ],
       "line_ids": { "name": "item.wide_mirror.name" } },
     { "id": "forged_papers", "kind": "deal", "slots": ["dash_1", "dash_2", "glovebox_a", "glovebox_b"], "tags": ["small", "papers", "stowed"],
-      "rarity": "rare", "price": 60, "contraband": true,
+      "rarity": "rare", "price": 60, "contraband": true, "until_boss": "checkpoint",
       "rituals": ["stow"],
       "gives": [],
       "takes": [],

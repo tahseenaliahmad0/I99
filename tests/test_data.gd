@@ -111,6 +111,10 @@ func _check_broken_item_rules() -> void:
 	_expect("E_REF", "items[cigarettes].tags[1]", "a tag that is not in the tag list")
 
 	_reset_fixture()
+	_record("items", "cigarettes")["until_boss"] = "ambush"
+	_expect("E_REF", "items[cigarettes].until_boss", "an item for a boss the Telling does not have")
+
+	_reset_fixture()
 	_record("items", "cigarettes")["gives"] = [{"effect": "lit", "duration": 25, "bogus": 1}]
 	_expect("E_UNKNOWN_KEY", "items[cigarettes].gives[0]", "an entry with an unknown key")
 

@@ -1033,7 +1033,12 @@ func _report_soldier() -> void:
 		# each stack of Courage he can smell.
 		suspicion.add(_checkpoint_number("contraband_suspicion") * float(items.contraband_in_view()))
 		suspicion.add(_checkpoint_number("courage_suspicion") * float(courage_noticed()))
-		# Forged papers pass the Papers phase by themselves, once (GDD 7.7).
+		# Forged papers pass the Papers phase by themselves, once (GDD 7.7):
+		# on the visit that gets him through. At the top of Suspicion he is
+		# turned back as he comes, and they stay in the cabin for the next.
+		if items.has_pass("papers") and suspicion.value >= _checkpoint_number("turned_back_at"):
+			_turn_back(suspicion.value)
+			return
 		if use_forged_papers():
 			boss.papers_passed()
 	if boss.delayed:

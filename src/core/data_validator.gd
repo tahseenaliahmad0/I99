@@ -214,6 +214,8 @@ func _item_schema() -> Dictionary:
 		"rarity": _opt(_enum(RARITIES)),
 		"price": _num(0.0),
 		"contraband": _bool(),
+		# An item that is for one boss is sold only while that boss is ahead.
+		"until_boss": _opt(_ref("bosses")),
 		"supply": _opt(_nullable(_obj({"uses": _int(0.0), "restock": _num(0.0)}))),
 		"rituals": _list(_ref("rituals")),
 		"gives": _list(_obj({}, true)),

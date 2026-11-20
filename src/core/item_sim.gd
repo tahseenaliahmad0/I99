@@ -1336,6 +1336,14 @@ func on_hit(kind: int) -> void:
 			candidate.supply = 0
 
 
+## True while something in the cabin passes a check by itself (use_pass).
+func has_pass(what: String) -> bool:
+	for candidate: Item in items:
+		if GameData.as_string(GameData.as_dict(candidate.record.get("params")).get("passes")) == what:
+			return true
+	return false
+
+
 ## Something in the cabin that passes a check by itself (forged papers pass
 ## a checkpoint's Papers phase, GDD 7.7). True when he had it: it is used up.
 func use_pass(what: String) -> bool:
