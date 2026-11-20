@@ -1691,6 +1691,26 @@ built by the workflow `m6-fixes`; this entry is what that work is held to.
   starts or ends.
 - **Nobody has heard it.** There are no speakers here: levels and character
   come from measurements and an offline recording. NEEDS OWNER.
+- **After its review** (merged as `m10/audio-in-fix`):
+  - Every `gain_db` is 5 dB lower, cues and the rest alike: the three cues
+    that can sound at once came to 1.7 of full scale. The check now adds
+    up the cues' peaks and fails above full scale.
+  - The added harmonic is the 12th, 11th, 10th, 9th and 8th of the engine's
+    pitch in gears 1 to 5: at low harmonics the two loops, each at its own
+    phase, could cancel instead of add.
+  - A Wreck silences everything the snapshot drives (the horn of a Snap,
+    the horn behind him, the hum, the heartbeat, the phone, the siren, the
+    indicator), as it did the engine. What had been asked for by itself
+    plays out into the cut. The radio plays on over it: NEEDS OWNER.
+  - A sound that repeats follows a gap that has grown shorter at once (a
+    jump in Suspicion or Nerves is heard within one new gap).
+  - Keys that say how a sound is played and mean nothing for that sound
+    are errors at boot, like the generator's.
+  - **A 34th sound, `rattle`**: GDD 16.3 asks for "each fault's visible or
+    audible effect" and the Rattle had neither. Quiet bursts of noise, a
+    higher band and slower than the rumble strip, no functional cue; heard
+    while the fault is lit and the engine runs. It is one commit
+    (4078d17) so that it can be taken back by itself. NEEDS OWNER.
 
 ## D-053 (M10, 2026-11-20) The post effects
 
