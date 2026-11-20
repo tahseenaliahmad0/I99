@@ -36,6 +36,9 @@ const WAV_OPTION: String = "--wav="
 const DRIVE_CHECK: String = "res://tools/audio_drive_check.gd"
 ## squeal_1, squeal_2 ...
 const SQUEAL: String = "squeal_%d"
+## The horn of another (the Audio autoload's name for it: this half of the
+## check is compiled before the autoloads are there).
+const HORN_BEHIND: String = "horn_behind"
 ## Sounds of which only one is heard at a time: the radio's loops, the squeals.
 const FAMILIES: PackedStringArray = ["radio_", "squeal_"]
 ## The events of GDD 16.5's table.
@@ -294,6 +297,18 @@ func _check_table() -> void:
 	_expect(GameData.as_array(_synth("radio_music").get("notes")).size() == 4, "radio_music: a four-note loop has four notes")
 	# "Speech-like blips; a different blip rhythm."
 	_expect(not _same(_shares("radio_news"), _shares("radio_callin")), "radio_callin: its rhythm must differ from the news")
+	# Not of the table: the horn of what comes up behind him (GDD 10.3) is a
+	# horn like his, and every note of it lower than any of his own, so that
+	# he cannot take the one for the other.
+	_expect(registry.has(HORN_BEHIND), "sfx.json has no '%s' for what comes up behind his standing car" % HORN_BEHIND)
+	_expect(_same(_synth(HORN_BEHIND).get("wave"), _synth("horn").get("wave")), "%s: a horn has the wave of his own" % HORN_BEHIND)
+	var own_lowest: float = INF
+	for note: Variant in GameData.as_array(_synth("horn").get("freqs")):
+		own_lowest = minf(own_lowest, GameData.as_float(note))
+	var behind: Array = GameData.as_array(_synth(HORN_BEHIND).get("freqs"))
+	_expect(not behind.is_empty(), "%s: a horn has its notes in \"freqs\"" % HORN_BEHIND)
+	for note: Variant in behind:
+		_expect(GameData.as_float(note) < own_lowest, "%s: its note of %s Hz is not lower than his own horn's %s" % [HORN_BEHIND, str(note), str(own_lowest)])
 
 
 ## The rhythm of a row of notes: sounding or resting, and for what share.

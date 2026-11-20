@@ -6,12 +6,15 @@ extends Node
 ## in its place (GDD 14), and the sound gets a player of its own. Three
 ## things are heard:
 ##
-##   - `play(id)`, and so every `sfx_requested` on the Events bus;
+##   - `play(id)`, and so every `sfx_requested` on the Events bus (a horn
+##     asked for with `behind` is not his own: it is `horn_behind`);
 ##   - the bus events that have a sound of their own: a hit (scrape, crash),
 ##     a close call (the chain's rising squeal), a heckle (the ding);
 ##   - `apply(snapshot)`, once a frame from the drive scene: the engine, the
-##     rumble strip, the heartbeat, the radio, the siren, the ringing phone,
-##     the indicator's tick, the Phantom's hum, the horn of a Snap.
+##     rumble strip, the heartbeat, the radio, the siren, the ringing phone
+##     (the one on its mount, and the one in his pocket at Dawn), the
+##     indicator's tick, the Phantom's hum, the horn of a Snap, the horn of
+##     what comes up behind his standing car.
 ##
 ## What an entry says about how its sound is played, beside how it is made:
 ##
@@ -49,6 +52,8 @@ const ENGINE_HARMONIC: String = "engine_harmonic"
 const RUMBLE: String = "rumble_strip"
 const HEARTBEAT: String = "heartbeat"
 const HORN: String = "horn"
+## The horn of another: of what comes up behind his standing car (GDD 10.3).
+const HORN_BEHIND: String = "horn_behind"
 const HUM: String = "phantom_hum"
 const SIREN: String = "siren_chirp"
 const RING: String = "phone_ring"
@@ -140,6 +145,7 @@ var _engine: Voice
 var _harmonic: Voice
 var _rumble: Voice
 var _horn: Voice
+var _horn_behind: Voice
 var _hum: Voice
 var _beat: Pulse
 var _ring: Pulse
@@ -259,6 +265,7 @@ func apply(snapshot: Dictionary) -> void:
 	var police_lights: bool = snapshot["police_lights"]
 	var pulled_over: bool = snapshot["pulled_over"]
 	var indicator: int = snapshot["indicator"]
+	var rear_end_in: float = snapshot["rear_end_in"]
 
 	# The engine (GDD 16.5): its pitch is the speed, its added harmonic the
 	# gear. A wrecked engine is a dead one (GDD 6.3).
@@ -279,6 +286,13 @@ func apply(snapshot: Dictionary) -> void:
 	if _horn != null:
 		_horn.wanted = snapped
 
+	# What comes up behind his standing car in the Storm (GDD 10.3) leans on
+	# its horn until it has hit him or missed him: no longer than it comes.
+	if _horn_behind != null:
+		_horn_behind.wanted = rear_end_in > 0.0
+		if not _horn_behind.wanted:
+			_horn_behind.held = 0.0
+
 	# The Phantom's hum before a cramp (GDD 7.9): no longer than the hum.
 	if _hum != null:
 		_hum.wanted = cramp == DriveSim.HUM
@@ -294,7 +308,9 @@ func apply(snapshot: Dictionary) -> void:
 		var share: float = clampf((nerves - _pound_from) / span, 0.0, 1.0) if span > 0.0 else 1.0
 		_set_pulse(_beat, pound, SECONDS_PER_MINUTE / lerpf(_beats_slow, _beats_fast, share))
 
-	# The phone rings until the call is answered or lost.
+	# A phone rings for as long as somebody calls: until the call is answered
+	# or lost. The snapshot names the caller of the phone on its mount and,
+	# while the Call rings in his pocket at Dawn (GDD 10.4), Noor.
 	if _ring != null:
 		_set_pulse(_ring, not caller.is_empty(), _ring.every)
 
@@ -431,6 +447,7 @@ func _clear() -> void:
 	_harmonic = null
 	_rumble = null
 	_horn = null
+	_horn_behind = null
 	_hum = null
 	_music = null
 	_beat = null
@@ -557,8 +574,9 @@ func _configure(tuning: Tuning) -> void:
 
 	_rumble = _voices.get(RUMBLE)
 	_horn = _voices.get(HORN)
+	_horn_behind = _voices.get(HORN_BEHIND)
 	_hum = _voices.get(HUM)
-	for id: String in [RUMBLE, HORN, HUM]:
+	for id: String in [RUMBLE, HORN, HORN_BEHIND, HUM]:
 		var voice: Voice = _voices.get(id)
 		if voice == null or not voice.looped:
 			push_error("Audio: sfx.json needs '%s', as a loop" % id)
@@ -681,8 +699,11 @@ func _apply_radio(snapshot: Dictionary) -> void:
 
 # --- Events ------------------------------------------------------------------
 
+## A horn asked for with `behind` is the horn of what comes up behind his
+## standing car (GDD 10.3), not his own.
 func _on_sfx_requested(data: Dictionary) -> void:
-	play(GameData.as_string(data.get("id")))
+	var id: String = GameData.as_string(data.get("id"))
+	play(HORN_BEHIND if id == HORN and GameData.as_bool(data.get("behind")) else id)
 
 
 ## A scrape sounds like one; a crash and a head-on are both a crash.

@@ -68,6 +68,15 @@
     },
     "stream": null
   },
+  "horn_behind": {
+    "synth": {
+      "wave": "square", "freqs": [310, 370], "harmonics": 9,
+      "rate": 22050, "duration": 0.1, "peak": 0.9, "loop": true,
+      "gain_db": -10, "fade_in": 0.01, "fade_out": 0.05, "hold": 1.0,
+      "note": "The horn of what comes up behind his standing car in the Storm (a `horn` asked for with `behind`): two square waves lower than his own, so that he knows it is not his. It sounds for as long as the snapshot says something is coming, or for `hold` if it is only asked for"
+    },
+    "stream": null
+  },
   "wiper": {
     "synth": {
       "wave": "noise", "seed": 51,

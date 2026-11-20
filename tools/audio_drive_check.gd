@@ -1,6 +1,8 @@
 extends RefCounted
 ## The second half of the sound check (tools/audio_check.gd): the Audio
-## autoload, taken through the states of a drive and the events of the bus.
+## autoload, taken through the states of a drive and the events of the bus,
+## and through what two set pieces bring with simulations of their own: the
+## horn behind a car that stands in the Storm, the Call at Dawn.
 ## Loaded by the first half once the autoloads are there.
 ##
 ## Nothing here waits for a sound to play out: frames are stepped by hand
@@ -18,6 +20,16 @@ const STREAM_FILE: String = "audio_check_stream.wav"
 ## file would be held; there is no such file.
 const SHARED_STREAM: String = "res://tools/audio_check_shared.wav"
 const TAPE: StringName = &"mixtape"
+const POCKET: StringName = &"pocket"
+## The gear a road is driven in at par (GDD 5.2).
+const PAR_GEAR: int = 3
+## The seed of the bosses the check drives, and of the road's draws on them.
+const BOSS_SEED: int = 1
+## How many of the Storm's waits the check stands through for something to
+## come up behind him: each wait brings it with the Storm's rear_end_chance.
+const STORM_WAITS: int = 30
+## How far short of where the Call begins the check sets the car down, m.
+const CALL_RUN_UP: float = 2.0
 
 var _data: GameData
 var _tuning: Tuning
@@ -48,8 +60,10 @@ func run(data: GameData) -> PackedStringArray:
 		_check_squeals()
 		_check_siren()
 		_check_phone()
+		_check_call()
 		_check_hum()
 		_check_horn()
+		_check_horn_behind()
 		_check_indicator()
 		_check_events()
 		_check_scene_gone()
@@ -330,6 +344,73 @@ func _check_phone() -> void:
 	_expect(Audio.starts_of(Audio.RING) - before == 4, "phone_ring: the first ring is heard twice, or the rest are late")
 
 
+## The Call (GDD 10.4), on Dawn's own road: the phone in his pocket rings as
+## the one on its mount does, for as long as the simulation says it rings,
+## and is cut the moment he answers.
+func _check_call() -> void:
+	var every: float = GameData.as_float(_synth(Audio.RING).get("every"))
+	var ring_s: float = GameData.as_float(GameData.as_dict(_boss_numbers(BossSim.DAWN).get("call")).get("ring_s"))
+	if every <= 0.0 or ring_s <= 0.0:
+		_fail("the Call: phone_ring's \"every\" and Dawn's ring_s must be above 0")
+		return
+	# One ring as the Call begins, and one every `every` s while it rings.
+	var rings: int = ceili(ring_s / every)
+
+	# Ignored: it rings out.
+	var before: int = Audio.starts_of(Audio.RING)
+	var sim: DriveSim = _to_the_call()
+	if sim == null:
+		return
+	_expect(GameData.as_string(sim.snapshot()["caller"]) == DriveSim.NOOR, "the Call: the snapshot does not name Noor as the caller while it rings")
+	_expect(Audio.starts_of(Audio.RING) - before == 1 and Audio.is_sounding(Audio.RING), "phone_ring: the Call begins without a ring")
+	# Frames after the one in which it began, to the one in which it is over.
+	var frames: int = 0
+	var guard: int = roundi((ring_s + 2.0) * FPS)
+	while sim.boss.call == BossSim.CALL_RINGING and guard > 0:
+		guard -= 1
+		frames += 1
+		_drive(sim, STEP)
+	_expect(absi(frames - roundi(ring_s * FPS)) <= 1, "the Call: it rang for %.2f s, not %.1f" % [float(frames) * STEP, ring_s])
+	_expect(Audio.starts_of(Audio.RING) - before == rings,
+			"phone_ring: the Call rings %d times in its %.0f s; one ring every %.1f s is %d" % [Audio.starts_of(Audio.RING) - before, ring_s, every, rings])
+	_expect(not Audio.is_sounding(Audio.RING), "phone_ring: still ringing when the Call has rung out")
+	_drive(sim, every * 2.5)
+	_expect(Audio.starts_of(Audio.RING) - before == rings, "phone_ring: it rings on after the Call has rung out")
+
+	# Answered with a TAP on his pocket, early in its ringing and after a
+	# second ring if there is time for one: the ring is cut there and then.
+	before = Audio.starts_of(Audio.RING)
+	sim = _to_the_call()
+	if sim == null:
+		return
+	var began: int = sim.tick
+	_drive(sim, minf(every * 1.25, ring_s * 0.25))
+	var input: DriveInput = DriveInput.new()
+	input.pointer_is_absolute = true
+	input.pointer = sim.hand.anchor_pointer(sim.hand.anchor_index(POCKET))
+	guard = roundi(3.0 * FPS)
+	while sim.hand.at_id() != POCKET and guard > 0:
+		guard -= 1
+		_drive(sim, STEP, input)
+	input.lmb = true
+	_drive(sim, STEP * 2.0, input)
+	input.lmb = false
+	guard = roundi(FPS)
+	while sim.boss.call == BossSim.CALL_RINGING and guard > 0:
+		guard -= 1
+		_drive(sim, STEP, input)
+	if not _expect(sim.boss.call == BossSim.CALL_TALKING, "the Call: a TAP on his pocket did not answer it; what an answer does to the ring was not checked"):
+		return
+	# It rang as it began and every `every` s since (give or take two frames).
+	var rung: int = Audio.starts_of(Audio.RING) - before
+	var rang_for: float = float(sim.tick - began) * DriveSim.DT
+	_expect(rung >= floori(maxf(rang_for - STEP * 2.0, 0.0) / every) + 1 and rung <= floori((rang_for + STEP * 2.0) / every) + 1,
+			"phone_ring: the Call rang %d times in the %.2f s before he answered it" % [rung, rang_for])
+	_expect(not Audio.is_sounding(Audio.RING), "phone_ring: still ringing with the phone at his ear")
+	_drive(sim, every * 2.5, input)
+	_expect(Audio.starts_of(Audio.RING) - before == rung, "phone_ring: it rings on while he talks")
+
+
 func _check_hum() -> void:
 	var spec: Dictionary = _synth(Audio.HUM)
 	var out: float = GameData.as_float(spec.get("fade_out")) + STEP * 3.0
@@ -378,6 +459,84 @@ func _check_horn() -> void:
 	_expect(not Audio.is_sounding(Audio.HORN), "horn: still heard after the Snap")
 
 
+## What comes up behind his standing car in the Storm (GDD 10.3) is heard by
+## a horn that is not his own, from the moment it shows itself until it has
+## hit him or missed him.
+func _check_horn_behind() -> void:
+	var spec: Dictionary = _synth(Audio.HORN_BEHIND)
+	var hold: float = GameData.as_float(spec.get("hold"))
+	var out: float = GameData.as_float(spec.get("fade_out")) + STEP * 3.0
+	var tell: float = GameData.as_float(_boss_numbers(BossSim.STORM).get("rear_end_tell_s"))
+	# Asked for on the bus, as the simulation asks: another horn than his.
+	_rest()
+	var own: int = Audio.starts_of(Audio.HORN)
+	Events.emit_event("sfx_requested", {"id": Audio.HORN, "behind": true})
+	_wait(hold * 0.5)
+	_expect(Audio.is_sounding(Audio.HORN_BEHIND), "horn_behind: a horn asked for from behind him is not heard")
+	_expect(Audio.starts_of(Audio.HORN) == own and not Audio.is_sounding(Audio.HORN), "horn_behind: the horn behind him is heard as his own")
+	_wait(hold * 0.5 + out)
+	_expect(not Audio.is_sounding(Audio.HORN_BEHIND), "horn_behind: asked for, it does not end")
+	# His own honk, and that of a vehicle he passes, stay what they were.
+	for request: Dictionary in [{"id": Audio.HORN}, {"id": Audio.HORN, "vehicle": 1}, {"id": Audio.HORN, "behind": false}]:
+		_rest()
+		Events.emit_event("sfx_requested", request)
+		_wait(STEP * 2.0)
+		_expect(Audio.is_sounding(Audio.HORN) and not Audio.is_sounding(Audio.HORN_BEHIND), "horn: the honk %s is heard as the horn behind him" % str(request))
+	# The snapshot knows how long it comes: longer than the hold, or not at all.
+	_rest()
+	Events.emit_event("sfx_requested", {"id": Audio.HORN, "behind": true})
+	_run(_snap({"rear_end_in": hold}), hold * 2.0)
+	_expect(Audio.is_sounding(Audio.HORN_BEHIND), "horn_behind: not heard for as long as something comes up behind him")
+	_run(_snap({"rear_end_in": 0.0}), out)
+	_expect(not Audio.is_sounding(Audio.HORN_BEHIND), "horn_behind: still heard when nothing comes any more")
+	Events.emit_event("sfx_requested", {"id": Audio.HORN, "behind": true})
+	_run(_snap({"rear_end_in": 0.0}), out)
+	_expect(not Audio.is_sounding(Audio.HORN_BEHIND), "horn_behind: heard on, though nothing comes")
+	if tell <= 0.0:
+		_fail("the Storm: its rear_end_tell_s must be above 0")
+		return
+
+	# The Storm itself. He stands dark in his lane, and stays: the horn is
+	# heard for the whole of the tell, and then the crash.
+	var brake: DriveInput = DriveInput.new()
+	var sim: DriveSim = _stand_in_the_storm(brake)
+	if sim == null:
+		return
+	own = Audio.starts_of(Audio.HORN)
+	var crashes: int = Audio.starts_of(Audio.CRASH)
+	var fell_silent: bool = false
+	var frames: int = 0
+	var guard: int = roundi((tell + 1.0) * FPS)
+	while Audio.starts_of(Audio.CRASH) == crashes and guard > 0:
+		guard -= 1
+		if not Audio.is_sounding(Audio.HORN_BEHIND):
+			fell_silent = true
+		_drive(sim, STEP, brake)
+		frames += 1
+	if _expect(guard > 0, "the Storm: what came up behind him did not hit him; its horn up to the hit was not checked"):
+		_expect(not fell_silent, "horn_behind: it falls silent before it has hit him")
+		_expect(absi(frames - roundi(tell * FPS)) <= 1, "horn_behind: heard %.2f s before the crash; the tell is %.1f s" % [float(frames) * STEP, tell])
+		_expect(Audio.starts_of(Audio.CRASH) == crashes + 1, "crash: what hits him from behind is not heard as one crash")
+		_drive(sim, out, brake)
+		_expect(not Audio.is_sounding(Audio.HORN_BEHIND), "horn_behind: still heard after it has hit him")
+	_expect(Audio.starts_of(Audio.HORN) == own, "horn: his own horn sounds when another comes up behind him")
+
+	# The same Storm, and he drives off within the tell: it misses him, and
+	# its horn is over.
+	sim = _stand_in_the_storm(brake)
+	if sim == null:
+		return
+	_drive(sim, tell * 0.5, brake)
+	_expect(Audio.is_sounding(Audio.HORN_BEHIND), "horn_behind: not heard half-way through the tell")
+	crashes = Audio.starts_of(Audio.CRASH)
+	brake.rmb = false
+	sim.car.speed = _tuning.fi("gear_speeds", PAR_GEAR - 1)
+	_drive(sim, out, brake)
+	_expect(not Audio.is_sounding(Audio.HORN_BEHIND), "horn_behind: still heard when he has driven off and nothing comes any more")
+	_drive(sim, tell * 2.0, brake)
+	_expect(Audio.starts_of(Audio.CRASH) == crashes, "the Storm: he drove off within the tell and was hit all the same")
+
+
 func _check_indicator() -> void:
 	var every: float = GameData.as_float(_synth(Audio.TICK).get("every"))
 	_expect(_count(Audio.TICK, _snap({"indicator": 1}), every * 3.5) == 4, "indicator_tick: the indicator must tick at once and every %.2f s" % every)
@@ -418,8 +577,9 @@ func _check_events() -> void:
 ## When no snapshot comes any more, what it asked for goes quiet.
 func _check_scene_gone() -> void:
 	_rest()
-	_run(_snap({"speed": _tuning.fi("gear_speeds", 2), "radio": ItemSim.MUSIC, "pound": true, "nerves": _tuning.f("snap_at")}), 1.0)
-	_expect(Audio.is_sounding(Audio.ENGINE) and Audio.is_sounding(Audio.RADIO % String(ItemSim.MUSIC)), "the drive is not heard")
+	_run(_snap({"speed": _tuning.fi("gear_speeds", 2), "radio": ItemSim.MUSIC, "pound": true, "nerves": _tuning.f("snap_at"), "rear_end_in": 1.0}), 1.0)
+	_expect(Audio.is_sounding(Audio.ENGINE) and Audio.is_sounding(Audio.RADIO % String(ItemSim.MUSIC)) and Audio.is_sounding(Audio.HORN_BEHIND),
+			"the drive is not heard")
 	var beats: int = Audio.starts_of(Audio.HEARTBEAT)
 	_wait(2.0)
 	for id: String in Audio.ids():
@@ -538,10 +698,68 @@ func _count(id: String, snapshot: Dictionary, seconds: float) -> int:
 	return Audio.starts_of(id) - before
 
 
+## The numbers of a boss: the object of its own name in its record.
+func _boss_numbers(boss_id: String) -> Dictionary:
+	return GameData.as_dict(_data.record("bosses", boss_id).get(boss_id))
+
+
+## A boss by itself with nothing of its plan on the road: the car in the
+## gear of par in the middle lane, at the start of its road.
+func _quiet_boss(boss_id: String) -> DriveSim:
+	var sim: DriveSim = DriveSim.new(_data)
+	var plan: Dictionary = BossSim.plan(_data, boss_id, "", BOSS_SEED)
+	for key: String in ["spawns", "hazards", "curves"]:
+		plan[key] = []
+	sim.gate.reset(PAR_GEAR)
+	sim.begin_leg(plan)
+	sim.in_encounter = true
+	sim.drain_events()
+	return sim
+
+
+## Dawn from quiet, set down a little short of where the phone in his pocket
+## begins to ring and driven until it does. Null (and a failure) when it
+## does not ring.
+func _to_the_call() -> DriveSim:
+	var from_end: float = GameData.as_float(GameData.as_dict(_boss_numbers(BossSim.DAWN).get("call")).get("from_end_m"))
+	var sim: DriveSim = _quiet_boss(BossSim.DAWN)
+	sim.car.s = GameData.as_float(_data.record("bosses", BossSim.DAWN).get("length_m")) - from_end - CALL_RUN_UP
+	_rest()
+	var guard: int = roundi(5.0 * FPS)
+	while sim.boss.call != BossSim.CALL_RINGING and guard > 0:
+		guard -= 1
+		_drive(sim, STEP)
+	if not _expect(sim.boss.call == BossSim.CALL_RINGING, "the Call: the phone in his pocket does not ring %.0f m from Dawn's end; its ring was not checked" % from_end):
+		return null
+	return sim
+
+
+## The Storm from quiet, his car standing dark in its lane with the brake
+## held (`brake` is made that input), driven until something comes up behind
+## it. Null (and a failure) when nothing comes in STORM_WAITS waits.
+func _stand_in_the_storm(brake: DriveInput) -> DriveSim:
+	var every: float = GameData.as_float(_boss_numbers(BossSim.STORM).get("rear_end_every_s"))
+	var sim: DriveSim = _quiet_boss(BossSim.STORM)
+	sim.rng.reseed(BOSS_SEED)
+	sim.car.speed = 0.0
+	brake.clear()
+	brake.rmb = true
+	_rest()
+	var guard: int = roundi(every * float(STORM_WAITS) * FPS)
+	while sim.boss.rear_end_in <= 0.0 and guard > 0:
+		guard -= 1
+		_drive(sim, STEP, brake)
+	if not _expect(sim.boss.rear_end_in > 0.0, "the Storm: nothing came up behind a car standing dark in its lane for %.0f s; its horn was not checked" % (every * float(STORM_WAITS))):
+		return null
+	return sim
+
+
 ## A simulation driven as the drive scene drives it: two ticks a frame, its
 ## events onto the bus, its snapshot to Audio. The car is kept in its lane.
-func _drive(sim: DriveSim, seconds: float) -> void:
-	var input: DriveInput = DriveInput.new()
+## `input` is what the player does meanwhile (nothing, if it is not given).
+func _drive(sim: DriveSim, seconds: float, input: DriveInput = null) -> void:
+	if input == null:
+		input = DriveInput.new()
 	for frame: int in roundi(seconds * FPS):
 		for tick: int in roundi(STEP / DriveSim.DT):
 			sim.car.x = sim.car.lane_center(clampi(sim.car.lane_of(sim.car.x), 0, sim.car.lanes - 1))
