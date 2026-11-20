@@ -644,6 +644,12 @@ func _step_queue(dt: float) -> void:
 			nose = minf(nose, gone.s - gone.half_length - _queue_gap)
 		for waiting: Variant in line:
 			var vehicle: TrafficSim.Vehicle = waiting
+			# Stop and go needs the brake: a vehicle of the queue he keeps
+			# pushing against is touched anew when the last touch has worn
+			# off (on the open road one contact is one hit: he is held
+			# behind what he touched; here that would carry him through
+			# the queue for the price of one bump).
+			vehicle.cc_hit = false
 			var room: float = nose - vehicle.half_length - vehicle.s
 			var speed_ms: float = clampf(room * _pull_up_rate, 0.0, _creep_ms)
 			vehicle.s += minf(speed_ms * dt, maxf(room, 0.0))

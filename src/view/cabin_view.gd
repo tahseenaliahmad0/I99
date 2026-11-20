@@ -344,7 +344,9 @@ func _show_mirror(snapshot: Dictionary) -> void:
 		light.position = _mirror_at + Vector3(side * lerpf(_light_spread.x, _light_spread.y, near), 0.0, _mirror_proud * 1.5)
 		light.scale = Vector3.ONE * lerpf(_light_grow.x, _light_grow.y, near)
 	var suspicion: float = snapshot["suspicion"]
-	_mirror_blue.visible = str(snapshot["suspicion_by"]) == PATROL and suspicion > 0.0
+	# Wherever the law is watching him, a Patrol behind him or the
+	# Checkpoint's soldiers: GDD 16.3 gives Suspicion one light.
+	_mirror_blue.visible = not str(snapshot["suspicion_by"]).is_empty() and suspicion > 0.0
 	if _mirror_blue.visible:
 		PlaceholderFactory.set_alpha(_mirror_blue, suspicion / maxf(_suspicion_max, 1.0))
 

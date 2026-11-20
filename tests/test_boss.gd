@@ -1256,6 +1256,31 @@ func _check_checkpoint_rows() -> void:
 			slid += 1
 	check_eq(slid, 0, "the Loud horn moves nobody out of a queue either: there are barriers between")
 
+	# Stop and go needs the brake (GDD 10.2). Pressed against the vehicle
+	# ahead with his foot off the brake he is not carried through the queue
+	# for the price of one bump: pushing on is a scrape again, every time
+	# the last one has worn off.
+	_begin_checkpoint("", 3)
+	var pushed: TrafficSim.Vehicle = _queue_tail(1)
+	_cruise(1, 1)
+	_sim.car.s = pushed.s - pushed.half_length - _sim.car.length() * 0.5 - 1.0
+	_sim.car.speed = tuning.f("scrape_max_closing") * 0.5
+	_input.clear()
+	_events = []
+	var pressing: float = tuning.f("hit_immunity") * 5.0
+	_ticks(_ticks_in(pressing))
+	var bumps: int = 0
+	for event: Dictionary in _events:
+		if GameData.as_string(event.get("type")) == "hit" and GameData.as_int(event.get("vehicle")) == pushed.id:
+			bumps += 1
+	check(bumps >= 4, "foot off the brake against the queue's last vehicle for %.1f s: he scrapes it again and again (%d times)" % [pressing, bumps])
+	# Driven as it must be, the same queue costs nothing.
+	_begin_checkpoint("", 3)
+	_events = []
+	_follow_the_queue(1)
+	check_eq(_count_events("hit"), 0, "(with the brake behind whatever is ahead the queue is driven without a touch)")
+	check_eq(_sim.boss.phase, BossSim.STOW, "(to the bar, where the soldier sets out)")
+
 
 ## A number of the Checkpoint's queue (data/legs.json).
 func _checkpoint_number_of_queue(key: String) -> float:
