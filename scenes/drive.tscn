@@ -1,4 +1,4 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=11 format=3]
 
 [ext_resource type="Script" path="res://src/game/drive_controller.gd" id="1_drive"]
 [ext_resource type="Script" path="res://src/view/cabin_view.gd" id="2_cabin"]
@@ -9,6 +9,7 @@
 [ext_resource type="Script" path="res://src/view/sky_view.gd" id="7_sky"]
 [ext_resource type="Script" path="res://src/view/post_fx_view.gd" id="9_postfx"]
 [ext_resource type="Script" path="res://src/view/stop_view.gd" id="8_stop"]
+[ext_resource type="Script" path="res://src/view/subtitles_view.gd" id="10_subtitles"]
 
 [node name="Drive" type="Node3D"]
 script = ExtResource("1_drive")
@@ -34,6 +35,9 @@ script = ExtResource("7_sky")
 
 [node name="PostFX" type="CanvasLayer" parent="."]
 script = ExtResource("9_postfx")
+
+[node name="Subtitles" type="CanvasLayer" parent="."]
+script = ExtResource("10_subtitles")
 
 [node name="Overlay" type="CanvasLayer" parent="."]
 

@@ -38,6 +38,20 @@ sign.hitcher,,[%s],false
 radio.news.patrol,Newsreader,Traffic police are out on the southern road tonight.,true
 noor.call.1,Noor,Baba? Are you awake?,true
 finale.proverb,"Noor, then Abu Noor",They say one hand doesn't clap. / No. But it drives.,true
+speaker.abu_noor,,Abu Noor,true
+speaker.noor,,Noor,true
+speaker.guest,,Guest,true
+speaker.child,,Child,true
+speaker.driver,,Driver,true
+speaker.uncle,,Uncle,true
+speaker.aunt,,Aunt,true
+speaker.old_woman,,Old woman,true
+speaker.newsreader,,Newsreader,true
+speaker.soldier,,Soldier,true
+speaker.drummer,,Drummer,true
+speaker.student,,Student,true
+speaker.boy,,Boy,true
+subtitle.test.long,Abu Noor,"You want the whole night? Then pour the tea and sit down, because this road has more turns in it than all of your uncle's stories put together.",false
 hud.gear,,Gear %s,false
 hud.neutral,,N,false
 hud.wheel,,Wheel %s deg,false

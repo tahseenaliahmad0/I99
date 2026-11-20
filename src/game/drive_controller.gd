@@ -39,6 +39,7 @@ var _bot: StandInBot = null
 @onready var _sky: SkyView = $Sky
 @onready var _post_fx: PostFxView = $PostFX
 @onready var _pointer: PointerView = $Overlay/Pointer
+@onready var _subtitles: SubtitlesView = $Subtitles
 @onready var _hud: DebugHud = $DebugHUD
 
 
@@ -61,6 +62,7 @@ func _ready() -> void:
 	_sky.setup(data, _factory)
 	_post_fx.setup(data, _camera, _cabin)
 	_pointer.setup(data, _factory)
+	_subtitles.setup(data)
 	sim.rng.reseed(int(str(Game.args.get("seed", "1"))))
 	if Game.args.has("bot"):
 		_bot = StandInBot.new(sim, data)
@@ -87,6 +89,10 @@ func _ready() -> void:
 		push_error("Drive: --ride names nobody who can get in: '%s'" % str(Game.args["ride"]))
 	if Game.args.has("hud") and not _hud.visible:
 		_hud.toggle()
+	if Game.args.has("say"):
+		# `--say=<line id>[,<line id>...]`: lines to look at, asked for as the simulation asks.
+		for line_id: String in str(Game.args["say"]).split(",", false):
+			Events.emit_event("line_requested", {"id": line_id})
 	if Game.args.has("aim"):
 		_aim_anchor = sim.hand.anchor_index(StringName(str(Game.args["aim"])))
 		if _aim_anchor == HandSim.NO_ANCHOR:
@@ -154,6 +160,7 @@ func _physics_process(_delta: float) -> void:
 		if type == "arrived" and _boss_spec.is_empty():
 			# Until the wedding room exists (M9) the night simply begins again.
 			Game.write_save({})
+			_subtitles.clear()
 			sim.begin_telling(sim.run.table, sim.run.seed + 1)
 
 

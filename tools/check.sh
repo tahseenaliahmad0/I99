@@ -62,6 +62,8 @@ if [ "${#TEST_ARGS[@]}" -gt 0 ]; then
 else
   run_step tests --script res://tests/run_tests.gd
 fi
+# What is said and how it is shown (GDD 16.6): wrapping, timing, the queue, the Call's line.
+run_step subtitles --fixed-fps 60 --script res://tools/subtitles_check.gd
 run_step smoke --script res://tools/smoke_all.gd
 run_step postfx --script res://tools/post_fx_check.gd
 

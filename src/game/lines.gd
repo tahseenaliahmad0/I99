@@ -8,6 +8,10 @@ extends Node
 signal locale_changed(locale: String)
 
 const FALLBACK_LOCALE: String = "en"
+## A speaker's name is a line of its own, so that it is written, and
+## translated, once: this prefix and the name as a speaker column writes it,
+## in lower case with underscores ("Old woman" is `speaker.old_woman`).
+const SPEAKER_PREFIX: String = "speaker."
 
 var locale: String = FALLBACK_LOCALE
 
@@ -38,9 +42,36 @@ func get_text(id: String) -> String:
 	return _field(id, "text")
 
 
-## The speaker tag of a line ("" when it has none).
+## The speaker column of a line ("" when it has none): who says it, as the
+## line table writes it. What a speaker tag shows is get_speaker_name().
 func get_speaker(id: String) -> String:
 	return _field(id, "speaker")
+
+
+## A speaker's name as a speaker tag shows it (GDD 16.6): the text of the
+## speaker's own line in the current locale. `speaker` is what a speaker
+## column holds. A speaker who has no line is shown as the column has it.
+func get_speaker_name(speaker: String) -> String:
+	var id: String = speaker_line_id(speaker)
+	if not id.is_empty() and has_line(id):
+		return get_text(id)
+	return speaker
+
+
+## The id of the line that holds a speaker's name: "Old woman" gives
+## "speaker.old_woman". "" for a name with no Latin letter or digit in it.
+func speaker_line_id(speaker: String) -> String:
+	var key: String = ""
+	var gap: bool = false
+	for character: String in speaker.to_lower():
+		if (character >= "a" and character <= "z") or (character >= "0" and character <= "9"):
+			if gap and not key.is_empty():
+				key += "_"
+			key += character
+			gap = false
+		else:
+			gap = true
+	return "" if key.is_empty() else SPEAKER_PREFIX + key
 
 
 ## get_text with printf-style values, e.g. format("stop.price", [15]).
