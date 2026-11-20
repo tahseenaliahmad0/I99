@@ -823,6 +823,43 @@ func test_item_mixtape() -> void:
 		check(not _sim.hand.is_anchor_active(_sim.hand.anchor_index(&"radio")) and _sim.hand.is_anchor_active(_sim.hand.anchor_index(&"tape")),
 				"the deck has taken the dial's place")
 
+	# On the road the dial gives way to a tape in his hand too. At a stop the
+	# dial is not in use at all, and nothing in the cabin as it is sold is
+	# carried to the deck on the road: so this tape is one that may be stowed
+	# (a private copy of the data). With the tape in the glovebox the dial is
+	# the hand's again; taken out, the tape still goes back into the deck.
+	var cabin: GameData = fresh_data()
+	cabin.record("items", "mixtape")["rituals"] = ["stow", "tape_flip"]
+	if check(DataValidator.validate(cabin).is_empty(), "(a mixtape that may be stowed validates)"):
+		_sim = DriveSim.new(cabin)
+		_sim.in_encounter = true
+		_events = []
+		_input.clear()
+		_give("mixtape")
+		var dial: int = _sim.hand.anchor_index(&"radio")
+		var slot: int = _sim.hand.anchor_index(&"tape")
+		_tap_at("glovebox")
+		_drag("tape", "glovebox")
+		check(_item("mixtape") != null and _sim.items.is_stowed(_item("mixtape")), "(on the road, the tape is stowed in the glovebox)")
+		check(_sim.hand.is_anchor_active(dial) and not _sim.hand.is_anchor_active(slot), "(with the deck empty the dial is the hand's again)")
+		# Taken out and let go in mid-air: nothing has moved, the dial least of all.
+		_carry("glovebox", [out_far])
+		check(_item("mixtape") != null and _sim.items.is_stowed(_item("mixtape")), "(let go in mid-air, the tape stays in the glovebox)")
+		check(_sim.hand.is_anchor_active(dial) and not _sim.hand.is_anchor_active(slot), "and when the carry is over the dial is back")
+		# Taken out and carried to the deck.
+		_reach("glovebox")
+		_input.lmb = true
+		_ticks(_ticks_in(0.1))
+		check(_sim.hand.carrying, "(he takes the tape out of the glovebox)")
+		check(not _sim.hand.is_anchor_active(dial) and _sim.hand.is_anchor_active(slot), "while the tape is in his hand the dial gives way to the deck")
+		_input.pointer = _sim.hand.anchor_pointer(slot)
+		_ticks(_ticks_in(2.5))
+		check_eq(_sim.hand.at_id(), &"tape", "the hand comes to rest on the deck, not on the dial")
+		_input.lmb = false
+		_ticks(_ticks_in(0.3))
+		_input.clear()
+		check(_item("mixtape") != null and _anchor_of("mixtape") == "tape", "and the tape goes back into the deck, on the road as at a stop")
+
 	# The deck plays the tape, not the radio.
 	_new_sim()
 	_sim.items.drag_step(_ritual("radio_tune"), 1)
