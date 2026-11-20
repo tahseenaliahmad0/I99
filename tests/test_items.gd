@@ -849,6 +849,10 @@ func test_item_energy_drink() -> void:
 	var plain: Dictionary = _a_second_of_road()
 	check_near(GameData.as_float(plain["leg_time"]), 1.0, 0.000001, "(a second is a second on the leg's clock)")
 	check_near(GameData.as_float(plain["car"]), tuning.fi("gear_speeds", 2) / 3.6, 0.0001, "(without Focus third gear covers 27.8 m a second)")
+	var gust_carry: float = tuning.f("gust_push") * tuning.f("gust_duration")
+	var plain_gust: Dictionary = _a_gust(tuning.f("gust_duration") * 2.0)
+	check_eq(GameData.as_int(plain_gust["ticks"]), _ticks_in(tuning.f("gust_duration")), "(without Focus a gust blows for gust_duration)")
+	check_near(GameData.as_float(plain_gust["carried"]), gust_carry, tuning.f("gust_push") * DT * 0.25, "(and carries the car gust_push x gust_duration)")
 	_hold_at(cup, hold_s)
 	var focused: Dictionary = _a_second_of_road()
 	check_near(GameData.as_float(focused["car"]), GameData.as_float(plain["car"]) * road_speed, 0.0001, "with Focus the car covers 85% of the road in a second")
@@ -860,6 +864,14 @@ func test_item_energy_drink() -> void:
 	check_near(GameData.as_float(focused["wheel"]), GameData.as_float(plain["wheel"]), 0.000001, "the wheel turns as fast as ever under it")
 	check_near(GameData.as_float(focused["clock"]), GameData.as_float(plain["clock"]), 0.000001, "and the Clock does not slow")
 	check_near(GameData.as_float(focused["leg_time"]), GameData.as_float(plain["leg_time"]), 0.000001, "nor does the leg's")
+	# A gust is the road's: with Focus it blows for gust_duration of the road's
+	# time, longer by his clock, and carries the car as far as ever (to half a
+	# tick of its push: it lasts a whole number of ticks).
+	var focused_gust: Dictionary = _a_gust(tuning.f("gust_duration") / road_speed * 2.0)
+	check(_sim.effects.has(&"focus"), "(he still has Focus)")
+	check_eq(GameData.as_int(focused_gust["ticks"]), roundi(tuning.f("gust_duration") / (DT * road_speed)), "with Focus a gust blows for gust_duration of the road's time: longer by his clock")
+	check(GameData.as_int(focused_gust["ticks"]) > GameData.as_int(plain_gust["ticks"]), "(%d ticks in place of %d)" % [GameData.as_int(focused_gust["ticks"]), GameData.as_int(plain_gust["ticks"])])
+	check_near(GameData.as_float(focused_gust["carried"]), gust_carry, tuning.f("gust_push") * DT * road_speed * 0.5, "and carries the car as far as it does without")
 	# For 30 s.
 	_run(_sim.effects.time_left(&"focus") - 0.5)
 	check(_sim.effects.has(&"focus"), "just short of 30 s he still has Focus")
@@ -1653,6 +1665,31 @@ func _a_second_of_road() -> Dictionary:
 	_sim.wheel.reset()
 	_sim.traffic.clear()
 	return out
+
+
+## One gust toward the right shoulder in third gear with nobody steering,
+## watched for `seconds`: the ticks of his time it pushes the car for, and how
+## far it carries it (against the same stretch driven without a gust).
+func _a_gust(seconds: float) -> Dictionary:
+	var crown: float = tuning.f("crown_drift")
+	var pushed: int = 0
+	var sideways: PackedFloat64Array = PackedFloat64Array()
+	_input.clear()
+	_keep_lane = false
+	for gusty: bool in [false, true]:
+		_cruise(3, 1)
+		if gusty:
+			_sim.start_gust(1)
+		var x_from: float = _sim.car.x
+		for _index: int in _ticks_in(seconds):
+			_sim.step(_input)
+			if _sim.car.drift > crown + tuning.f("gust_push") * 0.5:
+				pushed += 1
+		sideways.append(_sim.car.x - x_from)
+	_keep_lane = true
+	_cruise(3, 1)
+	return {"ticks": pushed, "carried": sideways[1] - sideways[0]}
+
 
 ## Steps until the phone rings (at most a little over the longest gap).
 func _await_ring() -> bool:

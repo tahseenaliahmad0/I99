@@ -189,8 +189,9 @@ var _at_window: bool = false
 ## and the seconds left of that.
 var cramp: String = ""
 var _cramp_left: float = 0.0
-## Ticks the gust still has to push: a gust lasts a whole number of ticks.
-var _gust_ticks_left: int = 0
+## Seconds the gust still has to push, of the road's time (under Focus that is
+## longer by his clock): a gust lasts a whole number of ticks.
+var _gust_left: float = 0.0
 var _gust_push: float = 0.0
 var _gust_strength: float = 0.0
 var _gust_duration: float = 0.0
@@ -318,7 +319,7 @@ func _build() -> void:
 	_anchor_home = PackedVector3Array()
 	for index: int in hand.anchor_count():
 		_anchor_home.append(hand.anchor_position(index))
-	_gust_ticks_left = 0
+	_gust_left = 0.0
 	_gust_push = 0.0
 	_braking = false
 	_next_free_spawn_s = 0.0
@@ -1399,8 +1400,8 @@ func set_road(lanes: int, divided: bool) -> void:
 	_lane = car.lane_of(car.x)
 
 
-## Starts one gust (GDD 5.4): gust_push for gust_duration, which is counted in
-## whole ticks (a float countdown ran one tick over). `direction` is +1 toward
+## Starts one gust (GDD 5.4): gust_push for gust_duration of the road's time,
+## which is counted in whole ticks (see _extra_drift). `direction` is +1 toward
 ## the right shoulder, -1 toward the left. `strength` scales it.
 func start_gust(direction: int, strength: float = 1.0) -> void:
 	_blow(direction, _gust_strength * strength)
@@ -1408,7 +1409,7 @@ func start_gust(direction: int, strength: float = 1.0) -> void:
 
 ## One gust that pushes at `push` m/s.
 func _blow(direction: int, push: float) -> void:
-	_gust_ticks_left = roundi(_gust_duration * float(TICKS_PER_SECOND))
+	_gust_left = _gust_duration
 	_gust_push = push * float(direction)
 
 
@@ -1719,9 +1720,15 @@ func _item_snapshots() -> Array[Dictionary]:
 ## Every sideways push but the road's crown (GDD 5.4), m/s toward the right.
 func _extra_drift() -> float:
 	var push: float = car.curve_push(curve_k) - faults.param(FAULT_PULL, "drift_left", 0.0)
-	if _gust_ticks_left > 0:
-		_gust_ticks_left -= 1
+	# A gust is the road's: it blows for gust_duration of the road's time, so
+	# under Focus it lasts longer by his clock and carries the car as far as
+	# ever (GDD 7.4). It pushes for a whole number of ticks: for this one while
+	# at least half a tick of it is left.
+	if _gust_left >= _road_dt * 0.5:
+		_gust_left -= _road_dt
 		push += _gust_push
+	else:
+		_gust_left = 0.0
 	# Sway (GDD 5.4): sway_per_stack per Courage stack, swinging at
 	# sway_frequency from the moment Courage began.
 	var stacks: int = courage()
