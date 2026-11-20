@@ -1968,7 +1968,10 @@ func _feed_nerves() -> void:
 	# (The law at the Checkpoint is an encounter like a Patrol: no empty
 	# road calms him under its eyes.)
 	nerves.add_rate(nerves.road_rate(near, nearest, in_encounter or encounter.active or boss.watching()))
-	if car.on_shoulder:
+	if car.on_shoulder and car.speed > 0.0:
+		# The shoulder is rough to drive on (GDD 5.1). A car at rest is
+		# shaken by nothing: the Storm's safe place and the Call taken
+		# pulled over cost his Nerves no more than standing anywhere.
 		nerves.add_rate(_shoulder_rate)
 	nerves.add_rate(faults.param(FAULT_RATTLE, "nerves_per_s", 0.0))
 	if car.on_rumble:

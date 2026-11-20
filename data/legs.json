@@ -35,7 +35,7 @@
        "thin_s": 8, "thin_m": 40, "thick_s": 12, "thick_m": 15,
        "gust_push": 2.0, "gust_every_s": 9,
        "wipe_haze": 0.10, "window_haze_per_s": 0.05,
-       "stopped_kmh": 1, "rear_end_every_s": 10, "rear_end_tell_s": 1, "rear_end_chance": 0.5,
+       "stopped_kmh": 1, "moved_off_kmh": 15, "rear_end_every_s": 10, "rear_end_tell_s": 2, "rear_end_chance": 0.5,
        "tail_lights": {"first_m": 120, "gap_m": [140, 220], "speed_kmh": [60, 70], "vehicles": ["car", "taxi", "pickup", "truck"]}
      },
      "line_ids": {"name": "boss.storm.name"}},

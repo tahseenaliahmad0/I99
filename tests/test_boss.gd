@@ -1324,6 +1324,7 @@ func test_boss_02() -> void:
 	_check_storm_gusts("")
 	_check_storm_haze()
 	_check_storm_standing()
+	_check_storm_standing_is_not_dodged()
 	_check_storm_cramp()
 	_check_storm_modifiers()
 	_check_storm_tail_lights()
@@ -1665,6 +1666,10 @@ func _check_storm_standing() -> void:
 				# ...or by putting his hazard lights on, there on the shoulder.
 				_tap_at("hazard_button")
 				check(_sim.items.flag(DriveSim.FLAG_HAZARDS), "(his hazard lights are on)")
+				# (His foot stays on the brake: the hand's helpers let it go,
+				# and in the two seconds of the tell the car would roll along
+				# the shoulder into the guardrail.)
+				_input.rmb = true
 		_events = []
 		_ticks(_ticks_in(tell + 1.0))
 		var what: String = ["he stays as he is: it hits him", "he drives off: it misses him", "he puts his hazard lights on: it misses him"][remedy]
@@ -1700,6 +1705,108 @@ func _check_storm_standing() -> void:
 	_events = []
 	_ticks(_ticks_in(every * 6.0))
 	check_eq(_count_events("hit"), 0, "out of the Storm a standing car is not run into")
+
+
+## A car that stands in the Storm is not made safe by a twitch of the pedal
+## (found by the review of M7: a tenth of a second off the brake began the
+## 10 s anew, and a twitch after the horn made the hit miss). The wait that
+## standing begins ends when he has driven off, or made himself safe.
+func _check_storm_standing_is_not_dodged() -> void:
+	var storm: Dictionary = _storm()
+	var every: float = GameData.as_float(storm.get("rear_end_every_s"))
+	var tell: float = GameData.as_float(storm.get("rear_end_tell_s"))
+	var stopped: float = GameData.as_float(storm.get("stopped_kmh"))
+	var moved_off: float = GameData.as_float(storm.get("moved_off_kmh"))
+	var accel: float = tuning.f("accel")
+	check(moved_off > stopped, "(driving off is more than rolling: %s km/h against %s)" % [str(moved_off), str(stopped)])
+	check(moved_off / accel < tell - 0.5, "the tell leaves him time to drive off: %.2f s to reach %s km/h, and %.1f s of horn" % [moved_off / accel, str(moved_off), tell])
+
+	# The foot lifted for a moment every 8.5 s: the car creeps, and the wait goes on.
+	var waits: int = 30
+	_begin_quiet_boss(STORM, "", 1)
+	_sim.rng.reseed(11)
+	_stand_in_lane(false)
+	_sim.gate.reset(1)
+	_events = []
+	var fastest: float = 0.0
+	var pulse_every: int = _ticks_in(8.5)
+	for index: int in _ticks_in(every * float(waits)):
+		_input.rmb = index % pulse_every >= 11
+		_tick()
+		fastest = maxf(fastest, _sim.car.speed)
+		if _sim.wrecked:
+			break
+	check(fastest > stopped and fastest < moved_off, "(a twitch of the pedal every 8.5 s: the car creeps at up to %.2f km/h)" % fastest)
+	check(_count_events("hit") > 0, "a twitch of the pedal does not begin the 10 s anew: standing dark in his lane he is hit (%d times)" % _count_events("hit"))
+	check_eq(_horns_behind(), _count_events("hit"), "(each time announced)")
+
+	# The foot lifted for a moment after each horn: it hits him all the same.
+	_begin_quiet_boss(STORM, "", 1)
+	_sim.rng.reseed(11)
+	_stand_in_lane(false)
+	_sim.gate.reset(1)
+	_events = []
+	var horns: int = 0
+	var lift_until: int = -1
+	for index: int in _ticks_in(every * float(waits)):
+		if _horns_behind() > horns:
+			horns = _horns_behind()
+			lift_until = index + _ticks_in(0.3) + 15
+		_input.rmb = not (index >= lift_until - 15 and index < lift_until)
+		_tick()
+		if _sim.wrecked:
+			break
+	check(horns > 0, "(something comes up behind him)")
+	check_eq(_count_events("hit"), horns, "a twitch of the pedal after the horn does not make it miss: %d horns, %d hits" % [horns, _count_events("hit")])
+
+	# Really driving off does: off the brake at the horn, in first gear.
+	_begin_quiet_boss(STORM, "", 1)
+	_sim.rng.reseed(11)
+	_stand_in_lane(false)
+	_sim.gate.reset(1)
+	_events = []
+	var guard: int = _ticks_in(every * float(waits))
+	while _horns_behind() == 0 and guard > 0:
+		guard -= 1
+		_tick()
+	check(guard > 0, "(the horn sounds behind him)")
+	_events = []
+	_ticks(_ticks_in(0.5))
+	_input.rmb = false
+	_ticks(_ticks_in(tell))
+	check(_sim.car.speed >= moved_off, "(half a second after the horn he lets the brake go: %.1f km/h by the time it would have hit)" % _sim.car.speed)
+	check_eq(_count_events("hit"), 0, "driving off within the tell, it misses him")
+	check_near(GameData.as_float(_sim.snapshot()["rear_end_in"]), 0.0, 0.000001, "(and nothing is behind him)")
+
+	# The safe place is safe for his Nerves too: the shoulder is rough to
+	# drive on (GDD 5.1: +1 a second); a car at rest is shaken by nothing.
+	var shoulder_rate: float = tuning.f("shoulder_nerves_rate")
+	check(shoulder_rate > 0.0, "(driving on the shoulder frays him)")
+	var after: Array[float] = []
+	for place: int in 2:
+		_begin_quiet_boss(STORM, "", 1)
+		_sim.in_encounter = true
+		if place == 0:
+			_stand_in_lane(true)
+		else:
+			_stand_on_the_shoulder(true)
+		_sim.nerves.set_value(40.0)
+		_ticks(_ticks_in(8.0))
+		after.append(_sim.nerves.value)
+	check_near(after[1], after[0], 0.000001, "standing on the shoulder costs his Nerves no more than standing in a lane (%.2f against %.2f after 8 s)" % [after[1], after[0]])
+	_begin_quiet_boss(STORM, "", 1)
+	_sim.in_encounter = true
+	_stand_on_the_shoulder(true)
+	_input.rmb = false
+	_sim.gate.reset(1)
+	_sim.nerves.set_value(40.0)
+	var rolled: float = 0.0
+	for _index: int in _ticks_in(4.0):
+		_sim.car.x = (_sim.car.road_right() + _sim.car.guardrail_x()) * 0.5
+		_tick()
+		if _sim.car.speed > 0.0:
+			rolled += DT
+	check_near(_sim.nerves.value - 40.0, shoulder_rate * rolled, 0.05, "(driving along it still does: +%.1f in %.1f s of rolling)" % [_sim.nerves.value - 40.0, rolled])
 
 
 ## The weather cramp fires once (GDD 7.9).
@@ -2824,6 +2931,24 @@ func _check_call_pulled_over() -> void:
 	check_eq(_sim.faults.lamps, 0, "(and nothing else: no lamp)")
 	_ticks(_ticks_in(1.0))
 	check(_sim.car.speed > 0.0, "then the car moves off again")
+
+	# The fourth response costs its 10 minutes and nothing more (the review
+	# of M7): standing on the rough shoulder does not fray him, and a
+	# guardrail brushed as he pulled over is not scraped again while the
+	# car is held.
+	_to_the_call()
+	_sim.in_encounter = true
+	_stand_on_the_shoulder(true)
+	_answer_with_the_brake_held()
+	check_eq(GameData.as_string(_event("call_resolved").get("taken")), BossSim.TAKEN_PARKED, "(the Call taken pulled over)")
+	_sim.nerves.set_value(40.0)
+	_sim.car.edge_touched = CarSim.EDGE_RIGHT
+	_events = []
+	_ticks(_ticks_in(talk * 0.5))
+	check_eq(_sim.boss.call, BossSim.CALL_TALKING, "(he is still talking)")
+	check_near(_sim.nerves.value, 40.0, 0.000001, "pulled over for the Call the shoulder does not fray him: his Nerves are where they were")
+	check_eq(_count_events("hit"), 0, "and the guardrail he brushed as he stopped does not scrape him again while the car is held")
+	check_eq(_sim.faults.lamps, 0, "(no lamp)")
 
 	# During it the phone is in his hand.
 	_to_the_call()

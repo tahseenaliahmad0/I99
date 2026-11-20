@@ -390,6 +390,7 @@ func _storm_schema() -> Dictionary:
 		"wipe_haze": _num(0.0, 1.0),
 		"window_haze_per_s": _num(0.0, 1.0),
 		"stopped_kmh": _num(0.0),
+		"moved_off_kmh": _above(0.0),
 		"rear_end_every_s": _above(0.0),
 		"rear_end_tell_s": _num(0.0),
 		"rear_end_chance": _num(0.0, 1.0),
@@ -539,6 +540,13 @@ func _check_bosses() -> void:
 			_err("E_MISSING", "legs.json", "%s.dawn" % label, "Dawn needs its numbers")
 		if id == "checkpoint" and not boss.has("checkpoint"):
 			_err("E_MISSING", "legs.json", "%s.checkpoint" % label, "the Checkpoint needs its numbers")
+		var storm: Dictionary = GameData.as_dict(boss.get("storm"))
+		if GameData.is_number(storm.get("moved_off_kmh")) and GameData.is_number(storm.get("stopped_kmh")):
+			if GameData.as_float(storm.get("moved_off_kmh")) <= GameData.as_float(storm.get("stopped_kmh")):
+				_err("E_RANGE", "legs.json", "%s.storm.moved_off_kmh" % label, "must be above stopped_kmh: driving off is more than rolling")
+			# The horn behind him is a tell he can act on (GDD 2.2, pillar 4).
+			if GameData.as_float(storm.get("moved_off_kmh")) / maxf(_tuning_number("accel", 1.0), 0.001) >= GameData.as_float(storm.get("rear_end_tell_s")):
+				_err("E_RANGE", "legs.json", "%s.storm.rear_end_tell_s" % label, "must leave time to reach moved_off_kmh from rest")
 		var checkpoint: Dictionary = GameData.as_dict(boss.get("checkpoint"))
 		if not checkpoint.is_empty():
 			var corridor: Dictionary = GameData.as_dict(checkpoint.get("corridor"))
@@ -583,7 +591,6 @@ func _check_bosses() -> void:
 				_err("E_RULE", "legs.json", "%s.dawn" % label, "the order along the road must be: sunrise, the last checkpoint, the Call, the end")
 			if GameData.as_float(check.get("gap_m")) <= _tuning_number("car_width", 0.0) or GameData.as_float(check.get("gap_m")) > _tuning_number("lane_width", INF):
 				_err("E_RANGE", "legs.json", "%s.dawn.checkpoint.gap_m" % label, "must be wider than the car and no wider than a lane")
-		var storm: Dictionary = GameData.as_dict(boss.get("storm"))
 		var gaps: Array = GameData.as_array(GameData.as_dict(storm.get("tail_lights")).get("gap_m"))
 		if gaps.size() == 2 and GameData.as_float(gaps[0]) > GameData.as_float(gaps[1]):
 			_err("E_RANGE", "legs.json", "%s.storm.tail_lights.gap_m" % label, "must be [least, most]")

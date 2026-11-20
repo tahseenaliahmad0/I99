@@ -80,6 +80,7 @@ func test_data_01() -> void:
 	_check_broken_item_rules()
 	_check_broken_passenger_rules()
 	_check_broken_cabin_props()
+	_check_broken_boss_rules()
 
 
 # --- 1. Shipped data ----------------------------------------------------------
@@ -95,6 +96,61 @@ func _check_shipped_data() -> void:
 	check(data.has_line("narrator.start"), "a line of GDD 3.6 exists by id")
 	note("%d tuning constants, %d anchors, %d lines" % [
 		data.tuning.keys().size(), data.records("anchors").size(), data.line_ids().size()])
+
+
+# --- 9. The set pieces (M7) ----------------------------------------------------
+
+## The rules a boss's record must keep (GDD 10.2 to 10.4, D-046 to D-048 and
+## the review of M7): each broken once.
+func _check_broken_boss_rules() -> void:
+	_reset_fixture()
+	_record("bosses", "storm").erase("storm")
+	_expect("E_MISSING", "storm", "a Storm without its numbers")
+
+	_reset_fixture()
+	_boss_numbers("storm")["moved_off_kmh"] = _boss_numbers("storm")["stopped_kmh"]
+	_expect("E_RANGE", "storm.moved_off_kmh", "a Storm in which driving off is no more than rolling")
+
+	_reset_fixture()
+	_boss_numbers("storm")["rear_end_tell_s"] = 1.0
+	_expect("E_RANGE", "storm.rear_end_tell_s", "a horn behind him that leaves no time to drive off")
+
+	_reset_fixture()
+	GameData.as_dict(_boss_numbers("storm")["tail_lights"])["gap_m"] = [220, 140]
+	_expect("E_RANGE", "storm.tail_lights.gap_m", "tail lights whose gaps are not least, most")
+
+	_reset_fixture()
+	GameData.as_dict(_boss_numbers("checkpoint")["corridor"])["at_m"] = 20
+	_expect("E_RANGE", "checkpoint.corridor", "a taper that begins before the Checkpoint's road")
+
+	_reset_fixture()
+	GameData.as_dict(_boss_numbers("checkpoint")["corridor"])["gap_m"] = 1.0
+	_expect("E_RANGE", "checkpoint.corridor.gap_m", "barriers nearer than the car is wide")
+
+	_reset_fixture()
+	GameData.as_dict(_boss_numbers("checkpoint")["queue"])["cars"] = 40
+	_expect("E_RANGE", "checkpoint.queue.cars", "a queue that does not fit between the barriers")
+
+	_reset_fixture()
+	_boss_numbers("checkpoint")["pass_under"] = 120
+	_expect("E_RANGE", "checkpoint.pass_under", "passing at more Suspicion than turns him back")
+
+	_reset_fixture()
+	_boss_numbers("checkpoint")["documents"] = ["licence", "licence", "registration"]
+	_expect("E_DUP_ID", "checkpoint.documents", "a document listed twice")
+
+	_reset_fixture()
+	_boss_numbers("dawn")["sunrise_at_m"] = 3000
+	_expect("E_RULE", "dawn", "a sunrise after the last checkpoint")
+
+	_reset_fixture()
+	_record("bosses", "storm")["modifiers"] = ["crosswind", "thorough"]
+	_expect("E_RULE", "bosses[storm].modifiers", "a boss with another boss's modifier")
+
+
+## A boss's own numbers in the fixture (the object under its id).
+func _boss_numbers(id: String) -> Dictionary:
+	return GameData.as_dict(_record("bosses", id)[id])
 
 
 # --- 6. What items say they do (M6) -------------------------------------------

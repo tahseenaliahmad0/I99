@@ -153,6 +153,8 @@ var _stopped_kmh: float = 0.0
 var _rear_end_every: float = 0.0
 var _rear_end_tell: float = 0.0
 var _rear_end_chance: float = 0.0
+## The speed at which a car that stood in the Storm has driven off again.
+var _moved_off_kmh: float = 0.0
 ## Seconds he has stood where he is not safe, since the last time something
 ## could have come.
 var _stood: float = 0.0
@@ -440,6 +442,7 @@ func begin(plan_of_road: Dictionary) -> void:
 		_thick_s = GameData.as_float(storm.get("thick_s"))
 		_thick_m = GameData.as_float(storm.get("thick_m"))
 		_stopped_kmh = GameData.as_float(storm.get("stopped_kmh"))
+		_moved_off_kmh = GameData.as_float(storm.get("moved_off_kmh"))
 		_rear_end_every = GameData.as_float(storm.get("rear_end_every_s"))
 		_rear_end_tell = GameData.as_float(storm.get("rear_end_tell_s"))
 		_rear_end_chance = GameData.as_float(storm.get("rear_end_chance"))
@@ -891,11 +894,15 @@ func _step_dust(dt: float) -> void:
 ## with its hazard lights on. Anywhere else, or dark, something may come out
 ## of the dust behind it every rear_end_every_s: the draw is made
 ## rear_end_tell_s before, and what it brings shows its lights and sounds its
-## horn for that long before it hits. A car that has moved off or made itself
-## safe by then is missed.
+## horn for that long before it hits. A car that has driven off or made
+## itself safe by then is missed. The wait begins when he stands
+## (stopped_kmh) and ends when he has driven off (moved_off_kmh): a car
+## that creeps where it stood is as easily run into as one that stands.
 func _step_standing(dt: float, hazards_on: bool) -> void:
 	var off_the_lanes: bool = _car.x - _car.half_width() >= _car.road_right()
-	if _car.speed > _stopped_kmh or (hazards_on and off_the_lanes):
+	var waiting: bool = _stood > 0.0
+	var driving: bool = _car.speed >= _moved_off_kmh if waiting else _car.speed > _stopped_kmh
+	if driving or (hazards_on and off_the_lanes):
 		_stood = 0.0
 		_drawn = false
 		_coming = false
