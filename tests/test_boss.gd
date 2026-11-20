@@ -1328,6 +1328,7 @@ func test_boss_02() -> void:
 	_check_storm_cramp()
 	_check_storm_modifiers()
 	_check_storm_tail_lights()
+	_check_storm_tail_lights_leave_a_way_past()
 	_check_storm_in_a_telling()
 
 
@@ -1380,6 +1381,78 @@ func _check_storm_is_measured_by_distance() -> void:
 	check(_sim.car.s >= length and _sim.car.s < length + 1.0, "after the halt the Storm still ends at 2,000 m (ended at %.2f m)" % _sim.car.s)
 	check_near(float(_sim.tick - from_tick) * DT, (length - stood_at) / (tuning.fi("gear_speeds", 2) * KMH_TO_MS), 0.1,
 			"all the road that was left when he stopped was still to drive")
+
+
+## "Always a way past" (D-046; GDD 12.4 rule 8: no walls) at any pace, not
+## only at par. A driver who follows the tail lights at their own speed, as
+## GDD 10.3 tells him to in thick dust, used to have each new one laid
+## beside the last: three abreast (the review of M7).
+func _check_storm_tail_lights_leave_a_way_past() -> void:
+	var lights: Dictionary = GameData.as_dict(_storm().get("tail_lights"))
+	var speeds: Array = GameData.as_array(lights.get("speed_kmh"))
+	var slow: float = (GameData.as_float(speeds[0]) + GameData.as_float(speeds[1])) * 0.5
+	var par: float = tuning.fi("gear_speeds", 2)
+	var second: float = tuning.fi("gear_speeds", 1)
+	var reach: float = tuning.f("car_length") * 2.0
+	var paces: Array[String] = ["at the tail lights' own speed", "in second gear for 600 m, then at par", "at par in thin dust and the tail lights' speed in thick"]
+	for pace: int in paces.size():
+		var walls: int = 0
+		var two_in_a_lane: int = 0
+		var seen: int = 0
+		var worst: String = ""
+		for seed_value: int in range(5, 13):
+			_sim = DriveSim.new(fresh_data())
+			_events = []
+			_input.clear()
+			_keep_lane = false
+			_sim.gate.reset(3)
+			_sim.begin_boss(STORM, "", seed_value)
+			var length: float = _sim.leg.length
+			var guard: int = _ticks_in(400.0)
+			var walled: bool = false
+			while _sim.leg.active and _sim.car.s < length - 1.0 and guard > 0:
+				guard -= 1
+				# A car that touches nothing: along the shoulder, at the pace asked.
+				_sim.car.x = (_sim.car.road_right() + _sim.car.guardrail_x()) * 0.5
+				match pace:
+					0:
+						_sim.car.speed = slow
+					1:
+						_sim.car.speed = second if _sim.car.s < 600.0 else par
+					2:
+						_sim.car.speed = slow if _sim.boss.thick else par
+				_sim.items.flags[DriveSim.FLAG_HAZARDS] = true
+				_tick()
+				# (Looked at ten times a second: a wall lasts for seconds.)
+				if _sim.tick % 12 != 0:
+					continue
+				var by_lane: Array[Array] = [[], [], []]
+				for vehicle: TrafficSim.Vehicle in _sim.traffic.vehicles:
+					if vehicle.lane >= 0 and vehicle.lane < 3:
+						by_lane[vehicle.lane].append(vehicle.s)
+				seen = maxi(seen, _sim.traffic.vehicles.size())
+				for at: Variant in by_lane[0]:
+					var beside: int = 0
+					for lane: int in [1, 2]:
+						for other: Variant in by_lane[lane]:
+							if absf(GameData.as_float(other) - GameData.as_float(at)) <= reach:
+								beside += 1
+								break
+					if beside == 2 and not walled:
+						walled = true
+						worst = "seed %d at %.0f m" % [seed_value, _sim.car.s]
+				for lane: int in 3:
+					var line: Array = by_lane[lane]
+					line.sort()
+					for index: int in range(1, line.size()):
+						if GameData.as_float(line[index]) - GameData.as_float(line[index - 1]) < reach:
+							two_in_a_lane += 1
+			check(guard > 0, "(seed %d: the Storm is driven to its end %s)" % [seed_value, paces[pace]])
+			if walled:
+				walls += 1
+		check(seen > 0, "(%s there are tail lights on the road)" % paces[pace])
+		check_eq(walls, 0, "driving %s, the tail lights never close the road three abreast (%d of 8 Storms; first: %s)" % [paces[pace], walls, worst])
+		check_eq(two_in_a_lane, 0, "(%s: nor does one run into another in its lane)" % paces[pace])
 
 
 ## Visibility: 8 s thin (40 m), 12 s thick (15 m), over and over, by the clock.

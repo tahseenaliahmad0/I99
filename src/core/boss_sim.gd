@@ -378,8 +378,19 @@ static func _plan_storm(data: GameData, out: Dictionary, storm: Dictionary, modi
 			"trigger_s": snappedf(trigger, 0.01),
 			"ahead": snappedf(at - trigger, 0.01),
 			"meet_s": -1.0,
+			# Put on the road only where no other is nearer than the least
+			# gap: a driver at their own pace is not given a wall.
+			"apart_m": GameData.as_float(gaps[0]),
 		})
 		at += random.randf_range(GameData.as_float(gaps[0]), GameData.as_float(gaps[1]))
+	# None is faster than one ahead of it: they never close on one another,
+	# so what begins as a way past stays one.
+	var drawn: Array[float] = []
+	for spawn: Variant in spawns:
+		drawn.append(GameData.as_float(GameData.as_dict(spawn).get("speed")))
+	drawn.sort()
+	for index: int in spawns.size():
+		GameData.as_dict(spawns[index])["speed"] = drawn[index]
 	out["spawns"] = spawns
 
 

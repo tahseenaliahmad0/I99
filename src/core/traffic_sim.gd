@@ -191,6 +191,15 @@ func begin_lane_change(vehicle: Vehicle, to_lane: int, signal_time: float, durat
 	vehicle.change_duration = duration if duration > 0.0 else _change_time
 
 
+## True when a vehicle going `direction`'s way is within `reach` metres of
+## `s` along the road, in any lane.
+func someone_near(s: float, reach: float, direction: int) -> bool:
+	for vehicle: Vehicle in vehicles:
+		if vehicle.direction == direction and absf(vehicle.s - s) < reach:
+			return true
+	return false
+
+
 ## True when any of a vehicle's next `seconds` of road, at the speed it has,
 ## lies where barriers stand between the lanes.
 func _between_walls(vehicle: Vehicle, seconds: float) -> bool:
