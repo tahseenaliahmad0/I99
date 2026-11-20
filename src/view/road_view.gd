@@ -80,6 +80,8 @@ var _hazards: Node3D
 var _signs: Array[Node3D] = []
 var _sign_nodes: Node3D
 var _fork_sign_height: float = 0.0
+## How far over the branches' texts the boss ahead is written.
+var _boss_text_lift: float = 0.0
 ## Letter sizes (Label3D pixel sizes) of a roadside sign and of a fork's sign.
 var _small_text: float = 0.01
 var _large_text: float = 0.01
@@ -87,6 +89,8 @@ var _gore: Node3D
 var _fork_bar: Node3D
 var _stall: Node3D
 var _stall_offset: Vector2 = Vector2.ZERO
+var _set_piece: SetPieceView
+var _gusts: GustView
 
 
 func setup(data: GameData, factory: PlaceholderFactory) -> void:
@@ -116,6 +120,7 @@ func setup(data: GameData, factory: PlaceholderFactory) -> void:
 	_sign_text_height = tuning.f("sign_text_height")
 	_vehicle_sign_lift = tuning.f("vehicle_sign_lift")
 	_fork_sign_height = tuning.f("fork_sign_height")
+	_boss_text_lift = tuning.f("fork_boss_text_lift")
 	_small_text = factory.size_of("road_sign_text").x
 	_large_text = factory.size_of("road_fork_text").x
 	_stall_offset = Vector2(tuning.fi("stop_stall_offset", 0), tuning.fi("stop_stall_offset", 1))
@@ -150,6 +155,15 @@ func setup(data: GameData, factory: PlaceholderFactory) -> void:
 	_stall = factory.make_world("stop_stall")
 	_stall.visible = false
 	add_child(_stall)
+	# What a set piece puts on the road, and the dust a gust sends ahead of it.
+	_set_piece = SetPieceView.new()
+	_set_piece.name = "SetPiece"
+	add_child(_set_piece)
+	_set_piece.setup(data, factory)
+	_gusts = GustView.new()
+	_gusts.name = "Gusts"
+	add_child(_gusts)
+	_gusts.setup(data, factory)
 
 
 func apply(snapshot: Dictionary, delta: float) -> void:
@@ -200,6 +214,8 @@ func apply(snapshot: Dictionary, delta: float) -> void:
 	_show_hazards(hazards)
 	var signs: Array[Dictionary] = snapshot["signs"]
 	_show_signs(_sign_entries(signs))
+	_set_piece.apply(snapshot, _lanes, delta)
+	_gusts.apply(snapshot)
 
 	# The gore: where the road parts (GDD 9.5).
 	var gore_ahead: float = snapshot["gore_ahead"]
@@ -492,6 +508,17 @@ func _sign_entries(signs: Array[Dictionary]) -> Array[Dictionary]:
 						"text": _branch_text(GameData.as_dict(road_sign.get("left")))})
 				entries.append({"ahead": ahead, "x": road_right * 0.78, "height": _fork_sign_height, "post": false, "large": true,
 						"text": _branch_text(GameData.as_dict(road_sign.get("right")))})
+				# After tea: the boss ahead and what it has in store (GDD 9.6),
+				# over the two branches.
+				var boss: String = GameData.as_string(road_sign.get("boss"))
+				if not boss.is_empty():
+					entries.append({"ahead": ahead, "x": road_right * 0.5, "height": _fork_sign_height + _boss_text_lift, "post": false, "large": true,
+							"text": _boss_text(boss, GameData.as_string(road_sign.get("boss_modifier")))})
+			"checkpoint":
+				# A limit to take the barriers at, or none: this one is to stop at.
+				var limit: float = GameData.as_float(road_sign.get("limit"))
+				entries.append({"ahead": ahead, "x": _rail_x - _sign_inset, "height": _sign_text_height, "post": true,
+						"text": Lines.format("sign.checkpoint", ["%d" % roundi(limit) if limit > 0.0 else Lines.get_text("sign.checkpoint.stop")])})
 	_fork_bar.visible = fork_shown
 	return entries
 
@@ -510,6 +537,14 @@ func _branch_text(branch: Dictionary) -> String:
 	# One thing to a line, so that the letters can be large enough to read
 	# from the lead the sign is given.
 	return Lines.format("sign.fork", [" /\n".join(parts)])
+
+
+## "[CHECKPOINT / LONG QUEUE]": the boss ahead, and its modifier if it has one.
+func _boss_text(boss: String, modifier: String) -> String:
+	var boss_name: String = Lines.get_text("boss.%s.name" % boss)
+	if modifier.is_empty():
+		return Lines.format("sign.fork", [boss_name])
+	return Lines.format("sign.boss", [boss_name, Lines.get_text("sign.boss_modifier.%s" % modifier)])
 
 
 ## Road signs (GDD 16.1): a text in square brackets, on a post inside the

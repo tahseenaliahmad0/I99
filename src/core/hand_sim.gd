@@ -449,6 +449,9 @@ func _travel(dt: float, speed_mult: float) -> void:
 
 func _update_glance(dt: float) -> void:
 	var want: Vector2 = _space.glance_for(pos)
+	if at_ear:
+		# A phone held to his ear is no reach: his eyes stay on the road.
+		want = Vector2.ZERO
 	if eyes_down:
 		want.y = -_eyes_down_pitch
 	var blend: float = 1.0

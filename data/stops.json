@@ -2,11 +2,11 @@
   "version": 1,
 
   "stops": [
-    {"id": "fuel_station", "service": "shop", "stock": {"count": 3, "pools": ["habit", "keepsake"]}, "restocks": true, "clock_min": 10, "weight": 30, "line_ids": {"name": "stop.fuel_station.name"}},
+    {"id": "fuel_station", "service": "shop", "stock": {"count": 3, "pools": ["habit", "keepsake"]}, "restocks": true, "hitcher": "sometimes", "clock_min": 10, "weight": 30, "line_ids": {"name": "stop.fuel_station.name"}},
     {"id": "fitter", "service": "repair", "stock": {"count": 2, "pools": ["adaptation"]}, "clock_min": 15, "weight": 20, "line_ids": {"name": "stop.fitter.name"}},
-    {"id": "tea_stall", "service": "tea", "stock": null, "nerves_to": 30, "clock_min": 20, "weight": 20, "line_ids": {"name": "stop.tea_stall.name"}},
+    {"id": "tea_stall", "service": "tea", "stock": null, "nerves_to": 30, "hitcher": "sometimes", "clock_min": 20, "weight": 20, "line_ids": {"name": "stop.tea_stall.name"}},
     {"id": "roadside_find", "service": "find", "stock": {"count": 2, "pools": ["keepsake"], "free": 1}, "clock_min": 5, "weight": 15, "line_ids": {"name": "stop.roadside_find.name"}},
-    {"id": "hitcher", "service": "passenger", "stock": null, "clock_min": 2, "weight": 15, "line_ids": {"name": "stop.hitcher.name"}},
+    {"id": "hitcher", "service": "passenger", "stock": null, "hitcher": "always", "clock_min": 2, "weight": 15, "line_ids": {"name": "stop.hitcher.name"}},
     {"id": "shady_guy", "service": "deals", "stock": {"count": 2, "pools": ["deal"]}, "clock_min": 5, "weight": 0, "line_ids": {"name": "stop.shady_guy.name"}},
     {"id": "boss_stop", "service": "boss", "stock": {"count": 3, "pools": ["habit", "keepsake", "adaptation"], "free": 1}, "clock_min": 0, "weight": 0, "line_ids": {"name": "stop.boss_stop.name"}}
   ]

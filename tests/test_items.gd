@@ -83,6 +83,9 @@ func test_item_cigarettes() -> void:
 	_run(0.1)
 	check(not _sim.effects.has(&"lit"), "after 25 s it is out")
 	check_near(_sim.nerves.value, nerves_0 + calm, 0.01, "having calmed him by 10 in all")
+	# The calm is counted in whole ticks, like the burn: a quarter of one tick
+	# of it is the tolerance, so a tick too many or too few is caught.
+	check_near(_sim.nerves.value, nerves_0 + calm, absf(calm) / burn * DT * 0.25, "by 10 and not a tick of calm more: it ends with the burn")
 	check(_sim.nerves.tremor_amplitude > 0.0, "and the Tremor is back")
 	var haze_top: float = _sim.items.haze
 	check_near(haze_top, haze_rate * burn, 0.003, "the Haze reached 2% x 25 s")
@@ -182,6 +185,62 @@ func test_item_cigarettes() -> void:
 	_hold_at("ashtray", hold_s)
 	check(_sim.effects.has(&"lit"), "on the road again he lights one")
 	check_eq(_item("cigarettes").supply, uses - 1, "from the pack of 10")
+
+	# A stop does not cancel the Craving. Burnt out before the stall: what is
+	# left of its 30 s waits there with the night, and runs on down the road.
+	_to_quiet_leg("fuel_station")
+	_hold_at("ashtray", hold_s)
+	_flick(Vector2(0.0, tuning.f("flick_min_distance") * 1.5))
+	_run(_sim.effects.time_left(&"lit") + 0.05)
+	_run(crave_after * 0.5)
+	check(not _sim.effects.has(&"lit") and _item("cigarettes").lapse_left > 0.0, "(burnt out, and half the Craving's 30 s gone, he pulls in)")
+	_into_stall()
+	var owed: float = _item("cigarettes").lapse_left
+	check(owed > crave_after * 0.4 and owed < crave_after * 0.5, "at the stop the rest of the 30 s is still owed (%s s)" % str(snappedf(owed, 0.01)))
+	_run(crave_after)
+	check_eq(_item("cigarettes").lapse_left, owed, "it waits there with the night, however long he shops")
+	_leave_stop()
+	# (His foot on the brake: he stands on the road, where the night goes on.)
+	_input.rmb = true
+	before = _sim.nerves.value
+	_run(owed - 1.0)
+	check_near(_sim.nerves.value - before, 0.0, 0.000001, "back on the road the wait runs on from where it stood")
+	_run(1.5)
+	check_near(_sim.nerves.value - before, crave_nerves, 0.000001, "and when its 30 s of road are up the Craving comes: +8 Nerves")
+	_run(crave_after * 2.0)
+	check_near(_sim.nerves.value - before, crave_nerves, 0.000001, "once")
+
+	# A cigarette that the stop puts out starts its Craving there.
+	_to_quiet_leg("fuel_station")
+	_hold_at("ashtray", hold_s)
+	_flick(Vector2(0.0, tuning.f("flick_min_distance") * 1.5))
+	_run(burn * 0.4)
+	check(_sim.effects.has(&"lit"), "(he pulls in with a cigarette burning)")
+	_into_stall()
+	check(not _sim.effects.has(&"lit"), "(the stop puts it out)")
+	check_near(_item("cigarettes").lapse_left, crave_after, 0.000001, "a cigarette that a stop puts out starts its Craving there: 30 s are owed")
+	_leave_stop()
+	_input.rmb = true
+	before = _sim.nerves.value
+	_run(crave_after - 1.0)
+	check_near(_sim.nerves.value - before, 0.0, 0.000001, "30 s of road after that stop")
+	_run(1.5)
+	check_near(_sim.nerves.value - before, crave_nerves, 0.000001, "the Craving comes: +8 Nerves")
+
+	# Lighting another within what is left still answers it.
+	_to_quiet_leg("fuel_station")
+	_hold_at("ashtray", hold_s)
+	_flick(Vector2(0.0, tuning.f("flick_min_distance") * 1.5))
+	_run(burn * 0.4)
+	_into_stall()
+	_leave_stop()
+	_hold_at("ashtray", hold_s)
+	_flick(Vector2(0.0, tuning.f("flick_min_distance") * 1.5))
+	check(_sim.effects.has(&"lit"), "(after the stop he lights another)")
+	_input.rmb = true
+	before = _sim.nerves.value
+	_run(crave_after + 1.0)
+	check(_sim.nerves.value < before, "another lit within the 30 s the stop left him: no Craving")
 
 
 # --- T-ITEM-TEA-GLASS --------------------------------------------------------
@@ -289,6 +348,33 @@ func test_item_tea_glass() -> void:
 	_ticks(SETTLE)
 	_hold_at("cup_a", hold_s)
 	check_eq(_count_events("ritual_completed", "ritual", "tea_sip"), 0, "there is nothing left to sip")
+
+	# Spilled by a crash in the middle of a sip, the glass in his hand gives
+	# nothing: a truck in his lane that he runs into half-way through the HOLD.
+	_new_sim()
+	_cruise(3, 1)
+	glass = _item("tea_glass")
+	_sim.nerves.set_value(40.0)
+	_reach("cup_a")
+	var closing: float = (tuning.f("scrape_max_closing") + tuning.f("crash_max_closing")) * 0.5
+	var nose_to_tail: float = closing * CarSim.KMH_TO_MS * hold_s * 0.5
+	_sim.traffic.spawn(&"truck", 1, _sim.car.s + _sim.car.length() * 0.5 + GameData.as_float(data.record("vehicles", "truck").get("length")) * 0.5 + nose_to_tail,
+			tuning.fi("gear_speeds", 2) - closing)
+	var spilled_at: int = -1
+	var nerves_then: float = 0.0
+	_input.lmb = true
+	for index: int in _ticks_in(hold_s) + 1:
+		_tick()
+		if spilled_at < 0 and glass.supply == 0:
+			spilled_at = index
+			nerves_then = _sim.nerves.value
+	_input.lmb = false
+	_ticks(SETTLE)
+	check_eq(GameData.as_int(_event("hit").get("kind")), Collision.Hit.CRASH, "(he runs into a slow truck while he sips)")
+	check(spilled_at > 0 and spilled_at < _ticks_in(hold_s) - 1, "(the crash spills the glass in the middle of the HOLD: tick %d of %d)" % [spilled_at, _ticks_in(hold_s)])
+	check_eq(_count_events("ritual_completed", "ritual", "tea_sip"), 0, "the sip he was taking when it spilled is no sip")
+	check(_sim.nerves.value >= nerves_then, "it calms him by nothing")
+	check(not _sim.effects.has(&"awake"), "and does not wake him")
 
 	# Refill: 2 cash at a fuel station.
 	_to_quiet_leg("fuel_station")
@@ -717,6 +803,26 @@ func test_item_mixtape() -> void:
 	_run(side - 2.0)
 	check(_sim.effects.has(&"music"), "and plays its 60 s from there")
 
+	# Bought for 25 at a fuel station and carried to the deck: the radio's dial
+	# is at the same place and gives way to the tape in his hand.
+	var price: float = GameData.as_float(record.get("price"))
+	var sold: Dictionary = _to_fuel_station_selling("mixtape")
+	if check(not sold.is_empty(), "one of the first fuel stations of forty Tellings sells a mixtape"):
+		check_near(GameData.as_float(sold["price"]), price, 0.000001, "for its 25")
+		_sim.cash = price + 5.0
+		_tap_at(GameData.as_string(sold["anchor"]))
+		check(GameData.as_bool(_offer(StopSim.ITEM, "mixtape").get("bought")), "a TAP buys it")
+		check_near(_sim.cash, 5.0, 0.000001, "for 25")
+		_drag(GameData.as_string(sold["anchor"]), "tape")
+		check(_item("mixtape") != null and _anchor_of("mixtape") == "tape", "a DRAG from the tray puts it in the deck, where the radio's dial was")
+		check(_offer(StopSim.ITEM, "mixtape").is_empty(), "and it is off the tray")
+		_leave_stop()
+		check_near(_sim.cash, 5.0, 0.000001, "nothing is paid back when he leaves: the tape is in its place")
+		_run(0.5)
+		check(_sim.effects.has(&"music"), "and on the road it plays")
+		check(not _sim.hand.is_anchor_active(_sim.hand.anchor_index(&"radio")) and _sim.hand.is_anchor_active(_sim.hand.anchor_index(&"tape")),
+				"the deck has taken the dial's place")
+
 	# The deck plays the tape, not the radio.
 	_new_sim()
 	_sim.items.drag_step(_ritual("radio_tune"), 1)
@@ -802,6 +908,10 @@ func test_item_energy_drink() -> void:
 	var plain: Dictionary = _a_second_of_road()
 	check_near(GameData.as_float(plain["leg_time"]), 1.0, 0.000001, "(a second is a second on the leg's clock)")
 	check_near(GameData.as_float(plain["car"]), tuning.fi("gear_speeds", 2) / 3.6, 0.0001, "(without Focus third gear covers 27.8 m a second)")
+	var gust_carry: float = tuning.f("gust_push") * tuning.f("gust_duration")
+	var plain_gust: Dictionary = _a_gust(tuning.f("gust_duration") * 2.0)
+	check_eq(GameData.as_int(plain_gust["ticks"]), _ticks_in(tuning.f("gust_duration")), "(without Focus a gust blows for gust_duration)")
+	check_near(GameData.as_float(plain_gust["carried"]), gust_carry, tuning.f("gust_push") * DT * 0.25, "(and carries the car gust_push x gust_duration)")
 	_hold_at(cup, hold_s)
 	var focused: Dictionary = _a_second_of_road()
 	check_near(GameData.as_float(focused["car"]), GameData.as_float(plain["car"]) * road_speed, 0.0001, "with Focus the car covers 85% of the road in a second")
@@ -813,6 +923,14 @@ func test_item_energy_drink() -> void:
 	check_near(GameData.as_float(focused["wheel"]), GameData.as_float(plain["wheel"]), 0.000001, "the wheel turns as fast as ever under it")
 	check_near(GameData.as_float(focused["clock"]), GameData.as_float(plain["clock"]), 0.000001, "and the Clock does not slow")
 	check_near(GameData.as_float(focused["leg_time"]), GameData.as_float(plain["leg_time"]), 0.000001, "nor does the leg's")
+	# A gust is the road's: with Focus it blows for gust_duration of the road's
+	# time, longer by his clock, and carries the car as far as ever (to half a
+	# tick of its push: it lasts a whole number of ticks).
+	var focused_gust: Dictionary = _a_gust(tuning.f("gust_duration") / road_speed * 2.0)
+	check(_sim.effects.has(&"focus"), "(he still has Focus)")
+	check_eq(GameData.as_int(focused_gust["ticks"]), roundi(tuning.f("gust_duration") / (DT * road_speed)), "with Focus a gust blows for gust_duration of the road's time: longer by his clock")
+	check(GameData.as_int(focused_gust["ticks"]) > GameData.as_int(plain_gust["ticks"]), "(%d ticks in place of %d)" % [GameData.as_int(focused_gust["ticks"]), GameData.as_int(plain_gust["ticks"])])
+	check_near(GameData.as_float(focused_gust["carried"]), gust_carry, tuning.f("gust_push") * DT * road_speed * 0.5, "and carries the car as far as it does without")
 	# For 30 s.
 	_run(_sim.effects.time_left(&"focus") - 0.5)
 	check(_sim.effects.has(&"focus"), "just short of 30 s he still has Focus")
@@ -875,6 +993,17 @@ func test_item_energy_drink() -> void:
 		check_near(cash - _sim.cash, 10.0, 0.000001, "a TAP pays 10")
 		check_eq(_item("energy_drink").supply, uses, "for three cans")
 	check(not _sim.effects.has(&"focus"), "(and the Focus he drove in with is gone: a stop ends every timer)")
+	# What the stop ends it says: each status of the can began once and is announced as over once.
+	for give: Variant in GameData.as_array(record.get("gives")) + GameData.as_array(record.get("takes")):
+		var entry: Dictionary = GameData.as_dict(give)
+		if not entry.has("effect") or not entry.has("duration"):
+			continue
+		var status: String = GameData.as_string(entry.get("effect"))
+		check(not _sim.effects.has(StringName(status)), "(%s is over at the stop)" % status)
+		check_eq(_count_events("effect_added", "effect", status), 1, "(%s began with the can)" % status)
+		check_eq(_count_events("effect_expired", "effect", status), 1, "the stop that ends %s announces its end" % status)
+	var entered_at: int = _events.find(_event("stop_entered"))
+	check(entered_at >= 0 and _events.find(_event("effect_expired")) < entered_at, "before the stop itself is announced")
 
 
 # --- T-ITEM-PAINKILLERS ------------------------------------------------------
@@ -1003,6 +1132,25 @@ func test_item_painkillers() -> void:
 	check_eq(_sim.run.legs_done, 1, "(the next leg)")
 	check_near(_sim.heavy_floor(), floor_before, 0.000001, "on the next leg the floor is where it was")
 	check(not _sim.phantom_muted(), "and the Phantom is back")
+	# What the leg held to its end is announced as over at the gore, once:
+	# not at the leg's stop, which it passed through, and not begun anew there.
+	for list: String in ["gives", "takes"]:
+		for listed: Variant in GameData.as_array(record.get(list)):
+			var entry: Dictionary = GameData.as_dict(listed)
+			if GameData.as_string(entry.get("for")) != "leg":
+				continue
+			var status: String = GameData.as_string(entry.get("effect"))
+			check_eq(_count_events("effect_added", "effect", status), 1, "(%s began once, with the first pill)" % status)
+			check_eq(_count_events("effect_expired", "effect", status), 1, "the end of %s is announced once" % status)
+			var ended_at: int = -1
+			var left_at: int = -1
+			for index: int in _events.size():
+				var type: String = GameData.as_string(_events[index].get("type"))
+				if type == "effect_expired" and GameData.as_string(_events[index].get("effect")) == status:
+					ended_at = index
+				elif type == "stop_left":
+					left_at = index
+			check(left_at >= 0 and ended_at > left_at, "at the gore, after the leg's stop")
 
 	# 6 pills.
 	_new_sim()
@@ -1031,6 +1179,26 @@ func test_item_painkillers() -> void:
 		_tap_at(GameData.as_string(refill["anchor"]))
 		check_near(cash - _sim.cash, 15.0, 0.000001, "a TAP pays 15")
 		check_eq(_item("painkillers").supply, uses, "for a full bottle")
+
+	# Taken in a boss, "for the leg" is until the next leg begins: through the
+	# boss stop and along the road to the fork, which are no leg of their own.
+	var floors: PackedFloat64Array = tuning.floats("heavy_floor")
+	_to_quiet_leg("fuel_station")
+	_give("painkillers")
+	_drive_on_to_boss()
+	var floor_in_boss: float = _sim.heavy_floor()
+	_hold_at("face", hold_s)
+	check_near(_sim.heavy_floor(), floor_in_boss + floor_up, 0.000001, "(a pill in the boss raises the Heavy floor by 15)")
+	_drive_on_to_boss_stop()
+	check_near(_sim.heavy_floor(), floor_in_boss + floor_up, 0.000001, "a pill taken in a boss holds through the boss stop")
+	check(_sim.phantom_muted(), "(the Phantom stays muted there)")
+	_leave_stop()
+	check_eq(_sim.run.stage, RunState.Stage.APPROACH, "(the road to the next act's first fork)")
+	check_near(_sim.heavy_floor(), floors[_sim.run.act - 1] + floor_up, 0.000001, "and along the road to the fork: that act's floor and the pill's 15")
+	check(_sim.phantom_muted(), "(the Phantom too)")
+	_into_next_quiet_leg()
+	check_near(_sim.heavy_floor(), floors[_sim.run.act - 1], 0.000001, "the leg that begins at the gore ends it")
+	check(not _sim.phantom_muted(), "and the Phantom is back")
 
 
 # --- T-ITEM-ARAK-FLASK -------------------------------------------------------
@@ -1393,6 +1561,34 @@ func test_item_phone() -> void:
 	check(not GameData.as_bool(_event("call_resolved").get("answered")), "(announced as missed)")
 	check(not _sim.hand.eyes_down, "and his eyes are back on the road")
 
+	# A TAP that ends after the phone has rung out answers nothing, and to a
+	# patrol that watches it is no use of the phone: the button goes down with
+	# two ticks of ringing left and comes up after them. Once as the only TAP
+	# of the call, once as its second.
+	for tapped_in_time: bool in [false, true]:
+		_begin_quiet_leg("patrol", 2, 71)
+		_give("phone")
+		_reach(mount)
+		if not check(_await_ring() and _sim.suspicion.watching, "(a call in view of a patrol)"):
+			continue
+		if tapped_in_time:
+			_tap()
+			check_eq(_sim.items.call_taps, 1, "(one TAP in time: the phone has been seen in his hand)")
+		while _sim.items.caller != &"" and _sim.items.ring_left > 2.5 * DT:
+			_tick()
+		var seen: float = _sim.suspicion.value
+		var announced: int = _count_events("ritual_completed", "ritual", "phone_answer")
+		_input.lmb = true
+		_tick()
+		check(_sim.gesture.is_active() and _sim.items.caller != &"", "(the TAP begins while it still rings)")
+		_ticks(TAP_TICKS - 1)
+		check(_sim.gesture.is_active() and _sim.items.caller == &"", "(and the ringing stops under his finger)")
+		_input.lmb = false
+		_ticks(SETTLE)
+		check(not GameData.as_bool(_event("call_resolved").get("answered")), "the call is missed")
+		check_eq(_count_events("ritual_completed", "ritual", "phone_answer"), announced, "a TAP that ends after the ringing answers nothing")
+		check(_sim.suspicion.value <= seen, "and is no use of the phone: the patrol has seen nothing new (%s, then %s)" % [str(snappedf(seen, 0.01)), str(snappedf(_sim.suspicion.value, 0.01))])
+
 	# One call in four is Um Noor: -8 Nerves.
 	_new_sim()
 	_give("phone")
@@ -1430,6 +1626,42 @@ func test_item_phone() -> void:
 		_tap()
 		_tap()
 		check(_sim.items.caller == &"" and _sim.suspicion.value <= before, "the other TAPs of the same call add nothing")
+
+	# "Every 25 to 40 s" is of the road: a stop does not start the wait for
+	# the next call again, and no call comes in while he stands there.
+	var road_gap: int = _ticks_to_next_ring(false)
+	var stop_gap: int = _ticks_to_next_ring(true)
+	check(road_gap >= _ticks_in(gap_min) and road_gap <= _ticks_in(gap_max) + 1, "(with no stop the next call comes 25 to 40 s after the last was answered: %s s)" % str(snappedf(float(road_gap) * DT, 0.01)))
+	check_eq(stop_gap, road_gap, "with a stop on the way it comes after the same seconds of road: the wait passes through the stop")
+
+	# A call still ringing when he pulls in is dropped: unanswered, and at no
+	# cost to his Nerves or to his row of answered calls. It is announced.
+	_to_quiet_leg("fuel_station")
+	_give("phone")
+	_reach(mount)
+	_await_ring()
+	for _index: int in taps:
+		_tap()
+	check_eq(_sim.items.answered_run, 1, "(one call answered)")
+	_input.rmb = true
+	check(_await_ring(), "(the next one rings, and he pulls in with it ringing)")
+	_events = []
+	var nerves_ringing: float = _sim.nerves.value
+	_into_stall()
+	check_eq(_sim.items.caller, &"", "at the stop the phone is silent")
+	check_eq(_count_events("call_resolved"), 1, "the call that was ringing is announced as over")
+	var dropped: Dictionary = _event("call_resolved")
+	check(not GameData.as_bool(dropped.get("answered")) and GameData.as_bool(dropped.get("dropped")), "unanswered: dropped")
+	check_near(GameData.as_float(dropped.get("nerves")), 0.0, 0.000001, "at no cost")
+	# (But for the tick the slip lane takes to open under him: a tick of rough shoulder.)
+	check_near(_sim.nerves.value, nerves_ringing, tuning.f("shoulder_nerves_rate") * DT * 1.5, "his Nerves are what they were (a missed call would be +4)")
+	check_eq(_sim.items.answered_run, 1, "and his row of answered calls stands")
+	check(_events.find(dropped) < _events.find(_event("stop_entered")), "(announced before the stop is)")
+	_leave_stop()
+	_input.rmb = true
+	var left_at: int = _sim.tick
+	check(_await_ring(), "(the phone rings again down the road)")
+	check_between(float(_sim.tick - left_at) * DT, gap_min - 2.0 * DT, gap_max + 2.0 * DT, "the wait for the next call is counted from the end of the one the stop dropped")
 
 
 # --- T-ITEM-BREATH-MINTS -----------------------------------------------------
@@ -1579,6 +1811,31 @@ func _a_second_of_road() -> Dictionary:
 	_sim.traffic.clear()
 	return out
 
+
+## One gust toward the right shoulder in third gear with nobody steering,
+## watched for `seconds`: the ticks of his time it pushes the car for, and how
+## far it carries it (against the same stretch driven without a gust).
+func _a_gust(seconds: float) -> Dictionary:
+	var crown: float = tuning.f("crown_drift")
+	var pushed: int = 0
+	var sideways: PackedFloat64Array = PackedFloat64Array()
+	_input.clear()
+	_keep_lane = false
+	for gusty: bool in [false, true]:
+		_cruise(3, 1)
+		if gusty:
+			_sim.start_gust(1)
+		var x_from: float = _sim.car.x
+		for _index: int in _ticks_in(seconds):
+			_sim.step(_input)
+			if _sim.car.drift > crown + tuning.f("gust_push") * 0.5:
+				pushed += 1
+		sideways.append(_sim.car.x - x_from)
+	_keep_lane = true
+	_cruise(3, 1)
+	return {"ticks": pushed, "carried": sideways[1] - sideways[0]}
+
+
 ## Steps until the phone rings (at most a little over the longest gap).
 func _await_ring() -> bool:
 	var guard: int = _ticks_in(GameData.as_float(GameData.as_array(_params("phone").get("call_gap_s"))[1]) + 10.0)
@@ -1586,6 +1843,42 @@ func _await_ring() -> bool:
 		guard -= 1
 		_tick()
 	return _sim.items.caller != &""
+
+
+## A Telling's first leg with a phone: the first call is answered, and then
+## he waits for the next with his foot on the brake. Returns the ticks of
+## road (ticks in which the night went on) from the answer to the next ring.
+## With `stops`, he pulls into the leg's stop part of the way through the
+## wait and stands there longer than any wait lasts.
+func _ticks_to_next_ring(stops: bool) -> int:
+	var params: Dictionary = _params("phone")
+	var gap: Array = GameData.as_array(params.get("call_gap_s"))
+	_to_quiet_leg("fuel_station")
+	_give("phone")
+	_reach(_anchor_of("phone"))
+	if not check(_await_ring(), "(a first call)"):
+		return -1
+	for _index: int in GameData.as_int(params.get("answer_taps")):
+		_tap()
+	check_eq(_sim.items.answered_run, 1, "(answered)")
+	var answered_at: int = _sim.tick
+	var stood: int = 0
+	_input.rmb = true
+	if stops:
+		_run(GameData.as_float(gap[0]) * 0.4)
+		check_eq(_sim.items.caller, &"", "(the next call has not come when he pulls in)")
+		_into_stall()
+		var entered_at: int = _sim.tick
+		_events = []
+		_run(GameData.as_float(gap[1]) + GameData.as_float(params.get("ring_s")))
+		check_eq(_count_events("call_started"), 0, "no call comes in while he stands at a stop")
+		_leave_stop()
+		# (Every tick since he stopped but the last, which is of the road again.)
+		stood = _sim.tick - entered_at - 1
+		_input.rmb = true
+	if not check(_await_ring(), "(the next call)"):
+		return -1
+	return _sim.tick - answered_at - stood
 
 
 ## A new simulation on a Telling seed with a phone and nobody answering it:
@@ -1620,3 +1913,17 @@ func _starting_supply(item_id: String) -> int:
 		if GameData.as_string(start.get("item")) == item_id:
 			return GameData.as_int(start.get("supply"), -1)
 	return -1
+
+
+## A Telling's first leg driven to a fuel station that sells `item_id`: the
+## first of forty Tellings whose first stop is one and has it on the tray.
+## Returns the offer; {} when none of them sells it.
+func _to_fuel_station_selling(item_id: String) -> Dictionary:
+	for skip: int in 40:
+		_to_quiet_leg("fuel_station", skip)
+		_scrape()
+		_into_stall()
+		var sold: Dictionary = _offer(StopSim.ITEM, item_id)
+		if not sold.is_empty():
+			return sold
+	return {}

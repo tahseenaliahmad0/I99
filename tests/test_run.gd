@@ -546,6 +546,29 @@ func _check_exit_cases(exit_at: float, stall_at: float, third: float) -> void:
 		_sim.step(_input)
 	check(_sim.stopped, "the grip he arrived with does not drive him off again")
 
+	# A missed Exit that takes his Nerves to the top is a Snap like any other
+	# (it comes with leg progress, after the tick's Nerves have been told).
+	_begin_quiet_leg()
+	_sim.car.s = stall_at - 20.0
+	_input.clear()
+	var edge: float = tuning.f("snap_at") - tuning.f("missed_exit_nerves") * 0.5
+	var guard_ticks: int = int(10.0 / DT)
+	while _sim.car.s < stall_at and guard_ticks > 0:
+		guard_ticks -= 1
+		_sim.nerves.set_value(edge)
+		_sim.car.x = _sim.car.lane_center(1)
+		_sim.car.speed = third
+		_sim.step(_input)
+		_collect()
+	check(not _sim.stopped and _sim.car.s >= stall_at, "(at the edge of his Nerves he drives past the stall)")
+	check_near(_sim.nerves.value, tuning.f("snap_reset"), 0.01, "the missed Exit's +5 take him over the top: a Snap, and his Nerves are reset")
+	check_eq(_events_named("snap").size(), 1, "which is announced, as every Snap is")
+	var leans_on_horn: bool = false
+	for event: Dictionary in _events_named("sfx_requested"):
+		leans_on_horn = leans_on_horn or GameData.as_string(event.get("id")) == "horn"
+	check(leans_on_horn, "with the horn he leans on")
+	check(GameData.as_bool(_sim.snapshot()["snap"]), "and the Snap is on him")
+
 
 ## The gore itself: a car on the split is on the right-hand road.
 func _check_gore_line() -> void:

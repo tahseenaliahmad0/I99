@@ -204,13 +204,31 @@ func step(dt: float) -> void:
 		value = clampf(value + _rate * dt, MIN, MAX)
 		if value >= _snap_at:
 			_snap()
-	snap_left -= dt
-	if snap_left < dt * 0.5:
-		snap_left = 0.0
+	step_snap(dt)
 	_tremor_phase = fmod(_tremor_phase + TAU * _tremor_hz * dt, TAU)
 	_refresh_impairments()
 	_step_sleep(dt)
 	_note_crossings()
+
+
+## What is left of a Snap runs down. Its seconds are the hand's, not the
+## night's: where the night waits (a stop, an officer at his window) this is
+## all of him that steps.
+func step_snap(dt: float) -> void:
+	snap_left -= dt
+	if snap_left < dt * 0.5:
+		snap_left = 0.0
+
+
+## The night begins to wait for him with an officer at his window: as at a
+## stop, his eyes are open, and the rhythm of Blink and Nod starts anew when
+## the night goes on.
+func rouse() -> void:
+	lids = 0.0
+	eyes_shut = false
+	_blink_clock = 0.0
+	_nod_clock = 0.0
+	_nod_cancelled = false
 
 
 func _snap() -> void:

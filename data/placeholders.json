@@ -841,6 +841,62 @@
     },
     "scene": null
   },
+  "cabin_passenger": {
+    "placeholder": {
+      "shape": "capsule",
+      "size": [
+        0.17,
+        0.9
+      ],
+      "color": "#7B4FA3"
+    },
+    "scene": null
+  },
+  "cabin_passenger_arm": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.05,
+        0.05,
+        1.0
+      ],
+      "color": "#7B4FA3"
+    },
+    "scene": null
+  },
+  "cabin_drum": {
+    "placeholder": {
+      "shape": "cylinder",
+      "size": [
+        0.12,
+        0.5
+      ],
+      "color": "#8B5A2B"
+    },
+    "scene": null
+  },
+  "stop_hitcher": {
+    "placeholder": {
+      "shape": "capsule",
+      "size": [
+        0.17,
+        1.1
+      ],
+      "color": "#7B4FA3"
+    },
+    "scene": null
+  },
+  "stop_hitcher_text": {
+    "placeholder": {
+      "shape": "label",
+      "size": [
+        0.0016
+      ],
+      "color": "#FFFFFF",
+      "text": "[HITCHER]"
+    },
+    "scene": null
+  },
   "cabin_clock_text": {
     "placeholder": {
       "shape": "label",
@@ -884,6 +940,131 @@
       ],
       "color": "#FFFFFF",
       "text": "[FORK]"
+    },
+    "scene": null
+  },
+  "road_checkpoint_barrier": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.25,
+        0.85,
+        1.0
+      ],
+      "color": "#B5B2A8"
+    },
+    "scene": null
+  },
+  "road_checkpoint_cap": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.25,
+        0.05,
+        1.0
+      ],
+      "color": "#DEDBD0"
+    },
+    "scene": null
+  },
+  "road_checkpoint_bar": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        1.0,
+        0.1,
+        0.1
+      ],
+      "color": "#D64541"
+    },
+    "scene": null
+  },
+  "road_soldier": {
+    "placeholder": {
+      "shape": "capsule",
+      "size": [
+        0.2,
+        1.8
+      ],
+      "color": "#8A7F4B"
+    },
+    "scene": null
+  },
+  "road_soldier_sign": {
+    "placeholder": {
+      "shape": "label",
+      "size": [
+        0.0016
+      ],
+      "color": "#FFFFFF",
+      "text": "[PAPERS]"
+    },
+    "scene": null
+  },
+  "road_bay": {
+    "placeholder": {
+      "shape": "quad",
+      "size": [
+        1.0,
+        1.0
+      ],
+      "color": "#4A5670"
+    },
+    "scene": null
+  },
+  "road_street_end": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        40.0,
+        6.0,
+        8.0
+      ],
+      "color": "#E3D9C3"
+    },
+    "scene": null
+  },
+  "road_street_text": {
+    "placeholder": {
+      "shape": "label",
+      "size": [
+        0.03
+      ],
+      "color": "#FFFFFF",
+      "text": "[THE HOUSE]"
+    },
+    "scene": null
+  },
+  "road_gust_streak": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        2.4,
+        0.08,
+        0.14
+      ],
+      "color": "#D9C9A3"
+    },
+    "scene": null
+  },
+  "sky_sun": {
+    "placeholder": {
+      "shape": "sphere",
+      "size": [
+        14.0
+      ],
+      "color": "#FFF3C2"
+    },
+    "scene": null
+  },
+  "sky_glow": {
+    "placeholder": {
+      "shape": "quad",
+      "size": [
+        320.0,
+        46.0
+      ],
+      "color": "#E8843C"
     },
     "scene": null
   },
@@ -1093,6 +1274,208 @@
         0.035
       ],
       "color": "#E8E0D0"
+    },
+    "scene": null
+  },
+  "item_papers_licence": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.05,
+        0.004,
+        0.034
+      ],
+      "color": "#F2B6C6"
+    },
+    "scene": null
+  },
+  "item_papers_id": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.05,
+        0.004,
+        0.034
+      ],
+      "color": "#A8D8A0"
+    },
+    "scene": null
+  },
+  "item_papers_registration": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.07,
+        0.004,
+        0.1
+      ],
+      "color": "#BFD4E8"
+    },
+    "scene": null
+  },
+  "item_checkpoint_bribe": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.07,
+        0.008,
+        0.035
+      ],
+      "color": "#7FA36B"
+    },
+    "scene": null
+  },
+  "item_hand_licence": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.05,
+        0.004,
+        0.034
+      ],
+      "color": "#F2B6C6"
+    },
+    "scene": null
+  },
+  "item_hand_banknotes": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.07,
+        0.008,
+        0.035
+      ],
+      "color": "#7FA36B"
+    },
+    "scene": null
+  },
+  "item_call_hand_over": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.045,
+        0.085,
+        0.012
+      ],
+      "color": "#1E2A38"
+    },
+    "scene": null
+  },
+  "cabin_window_glass": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.008,
+        0.46,
+        0.96
+      ],
+      "color": "#9FC4E8"
+    },
+    "scene": null
+  },
+  "cabin_hazard_lamp": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.03,
+        0.03,
+        0.012
+      ],
+      "color": "#FF3B30"
+    },
+    "scene": null
+  },
+  "cabin_glovebox_door": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.3,
+        0.14,
+        0.012
+      ],
+      "color": "#3A3A42"
+    },
+    "scene": null
+  },
+  "cabin_letter": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.075,
+        0.004,
+        0.105
+      ],
+      "color": "#EFE6CF"
+    },
+    "scene": null
+  },
+  "cabin_registration": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.07,
+        0.004,
+        0.1
+      ],
+      "color": "#BFD4E8"
+    },
+    "scene": null
+  },
+  "cabin_licence": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.05,
+        0.034,
+        0.004
+      ],
+      "color": "#F2B6C6"
+    },
+    "scene": null
+  },
+  "cabin_mirror_glass": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.26,
+        0.08,
+        0.012
+      ],
+      "color": "#1C2630"
+    },
+    "scene": null
+  },
+  "cabin_mirror_light": {
+    "placeholder": {
+      "shape": "quad",
+      "size": [
+        0.03,
+        0.02
+      ],
+      "color": "#FFF6D0"
+    },
+    "scene": null
+  },
+  "cabin_mirror_blue": {
+    "placeholder": {
+      "shape": "quad",
+      "size": [
+        0.22,
+        0.05
+      ],
+      "color": "#2E6BFF"
+    },
+    "scene": null
+  },
+  "cabin_pocket_phone": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.045,
+        0.085,
+        0.012
+      ],
+      "color": "#CFE8FF"
     },
     "scene": null
   },

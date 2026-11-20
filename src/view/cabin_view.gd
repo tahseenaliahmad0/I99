@@ -9,6 +9,12 @@ extends Node3D
 const WHEEL_NODE: String = "Wheel"
 const GEAR_LEVER_NODE: String = "GearLever"
 const GEAR_LEVER_ANCHOR: String = "gear_lever"
+const MIRROR_ANCHOR: String = "mirror"
+## What a slot that takes the tea holds.
+const DRINK: String = "drink"
+const POCKET_ANCHOR: String = "pocket"
+## Who watches him, as the snapshot's "suspicion_by" names a Patrol.
+const PATROL: String = "patrol"
 ## Anchors whose marker hangs on a node of its own (GDD 13.5).
 const NAMED_NODES: Dictionary = {"mirror": "Mirror", "visor": "Visor", "seat": "Seat", "glovebox": "Glovebox"}
 
@@ -44,9 +50,43 @@ var _marker_offset: Dictionary = {}
 var _fittings: Array[Array] = []
 ## item id -> the magenta tag on it while it is contraband (GDD 16.1).
 var _tags: Dictionary = {}
-var _mirror: Node3D
 var _ring_bob: float = 0.0
 var _ring_hz: float = 0.0
+## Props that show a cabin switch: [node, the flags it is drawn under, whether it blinks].
+var _switch_props: Array[Array] = []
+var _blink_hz: float = 1.0
+## The mirror's glass; in it, the lights of what comes up behind him in the
+## dust (GDD 10.3) and the blue of a Patrol that has him in view (GDD 16.3).
+var _mirror_glass: Node3D
+var _mirror_lights: Array[Node3D] = []
+var _mirror_blue: Node3D
+var _mirror_at: Vector3 = Vector3.ZERO
+var _mirror_proud: float = 0.0
+var _light_grow: Vector2 = Vector2.ONE
+var _light_spread: Vector2 = Vector2.ZERO
+var _rear_end_tell: float = 1.0
+var _suspicion_max: float = 100.0
+## The glovebox's cells, in order, and where their middle is on its open door.
+var _cells: PackedStringArray = PackedStringArray()
+var _cell_pos: Vector3 = Vector3.ZERO
+var _cell_spread: float = 0.0
+## His own phone, seen at his pocket while it rings (GDD 10.4).
+var _pocket_phone: Node3D
+## Whoever rides in the seat (GDD 8, 16.1): a purple capsule; the arm they
+## reach out with (to the wheel, across the lever, with the tea); the drum.
+var _passenger: Node3D
+var _passenger_at: Vector3 = Vector3.ZERO
+var _passenger_arm: MeshInstance3D
+var _arm_from: Vector3 = Vector3.ZERO
+var _sleep_tilt: float = 0.0
+var _drum: Node3D
+var _drum_at: Vector3 = Vector3.ZERO
+var _drum_bob: float = 0.0
+var _drum_hz: float = 0.0
+var _grip_point: Vector3 = Vector3.ZERO
+## The anchors of the cup holders: where the tea stands, and so the anchors a
+## passenger moves when he holds it out.
+var _held_out: PackedStringArray = PackedStringArray()
 
 
 func setup(data: GameData, factory: PlaceholderFactory) -> void:
@@ -61,6 +101,14 @@ func setup(data: GameData, factory: PlaceholderFactory) -> void:
 		node.position = GameData.as_vec3(prop.get("pos"))
 		node.rotation_degrees = GameData.as_vec3(prop.get("rot"))
 		props.add_child(node)
+		if prop.has("alpha"):
+			PlaceholderFactory.set_alpha(node, GameData.as_float(prop.get("alpha")))
+		var conditions: Array = GameData.as_array(prop.get("flags"))
+		var blinks: bool = GameData.as_bool(prop.get("blink"))
+		if not conditions.is_empty() or blinks:
+			_switch_props.append([node, conditions, blinks])
+	_blink_hz = tuning.f("signal_blink_hz")
+	_mirror_glass = props.get_node_or_null("mirror_glass") as Node3D
 
 	_build_wheel(tuning)
 
@@ -99,6 +147,12 @@ func setup(data: GameData, factory: PlaceholderFactory) -> void:
 		_anchor_pos[GameData.as_string(anchor.get("id"))] = GameData.as_vec3(anchor.get("pos"))
 	for slot: Dictionary in data.records("slots"):
 		_slot_anchor[GameData.as_string(slot.get("id"))] = GameData.as_string(slot.get("anchor"))
+		if GameData.as_string(slot.get("id")).begins_with(ItemSim.GLOVEBOX):
+			_cells.append(GameData.as_string(slot.get("id")))
+		if GameData.as_array(slot.get("holds")).has(DRINK):
+			_held_out.append(GameData.as_string(slot.get("anchor")))
+	_cell_pos = Vector3(tuning.fi("glovebox_cell_pos", 0), tuning.fi("glovebox_cell_pos", 1), tuning.fi("glovebox_cell_pos", 2))
+	_cell_spread = tuning.f("glovebox_cell_spread")
 	_item_lift = tuning.f("item_lift")
 	_items = _group("ItemMounts")
 
@@ -141,9 +195,51 @@ func setup(data: GameData, factory: PlaceholderFactory) -> void:
 		else:
 			fitted.add_child(node)
 		_fittings.append([GameData.as_string(fitting.get("item")), node])
-	_mirror = get_node_or_null("Mirror") as Node3D
 	_ring_bob = tuning.f("phone_ring_bob")
 	_ring_hz = tuning.f("phone_ring_hz")
+
+	# In the mirror: two lights that come nearer, and the Patrol's blue.
+	var mirror: Node3D = _group("Mirror")
+	_mirror_at = _anchor_pos.get("mirror", Vector3.ZERO)
+	_mirror_proud = factory.size_of("cabin_mirror").z
+	_light_grow = Vector2(tuning.fi("mirror_light_grow", 0), tuning.fi("mirror_light_grow", 1))
+	_light_spread = Vector2(tuning.fi("mirror_light_spread", 0), tuning.fi("mirror_light_spread", 1))
+	_rear_end_tell = GameData.as_float(GameData.as_dict(data.record("bosses", BossSim.STORM).get("storm")).get("rear_end_tell_s"), 1.0)
+	_suspicion_max = tuning.f("suspicion_max")
+	_mirror_blue = factory.make("cabin_mirror_blue")
+	_mirror_blue.position = _mirror_at + Vector3(0.0, 0.0, _mirror_proud)
+	_mirror_blue.visible = false
+	mirror.add_child(_mirror_blue)
+	for _side: int in 2:
+		var light: Node3D = factory.make("cabin_mirror_light")
+		light.visible = false
+		mirror.add_child(light)
+		_mirror_lights.append(light)
+
+	_pocket_phone = factory.make("cabin_pocket_phone")
+	_pocket_phone.visible = false
+	_items.add_child(_pocket_phone)
+
+	var seat: Node3D = _group("Seat")
+	_passenger_at = Vector3(tuning.fi("passenger_pos", 0), tuning.fi("passenger_pos", 1), tuning.fi("passenger_pos", 2))
+	_arm_from = Vector3(tuning.fi("passenger_arm_from", 0), tuning.fi("passenger_arm_from", 1), tuning.fi("passenger_arm_from", 2))
+	_sleep_tilt = deg_to_rad(tuning.f("passenger_sleep_tilt"))
+	_drum_at = Vector3(tuning.fi("drum_pos", 0), tuning.fi("drum_pos", 1), tuning.fi("drum_pos", 2))
+	_drum_bob = tuning.f("drum_bob")
+	_drum_hz = tuning.f("drum_hz")
+	_grip_point = GameData.as_vec3(GameData.as_dict(data.root("anchors").get("points")).get("G"))
+	_passenger = factory.make("cabin_passenger")
+	_passenger.position = _passenger_at
+	_passenger.visible = false
+	seat.add_child(_passenger)
+	_passenger_arm = factory.make("cabin_passenger_arm") as MeshInstance3D
+	if _passenger_arm != null:
+		_passenger_arm.visible = false
+		seat.add_child(_passenger_arm)
+	_drum = factory.make("cabin_drum")
+	_drum.position = _drum_at
+	_drum.visible = false
+	seat.add_child(_drum)
 
 	_lit_tip = factory.make("item_cigarette_lit")
 	_lit_tip.visible = false
@@ -174,9 +270,8 @@ func apply(snapshot: Dictionary) -> void:
 		var home: Vector3 = _marker_home[id]
 		var offset: Vector3 = _marker_offset[id]
 		marker_node.position = (GameData.as_vec3(moves[str(id)]) + offset) if moves.has(str(id)) else home
-	if _mirror != null:
-		var mirror_scale: float = snapshot["mirror_scale"]
-		_mirror.scale = Vector3(mirror_scale, 1.0, 1.0)
+	_show_mirror(snapshot)
+	_show_passenger(snapshot, moves)
 
 	var capacity: int = snapshot["lamp_capacity"]
 	var lit: int = snapshot["lamps"]
@@ -192,7 +287,16 @@ func apply(snapshot: Dictionary) -> void:
 	_visor_down.visible = snapshot["visor_down"]
 	var items: Array[Dictionary] = snapshot["items"]
 	var time: float = snapshot["time"]
-	_show_items(items, moves, str(snapshot["caller"]) != "", time)
+	var flags: Dictionary = snapshot["flags"]
+	_show_switches(flags, time)
+	# Noor's call rings in his pocket (GDD 10.4); any other on the mount.
+	var caller: String = str(snapshot["caller"])
+	var his_own: bool = caller == DriveSim.NOOR
+	_show_items(items, moves, caller != "" and not his_own, time, GameData.as_bool(flags.get(ItemSim.FLAG_GLOVEBOX)))
+	_pocket_phone.visible = his_own and _anchor_pos.has(POCKET_ANCHOR)
+	if _pocket_phone.visible:
+		var pocket: Vector3 = _anchor_pos[POCKET_ANCHOR]
+		_pocket_phone.position = pocket + Vector3(0.0, _item_lift + _ring_bob * (0.5 + 0.5 * sin(TAU * _ring_hz * time)), 0.0)
 
 	var snapped: String = str(snapshot["hand_snap"])
 	if snapped != _snapped:
@@ -205,9 +309,88 @@ func apply(snapshot: Dictionary) -> void:
 		_outline.visible = false
 
 
+## A prop that shows a cabin switch (the window's glass, the hazard lamp, the
+## glovebox's door and what lies in it) is drawn while every flag it names is
+## as it names it; one that blinks comes and goes at the indicators' rate.
+func _show_switches(flags: Dictionary, time: float) -> void:
+	var blink_on: bool = fmod(time * _blink_hz, 1.0) < 0.5
+	for entry: Array in _switch_props:
+		var node: Node3D = entry[0]
+		var shown: bool = blink_on or not GameData.as_bool(entry[2])
+		for condition: Variant in GameData.as_array(entry[1]):
+			var word: String = str(condition)
+			var wants_off: bool = word.begins_with("!")
+			if GameData.as_bool(flags.get(StringName(word.trim_prefix("!")))) == wants_off:
+				shown = false
+		node.visible = shown
+
+
+## The mirror (GDD 16.3): as wide as what is fitted makes it; the lights of
+## what comes up behind him in the dust, nearer and wider apart until it is
+## on him; and the blue of a Patrol, brighter the more it suspects.
+func _show_mirror(snapshot: Dictionary) -> void:
+	var mirror_scale: float = snapshot["mirror_scale"]
+	if _mirror_glass != null:
+		_mirror_glass.scale = Vector3(mirror_scale, 1.0, 1.0)
+	if _markers.has(MIRROR_ANCHOR):
+		var marker: Node3D = _markers[MIRROR_ANCHOR]
+		marker.scale = Vector3(mirror_scale, 1.0, 1.0)
+	var rear_end_in: float = snapshot["rear_end_in"]
+	var near: float = clampf(1.0 - rear_end_in / maxf(_rear_end_tell, 0.001), 0.0, 1.0)
+	for index: int in _mirror_lights.size():
+		var light: Node3D = _mirror_lights[index]
+		light.visible = rear_end_in > 0.0
+		var side: float = -1.0 if index == 0 else 1.0
+		light.position = _mirror_at + Vector3(side * lerpf(_light_spread.x, _light_spread.y, near), 0.0, _mirror_proud * 1.5)
+		light.scale = Vector3.ONE * lerpf(_light_grow.x, _light_grow.y, near)
+	var suspicion: float = snapshot["suspicion"]
+	_mirror_blue.visible = str(snapshot["suspicion_by"]) == PATROL and suspicion > 0.0
+	if _mirror_blue.visible:
+		PlaceholderFactory.set_alpha(_mirror_blue, suspicion / maxf(_suspicion_max, 1.0))
+
+
+## Whoever rides (GDD 8.2): in the seat; leaning toward the door while they
+## sleep; an arm out to the wheel they hold, across the gear lever they block,
+## or with the tea they hold out; and a drummer's drum on the right of the
+## dash, moving while it is played.
+func _show_passenger(snapshot: Dictionary, moves: Dictionary) -> void:
+	var riding: bool = str(snapshot["passenger"]) != ""
+	_passenger.visible = riding
+	var block: float = snapshot["view_block_right"]
+	_drum.visible = riding and block > 0.0
+	if _passenger_arm != null:
+		_passenger_arm.visible = false
+	if not riding:
+		return
+	_passenger.rotation = Vector3(0.0, 0.0, -_sleep_tilt if snapshot["passenger_asleep"] else 0.0)
+	var time: float = snapshot["time"]
+	if _drum.visible:
+		var beat: float = sin(TAU * _drum_hz * time) if snapshot["passenger_drumming"] else 0.0
+		_drum.position = _drum_at + Vector3(0.0, _drum_bob * beat, 0.0)
+	# Where the arm goes, if it goes anywhere.
+	var to: Vector3 = _arm_from
+	var held: int = snapshot["wheel_held"]
+	if held != PassengerSim.HOLD_NONE:
+		to = _grip_point
+	elif snapshot["lever_blocked"] and _anchor_pos.has(GEAR_LEVER_ANCHOR):
+		to = _anchor_pos[GEAR_LEVER_ANCHOR]
+	elif snapshot["tea_passed"]:
+		for id: Variant in moves:
+			# What he holds out stood in a cup holder: it is where his arm ends.
+			if _held_out.has(str(id)):
+				to = GameData.as_vec3(moves[id])
+	var along: Vector3 = to - _arm_from
+	if _passenger_arm == null or along.length() < 0.001:
+		return
+	_passenger_arm.visible = true
+	_passenger_arm.transform = Transform3D(Basis.looking_at(along.normalized(), Vector3.UP), (_arm_from + to) * 0.5)
+	_passenger_arm.scale = Vector3(1.0, 1.0, along.length())
+
+
 ## Each item is drawn at its slot (GDD 7.1), from its own placeholder
-## "item_<id>" (or "item_default"). An empty one is hidden.
-func _show_items(items: Array[Dictionary], moves: Dictionary, ringing: bool, time: float) -> void:
+## "item_<id>" (or "item_default"). An empty one is hidden; so is one stowed
+## in the glovebox, unless the glovebox is open: then it lies in its cell.
+func _show_items(items: Array[Dictionary], moves: Dictionary, ringing: bool, time: float, glovebox_open: bool) -> void:
 	var seen: Dictionary = {}
 	var burning: bool = false
 	for fitting: Array in _fittings:
@@ -231,7 +414,11 @@ func _show_items(items: Array[Dictionary], moves: Dictionary, ringing: bool, tim
 		var anchor: String = str(_slot_anchor.get(str(item["slot"]), ""))
 		var supply: int = item["supply"]
 		node.visible = _anchor_pos.has(anchor) and supply != 0
-		if _anchor_pos.has(anchor):
+		var cell: int = _cells.find(str(item["slot"]))
+		if cell >= 0:
+			node.visible = node.visible and glovebox_open
+			node.position = _cell_pos + Vector3((float(cell) * 2.0 - float(_cells.size() - 1)) * _cell_spread, _item_lift, 0.0)
+		elif _anchor_pos.has(anchor):
 			var at: Vector3 = GameData.as_vec3(moves[anchor]) if moves.has(anchor) else _anchor_pos[anchor]
 			node.position = at + Vector3(0.0, _item_lift, 0.0)
 			if ringing and id == "phone":

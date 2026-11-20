@@ -13,6 +13,9 @@ var _tray: Node3D
 var _places: Dictionary = {}
 var _anchor_pos: Dictionary = {}
 var _label_lift: float = 0.0
+## Whoever stands at the roadside asking for a ride (GDD 8.1), and their name.
+var _hitcher: Node3D
+var _hitcher_name: Label3D
 
 
 func setup(data: GameData, factory: PlaceholderFactory) -> void:
@@ -47,6 +50,15 @@ func setup(data: GameData, factory: PlaceholderFactory) -> void:
 			label.no_depth_test = true
 			add_child(label)
 		_places[anchor] = [thing, label]
+	_hitcher = factory.make("stop_hitcher")
+	_hitcher.position = _vec(tuning, "hitcher_pos")
+	add_child(_hitcher)
+	_hitcher_name = factory.make("stop_hitcher_text") as Label3D
+	if _hitcher_name != null:
+		_hitcher_name.position = _hitcher.position + Vector3(0.0, tuning.f("hitcher_sign_lift"), 0.0)
+		_hitcher_name.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		_hitcher_name.no_depth_test = true
+		add_child(_hitcher_name)
 	visible = false
 
 
@@ -62,6 +74,12 @@ func apply(snapshot: Dictionary) -> void:
 		if offer["shady"]:
 			shady = true
 	_shady.visible = shady
+	var hitcher: String = str(snapshot["hitcher"])
+	_hitcher.visible = not hitcher.is_empty()
+	if _hitcher_name != null:
+		_hitcher_name.visible = _hitcher.visible
+		if _hitcher.visible:
+			_hitcher_name.text = Lines.format("sign.hitcher", [Lines.get_text("passenger.%s.name" % hitcher)])
 	for anchor: Variant in _places:
 		var pair: Array = _places[anchor]
 		var thing: Node3D = pair[0]

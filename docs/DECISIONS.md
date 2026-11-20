@@ -1473,3 +1473,308 @@ built by the workflow `m6-fixes`; this entry is what that work is held to.
   from the tick it is added; what reads it late in that last tick misses
   it: 0.03% of a 25 s status).
 - **After a Wreck there is no saved Telling** to continue.
+
+## D-050 (M7, 2026-11-20) The views of the set pieces; `--boss=`; the stand-in at the wheel
+
+- **Context.** GDD 10.2 to 10.5 say what happens at a set piece and 16.1 how
+  things look; nothing says where anything stands. The pictures taken while
+  building the views also showed two things the rules had left open.
+- **On the road** (`SetPieceView`, a child of `RoadView`):
+  - *Barriers* are drawn where the simulation has them: from each lane's own
+    lines two faces close in to the corridor's mouth, and from there one
+    block of concrete fills what the corridors leave of a lane. Each has a
+    lighter cap, so that in flat colours its top can be told from its face.
+  - *The bar* is one per lane, hinged on its left. His own goes up when he
+    is let through; another lane's is up while a vehicle that was waved on
+    drives under it.
+  - *The soldier* is a khaki capsule. He waits beyond the bar on the
+    driver's side, walks to the car during the Stow, and stands beside the
+    front wing for the Papers: there his sign (`sign.document.<id>`, a text
+    that always faces the driver) is in the windscreen and not behind the
+    pillar. At Dawn's last checkpoint one stands at the barriers' mouth.
+  - *Signs.* "[CHECKPOINT / 70]" before Dawn's barriers, "[CHECKPOINT /
+    STOP]" before the Checkpoint's. After tea the fork's sign carries the
+    boss ahead over its two branches: "[CHECKPOINT / LONG QUEUE]", or
+    "[CHECKPOINT]" when it has no modifier. The lines
+    `sign.boss_modifier.*` are names without brackets now, parts of that
+    sign like `modifier.*.name`.
+  - *The Arrival.* The bay is paint and four lines on the lane's last 12 m.
+    The street ends at a house, "[THE HOUSE]" (`sign.arrival`, a
+    placeholder for the writer).
+  - *A gust's tell* (`GustView`): streaks of dust that blow across the road
+    the way the car will be pushed, for the second before it is. GDD 5.4
+    asks for it on every leg; until now it was only a number on the HUD.
+- **In the sky:** Dawn's glow is a flat orange band on the right of the
+  horizon, the sun a disc ahead and to the left that climbs as its Glare
+  comes on (the flare on his view is the post effects'). Dawn driven by
+  itself lightens along its road; in a Telling the sky follows the Clock.
+- **In the cabin:**
+  - A prop may show a cabin switch: `flags` (drawn only while each is as
+    written, "!" for off), `blink`, `alpha`. With that the window has
+    glass, the hazard button a lamp, the glovebox a door; in the open
+    glovebox lie the letter, the registration under it (the letter leans
+    aside once it has been moved), and what is stowed, each thing in its
+    cell. Shut, none of it is seen. His licence stands clipped on the dash.
+  - The mirror has a glass. In it: the two lights of what comes up behind
+    him in the dust, nearer and wider apart through the second of tell
+    (GDD 10.3), and the blue of a Patrol, brighter with his Suspicion (GDD
+    16.3). At the Checkpoint nobody is behind him and the mirror stays
+    dark. A wide mirror now widens in place (the group it hung in was
+    scaled about the wheel hub, which slid it 21 cm to the right).
+  - During the Call the phone is in the hand at his ear; while it rings,
+    his own phone is lit at his pocket.
+- **Two rules the pictures asked for.**
+  - *With the phone at his ear his eyes are on the road.* The Glance of GDD
+    4.7 follows a reach ("far reaches cost road view"); a phone held to
+    his ear is none. Read to the letter it turned the view 35 degrees to
+    the right for all 30 s of the Call, in rush traffic, steering at 40%.
+    The cost of answering alone is the wrist and the hand (GDD 10.4).
+    T-CALL-01 checks it.
+  - *The ring is written out.* His pocket is below what he can see, so the
+    phone's shaking is no tell. When the Call begins the simulation asks
+    for the line `call.noor.rings` beside the sound (GDD 17.2: every tell
+    has both a sound and a visual). T-BOSS-03 checks it.
+- **`--boss=<id>[,modifier]`** drives a boss of legs.json by itself, and
+  `--boss=arrival` the last street; each begins again with the next seed
+  when it ends. `--shot-frame=a,b,c` saves several pictures in one run.
+- **The stand-in at the wheel** (`StandInBot`, behind `--bot=`) is a class
+  of its own now and gets through every set piece: the brake behind the
+  queue and at the bar, the window and whatever the soldier's sign asks
+  for, second gear between Dawn's barriers, the lane with the most room in
+  the dust, the brake into the bay and the key. It works the hand through
+  the input as a player does and puts the car where it wants it; it lets
+  the Call ring out. The DriverBot of GDD 13.8 (M11) replaces it.
+- **Smoke runs:** the four set pieces, each to its end and into its next
+  round.
+- **Tests.** The mutation run of the Checkpoint (54 changes, 46 caught)
+  left eight alive, and Dawn's two: T-BOSS-01 now also checks that
+  Thorough never asks twice for one document, that nobody in a queue
+  drives into the vehicle leaving it, that a honk moves nobody out of a
+  queue even with free road beside it, that he does not tap on an open
+  window, that scraping a vehicle is no touch of a barrier, that a car
+  inside a queue vehicle is never put through a barrier, that a stowed
+  flask cannot be drunk from behind the shut door, and that a full
+  glovebox takes nothing more; T-BOSS-03 that most of the traffic is there
+  by the second half of the false dawn and that he meets no vehicle between
+  the last checkpoint's barriers.
+- **Pictures:** `artifacts/m7_*.png`.
+
+## D-051 (M8, 2026-11-20) The five passengers
+
+- **Context.** GDD 8 gives the rules of passengers and a table of five; GDD
+  14 gives one record as an example. How a passenger is met, how a ride is
+  counted, and what several cells of the table mean in the simulation's
+  terms is not said.
+- **`PassengerSim`** (GDD 13.2) keeps who rides and what they are doing; a
+  passenger is a record of passengers.json. Besides GDD 14's fields (`hand`,
+  `weights`, `on_leave`, `rides_legs` or `rides_until`, `fare`,
+  `line_prefix`) a record may have `always` (`suspicion_gain_mult`,
+  `fork_sign_lead_s`, `answers_calls`, `effects`), `sleeps`, `drums`,
+  `repairs`, `retunes` and `view_block_right`. A Weight is `when` (a tag of
+  what he uses, a gear, a gear in rain, asleep, a scrape, drumming under a
+  Patrol), a `resource` and an `amount` or a rate. The validator knows all
+  of it and asks for the five of GDD 8.2.
+- **Where hitchers stand.** A stop's record says `"hitcher": "always"` (the
+  Hitcher stop) or `"sometimes"` (fuel stations and tea stalls: at
+  `hitcher_chance`, 0.25, of them; GDD 8.1 says "sometimes"). Who stands
+  there is drawn from the Telling seed and the stop's place in the night,
+  each of the five as likely as another, without drawing from the streams
+  the stops' stock uses (so no stop sells anything else than it did). Never
+  the one he already carries: the next of the five stands there instead.
+- **Getting in.** A new anchor, `passenger_door` (0.96, -0.04, 0.10), 0.57 s
+  from the wheel like the glovebox (GDD 8.1: a "glovebox-class Far reach").
+  A TAP there is the stop's ritual `stop_board`, offered while a hitcher
+  stands there and the seat is free. Leaving the stop is declining.
+- **The seat.** What lies on it (the Thermos) goes to a slot `back_seat`
+  that no anchor reaches, and comes back when the seat is free. What is
+  bought for the seat while somebody sits there goes behind it as well.
+- **How far they ride.** A leg is ridden when its stall is behind the car,
+  stopped at or not. Nobody gets out of a moving car: a passenger whose legs
+  are ridden gets out at the first stop he makes after that, and one who
+  rides to the end of the act at the stop after its boss. A boss is no leg.
+  One who rides to Basra gets out at no stop, and the `arrived` event names
+  them as `guest` (the game adds them to the profile's guests, GDD 11.5).
+  The fare is paid on getting out.
+- **The Hajjiya.** *"Holds the wheel dead straight"* is read as: the car
+  goes dead straight where the road is straight. She holds the wheel
+  against what is always there (the crown, a steering that pulls); a bend
+  or a gust carries the car off all the same, as their tells say they will.
+  With the wheel merely at its centre the crown would have the car out of
+  its lane in 3.4 s, exactly as with nobody holding it: her Hand would be
+  nothing. Held through bends she would be an autopilot. It ends after 6 s
+  or when he takes the wheel. Her food (-20 Nerves) and her blessing come
+  as she gets out (GDD 14: `on_leave`); the blessing is kept through stops
+  and is spent by the first scrape that nothing else turned aside (the
+  charm's first scrape of a leg comes before it).
+- **The Conscript.** The uniform halves every gain of Suspicion, asleep or
+  awake, the Checkpoint's included. He gets in asleep. A tap or the horn
+  wakes him for 20 s; the tap that wakes him is not yet a cigarette. Awake,
+  a tap lights one: it burns in the driver's ashtray as his own would, with
+  nothing taken from his pack and no ritual, and he hands over no second
+  while it burns. He snores (-0.5 Nerves a second) only asleep.
+- **The Drummer.** One tap, two things (GDD 8.2 gives the tap both to the
+  tea and to the drum): a tap stops the drum and he holds out the tea beside
+  the wheel (the tea's anchor moves to `hand.at`, an at-wheel reach); the
+  next tap puts it back and he drums again. "The music effect" is the
+  status `music` and the radio's own rate (`radio_music_rate`); with the
+  radio on music too it is still one music. The drum blocks the right 10%
+  of the view whether he plays or not (a drum on the right end of the dash;
+  the snapshot says `view_block_right`). Under a Patrol's ears the drumming
+  is +10 Suspicion a second; a checkpoint is no Patrol.
+- **The Student.** Every call of the phone is answered in the tick it rings:
+  the fare or the calm without his hand, and nothing for a Patrol to see.
+  Noor's call is his own to take (GDD 10.4); she holds the phone if he
+  hands it to her, as any passenger does. A fork's sign stands 5 s of road
+  further ahead of the fork. Her talk keeps him Awake all the time she rides.
+- **The Apprentice.** With a lamp lit and no repair yet on this leg he says
+  so, 2 s later he leans across the gear lever for 3 s (the lever cannot be
+  taken, and is taken out of the hand that holds it), and then the oldest
+  fault is mended. "Per leg" renews when a leg or a boss begins. "At its
+  current angle" locks the wheel where it is, as the hook does, for 3 s or
+  until he takes it. The radio goes to static every 30 s from when he got in.
+- **At a stop the night waits** for passengers too: no Hand, no Weight, no
+  timers.
+- **Views.** A purple capsule in the seat (leaning while asleep), an arm to
+  the wheel, the lever or the tea, the drum; a hitcher beside the front wing
+  with their name over their head; HUD rows. `--ride=<id>` puts a passenger
+  in the seat.
+- **Tests.** T-PASS-HAJJIYA (which also carries GDD 8.1: the roadside, the
+  door, the seat, where hitchers stand), -CONSCRIPT, -DRUMMER, -STUDENT,
+  -APPRENTICE; T-DATA-01 gains the failure cases of the new rules; the
+  mutation list is `tools/mutants/passengers.py`.
+
+## D-052 (M10, 2026-11-20) The sound of the game
+
+- **Context.** GDD 16.5 names 31 sounds and says how each is made; it does
+  not say how they are played, mixed or kept apart. Built ahead of its
+  milestone by a workflow under the rule "nothing under `src/core`" (see
+  D-055), then taken in over the set pieces of M7.
+- **How a sound is described.** Each entry of `data/sfx.json` says what the
+  sound is in a small vocabulary (wave; pitch as `freq`, `freq_to`, `trill`,
+  `freqs` or `notes`; partials; a filter; an envelope; `rate`, `duration`,
+  `peak`, `seed`) and how it is played (`gain_db`, `loop`, fades, `hold`,
+  `functional` with `duck_*`, `every`, `per_minute`, `speed_*`, `per_gear`,
+  `warble`). A key nothing reads is an error at boot. Buffers are 16-bit
+  mono, normalised to a peak of 0.9; loudness is `gain_db` at playback.
+  `SfxSynth` (src/game) makes them; `Audio` plays them from the snapshot
+  and from `sfx_requested`. All 33 are made in about 75 ms.
+- **The engine** is one saw loop whose pitch follows the speed (60 Hz at 40
+  km/h to 180 Hz at 160, held at 30 Hz below). "A different added harmonic
+  per gear" is a second entry, `engine_harmonic`: a sine at a harmonic of
+  the engine's pitch that drops as he shifts up, silent in neutral.
+- **Functional cues** (the rumble strip, the indicator's tick, both yawns)
+  play on a bus of their own, and while one sounds everything else is turned
+  down by that cue's `duck_db`, so that each stands at least 6 dB above all
+  else at once: the check's reading of "audible over everything else".
+  There is no limiter (the engine's leaves its bus quieter afterwards).
+- **What repeats keeps the simulation's time.** `Audio` steps by the
+  snapshot's `time`. The indicator ticks every 0.4 s while it signals; a
+  phone rings every 1.4 s while the snapshot names a caller, Noor's too (six
+  rings in her 8 s); the siren chirps every 3.0 s at no Suspicion down to
+  every 0.8 s at full, wherever he is watched; the heartbeat is heard only
+  during Pound, 60 a minute rising to 120 at the Snap. Hazard lights tick
+  only when toggled (a steady tick would hold everything else down).
+- **A 33rd sound, `horn_behind`**: what comes up behind his standing car in
+  the Storm is two square waves lower than his own horn, for the whole
+  second of its tell, because the tell of a crash must not be taken for the
+  honk he makes himself. It is not a functional cue (GDD 16.5 names four).
+- **Not invented:** sounds for a gust's tell, the dust thickening, the low
+  sun, a checkpoint's sign, the key of the Arrival, the passengers. The
+  table of GDD 16.5 has none, GDD 1.5 forbids resources the document does
+  not name, and the mix has about 0.1 dB of room left under the 6 dB rule.
+  GDD 17.2 ("every tell has both a sound and a visual") is therefore not
+  met for those: NEEDS OWNER.
+- **Tools.** `tools/audio_check.gd` (a step of `tools/check.sh` after the
+  data validator; with `-- --wav=<folder>` it writes every buffer for
+  listening) and `tools/audio_drive_check.gd`, which holds what needs the
+  autoloads. `I99_AUDIO_LOG` in the environment prints every sound that
+  starts or ends.
+- **Nobody has heard it.** There are no speakers here: levels and character
+  come from measurements and an offline recording. NEEDS OWNER.
+
+## D-053 (M10, 2026-11-20) The post effects
+
+- **Context.** GDD 16.4 lists the effects and their strengths; a canvas
+  shader cannot read depth, so "on the glass" had to be given a meaning.
+- **Files.** `shaders/post_fx.gdshader` and `src/view/post_fx_view.gd`
+  (`PostFxView`, the CanvasLayer `PostFX` between `Sky` and the pointer's
+  layer), rather than the `postfx.*` of GDD 13.2. `setup(data, camera,
+  cabin)`, `apply(snapshot, delta)`. With nothing to show the rectangle is
+  hidden: no screen copy, no shader.
+- **Where the glass is.** Each pixel's ray is met with three panes given in
+  tuning (`postfx_windscreen`, `postfx_window_left`, `_right`); what is
+  drawn under the cabin's Mirror and Visor nodes is taken out again.
+  Haze, rain blur and cracks are on the windscreen only; the night, the
+  glare and the falling rain are outside every window. The cabin takes 40%
+  of the darkness and 15% of the glare. The lowest 5 cm of windscreen stay
+  clear, so the clock and the nearest 12 m of road stay readable.
+- **Each effect.** Haze is a drifting veil never thicker than the
+  snapshot's, dust-coloured in the Storm and by day where the view ends,
+  smoke-coloured otherwise. "Cracks cover 20% of the view" is that share of
+  the windscreen: a web round a point of impact, fixed to the glass. Glare
+  is a wash at the light with a small blaze; the light is where the
+  snapshot's `glare_position` says (degrees right of dead ahead, degrees
+  up), else straight ahead (the motorcade's spotlight). The simulation
+  gives that key while Dawn's sun is up: `sun_side` times `sun_position`
+  to the side, climbing from `sun_rise_from` to 14 degrees as its Glare
+  comes on, which is inside what the lowered visor covers. The sky draws
+  its disc at the same place (at the merge the sky of D-050 and the post
+  effects each had a sun of their own, 10 degrees apart).
+  The view never reads `visor_down`: a blocked sun is a Glare of 0. At
+  night what the headlights do not reach loses 80% of its light; the pool
+  is as wide as the headlights let him see. Tunnel is an ellipse that
+  shrinks to `tunnel_min_view`; Lids are soft bars; a Blink sweeps them
+  shut and open in 0.06 s.
+- **No more than three flashes a second** is kept in the view: every amount
+  is eased and one that has turned may not turn again for 0.17 s.
+- **Left to others.** The dust in the air, the false dawn's glow and the
+  streaks of a gust are the world's (sky and road views, D-050); the
+  Wreck's cut to black and the prologue's white-out are M9's.
+- **Tools.** `tools/post_fx_check.gd` (the last step of `tools/check.sh`)
+  and `tools/post_fx_shots.gd` (pictures of states over the drive scene;
+  fifteen are in `artifacts/m10_postfx_*.png`).
+- **Not run:** Forward+ and Mobile (no Vulkan here), and no frame time on a
+  GPU. NEEDS OWNER.
+
+## D-054 (M10, 2026-11-20) Subtitles
+
+- **Context.** GDD 16.6 gives the place, the size of a subtitle and how
+  long it stays. It does not say what happens to a longer text, to two
+  lines asked for at once, or where the speaker's name comes from.
+- **Files.** `src/view/subtitles_view.gd` (`SubtitlesView`, the CanvasLayer
+  `Subtitles`: over the post effects, under the pointer) and the pure class
+  `SubtitleQueue` (wrapping, timing, the queue).
+- **Wrapping.** A character is one code point of the text, the speaker tag
+  not counted. A text is cut only at spaces; two lines are balanced. A text
+  that needs more than two lines is shown in parts of two lines, each held
+  for the larger of 1.5 s and 0.06 s a character of its own.
+- **The queue.** Lines asked for while one is showing wait in order;
+  nothing is dropped or cut short except by a clear. A `wreck` clears what
+  is showing and waiting (the Wreck cuts off what was being said), so the
+  Table's objection must be asked for after it. A subtitle's time is the
+  view's own frame time.
+- **Speakers.** The tag is a row of its own above the text. A speaker's
+  name is a line: `speaker.` and the name in lower case with underscores
+  (`speaker.old_woman`); a speaker with no such line is shown as the column
+  has it. A row that holds an exchange ("X, then Y", "a / b") is one
+  subtitle per speaker.
+- **Settings** (GDD 17.1, Subtitles): `subtitle_size` is "small", "medium"
+  or "large" (28, 36, 48 px at 1080p; default medium) and
+  `subtitle_background` a boolean (default on: a dark box at 60%; off, the
+  letters keep their outline). The keys, the defaults and their live effect
+  exist; the screen that changes them is the menus' (D-055).
+- **Noor's line** on the Call is asked for by data: the two rituals that
+  take the Call carry the op `line:noor.call.1`. A Call left to ring says
+  nothing.
+- **`--say=<line id>[,...]`** asks for lines when the drive scene starts
+  (not in GDD 13.9). `subtitle.test.long` is a test line of 143 characters.
+- **Tools.** `tools/subtitles_check.gd` with `subtitles_check_body.gd` (a
+  step of `tools/check.sh` between the tests and the smoke runs);
+  `tools/subtitles_shots.sh`; pictures in `artifacts/m10_subtitles_*.png`.
+  Right-to-left was tried with an Arabic table built in memory.
+- **At the merge with M8** the four speakers the passengers brought got
+  their lines (`speaker.soldier`, `.drummer`, `.student`, `.boy`).
+- **Open.** Bottom-centre subtitles lie over the wheel hub and the key of
+  the Arrival (NEEDS OWNER: `subtitle_bottom_margin`). No font slot per
+  language yet (GDD 17.3; with the settings). For M9: a heckle's subtitle
+  is its 2 s tell, and a line that waits behind another shortens it.

@@ -198,6 +198,13 @@ func drift_share() -> float:
 	return clampf(speed / _drift_fade_speed, 0.0, 1.0)
 
 
+## The sideways push that is always there (GDD 5.4), m/s toward the right:
+## the road's crown and `extra` (a steering that pulls), as the car feels
+## them at the speed it has.
+func steady_drift(extra: float) -> float:
+	return (_crown + extra) * drift_share()
+
+
 # --- The tick ----------------------------------------------------------------
 
 ## `steer` is -1 to 1 (WheelSim.steer, after Tremor and Lag). `gear` is 0 for

@@ -41,6 +41,11 @@ const JSON_FILES: PackedStringArray = [
 const REGISTRY_FILES: PackedStringArray = ["placeholders", "sfx"]
 const LINE_LOCALES: PackedStringArray = ["en", "ar"]
 const LINE_HEADER: PackedStringArray = ["id", "speaker", "text", "needs_writer"]
+## A speaker's name is a line of its own: this prefix and the name as a
+## speaker column writes it, in lower case with underscores.
+const SPEAKER_PREFIX: String = "speaker."
+## Between the speakers of a row that holds an exchange (GDD 3.6).
+const SPEAKERS_THEN: String = ", then "
 const DEFAULT_DIR: String = "res://data"
 
 var dir: String = ""
@@ -232,6 +237,33 @@ func line_ids(locale: String = "en") -> PackedStringArray:
 	if not line_order.has(locale):
 		return PackedStringArray()
 	return line_order[locale]
+
+
+## Who speaks a line, in order: its speaker column names one speaker, or
+## several ("Guest, then Abu Noor": an exchange written as one row, GDD 3.6).
+static func speakers_of(speaker_column: String) -> PackedStringArray:
+	var speakers: PackedStringArray = []
+	for speaker: String in speaker_column.split(SPEAKERS_THEN, false):
+		if not speaker.strip_edges().is_empty():
+			speakers.append(speaker.strip_edges())
+	return speakers
+
+
+## The id of the line that holds a speaker's name, so that it is written,
+## and translated, once: "Old woman" gives "speaker.old_woman". "" for a
+## name with no Latin letter or digit in it (one already written in Arabic).
+static func speaker_line_id(speaker: String) -> String:
+	var key: String = ""
+	var gap: bool = false
+	for character: String in speaker.to_lower():
+		if (character >= "a" and character <= "z") or (character >= "0" and character <= "9"):
+			if gap and not key.is_empty():
+				key += "_"
+			key += character
+			gap = false
+		else:
+			gap = true
+	return "" if key.is_empty() else SPEAKER_PREFIX + key
 
 
 # --- Typed readers for parsed JSON -------------------------------------------

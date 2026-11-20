@@ -5,6 +5,9 @@ extends Node3D
 ## slides toward the target by up to shoulder_slide_max. No Skeleton3D, no
 ## engine IK. Reads the snapshot; changes nothing.
 
+## What is drawn in his hand while he holds his own phone to his ear.
+const PHONE: String = "phone"
+
 var _shoulder: Vector3 = Vector3.ZERO
 var _upper_length: float = 0.0
 var _forearm_length: float = 0.0
@@ -97,7 +100,11 @@ func apply(snapshot: Dictionary) -> void:
 		_hand.transform = Transform3D(_basis_along(along, Vector3.UP), hand)
 	else:
 		_hand.position = hand
-	_show_carried(str(snapshot["carrying"]), hand)
+	var carrying: String = str(snapshot["carrying"])
+	if carrying.is_empty() and snapshot["at_ear"]:
+		# The Call (GDD 10.4): his own phone, held to his ear.
+		carrying = PHONE
+	_show_carried(carrying, hand)
 	var moves: Dictionary = snapshot["anchor_moves"]
 	var ghost_progress: float = snapshot["ghost_progress"]
 	_show_ghost(str(snapshot["ghost_at"]), ghost_progress, moves)

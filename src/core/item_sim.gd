@@ -31,6 +31,12 @@ const HOME_ANCHOR: String = "@home"
 const GLOVEBOX: String = "glovebox"
 const FLAG_GLOVEBOX: StringName = &"glovebox_open"
 const UNSTOW: String = "unstow"
+## The seat, and where what lies on it goes while a passenger sits there
+## (GDD 8.1): the back seat, out of reach and out of use.
+const SEAT: StringName = &"seat"
+const BACK_SEAT: StringName = &"back_seat"
+## What a smoke is tagged, and where one handed to him burns (GDD 8.2).
+const TAG_SMOKE: String = "smoke"
 const STATIC: StringName = &"static"
 const AWAKE: StringName = &"awake"
 const VISOR_DOWN: StringName = &"visor_down"
@@ -200,6 +206,15 @@ var handed: StringName = &""
 ## True for the tick in which contraband, or the phone, was used.
 var contraband_used: bool = false
 var phone_used: bool = false
+## He tapped his passenger's shoulder this tick (GDD 8.1).
+var asked: bool = false
+## The tags of the things he used this tick (a cigarette lit, a sip taken):
+## for whoever in the seat minds (GDD 8.2).
+var used_tags: PackedStringArray = PackedStringArray()
+## Somebody sits in the seat: nothing else can lie there.
+var seat_occupied: bool = false
+## His passenger answers every call for him (GDD 8.2, the Student).
+var answered_for_him: bool = false
 ## sfx and line requests, drained by DriveSim.
 var events: Array[Dictionary] = []
 
@@ -212,10 +227,14 @@ var call_taps: int = 0
 ## in a row.
 var calls: int = 0
 var answered_run: int = 0
-## The charm has turned a scrape aside this leg (GDD 7.5).
+## The leg's first scrape is behind him: the one the charm turns aside (GDD
+## 7.5). It is marked with or without a charm, so that one hung up later in
+## the leg does not take the next scrape for the first.
 var scrape_spared: bool = false
-## The duct tape has held a fault this act; the fault it is holding now and
-## how long until that fault is mended ("" and 0 when it holds none).
+## The act's first fault is behind him: the one the duct tape takes hold of
+## (GDD 7.5), marked with or without the tape for the same reason. Then the
+## fault the tape is holding now and how long until that fault is mended
+## ("" and 0 when it holds none).
 var tape_spent: bool = false
 var mending: StringName = &""
 var mend_left: float = 0.0
@@ -255,8 +274,11 @@ var _radio_time: float = 0.0
 ## The station the radio is holding on as a status, or static.
 var _radio_held: StringName = STATIC
 var _horn_cooldown: float = 0.0
-## Nerves drips: [rate per second, seconds left].
-var _drips: Array[Vector2] = []
+## Nerves that come spread over a time (a cigarette's calm): for each drip its
+## rate per second and the seconds it has left. (64-bit: in a Vector2's 32
+## bits a countdown of a minute is a tick out by its end.)
+var _drip_rates: PackedFloat64Array = PackedFloat64Array()
+var _drip_left: PackedFloat64Array = PackedFloat64Array()
 
 var _haze_cap: float = 0.0
 var _haze_clear: float = 0.0
@@ -347,7 +369,8 @@ func reset_cabin() -> void:
 	horn_blown = false
 	cash_delta = 0.0
 	_horn_cooldown = 0.0
-	_drips.clear()
+	_drip_rates.clear()
+	_drip_left.clear()
 	_leg_holds.clear()
 	events.clear()
 	_hang_up()
@@ -379,7 +402,8 @@ func set_radio(station: StringName) -> void:
 	_radio_time = 0.0
 
 
-## What resets when a new leg begins.
+## What is once per leg may be done again: a leg begins, or a boss does
+## (and nothing else renews it: no stop, no road to a fork, no street).
 func begin_leg() -> void:
 	photo_used = false
 	scrape_spared = false
@@ -394,7 +418,8 @@ func begin_act() -> void:
 
 
 ## What of this leg a stop must not forget (the save holds it): the photo
-## was looked at, and the statuses that last to the leg's end.
+## was looked at, the leg's first scrape is behind him, and the statuses
+## that last to the leg's end.
 func leg_state() -> Dictionary:
 	var held: Array = []
 	for status: StringName in _leg_holds:
@@ -402,15 +427,23 @@ func leg_state() -> Dictionary:
 	return {"photo": photo_used, "spared": scrape_spared, "held": held}
 
 
+## True for a status the leg holds to its end: it passes through a stop.
+func held_for_leg(status: StringName) -> bool:
+	return _leg_holds.has(status)
+
+
 ## What of this Telling a stop must not forget: how many calls there have
-## been, and how many were answered in a row.
+## been, how many were answered in a row and how long the wait for the next
+## one still is (its exact bits; negative while it is not drawn); and that
+## the act's first fault is behind him.
 func telling_state() -> Dictionary:
-	return {"calls": calls, "answered_run": answered_run, "tape_spent": tape_spent}
+	return {"calls": calls, "answered_run": answered_run, "call_wait": Save.exact(_call_wait), "tape_spent": tape_spent}
 
 
 func set_telling_state(state: Dictionary) -> void:
 	calls = GameData.as_int(state.get("calls"))
 	answered_run = GameData.as_int(state.get("answered_run"))
+	_call_wait = Save.from_exact(state.get("call_wait"), -1.0)
 	tape_spent = GameData.as_bool(state.get("tape_spent"))
 
 
@@ -433,6 +466,8 @@ func begin_tick() -> void:
 	handed = &""
 	contraband_used = false
 	phone_used = false
+	asked = false
+	used_tags.clear()
 
 
 # --- Items and slots ---------------------------------------------------------
@@ -446,7 +481,8 @@ func add_item(id: StringName, slot: StringName, supply: int = -1) -> Item:
 	var item: Item = Item.new()
 	item.id = id
 	item.record = record
-	item.slot = slot
+	# With somebody in the seat, what belongs on it goes behind it.
+	item.slot = BACK_SEAT if slot == SEAT and seat_occupied else slot
 	var supply_spec: Dictionary = GameData.as_dict(record.get("supply"))
 	if supply_spec.has("uses"):
 		item.supply = supply if supply >= 0 else GameData.as_int(supply_spec.get("uses"))
@@ -522,6 +558,36 @@ func item_in_slot(slot: StringName) -> Item:
 
 func flag(flag_name: StringName) -> bool:
 	return GameData.as_bool(flags.get(flag_name))
+
+
+## A passenger takes the seat, or leaves it (GDD 8.1): what lay on it lies on
+## the back seat while they ride, out of reach, and comes back after.
+func seat_taken(on: bool) -> void:
+	seat_occupied = on
+	var from: StringName = SEAT if on else BACK_SEAT
+	var to: StringName = BACK_SEAT if on else SEAT
+	for candidate: Item in items:
+		if candidate.slot == from and (on or item_in_slot(SEAT) == null):
+			_put_out(candidate)
+			candidate.slot = to
+	_refresh_passives()
+
+
+## His passenger lights a cigarette and hands it over (GDD 8.2): it burns
+## where his own would, with nothing of his used and no ritual. False when
+## one is burning already or there is nowhere for it.
+func light_handed() -> bool:
+	var smoke: Item = null
+	for candidate: Item in tagged(TAG_SMOKE):
+		if not is_stowed(candidate) and not anchor_of(candidate).is_empty():
+			smoke = candidate
+			break
+	if smoke == null:
+		return false
+	if smoke.burning or (smoke.use_effect != &"" and _effects.has_own(smoke.use_effect)):
+		return false
+	_give(smoke)
+	return true
 
 
 ## The anchor an item's rituals are performed at: its slot's anchor.
@@ -683,6 +749,16 @@ func ritual_at(anchor: String) -> Dictionary:
 	return {}
 
 
+## The control at this anchor that asks for `status` (what he may hand an
+## officer asks for "pulled_over"), if its conditions hold now; {} for none.
+func ritual_for(status: StringName, anchor: String) -> Dictionary:
+	for offered: Variant in GameData.as_array(_controls.get(anchor)):
+		var control: Dictionary = offered
+		if GameData.as_array(control.get("requires")).has(String(status)) and _requirements_hold(control, null):
+			return control
+	return {}
+
+
 ## Where a HOLD or a DRAG_TO is offered, a control that is a TAP may be
 ## offered too (his face: the pills are a HOLD, a slap is a TAP; his pocket
 ## in the Call: the phone is handed to a passenger, or a TAP answers it). A
@@ -707,8 +783,13 @@ func owner_of(ritual: Dictionary) -> Item:
 
 
 ## Runs a completed ritual. `direction` is the Gesture.DIR_* flag of a FLICK.
-func complete(ritual: Dictionary, direction: int) -> void:
+## What the ritual requires is asked again now that its gesture is done (the
+## glass may have spilled during the HOLD, the phone rung out during the
+## TAP): false, and nothing is done, when it no longer holds.
+func complete(ritual: Dictionary, direction: int) -> bool:
 	var owner: Item = owner_of(ritual)
+	if not _requirements_hold(ritual, owner):
+		return false
 	if owner != null:
 		# Using contraband, or the phone, is something a police car sees (GDD 6.5).
 		if GameData.as_bool(owner.record.get("contraband")):
@@ -718,9 +799,15 @@ func complete(ritual: Dictionary, direction: int) -> void:
 			phone_used = true
 	for op: Variant in GameData.as_array(ritual.get("on_complete")):
 		_run(GameData.as_string(op), owner, direction)
+	if owner != null and GameData.as_array(ritual.get("on_complete")).has("give"):
+		# What he has just used, by its tags.
+		for tag: Variant in GameData.as_array(owner.record.get("tags")):
+			if not used_tags.has(GameData.as_string(tag)):
+				used_tags.append(GameData.as_string(tag))
 	var sfx: String = GameData.as_string(ritual.get("sfx"))
 	if not sfx.is_empty():
 		events.append({"type": "sfx_requested", "id": sfx})
+	return true
 
 
 ## One step of a DRAG ritual (the radio dial). `direction` is +1 right, -1 left.
@@ -861,6 +948,8 @@ func _run(op: String, owner: Item, direction: int) -> void:
 				owner.side_time = 0.0
 		"answer":
 			_answer_tap(owner)
+		"ask":
+			asked = true
 		"refill":
 			# A full supply again for everything of a kind (the Thermos: the tea, hot).
 			for refilled: Item in tagged(parts[1]):
@@ -941,7 +1030,8 @@ func _give_entry(owner: Item, entry: Dictionary) -> void:
 	if GameData.as_string(entry.get("resource")) == "nerves":
 		var over: float = GameData.as_float(entry.get("over"))
 		if over > 0.0:
-			_drips.append(Vector2(amount / over, over))
+			_drip_rates.append(amount / over)
+			_drip_left.append(over)
 		else:
 			_nerves.add(amount)
 	elif GameData.as_string(entry.get("resource")) == "cash":
@@ -1099,6 +1189,9 @@ func _ring(handset: Item) -> void:
 	call_taps = 0
 	events.append({"type": "call_started", "caller": String(caller), "ring_s": ring_left})
 	events.append({"type": "sfx_requested", "id": "phone_ring"})
+	if answered_for_him:
+		# His passenger picks it up: what the call gives, without his hand.
+		_answer(handset, true)
 
 
 ## One of the TAPs that answer a call; the last answers. (The first has shown
@@ -1109,6 +1202,11 @@ func _answer_tap(handset: Item) -> void:
 	call_taps += 1
 	if call_taps < int(_param(handset, "answer_taps", 1.0)):
 		return
+	_answer(handset, false)
+
+
+## The call is answered: the dispatcher's fare, or his family's voice.
+func _answer(handset: Item, for_him: bool) -> void:
 	var paid: float = 0.0
 	var calmed: float = 0.0
 	if caller == CALLER_FAMILY:
@@ -1123,7 +1221,7 @@ func _answer_tap(handset: Item) -> void:
 	if every > 0 and answered_run % every == 0:
 		paid += GameData.as_float(in_a_row.get("amount"))
 	cash_delta += paid
-	events.append({"type": "call_resolved", "caller": String(caller), "answered": true, "cash": paid, "nerves": calmed, "in_a_row": answered_run})
+	events.append({"type": "call_resolved", "caller": String(caller), "answered": true, "cash": paid, "nerves": calmed, "in_a_row": answered_run, "for_him": for_him})
 	_hang_up()
 
 
@@ -1245,22 +1343,25 @@ func use_pass(what: String) -> bool:
 	return false
 
 
-## The charm (GDD 7.5): the first scrape of a leg lights no lamp. True when
-## this scrape is that one; it is then spent for the leg.
+## A scrape. The charm (GDD 7.5): the first scrape of a leg lights no lamp.
+## True when this scrape is that one and a charm hangs there to turn it
+## aside. Charm or no charm, the leg's first scrape is behind him after it.
 func absorbs_scrape() -> bool:
-	if scrape_spared or passive("first_scrape_free") <= 0.0:
-		return false
+	var first: bool = not scrape_spared
 	scrape_spared = true
-	return true
+	return first and passive("first_scrape_free") > 0.0
 
 
 ## Lamps have just lit. Duct tape (GDD 7.5) takes hold of the first fault of
-## the act: it mends itself after self_repair_s.
+## the act: it mends itself after self_repair_s. Tape or no tape, the act's
+## first fault is behind him after it.
 func on_faults_lit(drawn: Array[StringName]) -> void:
-	var after: float = passive("self_repair_s")
-	if drawn.is_empty() or tape_spent or after <= 0.0:
+	if drawn.is_empty() or tape_spent:
 		return
 	tape_spent = true
+	var after: float = passive("self_repair_s")
+	if after <= 0.0:
+		return
 	mending = drawn[0]
 	mend_left = after
 
@@ -1282,6 +1383,22 @@ func _step_mending(dt: float) -> void:
 	mend_left -= dt
 	if mend_left < dt * 0.5:
 		finish_mending()
+
+
+## He has come to a stop (GDD 9.6), where the night waits: what cannot wait
+## is settled first, and said (`events`). The fault the tape holds is
+## mended; a call still ringing is dropped, unanswered and at no cost to his
+## Nerves or to his row of answered calls; a cigarette that is burning is
+## put out, and its craving waits from here.
+func come_to_a_stop() -> void:
+	finish_mending()
+	if caller != &"":
+		events.append({"type": "call_resolved", "caller": String(caller), "answered": false, "dropped": true,
+				"cash": 0.0, "nerves": 0.0, "in_a_row": answered_run})
+		_hang_up()
+	for candidate: Item in items:
+		if candidate.burning:
+			_burn_out(candidate)
 
 
 ## The officer takes the contraband he can see (GDD 6.5): everything marked
@@ -1344,15 +1461,16 @@ func step(dt: float) -> void:
 		if indicator_left <= 0.0:
 			indicator = 0
 
+	# A drip is counted in whole ticks like every other countdown: it is over
+	# when less than half a tick of it is left.
 	var index: int = 0
-	while index < _drips.size():
-		var drip: Vector2 = _drips[index]
-		_nerves.add_rate(drip.x)
-		drip.y -= dt
-		if drip.y <= 0.0:
-			_drips.remove_at(index)
+	while index < _drip_left.size():
+		_nerves.add_rate(_drip_rates[index])
+		_drip_left[index] -= dt
+		if _drip_left[index] < dt * 0.5:
+			_drip_rates.remove_at(index)
+			_drip_left.remove_at(index)
 		else:
-			_drips[index] = drip
 			index += 1
 
 	var haze_rate: float = 0.0
@@ -1411,10 +1529,15 @@ func _step_smoke(candidate: Item, dt: float) -> void:
 			candidate.ash_fell = true
 			_nerves.add(_param(candidate, "ash_nerves", 0.0))
 	elif candidate.burning:
-		candidate.burning = false
-		var lapse: Dictionary = GameData.as_dict(candidate.record.get("lapse"))
-		if lapse.has("after"):
-			candidate.lapse_left = GameData.as_float(lapse.get("after"))
+		_burn_out(candidate)
+
+
+## A smoke is out: from now the craving waits (GDD 7.4).
+func _burn_out(candidate: Item) -> void:
+	candidate.burning = false
+	var lapse: Dictionary = GameData.as_dict(candidate.record.get("lapse"))
+	if lapse.has("after"):
+		candidate.lapse_left = GameData.as_float(lapse.get("after"))
 
 
 ## Lapse (GDD 7.2): what happens when a habit is neglected.

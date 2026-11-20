@@ -79,6 +79,15 @@ var sun_side: float = 0.0
 var glow_side: float = 0.0
 ## How much of that glow there is, 0 to 1: all of it all through Dawn.
 var glow: float = 0.0
+
+
+## Where the sun stands in his view, in degrees to the right of dead ahead
+## and above the horizon: `side_deg` to the side at sun_side 1, and from
+## `rise_from` up to `rise_to` as its Glare comes on. One place for the
+## disc in the sky and for the light that washes the glass.
+func sun_position(side_deg: float, rise_from: float, rise_to: float) -> Vector2:
+	var risen: float = clampf(glare / _glare_full, 0.0, 1.0) if _glare_full > 0.0 else 1.0
+	return Vector2(sun_side * side_deg, lerpf(rise_from, rise_to, risen))
 ## The Call: CALL_NONE, CALL_RINGING, CALL_TALKING or CALL_OVER; the seconds
 ## left of the ring or of the talk; how it was taken; whether it was.
 var call: String = CALL_NONE

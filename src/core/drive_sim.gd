@@ -58,6 +58,8 @@ const GAIN_PER_STACK: String = "nerves_gain_per_stack"
 const HIDES_COURAGE: String = "hides_courage"
 const COURAGE: StringName = &"courage"
 const PAINKILLERS: StringName = &"painkillers"
+## What the tea is tagged (the Drummer passes it, GDD 8.2).
+const TEA: String = "tea"
 ## The two parts of the weather cramp (GDD 7.9).
 const HUM: String = "hum"
 const CRAMPED: String = "cramp"
@@ -93,6 +95,8 @@ var rng: Rng = Rng.new()
 var run: RunState = RunState.new()
 ## The stop he is at (GDD 9.6).
 var stop: StopSim = StopSim.new()
+## Who rides in the seat (GDD 8).
+var passengers: PassengerSim = PassengerSim.new()
 
 var tick: int = 0
 ## Thousands of dinars (GDD 6). Never below zero.
@@ -189,8 +193,9 @@ var _at_window: bool = false
 ## and the seconds left of that.
 var cramp: String = ""
 var _cramp_left: float = 0.0
-## Ticks the gust still has to push: a gust lasts a whole number of ticks.
-var _gust_ticks_left: int = 0
+## Seconds the gust still has to push, of the road's time (under Focus that is
+## longer by his clock): a gust lasts a whole number of ticks.
+var _gust_left: float = 0.0
 var _gust_push: float = 0.0
 var _gust_strength: float = 0.0
 var _gust_duration: float = 0.0
@@ -269,6 +274,7 @@ func _build() -> void:
 	clock = ClockSim.new()
 	run = RunState.new()
 	stop = StopSim.new()
+	passengers = PassengerSim.new()
 	hand.configure(data, space)
 	wheel.configure(tuning)
 	gate.configure(tuning)
@@ -287,6 +293,7 @@ func _build() -> void:
 	clock.configure(tuning)
 	run.configure(data)
 	stop.configure(data, items, faults, nerves, clock, rng)
+	passengers.configure(data, effects, nerves, items, faults)
 
 	cash = tuning.f("cash_start")
 	wrecked = false
@@ -318,7 +325,7 @@ func _build() -> void:
 	_anchor_home = PackedVector3Array()
 	for index: int in hand.anchor_count():
 		_anchor_home.append(hand.anchor_position(index))
-	_gust_ticks_left = 0
+	_gust_left = 0.0
 	_gust_push = 0.0
 	_braking = false
 	_next_free_spawn_s = 0.0
@@ -371,6 +378,7 @@ func step(input: DriveInput) -> void:
 	encounter.begin_tick()
 	boss.begin_tick()
 	suspicion.begin_tick()
+	passengers.begin_tick()
 
 	# Focus (GDD 7.4): the road runs slower, the hand does not.
 	_road_dt = DT * effects.product(ROAD_SPEED)
@@ -412,6 +420,8 @@ func step(input: DriveInput) -> void:
 	if hand.took_grip:
 		wheel.grip()
 		effects.remove(ItemSim.HOOK_SET)
+		# Whoever held the wheel for him lets go of it.
+		passengers.wheel_taken()
 	if hand.at_ear != _wrist_on_wheel:
 		# The Call taken alone: his wrist is on the wheel while his hand holds
 		# the phone to his ear (GDD 10.4).
@@ -420,13 +430,23 @@ func step(input: DriveInput) -> void:
 			wheel.grip()
 		elif not hand.gripping:
 			wheel.release()
-	wheel.locked = effects.has_own(ItemSim.HOOK_SET)
-	if wheel.locked and _hook_keeps_lane and curve_k == 0.0:
+	wheel.locked = effects.has_own(ItemSim.HOOK_SET) or passengers.holds_wheel()
+	if passengers.holds_straight():
+		# Held dead straight for him (GDD 8.2): against the road's crown and
+		# whatever else pulls steadily, so that on a straight the car keeps
+		# its line. A curve or a gust still carries it off.
+		wheel.hold_at(_straight_angle())
+	elif wheel.locked and _hook_keeps_lane and curve_k == 0.0 and not passengers.holds_wheel():
 		wheel.hold_at(_lane_keeping_angle())
 	wheel.tremor = nerves.tremor_offset
 	wheel.step(DT, hand.steer_px, steer_sensitivity)
 
 	# 5. Car: gear, speed, sideways motion, drift.
+	if passengers.blocks_lever() and _lever_in_hand:
+		# He leans across the lever (GDD 8.2): the hand is off it.
+		gate.release()
+		_lever_in_hand = false
+		hand.unpin()
 	_step_leg_road()
 	gate.step(DT, input.pointer_delta if _lever_in_hand else Vector2.ZERO,
 			faults.param(FAULT_CLUTCH, "lever_speed_mult", 1.0))
@@ -491,14 +511,19 @@ func step(input: DriveInput) -> void:
 	_step_encounter()
 	_step_suspicion()
 
-	# 9. Effect timers, Nerves, faults. At a stop the night waits: nothing
-	# burns down, cools, drifts or calms while he shops (GDD 6.4).
-	if not stopped:
+	# 9. Effect timers, Nerves, faults. At a stop, and while an officer waits
+	# at his window, the night waits: nothing burns down, cools, rings, drifts
+	# or calms (GDD 6.4). A Snap's seconds are the hand's own: they run on.
+	if _standing():
+		nerves.step_snap(DT)
+	else:
 		effects.step(DT)
 		items.step(DT)
+		_step_passenger()
 		_feed_nerves()
 		nerves.step(DT)
 	_report_nerves()
+	var snap_said: bool = nerves.snapped
 	_report_effects()
 	cash = maxf(cash + items.cash_delta, 0.0)
 	for event: Dictionary in items.events:
@@ -507,6 +532,11 @@ func step(input: DriveInput) -> void:
 	for event: Dictionary in stop.events:
 		_announce(event)
 	stop.events.clear()
+	cash = maxf(cash + passengers.cash_delta, 0.0)
+	for event: Dictionary in passengers.events:
+		_announce(event)
+	if passengers.changed:
+		_fit_cabin()
 
 	# 10. Clock: it runs while he drives, not while he stands (GDD 6.4).
 	if not _standing():
@@ -522,6 +552,12 @@ func step(input: DriveInput) -> void:
 			_clear_weather()
 		else:
 			_end_leg()
+	# What leg progress brought after this tick's reports is said in the tick
+	# it happened: the end of what a leg held to its end, at the gore, and a
+	# Snap that a missed Exit took him to.
+	_report_effects()
+	if nerves.snapped and not snap_said:
+		_report_snap()
 
 	tick += 1
 
@@ -560,7 +596,11 @@ func _announce_leg(plan: Dictionary) -> void:
 
 
 ## Puts the car at the start of a stretch of road: a leg, or a blank plan.
-func _set_stretch(plan: Dictionary) -> void:
+## `renews` where a leg or a boss begins: what is once per leg (the photo,
+## the charm's scrape, what lasts "for the leg") may be done again there,
+## and nowhere else: not on the road to a fork, not on the street of the
+## Arrival, not on the road he stands beside at a stop.
+func _set_stretch(plan: Dictionary, renews: bool = true) -> void:
 	set_road(GameData.as_int(plan.get("lanes"), 3), GameData.as_bool(plan.get("divided"), true))
 	traffic.clear()
 	collision.reset()
@@ -572,10 +612,15 @@ func _set_stretch(plan: Dictionary) -> void:
 		items.begin_act()
 	_floor_of_road = GameData.as_float(plan.get("heavy_floor"), -1.0)
 	curve_k = 0.0
-	items.begin_leg()
+	if renews:
+		items.begin_leg()
 	leg.begin(plan)
 	encounter.begin(plan)
 	boss.begin(plan)
+	if renews and (not leg.leg_id.is_empty() or boss.active):
+		# A leg or a boss, not the road to a fork or the last street: what a
+		# passenger does once per leg is new, as it is for the items.
+		passengers.begin_leg()
 	suspicion.end_watch()
 	_release_from_pull_over()
 	# At the Checkpoint he is watched from its start to the verdict, and
@@ -666,10 +711,11 @@ func begin_telling(table: String, telling_seed: int) -> void:
 	_enter_approach()
 
 
-## The road to a fork: nothing on it but the sign and the split.
+## The road to a fork: nothing on it but the sign and the split. It is no
+## leg: what was done once in the boss behind it stays done to the gore.
 func _enter_approach() -> void:
 	var length: float = tuning.f("leg_tail") - tuning.f("exit_slip_length")
-	_set_stretch(RunGenerator.blank_plan(run.act, RunGenerator.ROAD_LANES, true, length))
+	_set_stretch(RunGenerator.blank_plan(run.act, RunGenerator.ROAD_LANES, true, length), false)
 
 
 func _step_telling(button_down: bool) -> void:
@@ -724,6 +770,8 @@ func _step_exit() -> void:
 		_lane = car.lane_of(car.x)
 	elif _exit == EXIT_OPEN and car.s >= _stall_at:
 		_exit = EXIT_BEHIND
+		# A leg's ride is counted where its stall is, stopped at or not.
+		passengers.leg_ridden()
 		var in_slip_lane: bool = car.lane_of(car.x) >= car.lanes - 1
 		car.set_road(car.lanes - 1, car.divided)
 		_lane = car.lane_of(car.x)
@@ -747,24 +795,57 @@ func _enter_stop() -> void:
 	clock.add_minutes(minutes)
 	# The shady guy is there after a leg that lit no lamp (GDD 9.6).
 	_shady_here = _leg_lamps_lit == 0
-	items.finish_mending()
+	_let_passenger_out(false)
 	_save_point()
 	_emit("stop_entered", {"stop": run.stop, "minutes": minutes, "act": run.act, "leg_index": run.legs_done,
 			"shady": _shady_here, "offers": stop.offers_view()})
 
 
+## A passenger whose ride is over gets out where the car stands (GDD 8.1):
+## at a stall, or at the stop after the act's boss. What they pay and leave
+## him with is his before the stop is saved.
+func _let_passenger_out(after_boss: bool) -> void:
+	if not passengers.ride_over(after_boss):
+		return
+	passengers.leave("ride_over")
+	cash = maxf(cash + passengers.cash_delta, 0.0)
+	for event: Dictionary in passengers.events:
+		_announce(event)
+	passengers.begin_tick()
+	_fit_cabin()
+
+
 ## A stop is where the game saves (GDD 11.1). What the save holds is taken
 ## and at once put back, so that the Telling which goes on from here is,
-## to the bit, the one a player gets who loads that save.
+## to the bit, the one a player gets who loads that save. What the stop ends
+## is settled, and said, before that.
 func _save_point() -> void:
+	items.come_to_a_stop()
+	_announce_what_ends()
 	checkpoint = capture()
 	checkpoints += 1
 	restore(checkpoint)
 
 
+## What a stop ends is said before the simulation is made anew there (GDD
+## 13.6): the mend of the fault the tape held and the end of a call that was
+## ringing (ItemSim.come_to_a_stop), and the end of every status but those
+## the leg holds to its end.
+func _announce_what_ends() -> void:
+	for event: Dictionary in items.events:
+		_announce(event)
+	items.events.clear()
+	_report_effects()
+	for id: StringName in effects.active_ids():
+		if not items.held_for_leg(id):
+			_emit("effect_expired", {"effect": String(id)})
+
+
 func _open_stop(shady: bool) -> void:
 	if data.has_record("stops", run.stop):
 		stop.begin(run.stop, run.act, shady)
+		# Somebody may stand there, asking for a ride (GDD 8.1).
+		stop.hitcher = RunGenerator.hitcher(data, run.seed, run.act, run.legs_done, run.stop, passengers.id)
 	_sync_anchors()
 
 
@@ -808,7 +889,7 @@ func _leave_stop() -> void:
 	if run.stage == RunState.Stage.BOSS_STOP:
 		run.leave_boss_stop()
 		if run.stage == RunState.Stage.ARRIVAL:
-			_set_stretch(BossSim.arrival_plan(data, run.act))
+			_set_stretch(BossSim.arrival_plan(data, run.act), false)
 		else:
 			_enter_approach()
 	else:
@@ -849,7 +930,7 @@ func _end_boss() -> void:
 	_clear_weather()
 	run.enter_boss_stop()
 	_shady_here = false
-	items.finish_mending()
+	_let_passenger_out(true)
 	_save_point()
 	_emit("stop_entered", {"stop": run.stop, "minutes": 0.0, "act": run.act, "leg_index": run.legs_done,
 			"shady": false, "offers": stop.offers_view()})
@@ -857,7 +938,7 @@ func _end_boss() -> void:
 
 ## The street of the Arrival by itself (a test, `--boss=arrival`).
 func begin_arrival() -> void:
-	_set_stretch(BossSim.arrival_plan(data, act))
+	_set_stretch(BossSim.arrival_plan(data, act), false)
 
 
 ## What a set piece does once the car has moved: the last checkpoint's
@@ -868,6 +949,10 @@ func _step_set_piece() -> void:
 		effects.hold(THE_CALL, SET_PIECE, true)
 		_emit("call_started", {"caller": NOOR})
 		_emit("sfx_requested", {"id": "phone_ring"})
+		# His pocket is out of his sight: the ring is written out as well
+		# (GDD 17.2: every tell has both a sound and a visual).
+		# (Until the Call is resolved: answered, the ring is over at once.)
+		_emit("line_requested", {"id": "call.noor.rings", "until": "call_resolved"})
 		_sync_anchors()
 	if boss.searched:
 		_search_at_the_barriers()
@@ -1049,7 +1134,9 @@ func _arrive() -> void:
 	boss.stop()
 	leg.stop()
 	_sync_anchors()
-	_emit("arrived", {"table": table, "clock": clock.text(), "clock_minutes": clock.minutes, "late": clock.late(), "call": told_true})
+	# Whoever he carried to Basra is a wedding guest from now on (GDD 8.1, 11.5).
+	_emit("arrived", {"table": table, "clock": clock.text(), "clock_minutes": clock.minutes, "late": clock.late(), "call": told_true,
+			"guest": passengers.id})
 
 
 # --- Wreck, save and replay --------------------------------------------------
@@ -1084,7 +1171,11 @@ func capture() -> Dictionary:
 		if GameData.as_string(item.record.get("kind")) == "adaptation":
 			fitted.append({"id": String(item.id), "slot": String(item.slot)})
 		else:
-			kept.append({"id": String(item.id), "slot": String(item.slot), "supply": item.supply, "hot": Save.exact(item.hot_left)})
+			var entry: Dictionary = {"id": String(item.id), "slot": String(item.slot), "supply": item.supply, "hot": Save.exact(item.hot_left)}
+			if item.lapse_left >= 0.0:
+				# What neglect still owes him (the craving): the seconds until it bites.
+				entry["lapse"] = Save.exact(item.lapse_left)
+			kept.append(entry)
 	var lit: Array = []
 	for fault: StringName in faults.active:
 		lit.append(String(fault))
@@ -1122,7 +1213,7 @@ func capture() -> Dictionary:
 		"fault_deck": deck,
 		"items": kept,
 		"adaptations": fitted,
-		"passenger": null,
+		"passenger": passengers.state(),
 		"radio": String(items.radio),
 		"switches": switches,
 		"rng_state": rng.get_state(),
@@ -1158,6 +1249,7 @@ func restore(telling: Dictionary) -> bool:
 				StringName(GameData.as_string(kept.get("slot"))), GameData.as_int(kept.get("supply"), -1))
 		if item != null:
 			item.hot_left = Save.from_exact(kept.get("hot"), item.hot_left)
+			item.lapse_left = Save.from_exact(kept.get("lapse"), item.lapse_left)
 	for entry: Variant in GameData.as_array(telling.get("adaptations")):
 		var fitted: Dictionary = GameData.as_dict(entry)
 		items.add_item(StringName(GameData.as_string(fitted.get("id"))), StringName(GameData.as_string(fitted.get("slot"))))
@@ -1165,6 +1257,8 @@ func restore(telling: Dictionary) -> bool:
 	for key: Variant in switches:
 		items.flags[StringName(str(key))] = GameData.as_bool(switches[key])
 	items.set_radio(StringName(GameData.as_string(telling.get("radio"), String(ItemSim.STATIC))))
+	passengers.set_state(telling.get("passenger"))
+	passengers.begin_tick()
 
 	_side = GameData.as_int(telling.get("side"), RunState.RIGHT)
 	_shady_here = GameData.as_bool(telling.get("shady"))
@@ -1174,7 +1268,7 @@ func restore(telling: Dictionary) -> bool:
 	run.call_answered = GameData.as_bool(telling.get("call_answered"))
 	if run.stage == RunState.Stage.STOP:
 		# At the stall of the leg he is on.
-		_set_stretch(RunGenerator.plan(data, run.branch, run.act))
+		_set_stretch(RunGenerator.plan(data, run.branch, run.act), false)
 		_exit = EXIT_BEHIND
 		_exit_at = leg.length - tuning.f("leg_tail")
 		_stall_at = _exit_at + tuning.f("exit_slip_length")
@@ -1183,21 +1277,24 @@ func restore(telling: Dictionary) -> bool:
 		_lane = car.lane_of(car.x)
 		leg.fast_forward(car.s, maxf(Save.from_exact(bits.get("leg_time"), 0.0), 0.0))
 		_leg_lamps_lit = GameData.as_int(telling.get("leg_lamps"))
-		# What he did once this leg stays done, and what lasts to its end lasts.
-		items.set_leg_state(GameData.as_dict(telling.get("leg_state")))
 		# Whatever the leg's encounter was, it is behind him.
 		encounter.stop()
 	else:
 		# At the end of the act's boss.
 		var boss: Dictionary = run.boss_record()
 		_set_stretch(RunGenerator.blank_plan(run.act, GameData.as_int(boss.get("lanes"), RunGenerator.ROAD_LANES),
-				GameData.as_bool(boss.get("divided"), true), GameData.as_float(boss.get("length_m")), GameData.as_float(boss.get("par_s"))))
+				GameData.as_bool(boss.get("divided"), true), GameData.as_float(boss.get("length_m")), GameData.as_float(boss.get("par_s"))), false)
 		car.s = leg.length
 		leg.stop()
+	# What he did once this leg, or in this boss, stays done at its stop, and
+	# what lasts to the leg's end lasts.
+	items.set_leg_state(GameData.as_dict(telling.get("leg_state")))
 	# (After the stretch is set: a new act would otherwise seem to begin here.)
 	items.set_telling_state(GameData.as_dict(telling.get("item_state")))
 	_park()
 	_open_stop(_shady_here)
+	# What the save put back did not begin here: it is not said again.
+	effects.begin_tick()
 	return true
 
 
@@ -1276,6 +1373,8 @@ func _step_suspicion() -> void:
 		suspicion.add(tuning.f("suspicion_snap"))
 	_snapped = false
 	suspicion.add(leg.hazard_suspicion)
+	# What a passenger does that a Patrol hears (the drum, GDD 8.2).
+	suspicion.add_rate(passengers.suspicion_rate())
 	suspicion.step(DT)
 	if suspicion.jumped != 0.0 or floorf(suspicion.value) != floorf(before):
 		_emit("suspicion_changed", {"value": suspicion.value, "watching": true})
@@ -1294,6 +1393,9 @@ func _pull_over() -> void:
 	car.x = car.road_right() + (car.guardrail_x() - car.road_right()) * 0.5 + tuning.f("rumble_strip_width") * 0.5
 	_lane = car.lane_of(car.x)
 	encounter.park_police_behind()
+	# The night waits from here as it does at a stop, and finds him as a stop
+	# does: with his eyes open.
+	nerves.rouse()
 	if gesture.is_active():
 		gesture.cancel()
 	_emit("pulled_over", {
@@ -1393,14 +1495,27 @@ func give_item(id: StringName, slot: StringName = &"") -> ItemSim.Item:
 	return given
 
 
+## Puts a passenger in the seat (GDD 8.1): the hitcher he unlocked the door
+## for; a test; a debug key. False when the seat is taken or nobody is
+## called that.
+func board(passenger_id: String) -> bool:
+	if not passengers.board(passenger_id):
+		return false
+	for event: Dictionary in passengers.events:
+		_announce(event)
+	passengers.events.clear()
+	_fit_cabin()
+	return true
+
+
 ## Sets the road the car is on: 1 to 3 lanes, divided or not (GDD 5.1).
 func set_road(lanes: int, divided: bool) -> void:
 	car.set_road(lanes, divided)
 	_lane = car.lane_of(car.x)
 
 
-## Starts one gust (GDD 5.4): gust_push for gust_duration, which is counted in
-## whole ticks (a float countdown ran one tick over). `direction` is +1 toward
+## Starts one gust (GDD 5.4): gust_push for gust_duration of the road's time,
+## which is counted in whole ticks (see _extra_drift). `direction` is +1 toward
 ## the right shoulder, -1 toward the left. `strength` scales it.
 func start_gust(direction: int, strength: float = 1.0) -> void:
 	_blow(direction, _gust_strength * strength)
@@ -1408,7 +1523,7 @@ func start_gust(direction: int, strength: float = 1.0) -> void:
 
 ## One gust that pushes at `push` m/s.
 func _blow(direction: int, push: float) -> void:
-	_gust_ticks_left = roundi(_gust_duration * float(TICKS_PER_SECOND))
+	_gust_left = _gust_duration
 	_gust_push = push * float(direction)
 
 
@@ -1486,7 +1601,7 @@ func snapshot() -> Dictionary:
 		"ghost_at": hand.anchor_id(hand.ghost_anchor),
 		"ghost_progress": 1.0 - hand.flinch_left / maxf(tuning.f("phantom_flinch_delay"), 0.001) if hand.ghost_anchor != HandSim.NO_ANCHOR else 0.0,
 		"hook": "set" if effects.has_own(ItemSim.HOOK_SET) else ("armed" if effects.has_own(ItemSim.HOOK_ARMED) else ("cooling" if effects.has_own(ItemSim.HOOK_COOLDOWN) else "")),
-		"anchor_moves": items.anchor_moves(),
+		"anchor_moves": _anchor_moves(),
 		"mirror_scale": items.passive("mirror_scale"),
 		"mirror_shift": encounter.tell_shift,
 		"caller": NOOR if boss.call == BossSim.CALL_RINGING else String(items.caller),
@@ -1505,6 +1620,9 @@ func snapshot() -> Dictionary:
 		"suspicion_by": "checkpoint" if boss.kind == BossSim.CHECKPOINT else ("patrol" if suspicion.watching else ""),
 		"sun": boss.glare,
 		"sun_side": boss.sun_side,
+		# Where the light behind the Glare is, while the sun is up (degrees
+		# right of dead ahead, degrees above the horizon); null otherwise.
+		"glare_position": boss.sun_position(tuning.fi("sun_position", 0), tuning.f("sun_rise_from"), tuning.fi("sun_position", 1)) if boss.glare > 0.0 else null,
 		"glow": boss.glow,
 		"glow_side": boss.glow_side,
 		"corridor": boss.corridor(),
@@ -1582,6 +1700,20 @@ func snapshot() -> Dictionary:
 		"stopped": stopped,
 		"gore_ahead": leg.length - car.s if run.active and run.fork_ahead() and leg.active else -1.0,
 		"offers": _offers_in_view(),
+		"passenger": passengers.id,
+		"passenger_legs": passengers.legs_ridden,
+		"passenger_asleep": passengers.asleep(),
+		"passenger_awake_left": passengers.awake_left,
+		"passenger_drumming": passengers.drumming,
+		"tea_passed": passengers.passes_tea(),
+		"passenger_repair": passengers.repair,
+		"passenger_repair_left": passengers.repair_left,
+		"wheel_held": passengers.hold,
+		"wheel_held_left": passengers.hold_left,
+		"lever_blocked": passengers.blocks_lever(),
+		"view_block_right": passengers.view_block_right(),
+		"blessed": passengers.blessed,
+		"hitcher": stop.hitcher if stopped else "",
 		"boss": run.boss if run.active else boss.kind,
 		"boss_modifier": boss.modifier,
 		"boss_time": boss.time,
@@ -1655,7 +1787,7 @@ func _signs_in_view() -> Array[Dictionary]:
 			signs.append({"kind": "exit", "ahead": to_exit, "stop": GameData.as_string(run.branch.get("stop"))})
 	# The fork's overhead sign: for each branch its leg, modifier, stop and par.
 	if run.fork_ahead():
-		var to_fork: float = maxf(leg.length - tuning.f("fork_sign_lead") * par_ms, 0.0) - car.s
+		var to_fork: float = maxf(leg.length - (tuning.f("fork_sign_lead") + passengers.fork_sign_lead()) * par_ms, 0.0) - car.s
 		if to_fork >= 0.0 and to_fork <= ahead:
 			var sign: Dictionary = {"kind": "fork", "ahead": to_fork, "left": run.branches[RunState.LEFT], "right": run.branches[RunState.RIGHT]}
 			if run.boss_on_sign:
@@ -1719,9 +1851,15 @@ func _item_snapshots() -> Array[Dictionary]:
 ## Every sideways push but the road's crown (GDD 5.4), m/s toward the right.
 func _extra_drift() -> float:
 	var push: float = car.curve_push(curve_k) - faults.param(FAULT_PULL, "drift_left", 0.0)
-	if _gust_ticks_left > 0:
-		_gust_ticks_left -= 1
+	# A gust is the road's: it blows for gust_duration of the road's time, so
+	# under Focus it lasts longer by his clock and carries the car as far as
+	# ever (GDD 7.4). It pushes for a whole number of ticks: for this one while
+	# at least half a tick of it is left.
+	if _gust_left >= _road_dt * 0.5:
+		_gust_left -= _road_dt
 		push += _gust_push
+	else:
+		_gust_left = 0.0
 	# Sway (GDD 5.4): sway_per_stack per Courage stack, swinging at
 	# sway_frequency from the moment Courage began.
 	var stacks: int = courage()
@@ -1760,10 +1898,12 @@ func _step_free_traffic() -> void:
 func _apply_collisions() -> void:
 	if collision.hit != Collision.Hit.NONE:
 		# The charm turns the first scrape of a leg aside: no lamp (GDD 7.5).
-		var spared: bool = collision.hit == Collision.Hit.SCRAPE and items.absorbs_scrape()
+		var spared: bool = collision.hit == Collision.Hit.SCRAPE and (items.absorbs_scrape() or passengers.absorbs_scrape())
 		var drawn: Array[StringName] = faults.light(0 if spared else collision.hit_lamps)
 		nerves.jolt()
 		nerves.add(collision.hit_nerves)
+		if collision.hit == Collision.Hit.SCRAPE:
+			passengers.on_scrape()
 		items.on_hit(collision.hit)
 		items.on_faults_lit(drawn)
 		if collision.hit_forces_gear:
@@ -1812,7 +1952,7 @@ func _feed_nerves() -> void:
 		nearest = minf(nearest, distance)
 		if distance <= _traffic_radius:
 			near += 1
-	nerves.add_rate(nerves.road_rate(near, nearest, in_encounter or encounter.active or pulled_over))
+	nerves.add_rate(nerves.road_rate(near, nearest, in_encounter or encounter.active))
 	if car.on_shoulder:
 		nerves.add_rate(_shoulder_rate)
 	nerves.add_rate(faults.param(FAULT_RATTLE, "nerves_per_s", 0.0))
@@ -1833,23 +1973,60 @@ func _fit_cabin() -> void:
 	collision.cash_bonus = items.passive("close_call_bonus")
 	car.high_gear_bonus = items.passive("high_gear_bonus")
 	car.brake_mult = items.passive("brake_mult")
-	suspicion.gain_mult = items.passive("suspicion_gain_mult")
+	suspicion.gain_mult = items.passive("suspicion_gain_mult") * passengers.suspicion_mult()
 	_close_call_mult = items.passive("close_call_mult")
 	_lag_sources = items.passive("lag_sources")
 	_wheel_keys = items.passive("wheel_keys") > 0.0
 	_auto_indicate = not items.pair("auto_indicate").is_empty()
 	_hook_keeps_lane = not items.pair("hook_holds_lane").is_empty()
-	var moves: Dictionary = items.anchor_moves()
+	var moves: Dictionary = _anchor_moves()
 	for index: int in hand.anchor_count():
 		var id: String = String(hand.anchor_id(index))
 		hand.set_anchor_position(index, GameData.as_vec3(moves[id]) if moves.has(id) else _anchor_home[index])
 	_sync_anchors()
 
 
+## Anchors that something has moved: by what is fitted to the cabin, and the
+## tea, held out to him beside the wheel by a passenger (GDD 8.2).
+func _anchor_moves() -> Dictionary:
+	var moves: Dictionary = items.anchor_moves()
+	if passengers.passes_tea():
+		for tea: ItemSim.Item in items.tagged(TEA):
+			var anchor: String = items.anchor_of(tea)
+			if not anchor.is_empty() and not items.is_stowed(tea):
+				moves[anchor] = passengers.tea_at()
+				break
+	return moves
+
+
+## One tick of whoever rides with him (GDD 13.3, step 11), before the Nerves
+## are stepped: what they make of what he has just done, and their own time.
+func _step_passenger() -> void:
+	if items.asked:
+		passengers.ask()
+	if items.horn_blown:
+		passengers.on_horn()
+	if not items.used_tags.is_empty():
+		passengers.on_used(items.used_tags)
+	passengers.step(DT, gate.gear, leg.active and leg.raining)
+
+
+## The wheel angle that holds the car on a straight line where the road is
+## straight: against the crown and a steering that pulls (the drifts that
+## are always there, GDD 5.4), and nothing else.
+func _straight_angle() -> float:
+	var authority: float = car.lat_authority()
+	if authority <= 0.0:
+		return 0.0
+	var steady: float = car.steady_drift(-faults.param(FAULT_PULL, "drift_left", 0.0))
+	return clampf(-steady / authority, -1.0, 1.0) * wheel.max_angle()
+
+
 ## The thumb keypad (GDD 7.6): the horn and the wipers under the thumb of
-## the hand that grips. Each press is one honk or one sweep.
+## the hand that grips. Each press is one honk or one sweep. They are the
+## road's: not at a stop, and not with an officer at his window.
 func _step_wheel_keys(input: DriveInput) -> void:
-	if _wheel_keys and hand.gripping and nerves.snap_left <= 0.0:
+	if _wheel_keys and hand.gripping and nerves.snap_left <= 0.0 and not _standing():
 		if input.pad_horn and not _pad_horn_was:
 			_use_control("horn", 0)
 		if input.pad_wiper and not _pad_wiper_was:
@@ -2001,15 +2178,7 @@ func fray_rate(source: StringName, per_second: float) -> void:
 
 func _report_nerves() -> void:
 	if nerves.snapped:
-		_snapped = true
-		_emit("snap", {"nerves": nerves.value})
-		_emit("sfx_requested", {"id": "horn"})
-		if gesture.is_active():
-			gesture.cancel()
-		if _lever_in_hand:
-			gate.release()
-			_lever_in_hand = false
-			hand.unpin()
+		_report_snap()
 	for name: String in nerves.crossed:
 		_emit("nerves_threshold_crossed", {"threshold": name.substr(1), "on": name.begins_with("+")})
 	if nerves.yawned:
@@ -2022,6 +2191,20 @@ func _report_nerves() -> void:
 		_emit("nod", {})
 
 
+## A Snap (GDD 6.1): he leans on the horn, and whatever his hand was at is over.
+func _report_snap() -> void:
+	_snapped = true
+	_emit("snap", {"nerves": nerves.value})
+	_emit("sfx_requested", {"id": "horn"})
+	if gesture.is_active():
+		gesture.cancel()
+	if _lever_in_hand:
+		gate.release()
+		_lever_in_hand = false
+		hand.unpin()
+
+
+## Statuses that began or ended since this was last asked: each is said once.
 func _report_effects() -> void:
 	if effects.expired.has(ItemSim.HOOK_SET):
 		# The hook is out of its ring: it cannot be set again for a while.
@@ -2030,6 +2213,8 @@ func _report_effects() -> void:
 		_emit("effect_added", {"effect": String(id)})
 	for id: StringName in effects.expired:
 		_emit("effect_expired", {"effect": String(id)})
+	effects.added.clear()
+	effects.expired.clear()
 
 
 # --- Rituals -----------------------------------------------------------------
@@ -2037,6 +2222,9 @@ func _report_effects() -> void:
 ## A press was applied at an anchor. `button_down` is false for a buffered
 ## click that was already released when the hand arrived.
 func _begin_at(anchor: int, button_down: bool) -> void:
+	if anchor == _lever_anchor and passengers.blocks_lever():
+		# His passenger leans across it (GDD 8.2): no shifting.
+		return
 	if anchor == _lever_anchor and not sequential_shift:
 		# The lever is held only by a button that is still down: a click that
 		# ended during the reach must not take it and knock it out of gear.
@@ -2045,10 +2233,7 @@ func _begin_at(anchor: int, button_down: bool) -> void:
 			_lever_in_hand = true
 			hand.pin()
 		return
-	# At a stop the vendor's tray comes first; the cabin is his as ever.
-	var ritual: Dictionary = stop.ritual_at(String(hand.anchor_id(anchor))) if stopped else {}
-	if ritual.is_empty():
-		ritual = items.ritual_at(String(hand.anchor_id(anchor)))
+	var ritual: Dictionary = _ritual_at(String(hand.anchor_id(anchor)))
 	if ritual.is_empty():
 		return
 	var kind: Gesture.Kind = _gesture_kind(ritual)
@@ -2150,8 +2335,16 @@ func _complete_ritual() -> void:
 		cash = stop.buy(String(hand.anchor_id(_active_anchor)), cash)
 	elif ritual_id == StopSim.PLACE:
 		stop.place(String(hand.anchor_id(_active_anchor)), String(hand.anchor_id(hand.at_index)))
+	elif ritual_id == StopSim.BOARD:
+		# He unlocks the passenger door: the hitcher gets in (GDD 8.1).
+		if board(stop.hitcher):
+			stop.hitcher = ""
 	else:
-		items.complete(_active_ritual, gesture.direction)
+		# What the ritual requires may have gone while the gesture was made (a
+		# crash spilled the glass, the phone rang out): then it is not done,
+		# and nothing is announced.
+		if not items.complete(_active_ritual, gesture.direction):
+			return
 		if items.paid != &"":
 			_pay_the_officer(items.paid)
 		if items.call_taken != &"":
@@ -2169,13 +2362,46 @@ func _complete_ritual() -> void:
 	})
 
 
+## The ritual a press at an anchor begins now ({} for none). Where the night
+## waits the hand does only what it is there for: at a stop the shopping
+## (GDD 9.6: the vendor's tray, then the place of what he bought), and with
+## an officer at his window what he hands him (GDD 6.5: his licence, or
+## banknotes). The cabin's own rituals are the road's: what calms or loads
+## him takes the hand off a wheel that matters (GDD 2.2, 12.4).
+func _ritual_at(anchor: String) -> Dictionary:
+	if stopped:
+		return stop.ritual_at(anchor)
+	if pulled_over:
+		return items.ritual_for(PULLED_OVER, anchor)
+	return items.ritual_at(anchor)
+
+
+## True when the hand has something to do at an anchor now: on the road
+## wherever a control or an item is, and where the night waits only where
+## a ritual is offered it.
+func _anchor_in_use(anchor: String) -> bool:
+	if _standing():
+		return not _ritual_at(anchor).is_empty()
+	return items.anchor_in_use(anchor)
+
+
 ## The hand snaps only to anchors where something can be done now.
 func _sync_anchors() -> void:
 	for index: int in hand.anchor_count():
-		var anchor: String = String(hand.anchor_id(index))
-		var in_use: bool = items.anchor_in_use(anchor) or (stopped and stop.anchor_in_use(anchor))
+		var in_use: bool = _anchor_in_use(String(hand.anchor_id(index)))
 		# What is carried can be put down where its ritual says.
 		hand.set_anchor_active(index, in_use or (hand.carrying and _drag_destinations.has(index)))
+	if not hand.carrying:
+		return
+	# Another anchor at the same place gives way to it (the radio's dial to the
+	# tape deck, GDD 16.2): the pointer could not tell the two apart, and the
+	# hand would rest on the one where the thing cannot be put down.
+	for destination: int in _drag_destinations:
+		if destination == HandSim.NO_ANCHOR:
+			continue
+		for index: int in hand.anchor_count():
+			if not _drag_destinations.has(index) and hand.anchor_pointer(index).is_equal_approx(hand.anchor_pointer(destination)):
+				hand.set_anchor_active(index, false)
 
 
 func _gesture_kind(ritual: Dictionary) -> Gesture.Kind:

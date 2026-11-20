@@ -18,7 +18,10 @@ enum AppState { BOOT, TITLE, PROLOGUE, WEDDING, TELLING, WRECK_CUT, ENDING, FINA
 ## `--shot-frame=<n>` frames (DECISIONS D-014, D-019).
 ## `--give=<item>[,<item>...]` puts items in the cabin (the debug key F5 of
 ## GDD 13.9 from the command line).
-const VALUE_ARGS: PackedStringArray = ["table", "seed", "leg", "boss", "bot", "user-dir", "aim", "shot", "shot-frame", "give"]
+## `--ride=<passenger id>` puts a passenger in the seat (GDD 8).
+## `--say=<line id>[,<line id>...]` asks for those lines when the drive scene
+## starts, one after the other (to look at the subtitles).
+const VALUE_ARGS: PackedStringArray = ["table", "seed", "leg", "boss", "bot", "user-dir", "aim", "shot", "shot-frame", "give", "ride", "say"]
 ## `--continue` goes on from the save file (until the title screen offers it).
 ## `--hud` starts with the numeric HUD showing.
 const FLAG_ARGS: PackedStringArray = ["skip-prologue", "continue", "hud"]
@@ -56,7 +59,11 @@ func _ready() -> void:
 	for message: String in data_errors:
 		push_error("Data: %s" % message)
 
-	Settings.setup(user_dir, {})
+	Settings.setup(user_dir, {
+		# Subtitles (GDD 17.1): size small, medium or large; background on or off.
+		"subtitle_size": "medium",
+		"subtitle_background": true,
+	})
 	Lines.setup(data)
 	Audio.setup(data)
 	read_save()
@@ -94,6 +101,17 @@ func write_save(telling: Dictionary) -> bool:
 		push_error("Game: cannot write %s (%s)" % [save_path(), error_string(FileAccess.get_open_error())])
 		return false
 	file.store_string(Save.to_text(profile, telling))
+	return true
+
+
+## A passenger carried to Basra sits at a Table from then on (GDD 11.5).
+## False when they already do.
+func add_guest(passenger_id: String) -> bool:
+	var guests: Array = GameData.as_array(profile.get("guests"))
+	if passenger_id.is_empty() or guests.has(passenger_id):
+		return false
+	guests.append(passenger_id)
+	profile["guests"] = guests
 	return true
 
 

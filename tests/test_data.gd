@@ -78,6 +78,8 @@ func test_data_01() -> void:
 	_check_broken_tuning_anchors_lines()
 	_check_broken_files()
 	_check_broken_item_rules()
+	_check_broken_passenger_rules()
+	_check_broken_cabin_props()
 
 
 # --- 1. Shipped data ----------------------------------------------------------
@@ -212,6 +214,117 @@ func _check_broken_item_rules() -> void:
 	_reset_fixture()
 	_record("anchors", "tape")["over"] = "moon"
 	_expect("E_REF", "anchors[tape].over", "an anchor standing over an unknown one")
+
+
+## The rules that came with the passengers of GDD 8: what a Hand can be,
+## when a Weight bites, who must exist, where a hitcher stands.
+func _check_broken_passenger_rules() -> void:
+	_reset_fixture()
+	check(_validate().is_empty(), "(the fixture is valid before it is broken; first: %s)" % _first(_validate()))
+	_reset_fixture()
+	GameData.as_dict(_record("passengers", "hajjiya").get("hand"))["kind"] = "juggle"
+	_expect("E_ENUM", "passengers[hajjiya].hand.kind", "a Hand the simulation does not know")
+
+	_reset_fixture()
+	GameData.as_dict(_record("passengers", "hajjiya").get("hand")).erase("duration_s")
+	_expect("E_RULE", "passengers[hajjiya].hand", "a hand on the wheel for no time")
+
+	_reset_fixture()
+	GameData.as_dict(_record("passengers", "drummer").get("hand")).erase("at")
+	_expect("E_RULE", "passengers[drummer].hand", "tea passed to nowhere")
+
+	_reset_fixture()
+	_record("passengers", "drummer").erase("drums")
+	_expect("E_RULE", "passengers[drummer].hand", "a drummer without a drum who passes the tea between drumming")
+	_expect("E_RULE", "passengers[drummer].weights[0].when", "and whose drumming a Patrol hears")
+
+	_reset_fixture()
+	_record("passengers", "conscript").erase("sleeps")
+	_expect("E_RULE", "passengers[conscript].hand", "a cigarette from one who is never woken")
+	_expect("E_RULE", "passengers[conscript].weights[0].when", "and who snores without sleeping")
+
+	_reset_fixture()
+	GameData.as_dict(GameData.as_array(_record("passengers", "hajjiya").get("weights"))[0])["when"] = "full_moon"
+	_expect("E_ENUM", "passengers[hajjiya].weights[0].when", "a Weight that bites at a moment the simulation does not know")
+
+	_reset_fixture()
+	GameData.as_dict(GameData.as_array(_record("passengers", "hajjiya").get("weights"))[0])["when"] = "ritual_tag:perfume"
+	_expect("E_REF", "passengers[hajjiya].weights[0].when", "a Weight on a tag no item carries")
+
+	_reset_fixture()
+	GameData.as_dict(GameData.as_array(_record("passengers", "student").get("weights"))[1])["when"] = "gear>=fast&rain"
+	_expect("E_ENUM", "passengers[student].weights[1].when", "a gear that is no number")
+
+	_reset_fixture()
+	GameData.as_dict(GameData.as_array(_record("passengers", "student").get("weights"))[0])["per_s"] = 1.0
+	_expect("E_RULE", "passengers[student].weights[0]", "a Weight with both an amount and a rate")
+
+	_reset_fixture()
+	var by_second: Dictionary = GameData.as_dict(GameData.as_array(_record("passengers", "student").get("weights"))[1])
+	by_second.erase("per_s")
+	by_second["amount"] = 2.0
+	_expect("E_RULE", "passengers[student].weights[1]", "an amount where the Weight counts by the second")
+
+	_reset_fixture()
+	GameData.as_dict(GameData.as_array(_record("passengers", "student").get("weights"))[0])["resource"] = "fuel"
+	_expect("E_ENUM", "passengers[student].weights[0].resource", "a Weight on something that is not weighed")
+
+	_reset_fixture()
+	GameData.as_dict(_record("passengers", "apprentice").get("retunes"))["to"] = "opera"
+	_expect("E_REF", "passengers[apprentice].retunes.to", "a radio turned to a station that does not exist")
+
+	_reset_fixture()
+	GameData.as_dict(_record("passengers", "apprentice").get("retunes"))["every_s"] = 0
+	_expect("E_RULE", "passengers[apprentice].retunes.every_s", "a radio retuned every 0 s")
+
+	_reset_fixture()
+	GameData.as_dict(_record("passengers", "conscript").get("always"))["suspicion_gain_mult"] = 1.5
+	_expect("E_RANGE", "passengers[conscript].always.suspicion_gain_mult", "a uniform that raises Suspicion")
+
+	_reset_fixture()
+	GameData.as_dict(_record("passengers", "student").get("always"))["effects"] = ["glow"]
+	_expect("E_REF", "passengers[student].always.effects[0]", "talk that holds on a status that does not exist")
+
+	_reset_fixture()
+	_record("passengers", "student")["mood"] = "cheerful"
+	_expect("E_UNKNOWN_KEY", "passengers[student].mood", "a key no passenger has")
+
+	_reset_fixture()
+	var passengers: Array = _list("passengers", "passengers")
+	for index: int in range(passengers.size() - 1, -1, -1):
+		if GameData.as_string(GameData.as_dict(passengers[index]).get("id")) == "conscript":
+			passengers.remove_at(index)
+	_expect("E_MISSING", "passengers[conscript]", "one of the five passengers of GDD 8.2 missing")
+
+	_reset_fixture()
+	var english: Dictionary = _lines["en"]
+	english.erase("passenger.student.leave")
+	var arabic: Dictionary = _lines["ar"]
+	arabic.erase("passenger.student.leave")
+	_expect("E_REF", "passengers[student].line_prefix", "a passenger with no word for getting out")
+
+	_reset_fixture()
+	_record("stops", "fuel_station")["hitcher"] = "often"
+	_expect("E_ENUM", "stops[fuel_station].hitcher", "a hitcher who stands there neither always nor sometimes")
+
+	_reset_fixture()
+	GameData.as_array(_record("rituals", "passenger_ask").get("on_complete"))[0] = "beg"
+	_expect("E_ENUM", "rituals[passenger_ask].on_complete[0]", "an op the shoulder does not know")
+
+
+## Props that show a cabin switch (the window's glass, the hazard lamp).
+func _check_broken_cabin_props() -> void:
+	_reset_fixture()
+	GameData.as_array(_record("props", "window_glass").get("flags"))[0] = "!sunroof_open"
+	_expect("E_ENUM", "props[window_glass].flags[0]", "a prop that shows a switch the cabin does not have")
+
+	_reset_fixture()
+	_record("props", "window_glass")["alpha"] = 1.5
+	_expect("E_RANGE", "props[window_glass].alpha", "glass more than opaque")
+
+	_reset_fixture()
+	_record("props", "hazard_lamp")["blink"] = "fast"
+	_expect("E_TYPE", "props[hazard_lamp].blink", "a blink that is not yes or no")
 
 
 # --- 2. The GDD 14 examples ---------------------------------------------------
@@ -623,6 +736,22 @@ func _check_broken_tuning_anchors_lines() -> void:
 	_reset_fixture()
 	_add_line("Bad Id", "text")
 	_expect("E_ID", "Bad Id", "a line id that is not dotted lower case")
+
+	# Whoever speaks needs a line for their name (the subtitles' speaker tag).
+	_reset_fixture()
+	english = _lines["en"]
+	english["narrator.start"] = {"speaker": "Tea Seller", "text": "Tea?", "needs_writer": true}
+	_expect("E_REF", "speaker.tea_seller", "a speaker with no line for the name")
+	_reset_fixture()
+	english = _lines["en"]
+	english["narrator.start"] = {"speaker": "Abu Noor, then Tea Seller", "text": "Tea. / Tea?", "needs_writer": true}
+	_expect("E_REF", "speaker.tea_seller", "the second speaker of an exchange with no line for the name")
+	_reset_fixture()
+	english = _lines["en"]
+	english["narrator.start"] = {"speaker": "Abu Noor, then Noor", "text": "So. / Baba.", "needs_writer": true}
+	check(_validate().is_empty(), "an exchange between speakers who have their lines validates: %s" % _first(_validate()))
+	check_eq(GameData.speaker_line_id("Old woman"), "speaker.old_woman", "a speaker's line is `speaker.` and the name in lower case with underscores")
+	check_eq(GameData.speaker_line_id("أبو نور"), "", "a name with no Latin letter has no such line (it is shown as written)")
 
 	# A whole file gone.
 	_reset_fixture()

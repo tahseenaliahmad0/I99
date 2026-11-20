@@ -8,9 +8,50 @@ heckle.drivers.dare.gear4,Driver,Fourth gear! Tell them about fourth gear!,true
 heckle.uncles.doubt.1,Uncle,All night? At your age? In that car?,true
 heckle.aunts.order.tea,Aunt,Drink your tea before it goes cold.,true
 passenger.hajjiya.board,Old woman,"God keep you, my son. Not so fast.",true
+passenger.hajjiya.name,,THE HAJJIYA,true
+passenger.hajjiya.leave,Old woman,"Eat, my son. A thin man should not drive at night.",true
+passenger.hajjiya.hand,Old woman,Give it here. Straight. Like this.,true
+passenger.hajjiya.weight,Old woman,Not in front of me.,true
+passenger.hajjiya.prayer,Old woman,O Protector. O Protector. O Protector.,true
+passenger.conscript.name,,THE CONSCRIPT,true
+passenger.conscript.board,Soldier,Wake me at the checkpoint. Not before.,true
+passenger.conscript.leave,Soldier,Here. For the petrol.,true
+passenger.conscript.hand,Soldier,Take one. They are the army's.,true
+passenger.conscript.wake,Soldier,What? I am awake. I was awake.,true
+passenger.drummer.name,,THE DRUMMER,true
+passenger.drummer.board,Drummer,Mind the drum. It is worth more than the car.,true
+passenger.drummer.leave,Drummer,Here? Then here I play.,true
+passenger.drummer.hand,Drummer,"Your tea, driver.",true
+passenger.drummer.drum,Drummer,(he drums),true
+passenger.student.name,,THE STUDENT,true
+passenger.student.board,Student,Basra? I can pay. A little.,true
+passenger.student.leave,Student,"Thank you, uncle. Slowly, yes?",true
+passenger.student.hand,Student,"I have it. He says ten, for the airport.",true
+passenger.student.weight,Student,"The lane, uncle. The lane!",true
+passenger.apprentice.name,,THE APPRENTICE,true
+passenger.apprentice.board,Boy,My master says a car like this should not still be running.,true
+passenger.apprentice.leave,Boy,It will hold. Probably.,true
+passenger.apprentice.hand,Boy,I have the wheel. Three seconds.,true
+passenger.apprentice.repair,Boy,Don't touch the lever. I am in there.,true
+passenger.apprentice.radio,Boy,(he turns the dial),true
+sign.hitcher,,[%s],false
 radio.news.patrol,Newsreader,Traffic police are out on the southern road tonight.,true
 noor.call.1,Noor,Baba? Are you awake?,true
 finale.proverb,"Noor, then Abu Noor",They say one hand doesn't clap. / No. But it drives.,true
+speaker.abu_noor,,Abu Noor,true
+speaker.noor,,Noor,true
+speaker.guest,,Guest,true
+speaker.child,,Child,true
+speaker.driver,,Driver,true
+speaker.uncle,,Uncle,true
+speaker.aunt,,Aunt,true
+speaker.old_woman,,Old woman,true
+speaker.newsreader,,Newsreader,true
+speaker.soldier,,Soldier,true
+speaker.drummer,,Drummer,true
+speaker.student,,Student,true
+speaker.boy,,Boy,true
+subtitle.test.long,Abu Noor,"You want the whole night? Then pour the tea and sit down, because this road has more turns in it than all of your uncle's stories put together.",false
 hud.gear,,Gear %s,false
 hud.neutral,,N,false
 hud.wheel,,Wheel %s deg,false
@@ -139,15 +180,41 @@ hud.cramp.hum,,A HUM...,false
 hud.cramp.cramp,,CRAMP,false
 hud.ghost,,His left hand reaches,false
 hud.carrying,,Carrying: %s,false
-sign.boss_modifier.long_queue,,[LONG QUEUE],true
-sign.boss_modifier.thorough,,[THOROUGH],true
-sign.boss_modifier.crosswind,,[CROSSWIND],true
-sign.boss_modifier.night_storm,,[NIGHT STORM],true
-sign.boss_modifier.market_day,,[MARKET DAY],true
-sign.boss_modifier.early_sun,,[EARLY SUN],true
+hud.passenger,,Passenger: %s (%s legs)%s,false
+hud.passenger.asleep,,", asleep",false
+hud.passenger.awake,,", awake for %s s",false
+hud.passenger.drumming,,", drumming",false
+hud.passenger.tea,,", holds out the tea",false
+hud.passenger.holds,,", holds the wheel for %s s",false
+hud.passenger.warns,,", repairs in %s s",false
+hud.passenger.leans,,", across the lever for %s s",false
+hud.hitcher,,At the roadside: %s,false
+hud.blessed,,Blessed: the next scrape lights no lamp,false
+sign.boss_modifier.long_queue,,LONG QUEUE,true
+sign.boss_modifier.thorough,,THOROUGH,true
+sign.boss_modifier.crosswind,,CROSSWIND,true
+sign.boss_modifier.night_storm,,NIGHT STORM,true
+sign.boss_modifier.market_day,,MARKET DAY,true
+sign.boss_modifier.early_sun,,EARLY SUN,true
 sign.boss,,[%s / %s],false
 call.noor,,Noor,true
+call.noor.rings,,(his phone rings in his pocket: Noor),true
 sign.checkpoint,,[CHECKPOINT / %s],false
+sign.checkpoint.stop,,STOP,true
+sign.arrival,,[THE HOUSE],true
+hud.boss,,Boss: %s%s (%s s),false
+hud.dust,,Dust: %s (%s s to the change),false
+hud.dust.thick,,thick,false
+hud.dust.thin,,thin,false
+hud.rear_end,,Coming up behind him: %s s,false
+hud.dawn,,Dawn: %s,false
+hud.dawn.1,,false dawn,false
+hud.dawn.2,,sunrise,false
+hud.dawn.3,,the Call,false
+hud.the_call.ringing,,it rings (%s s),false
+hud.the_call.talking,,"he talks (%s s, %s)",false
+hud.the_call.over,,over,false
+hud.arrival,,The street: %s m to the bay,false
 hud.the_call,,The Call: %s,false
 hud.bay,,In the bay: turn the key,false
 sign.document.licence,,[LICENCE],true

@@ -148,6 +148,7 @@ func test_nerves_01() -> void:
 		if event.get("type") == "sfx_requested" and event.get("id") == "horn":
 			horn = true
 	check(kinds.has("snap"), "traffic alone can push him over: the Snap is announced as an event")
+	check_eq(kinds.count("snap"), 1, "once")
 	check(horn, "with the horn")
 	check(_sim.nerves.value < snap_at - 20.0, "and Nerves have dropped back")
 

@@ -17,7 +17,7 @@
     { "id": "slap",            "anchor": "face",               "gesture": "TAP",
       "eyes_down": false, "requires": [], "on_complete": ["nerves:12", "add_effect:awake:20"] },
     { "id": "passenger_ask",   "anchor": "passenger_shoulder", "gesture": "TAP",
-      "eyes_down": false, "requires": ["flag:passenger"], "on_complete": [] },
+      "eyes_down": false, "requires": ["flag:passenger"], "on_complete": ["ask"] },
     { "id": "glovebox_toggle", "anchor": "glovebox",           "gesture": "TAP",
       "eyes_down": false, "requires": [], "on_complete": ["toggle:glovebox_open"] },
     { "id": "indicator",       "anchor": "indicator_stalk",    "gesture": "FLICK", "flick_dirs": ["up", "down"],
@@ -68,9 +68,9 @@
       "eyes_down": false, "requires": ["!hook_armed", "!hook_set", "!hook_cooldown"], "on_complete": ["hook"] },
 
     { "id": "call_hand_over",  "anchor": "pocket",             "gesture": "DRAG_TO", "to": "passenger_shoulder",
-      "eyes_down": false, "over_items": true, "requires": ["the_call", "flag:passenger"], "on_complete": ["call:passenger"] },
+      "eyes_down": false, "over_items": true, "requires": ["the_call", "flag:passenger"], "on_complete": ["call:passenger", "line:noor.call.1"] },
     { "id": "call_answer",     "anchor": "pocket",             "gesture": "TAP",
-      "eyes_down": false, "over_items": true, "requires": ["the_call"], "on_complete": ["call:alone"] },
+      "eyes_down": false, "over_items": true, "requires": ["the_call"], "on_complete": ["call:alone", "line:noor.call.1"] },
     { "id": "key_turn",        "anchor": "key",                "gesture": "TAP",
       "eyes_down": false, "requires": ["in_bay"], "on_complete": ["key"] },
 

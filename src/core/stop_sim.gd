@@ -24,6 +24,9 @@ const SERVICE: StringName = &"service"
 ## while an offer lies at an anchor.
 const BUY: String = "stop_buy"
 const PLACE: String = "stop_place"
+## Unlocking the passenger door for the hitcher who stands there (GDD 8.1).
+const BOARD: String = "stop_board"
+const DOOR_ANCHOR: String = "passenger_door"
 const SHADY_KEY: String = "shady"
 const BOSS_SERVICE: String = "boss"
 
@@ -57,6 +60,8 @@ var _services_due: bool = false
 ## Tea was served at this stop (a tea stall, or a boss stop that became one).
 var tea_served: bool = false
 var shady_used: bool = false
+## The passenger who stands at this stop asking for a ride ("" for nobody).
+var hitcher: String = ""
 ## What happened, for DriveSim to announce.
 var events: Array[Dictionary] = []
 
@@ -93,6 +98,7 @@ func begin(id: String, act: int, shady: bool, price_mult: float = 1.0) -> void:
 	shady_used = false
 	_services_due = false
 	tea_served = false
+	hitcher = ""
 	events = []
 	var record: Dictionary = _data.record("stops", id)
 	service = GameData.as_string(record.get("service"))
@@ -111,6 +117,7 @@ func end() -> void:
 	active = false
 	offers = []
 	picks_left = 0
+	hitcher = ""
 
 
 # --- What the stop offers ----------------------------------------------------
@@ -267,7 +274,12 @@ func offer_at(anchor: String) -> Offer:
 
 
 func anchor_in_use(anchor: String) -> bool:
-	return active and offer_at(anchor) != null
+	return active and (offer_at(anchor) != null or (anchor == DOOR_ANCHOR and _door_can_open()))
+
+
+## The door can be unlocked for a hitcher while the seat is free.
+func _door_can_open() -> bool:
+	return not hitcher.is_empty() and not _items.seat_occupied
 
 
 ## The ritual a press at this anchor starts: a TAP that buys, or a DRAG_TO
@@ -275,6 +287,8 @@ func anchor_in_use(anchor: String) -> bool:
 func ritual_at(anchor: String) -> Dictionary:
 	if not active:
 		return {}
+	if anchor == DOOR_ANCHOR:
+		return {"id": BOARD, "anchor": anchor, "gesture": "TAP"} if _door_can_open() else {}
 	var offer: Offer = offer_at(anchor)
 	if offer == null:
 		return {}

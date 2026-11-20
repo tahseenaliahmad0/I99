@@ -1,5 +1,44 @@
 {
   "version": 1,
 
-  "passengers": []
+  "passengers": [
+    { "id": "hajjiya", "rides_legs": 3, "fare": 0, "line_prefix": "passenger.hajjiya",
+      "hand": { "kind": "hold_wheel_straight", "duration_s": 6, "on": "tap" },
+      "weights": [
+        { "when": "ritual_tag:smoke", "resource": "nerves", "amount": 10 },
+        { "when": "ritual_tag:flask", "resource": "nerves", "amount": 10 },
+        { "when": "gear>=4", "resource": "nerves", "per_s": 3 }
+      ],
+      "on_leave": ["nerves:-20", "add_effect:blessing"] },
+
+    { "id": "conscript", "rides_until": "act_end", "fare": 10, "line_prefix": "passenger.conscript",
+      "hand": { "kind": "cigarette", "on": "tap" },
+      "always": { "suspicion_gain_mult": 0.5 },
+      "sleeps": { "awake_s": 20, "horn_wakes": true },
+      "weights": [
+        { "when": "asleep", "resource": "nerves", "per_s": -0.5 }
+      ] },
+
+    { "id": "drummer", "rides_until": "basra", "fare": 0, "line_prefix": "passenger.drummer",
+      "hand": { "kind": "pass_tea", "on": "tap", "at": [0.24, 0.10, 0.04] },
+      "drums": { "effects": ["music", "awake"] },
+      "view_block_right": 0.10,
+      "weights": [
+        { "when": "drumming&patrol", "resource": "suspicion", "per_s": 10 }
+      ] },
+
+    { "id": "student", "rides_legs": 3, "fare": 20, "line_prefix": "passenger.student",
+      "hand": { "kind": "always", "on": "always" },
+      "always": { "answers_calls": true, "fork_sign_lead_s": 5, "effects": ["awake"] },
+      "weights": [
+        { "when": "scrape", "resource": "nerves", "amount": 5 },
+        { "when": "gear>=4&rain", "resource": "nerves", "per_s": 2 }
+      ] },
+
+    { "id": "apprentice", "rides_until": "basra", "fare": 0, "line_prefix": "passenger.apprentice",
+      "hand": { "kind": "hold_wheel", "duration_s": 3, "on": "tap" },
+      "repairs": { "per_leg": 1, "announce_s": 2, "lean_s": 3 },
+      "retunes": { "every_s": 30, "to": "static" },
+      "weights": [] }
+  ]
 }
