@@ -378,13 +378,34 @@ func _durations(queue: SubtitleQueue) -> void:
 	var own_length: bool = hundred.size() == 2
 	var sum: float = 0.0
 	var told: PackedStringArray = []
-	for part: SubtitleQueue.Part in hundred:
-		var length: int = part.joined().length()
+	for index: int in hundred.size():
+		var part: SubtitleQueue.Part = hundred[index]
+		# A part that another follows is timed with the space it was cut off at.
+		var length: int = part.joined().length() + (1 if index < hundred.size() - 1 else 0)
 		own_length = own_length and absf(part.duration - maxf(queue.min_duration, queue.char_duration * float(length))) <= TOLERANCE
 		sum += part.duration
 		told.append("%d characters %s s" % [length, str(snappedf(part.duration, 0.001))])
-	_check(own_length, "a text of 100 characters is two parts, each timed by its own length (%s)" % ", ".join(told))
+	_check(own_length, "a text of 100 characters is two parts, each timed by its own length, the first with the space it was cut off at (%s)" % ", ".join(told))
 	_check(sum >= 6.0 - TOLERANCE, "together they are held no less than the 6.0 s the whole text asks for (%s s)" % str(snappedf(sum, 0.001)))
+
+	# The rule is for the text, however many parts it is shown in: no part's
+	# cut may take time away from it.
+	var long_text: String = _line_text(LONG_LINE)
+	var long_parts: Array[SubtitleQueue.Part] = queue.parts_of("", long_text)
+	var long_sum: float = _held(long_parts)
+	_check(long_parts.size() == 2 and absf(long_sum - queue.duration_of(long_text.length())) <= TOLERANCE,
+			"the two parts of %s are held %s s together: what its %d characters ask for (%s s)" % [LONG_LINE, str(snappedf(long_sum, 0.001)), long_text.length(), str(snappedf(queue.duration_of(long_text.length()), 0.001))])
+	var tried: int = 0
+	var most_parts: int = 0
+	var short_by: float = 0.0
+	for length: int in range(1, queue.line_chars * 12):
+		var text: String = _text_of(length)
+		var parts: Array[SubtitleQueue.Part] = queue.parts_of("", text)
+		tried += 1
+		most_parts = maxi(most_parts, parts.size())
+		short_by = maxf(short_by, queue.duration_of(text.length()) - _held(parts))
+	_check(tried > 0 and most_parts > 2 and short_by <= TOLERANCE,
+			"%d texts of 1 to %d characters, in up to %d parts: none is held less than its characters ask for (short by %s s at most)" % [tried, queue.line_chars * 12 - 1, most_parts, str(snappedf(short_by, 0.001))])
 
 
 func _three_in_order() -> void:
@@ -1036,6 +1057,14 @@ func _rejoined(parts: Array[SubtitleQueue.Part]) -> String:
 	for part: SubtitleQueue.Part in parts:
 		texts.append(part.joined())
 	return " ".join(texts)
+
+
+## Seconds the parts are held, one after the other.
+func _held(parts: Array[SubtitleQueue.Part]) -> float:
+	var seconds: float = 0.0
+	for part: SubtitleQueue.Part in parts:
+		seconds += part.duration
+	return seconds
 
 
 ## Steps the view frame by frame until what it shows is something else (or

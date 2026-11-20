@@ -97,7 +97,10 @@ func lines_of(text: String) -> PackedStringArray:
 
 
 ## What `text` is on screen: one part for a text of up to max_lines lines,
-## several for a longer one, each timed by its own length.
+## several for a longer one, each timed by its own length. A part that
+## another follows is timed as one character longer: the space it was cut
+## off at is not drawn, but it is a character of the text, and so the parts
+## together are held for no less than the whole text asks for.
 func parts_of(speaker: String, text: String) -> Array[Part]:
 	var parts: Array[Part] = []
 	var lines: PackedStringArray = lines_of(text)
@@ -106,9 +109,9 @@ func parts_of(speaker: String, text: String) -> Array[Part]:
 		var part: Part = Part.new()
 		part.speaker = speaker
 		part.lines = _balanced(lines.slice(index, index + max_lines))
-		part.duration = duration_of(part.joined().length())
-		parts.append(part)
 		index += max_lines
+		part.duration = duration_of(part.joined().length() + (1 if index < lines.size() else 0))
+		parts.append(part)
 	return parts
 
 
