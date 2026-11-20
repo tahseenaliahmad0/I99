@@ -141,6 +141,7 @@ func call_shot(tree: SceneTree, path: String) -> void:
 	var drive: Node = await _answer_in_the_scene(tree)
 	var sim: DriveSim = drive.get("sim") as DriveSim
 	var view: SubtitlesView = drive.get_node("Subtitles") as SubtitlesView
+	await _until_she_speaks(tree, drive)
 	for frame: int in SHOT_FRAMES:
 		_keep_lane(sim)
 		await tree.process_frame
@@ -222,6 +223,22 @@ func _drive_scene(tree: SceneTree, arguments: Dictionary) -> Node:
 	sim.free_traffic_per_km = 0.0
 	sim.traffic.clear()
 	return tree.current_scene
+
+
+## Waits until the Subtitles layer of the drive scene shows what Noor says
+## on the Call: at once where nothing else is being shown, and behind it
+## otherwise (the ring, where the simulation writes that out). False when it
+## never comes.
+func _until_she_speaks(tree: SceneTree, drive: Node) -> bool:
+	var sim: DriveSim = drive.get("sim") as DriveSim
+	var view: SubtitlesView = drive.get_node("Subtitles") as SubtitlesView
+	var words: PackedStringArray = PackedStringArray([Lines.get_text(CALL_LINE)])
+	var guard: int = SCENE_GUARD
+	while not (view.is_showing() and view.shown_lines() == words) and guard > 0:
+		guard -= 1
+		_keep_lane(sim)
+		await tree.physics_frame
+	return view.is_showing() and view.shown_lines() == words
 
 
 ## A TAP of the grip button, as a player's: down for the ticks of TAP_FRAMES.
@@ -660,6 +677,10 @@ func _view() -> void:
 ## phone in his pocket rings; then it is left to ring out, answered alone
 ## with a TAP, and handed to a passenger. Nothing is put on the Events bus
 ## by hand: what the view shows is what the simulation asked for.
+##
+## What is held is about her line. Whatever else the simulation has written
+## out by then (the ring itself, where it does that) is shown as any line
+## is, before hers, and is no business of this check.
 func _the_call() -> void:
 	_heading("the Call of Dawn (GDD 10.4): the simulation asks for what Noor says, and it is shown")
 	Settings.reset_to_defaults()
@@ -695,36 +716,37 @@ func _the_call() -> void:
 	# It rings, and rings out.
 	_to_the_ring(view, false)
 	var rang: Dictionary = _last("call_started")
-	_check(_count("call_started") == 1 and _asked.is_empty() and not view.is_showing(), "the phone in his pocket rings: nothing is said yet")
+	_check(_count("call_started") == 1 and _unspoken(said), "the phone in his pocket rings: she has not spoken yet")
 	_check(Lines.speaker_line_id(Lines.get_speaker(CALL_LINE)) == Lines.SPEAKER_PREFIX + GameData.as_string(rang.get("caller")),
 			"who rings is who speaks in %s (%s)" % [CALL_LINE, GameData.as_string(rang.get("caller"))])
 	_drive(view, _frames_in(ring_s + 1.0))
-	_check(_count("call_resolved") == 1 and not GameData.as_bool(_last("call_resolved").get("answered")) and _asked.is_empty() and _seen.is_empty(),
-			"left to ring for its %s s it is over unanswered, and nothing was said" % str(ring_s))
+	_check(_count("call_resolved") == 1 and not GameData.as_bool(_last("call_resolved").get("answered")) and _unspoken(said),
+			"left to ring for its %s s it is over unanswered, and she never spoke" % str(ring_s))
 
 	# Answered alone: a TAP on his pocket.
 	_to_the_ring(view, false)
 	var at_pocket: bool = _reach(view, POCKET)
+	var unspoken: bool = _unspoken(said)
 	_input.lmb = true
 	_drive(view, TAP_FRAMES)
 	_input.lmb = false
 	_until_answered(view)
-	_check(at_pocket and GameData.as_bool(_last("call_resolved").get("answered")) and GameData.as_string(_last("call_resolved").get("taken")) == BossSim.TAKEN_ALONE,
-			"a TAP on his pocket answers it alone")
+	_check(at_pocket and unspoken and GameData.as_bool(_last("call_resolved").get("answered")) and GameData.as_string(_last("call_resolved").get("taken")) == BossSim.TAKEN_ALONE,
+			"a TAP on his pocket answers it alone; until then she has not spoken")
 	_check_said(view, said, hold)
 
-	# Handed to a passenger: nothing is said while the phone is carried.
+	# Handed to a passenger: she does not speak while the phone is carried.
 	_to_the_ring(view, true)
 	_reach(view, POCKET)
 	_input.lmb = true
 	_drive(view, _frames_in(DRAG_PRESS))
 	_input.pointer = _sim.hand.anchor_pointer(_sim.hand.anchor_index(SHOULDER))
 	_drive(view, _frames_in(DRAG_CARRY))
-	var carried_in_silence: bool = _asked.is_empty() and _seen.is_empty() and _count("call_resolved") == 0
+	unspoken = _unspoken(said) and _count("call_resolved") == 0
 	_input.lmb = false
 	_until_answered(view)
-	_check(carried_in_silence and GameData.as_bool(_last("call_resolved").get("answered")) and GameData.as_string(_last("call_resolved").get("taken")) == BossSim.TAKEN_WITH_PASSENGER,
-			"dragged to a passenger's shoulder and let go there, it is answered with them; nothing is said while it is carried")
+	_check(unspoken and GameData.as_bool(_last("call_resolved").get("answered")) and GameData.as_string(_last("call_resolved").get("taken")) == BossSim.TAKEN_WITH_PASSENGER,
+			"dragged to a passenger's shoulder and let go there, it is answered with them; she does not speak while it is carried")
 	_check_said(view, said, hold)
 
 	Settings.reset_to_defaults()
@@ -733,19 +755,35 @@ func _the_call() -> void:
 	_sim = null
 
 
-## After an answer: her line was asked for once, in the frame of the answer,
-## and it is on screen from that frame for its own time, under her name, with
-## nothing behind it.
+## Her line has not been asked for in this drive and has not been on screen.
+func _unspoken(said: String) -> bool:
+	return not _asked.has(CALL_LINE) and not _seen.has(said)
+
+
+## In the frame of an answer: her line is the last thing the simulation
+## asked for, and it asked once. It is on screen in that frame, under her
+## name, or comes up the moment what was showing has had its time; it is
+## held its own time, once, and nothing follows it.
 func _check_said(view: SubtitlesView, said: String, hold: float) -> void:
-	_check(_asked == PackedStringArray([CALL_LINE]) and view.waiting() == 1, "the simulation asks for %s as he answers, once" % CALL_LINE)
-	_check(_showing == said, "and it is on screen in that frame: %s" % _showing)
+	_check(_asked.count(CALL_LINE) == 1 and _asked[_asked.size() - 1] == CALL_LINE, "the simulation asks for %s as he answers, once" % CALL_LINE)
+	var before: String = _showing
+	var waited: int = 0
+	var gap: bool = false
 	var guard: int = MOST_FRAMES
+	while _showing != said and guard > 0:
+		guard -= 1
+		gap = gap or _showing.is_empty()
+		waited += 1
+		_drive(view, 1)
+	_check(_showing == said and not gap, "and it is on screen %s: %s" % ["in that frame" if waited == 0 else "%d frames on, when '%s' has had its time" % [waited, before], _showing])
+	guard = MOST_FRAMES
 	while view.is_showing() and guard > 0:
 		guard -= 1
 		_drive(view, 1)
-	var frames: int = _seen_frames[0] if _seen_frames.size() == 1 else 0
-	_check(_seen == PackedStringArray([said]) and _held_for(frames, hold) and _asked.size() == 1,
-			"held %s s (%d frames); then nothing is drawn and nothing more was asked for" % [str(hold), frames])
+	var at: int = _seen.find(said)
+	var frames: int = _seen_frames[at] if at != -1 else 0
+	_check(_seen.count(said) == 1 and at == _seen.size() - 1 and _held_for(frames, hold) and _asked.count(CALL_LINE) == 1,
+			"held %s s (%d frames), once; then nothing is drawn" % [str(hold), frames])
 
 
 ## The numbers of the Call in Dawn's record (data/legs.json).
@@ -902,8 +940,10 @@ func _in_the_scene(tree: SceneTree) -> void:
 	var view: SubtitlesView = drive.get_node("Subtitles") as SubtitlesView
 	_check(sim.boss.call == BossSim.CALL_TALKING and sim.boss.call_taken == BossSim.TAKEN_ALONE,
 			"on Dawn's road a TAP of the grip button with the pointer on his pocket answers the Call")
-	_check(_bus_lines == PackedStringArray([CALL_LINE]), "the scene sends what the Call's ritual asks for to the Events bus, once (%s)" % ", ".join(_bus_lines))
-	_check(view.is_showing() and view.shown_speaker() == Lines.get_speaker_name(Lines.get_speaker(CALL_LINE)) and view.shown_lines() == PackedStringArray([Lines.get_text(CALL_LINE)]) and view.waiting() == 1,
+	_check(_bus_lines.count(CALL_LINE) == 1 and _bus_lines[_bus_lines.size() - 1] == CALL_LINE,
+			"the scene sends what the Call's ritual asks for to the Events bus, once (%s)" % ", ".join(_bus_lines))
+	var spoken: bool = await _until_she_speaks(tree, drive)
+	_check(spoken and view.shown_speaker() == Lines.get_speaker_name(Lines.get_speaker(CALL_LINE)) and view.waiting() == 1,
 			"and its Subtitles layer shows it: %s: %s" % [view.shown_speaker(), " | ".join(view.shown_lines())])
 
 	# A Telling, its car put in the bay of the Arrival while something is being said: the key ends the night.
