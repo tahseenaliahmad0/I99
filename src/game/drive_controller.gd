@@ -37,6 +37,7 @@ var _bot: StandInBot = null
 @onready var _road: RoadView = $Road
 @onready var _stop: StopView = $Cabin/Stop
 @onready var _sky: SkyView = $Sky
+@onready var _post_fx: PostFxView = $PostFX
 @onready var _pointer: PointerView = $Overlay/Pointer
 @onready var _hud: DebugHud = $DebugHUD
 
@@ -58,6 +59,7 @@ func _ready() -> void:
 	_road.setup(data, _factory)
 	_stop.setup(data, _factory)
 	_sky.setup(data, _factory)
+	_post_fx.setup(data, _camera, _cabin)
 	_pointer.setup(data, _factory)
 	sim.rng.reseed(int(str(Game.args.get("seed", "1"))))
 	if Game.args.has("bot"):
@@ -168,6 +170,7 @@ func _process(delta: float) -> void:
 	_road.apply(snapshot, delta)
 	_stop.apply(snapshot)
 	_sky.apply(snapshot)
+	_post_fx.apply(snapshot, delta)
 	_pointer.apply(snapshot, _camera, _cabin)
 	_hud.apply(snapshot)
 	Audio.apply(snapshot)
