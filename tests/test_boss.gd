@@ -2830,6 +2830,7 @@ func test_call_01() -> void:
 	_check_call_pulled_over()
 	_check_call_and_the_ending()
 	_check_the_end_of_the_talk()
+	_check_two_phones_ringing()
 
 
 ## Dawn at the moment the phone begins to ring, on an empty road.
@@ -2954,6 +2955,37 @@ func _check_call_alone() -> void:
 	check(_sim.hand.gripping, "(and take the wheel)")
 	check_near(_pull(100.0), in_hand, 0.05, "(with all of his steering)")
 	_release()
+
+
+## With the phone Habit aboard a dispatcher can ring while Noor's call rings
+## in his pocket. Each phone keeps its own picture: the snapshot names who
+## rings on the mount beside who rings in his pocket (the review of M7: the
+## mounted phone lost its light and its call ran out unseen).
+func _check_two_phones_ringing() -> void:
+	_begin_quiet_boss(DAWN)
+	_give("phone")
+	_events = []
+	var guard: int = _ticks_in(60.0)
+	while GameData.as_string(_event("call_started").get("caller")).is_empty() and guard > 0:
+		guard -= 1
+		if _sim.car.s > 1000.0:
+			_sim.car.s -= 500.0
+		_tick()
+	var mounted: String = GameData.as_string(_event("call_started").get("caller"))
+	check(not mounted.is_empty() and mounted != DriveSim.NOOR, "(the phone on its mount rings: %s)" % mounted)
+	check_eq(GameData.as_string(_sim.snapshot()["mount_caller"]), mounted, "the snapshot names who rings on the mount")
+	# And now his own, in his pocket.
+	_sim.car.s = GameData.as_float(data.record("bosses", DAWN).get("length_m")) - GameData.as_float(GameData.as_dict(_dawn().get("call")).get("from_end_m")) - 0.5
+	_ticks(3)
+	var shot: Dictionary = _sim.snapshot()
+	check_eq(GameData.as_string(shot["call"]), BossSim.CALL_RINGING, "(Noor's call rings in his pocket)")
+	check_eq(GameData.as_string(shot["caller"]), DriveSim.NOOR, "(the snapshot's caller is Noor, as before)")
+	check_eq(GameData.as_string(shot["mount_caller"]), mounted, "while Noor rings in his pocket the phone on the mount still shows who rings there")
+	check(GameData.as_float(shot["mount_ring_left"]) > 0.0 and GameData.as_float(shot["mount_ring_left"]) < GameData.as_float(shot["ring_left"]) + 8.0, "(and for how long: %.1f s)" % GameData.as_float(shot["mount_ring_left"]))
+	check_near(GameData.as_float(shot["mount_ring_left"]), _sim.items.ring_left, 0.000001, "(the mount's own time, not hers)")
+	# With no phone on the mount nothing rings there.
+	_to_the_call()
+	check_eq(GameData.as_string(_sim.snapshot()["mount_caller"]), "", "(with no phone on the mount nobody rings there)")
 
 
 ## The end of the talk (the review of M7): it is announced a moment ahead,

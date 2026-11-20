@@ -91,9 +91,10 @@ func apply(snapshot: Dictionary) -> void:
 		var sway: float = snapshot["sway"]
 		rows.append(Lines.format("hud.courage", [str(courage), "%.2f" % sway, "%.0f" % (lag * 1000.0)]))
 	# Noor's call has a row of its own, with the set pieces.
-	if str(snapshot["caller"]) != "" and str(snapshot["caller"]) != DriveSim.NOOR:
-		var ring_left: float = snapshot["ring_left"]
-		rows.append(Lines.format("hud.call", [Lines.get_text("call.%s" % str(snapshot["caller"])), "%.1f" % ring_left, str(snapshot["call_taps"])]))
+	if str(snapshot["mount_caller"]) != "":
+		# The phone on its mount (Noor's call has a row of its own).
+		var ring_left: float = snapshot["mount_ring_left"]
+		rows.append(Lines.format("hud.call", [Lines.get_text("call.%s" % str(snapshot["mount_caller"])), "%.1f" % ring_left, str(snapshot["call_taps"])]))
 	if str(snapshot["hook"]) != "":
 		rows.append(Lines.format("hud.hook", [Lines.get_text("hook.%s" % str(snapshot["hook"]))]))
 	if str(snapshot["cramp"]) != "":

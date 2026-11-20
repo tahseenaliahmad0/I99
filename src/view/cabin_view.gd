@@ -289,10 +289,10 @@ func apply(snapshot: Dictionary) -> void:
 	var time: float = snapshot["time"]
 	var flags: Dictionary = snapshot["flags"]
 	_show_switches(flags, time)
-	# Noor's call rings in his pocket (GDD 10.4); any other on the mount.
-	var caller: String = str(snapshot["caller"])
-	var his_own: bool = caller == DriveSim.NOOR
-	_show_items(items, moves, caller != "" and not his_own, time, GameData.as_bool(flags.get(ItemSim.FLAG_GLOVEBOX)))
+	# Noor's call rings in his pocket (GDD 10.4); any other on the mount,
+	# also while hers rings.
+	var his_own: bool = str(snapshot["caller"]) == DriveSim.NOOR
+	_show_items(items, moves, str(snapshot["mount_caller"]) != "", time, GameData.as_bool(flags.get(ItemSim.FLAG_GLOVEBOX)))
 	_pocket_phone.visible = his_own and _anchor_pos.has(POCKET_ANCHOR)
 	if _pocket_phone.visible:
 		var pocket: Vector3 = _anchor_pos[POCKET_ANCHOR]

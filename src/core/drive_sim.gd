@@ -1638,6 +1638,9 @@ func snapshot() -> Dictionary:
 		"mirror_shift": encounter.tell_shift,
 		"caller": NOOR if boss.call == BossSim.CALL_RINGING else String(items.caller),
 		"ring_left": boss.call_left if boss.call == BossSim.CALL_RINGING else items.ring_left,
+		# The phone on its mount by itself: it can ring while Noor's does.
+		"mount_caller": String(items.caller),
+		"mount_ring_left": items.ring_left,
 		"call": boss.call,
 		"call_left": boss.call_left,
 		"call_taken": boss.call_taken,
