@@ -220,6 +220,10 @@ var _leg_lamps_lit: int = 0
 var _exit: int = EXIT_NONE
 var _exit_at: float = 0.0
 var _stall_at: float = 0.0
+## Where along the road he is on the car came onto it: its start, or the
+## stall he pulled away from. (A sign that would stand before that place is
+## one he has never been ahead of.)
+var _road_from: float = 0.0
 ## Seconds the hand has held the wheel at a stop: stop_leave_grip of it leaves.
 var _leave_grip: float = 0.0
 ## The hand has been off the wheel since he stopped: only then can a grip leave.
@@ -340,6 +344,7 @@ func _build() -> void:
 	_snapped = false
 	_leg_lamps_lit = 0
 	_exit = EXIT_NONE
+	_road_from = 0.0
 	_leave_grip = 0.0
 	_let_go_at_stop = false
 	_side = RunState.RIGHT
@@ -668,6 +673,7 @@ func _set_stretch(plan: Dictionary, renews: bool = true) -> void:
 	car.lat_tau_mult = _rain_response if leg.raining else 1.0
 	_leg_lamps_lit = 0
 	_exit = EXIT_NONE
+	_road_from = car.s
 
 
 ## The same for a car that drives on from one stretch into the next: it
@@ -939,6 +945,7 @@ func _leave_stop() -> void:
 		run.leave_stop()
 		car.x = car.lane_center(car.lanes - 1)
 		_lane = car.lane_of(car.x)
+		_road_from = car.s
 	car.speed = 0.0
 	_sync_anchors()
 
@@ -1365,7 +1372,7 @@ func state() -> Array:
 				vehicle.direction, vehicle.lane, vehicle.signalling, vehicle.changing, vehicle.role])
 	return [
 		tick, snapshot(), capture(), effects.get_state(), vehicles,
-		car.s, car.x, car.speed, car.v_lat, car.drift, wheel.angle, _let_go_angle, _catch_left, gate.gear, gate.lever,
+		car.s, car.x, car.speed, car.v_lat, car.drift, wheel.angle, _let_go_angle, _catch_left, _road_from, gate.gear, gate.lever,
 		hand.pos, hand.target, hand.pointer, hand.gripping, nerves.value, nerves.snap_left,
 		collision.chain, collision.immunity_left, leg.time, clock.minutes, suspicion.value, cash,
 	]
@@ -1845,7 +1852,15 @@ func _signs_in_view() -> Array[Dictionary]:
 			signs.append({"kind": "exit", "ahead": to_exit, "stop": GameData.as_string(run.branch.get("stop"))})
 	# The fork's overhead sign: for each branch its leg, modifier, stop and par.
 	if run.fork_ahead():
-		var to_fork: float = maxf(leg.length - (tuning.f("fork_sign_lead") + passengers.fork_sign_lead()) * par_ms, 0.0) - car.s
+		var fork_sign_at: float = maxf(leg.length - tuning.f("fork_sign_lead") * par_ms, 0.0)
+		# One who reads the road has the sign earlier (GDD 8.2), where the
+		# road he came onto still has that place ahead of him. Where it does
+		# not (he pulled away from a stall that lies beyond it; the short
+		# road to an act's first fork), the sign stands where it always does.
+		var early_at: float = fork_sign_at - passengers.fork_sign_lead() * par_ms
+		if early_at > _road_from:
+			fork_sign_at = early_at
+		var to_fork: float = fork_sign_at - car.s
 		if to_fork >= 0.0 and to_fork <= ahead:
 			var sign: Dictionary = {"kind": "fork", "ahead": to_fork, "left": run.branches[RunState.LEFT], "right": run.branches[RunState.RIGHT]}
 			if run.boss_on_sign:

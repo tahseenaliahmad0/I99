@@ -1253,9 +1253,119 @@ func test_pass_student() -> void:
 
 	# What the review of M8 found (RULES-05, -06, -10).
 	_check_her_word_for_the_call()
+	_check_the_sign_is_ahead_of_him()
 
 
-## She is the only one who tells him what the call was (GDD 8): the line of
+## The fork's sign as the snapshot has it ({} when none is ahead).
+func _fork_sign() -> Dictionary:
+	var signs: Array[Dictionary] = _shot("signs")
+	for road_sign: Dictionary in signs:
+		if GameData.as_string(road_sign.get("kind")) == "fork":
+			return road_sign
+	return {}
+
+
+## He drives on, nobody steering, until the fork is taken. Returns the ticks
+## in which the fork's sign was ahead of him, those in which it carried the
+## boss, how far ahead it stood when first seen and how far short of the
+## gore it stands (-1 when it was never ahead).
+func _watch_the_sign_to_the_gore() -> Array[float]:
+	var seen: int = 0
+	var with_boss: int = 0
+	var first: float = -1.0
+	var short_of_gore: float = -1.0
+	_input.clear()
+	_events = []
+	var guard: int = _ticks_in(60.0)
+	while _count_events("fork_taken") == 0 and guard > 0:
+		guard -= 1
+		var road_sign: Dictionary = _fork_sign()
+		if not road_sign.is_empty():
+			if first < 0.0:
+				first = GameData.as_float(road_sign.get("ahead"))
+				short_of_gore = GameData.as_float(_shot("gore_ahead")) - first
+			seen += 1
+			if road_sign.has("boss"):
+				with_boss += 1
+		_tick()
+	check_eq(_count_events("fork_taken"), 1, "(he comes to the gore)")
+	return [float(seen), float(with_boss), first, short_of_gore]
+
+
+## "Fork signs show 5 s earlier" (GDD 8.2) must not cost him the sign. It
+## stands 5 s of road earlier where that place is still ahead of where he
+## came onto the road; after a stop at the leg's stall (which lies beyond
+## that place) and on the short road to an act's first fork it stands where
+## it always does: ahead of him, its usual 5 s short of the gore, with what
+## the tea stall's sign owes him on it (GDD 9.5, 9.6).
+func _check_the_sign_is_ahead_of_him() -> void:
+	var par_ms: float = tuning.fi("gear_speeds", 2) / 3.6
+	var usual: float = tuning.f("fork_sign_lead") * par_ms
+	var early: float = GameData.as_float(GameData.as_dict(_passenger("student").get("always")).get("fork_sign_lead_s")) * par_ms
+	var after_stall: float = tuning.f("leg_tail") - tuning.f("exit_slip_length")
+	check(usual < after_stall and usual + early > after_stall, "(the fork's usual sign stands beyond the stall, at %.0f m short of the gore; one %.0f m earlier would stand before it)" % [usual, early])
+
+	# After tea at the leg's stall: the sign, and the boss on it.
+	var after_tea: Array = []
+	for rider: String in ["", "student"]:
+		_to_quiet_leg("tea_stall")
+		if not rider.is_empty():
+			check(_sim.board(rider), "(she rides along)")
+		_into_stall()
+		check_eq(_sim.run.stop, "tea_stall", "(tea at the leg's stall)")
+		_leave_stop()
+		check(_sim.run.boss_on_sign, "(after tea the next fork's sign owes him the boss ahead)")
+		after_tea.append(_watch_the_sign_to_the_gore())
+	var alone: Array[float] = after_tea[0]
+	var with_her: Array[float] = after_tea[1]
+	check(alone[0] > float(_ticks_in(1.0)), "(without her the fork's sign is ahead of him for %.1f s after he leaves the stall)" % (alone[0] * DT))
+	check_eq(with_her[0], alone[0], "with her beside him the fork's sign is ahead of him after a stop for as long as it is without her")
+	check_near(with_her[2], after_stall - usual, 0.5, "it stands %.0f m ahead of the stall" % (after_stall - usual))
+	check_near(with_her[3], usual, 0.000001, "its usual 5 s of road short of the gore")
+	check_eq(with_her[1], with_her[0], "and it carries the boss ahead all the while: the tea stall's sign is not lost with her")
+	check_eq(alone[1], alone[0], "(as it does without her)")
+
+	# The road to an act's first fork: from Baghdad, and from the stop after a boss.
+	for after_boss: bool in [false, true]:
+		var where: String = "from the stop after a boss" if after_boss else "from Baghdad"
+		var on_approach: Array = []
+		for rider: String in ["", "student"]:
+			_sim = DriveSim.new(fresh_data())
+			_events = []
+			_keep_lane = true
+			_input.clear()
+			_sim.begin_telling(TABLE, _seed_for("fuel_station"))
+			if after_boss:
+				_drive_on_to_boss()
+				if not rider.is_empty():
+					check(_sim.board(rider), "(she rides along through the boss)")
+				_drive_on_to_boss_stop()
+				_leave_stop()
+				check_eq(GameData.as_string(_shot("passenger")), rider, "(she is beside him as he leaves the stop after the boss)")
+			elif not rider.is_empty():
+				check(_sim.board(rider), "(she rides along from the start)")
+			check_eq(_sim.run.stage, RunState.Stage.APPROACH, "(the road to the act's first fork, %s)" % where)
+			check_near(_sim.leg.length, after_stall, 0.000001, "(%.0f m of it)" % after_stall)
+			on_approach.append(_watch_the_sign_to_the_gore())
+		alone = on_approach[0]
+		with_her = on_approach[1]
+		check(alone[0] > float(_ticks_in(1.0)), "(%s, without her the sign is ahead of him for %.1f s)" % [where, alone[0] * DT])
+		check_eq(with_her[0], alone[0], "on the road to an act's first fork (%s) the sign is ahead of him with her as without her" % where)
+		check_near(with_her[2], alone[2], 0.000001, "(as far ahead when the road begins: %.0f m)" % alone[2])
+		check_near(with_her[3], usual, 0.000001, "(its usual 5 s short of the gore: that road is too short for more)")
+
+	# It is one sign: on a leg he drives through with her it stands earlier,
+	# and once it is behind him no other stands before the gore.
+	for rider: String in ["", "student"]:
+		_to_first_leg(_telling_seed("student"))
+		if not rider.is_empty():
+			_sim.board(rider)
+		_sim.car.s = _sim.leg.length - usual - early + 5.0
+		_tick()
+		if rider.is_empty():
+			check_near(GameData.as_float(_fork_sign().get("ahead")), early - 5.0, 0.5, "(without her the sign is still %.0f m ahead there)" % (early - 5.0))
+		else:
+			check(_fork_sign().is_empty(), "with her the sign is one sign, 5 s earlier: past it, no second one stands before the gore")
 ## her Hand is the dispatcher's fare, so it is said for his calls and for no
 ## other; the call of his family has a word of its own.
 func _check_her_word_for_the_call() -> void:
