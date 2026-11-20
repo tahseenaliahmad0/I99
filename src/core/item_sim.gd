@@ -146,6 +146,10 @@ class Standing:
 	var condition: Condition = null
 	## The status is being held on right now.
 	var held: bool = false
+	## Nerves by the second that are the calm of the item's music (see
+	## ItemSim.music_rate): given under the condition under which the item
+	## holds the status "music" on.
+	var music: bool = false
 
 
 ## A condition of items.json or rituals.json, read once: an effect id,
@@ -215,6 +219,11 @@ var used_tags: PackedStringArray = PackedStringArray()
 var seat_occupied: bool = false
 ## His passenger answers every call for him (GDD 8.2, the Student).
 var answered_for_him: bool = false
+## What the music out of the dash does to his Nerves this tick, by the second
+## (GDD 6.1): the radio's or a tape's, after an open window; 0 when neither
+## plays. Music is music once: whoever else makes music (a drum, GDD 8.2)
+## gives only what theirs is stronger by.
+var music_rate: float = 0.0
 ## sfx and line requests, drained by DriveSim.
 var events: Array[Dictionary] = []
 
@@ -394,12 +403,22 @@ func empty_cabin() -> void:
 	_refresh_passives()
 
 
-## Tunes the radio to a station (or to static) without the dial.
+## Tunes the radio to a station (or to static) without the dial. What the
+## station it leaves held on ends with it, as when the dial leaves it (GDD
+## 6.2: static has no effect; the news keeps him awake "while tuned").
 func set_radio(station: StringName) -> void:
 	_radio_index = _stations.find(station)
 	radio = station if _radio_index != -1 else STATIC
-	_radio_held = STATIC
+	if _radio_held != radio:
+		_let_station_go()
 	_radio_time = 0.0
+
+
+## The status the radio's station held on is let go.
+func _let_station_go() -> void:
+	if _radio_held != STATIC:
+		_effects.hold(_radio_held, &"radio", false)
+	_radio_held = STATIC
 
 
 ## What is once per leg may be done again: a leg begins, or a boss does
@@ -497,6 +516,7 @@ func add_item(id: StringName, slot: StringName, supply: int = -1) -> Item:
 			var standing: Standing = _standing_of(GameData.as_dict(listed))
 			if standing != null:
 				item.standing.append(standing)
+	_mark_music(item)
 	items.append(item)
 	_refresh_passives()
 	return item
@@ -509,6 +529,17 @@ func remove_item(item: Item) -> void:
 	_put_out(item)
 	items.erase(item)
 	_refresh_passives()
+
+
+## What an item gives his Nerves by the second while it holds the status
+## "music" on (a tape, while it plays) is that music's calm.
+func _mark_music(item: Item) -> void:
+	for holding: Standing in item.standing:
+		if holding.kind != Standing.STATUS or holding.effect != MUSIC:
+			continue
+		for other: Standing in item.standing:
+			if other.kind == Standing.NERVES and other.condition == holding.condition:
+				other.music = true
 
 
 ## The entry of a "gives" or "takes" list that works all the time the item
@@ -1468,6 +1499,7 @@ func on_lane_line_crossed() -> void:
 # --- The tick ----------------------------------------------------------------
 
 func step(dt: float) -> void:
+	music_rate = 0.0
 	_horn_cooldown = maxf(_horn_cooldown - dt, 0.0)
 	since_wipe += dt
 	if indicator != 0:
@@ -1506,7 +1538,10 @@ func step(dt: float) -> void:
 				Standing.NERVES:
 					if on:
 						# What comes out of the deck is halved by an open window.
-						_nerves.add_rate(standing.amount * (deck_mult if _is_tape(candidate) else 1.0))
+						var rate: float = standing.amount * (deck_mult if _is_tape(candidate) else 1.0)
+						_nerves.add_rate(rate)
+						if standing.music:
+							music_rate += rate
 				Standing.STATUS:
 					if on != standing.held:
 						standing.held = on
@@ -1580,15 +1615,13 @@ func _step_radio(dt: float) -> void:
 	var mult: float = _window_radio_mult if flag(FLAG_WINDOW) else 1.0
 	if radio == &"music":
 		_nerves.add_rate(_radio_music_rate * mult)
+		music_rate += _radio_music_rate * mult
 	elif radio == &"news":
 		_nerves.add_rate(_radio_news_rate * mult)
 	# The station is a status while it plays: "news" implies Awake, "music"
 	# is what the beads answer to (GDD 7.8).
 	if radio != _radio_held:
-		if _radio_held != STATIC:
-			_effects.hold(_radio_held, &"radio", false)
+		_let_station_go()
 		if radio != STATIC and _data.has_record("effects", String(radio)):
 			_effects.hold(radio, &"radio", true)
 			_radio_held = radio
-		else:
-			_radio_held = STATIC

@@ -753,6 +753,53 @@ func test_pass_drummer() -> void:
 	_to_first_leg(_telling_seed("drummer"))
 	check_eq(GameData.as_string(_on_to_basra().get("guest")), "", "(with nobody in the seat at the end there is no guest)")
 
+	# What the review of M8 found (RULES-05, -10, -11).
+	_check_one_music()
+
+
+## Nerves by the second on the empty road with what plays: his drum, the
+## radio tuned to music by the dial, a mixtape in the deck; the window wound
+## down by its crank.
+func _music_calm(drums: bool, radio: bool, tape: bool, window: bool) -> float:
+	_on_the_road("drummer" if drums else "")
+	if tape:
+		_give("mixtape")
+	if window:
+		_reach("window_crank")
+		_crank(GameData.as_float(_ritual("window_crank").get("turns")))
+		check(_sim.items.flag(ItemSim.FLAG_WINDOW), "(he winds the window down)")
+	if radio:
+		_tune(tuning.a("radio_stations").find("music") + 1)
+		check_eq(_sim.items.radio, ItemSim.MUSIC, "(he tunes the radio to music)")
+	_ticks(2)
+	_sim.nerves.set_value(60.0)
+	return _nerves_over(4.0) / 4.0
+
+
+## The drum is "the music effect without the radio" (GDD 8.2): one music with
+## whatever else plays, never weaker for the radio being on (an open window
+## halves what comes out of the dash, GDD 4.6, not a drum), never a second
+## music beside a tape.
+func _check_one_music() -> void:
+	var music: float = tuning.f("radio_music_rate")
+	var open: float = tuning.f("window_radio_mult")
+	var tape: float = 0.0
+	for give: Variant in GameData.as_array(_record("mixtape").get("gives")):
+		var entry: Dictionary = GameData.as_dict(give)
+		if GameData.as_string(entry.get("resource")) == "nerves" and GameData.as_string(entry.get("while")) == "playing":
+			tape = GameData.as_float(entry.get("per_s"))
+	check(tape < music and music < 0.0 and open < 1.0, "(a tape calms more than the radio's music, and an open window lets some of either out)")
+	var silent: float = _music_calm(false, false, false, false)
+	check_near(_music_calm(true, false, false, false) - silent, music, 0.01, "his drum alone is the music effect: %.2f Nerves a second" % music)
+	check_near(_music_calm(true, true, false, false) - silent, music, 0.01, "his drum and the radio's music are one music")
+	check_near(_music_calm(true, false, false, true) - silent, music, 0.01, "an open window lets none of his drum out")
+	check_near(_music_calm(false, true, false, true) - silent, music * open, 0.01, "(the radio's music through an open window is %.2f)" % (music * open))
+	check_near(_music_calm(true, true, false, true) - silent, music, 0.01, "the drum is never weaker for the radio being on: with the window open the two are still the drum's %.2f" % music)
+	check_near(_music_calm(false, false, true, false) - silent, tape, 0.01, "(a mixtape alone is %.2f)" % tape)
+	check_near(_music_calm(true, false, true, false) - silent, tape, 0.01, "beside a tape the drum is no second music: the stronger of the two, not their sum")
+	check_near(_music_calm(false, false, true, true) - silent, tape * open, 0.01, "(the tape through an open window is %.2f)" % (tape * open))
+	check_near(_music_calm(true, false, true, true) - silent, minf(tape * open, music), 0.01, "the tape through an open window and his drum: one music still, the stronger")
+
 
 # --- T-PASS-STUDENT ----------------------------------------------------------
 
@@ -1118,3 +1165,52 @@ func test_pass_apprentice() -> void:
 	var arrived: Dictionary = _on_to_basra()
 	check_eq(_count_events("passenger_left"), 0, "he gets out at no stop of the night")
 	check_eq(GameData.as_string(arrived.get("guest")), "apprentice", "he rides to Basra: he is a wedding guest")
+
+	# What the review of M8 found (RULES-01, -02, -03, -05, -07, -10).
+	_check_retune_ends_the_station()
+
+
+## The dial dragged `steps` stations to the right, through the hand.
+func _tune(steps: int) -> void:
+	_reach("radio")
+	_input.pointer_is_absolute = false
+	_input.lmb = true
+	_input.pointer_delta = Vector2(tuning.f("radio_step_px") * (float(steps) + 0.2) / 20.0, 0.0)
+	_ticks(20)
+	_input.pointer_delta = Vector2.ZERO
+	_input.lmb = false
+	_ticks(SETTLE)
+	_input.clear()
+
+
+## When the boy turns the dial to static, what the station held on ends as it
+## does when the dial itself goes there (GDD 6.2: "Static: no effect"; 6.1:
+## the news keeps him awake "while tuned"; 7.8: the beads answer to music).
+func _check_retune_ends_the_station() -> void:
+	var every: float = GameData.as_float(GameData.as_dict(_passenger("apprentice").get("retunes")).get("every_s"))
+	var stations: Array = tuning.a("radio_stations")
+	for station: String in ["news", "music"]:
+		_on_the_road("apprentice")
+		_give("beads")
+		_tune(stations.find(station) + 1)
+		_ticks(2)
+		check_eq(String(_sim.items.radio), station, "(he drags the dial to the %s)" % station)
+		check(_sim.effects.has(StringName(station)), "(while it plays, its status is on)")
+		if station == "news":
+			check(_sim.effects.has(DriveSim.AWAKE), "(the news keeps him awake while it is tuned)")
+		else:
+			check(not _sim.items.pair("bead_calm").is_empty(), "(the beads answer to the radio's music)")
+		_events = []
+		var guard: int = _ticks_in(every + 1.0)
+		while _sim.items.radio != ItemSim.STATIC and guard > 0:
+			guard -= 1
+			_tick()
+		check_eq(_sim.items.radio, ItemSim.STATIC, "(the boy turns it to static)")
+		check(not _sim.effects.has(StringName(station)), "static has no effect: what the %s held on ends when he turns the dial away" % station)
+		check_eq(_count_events("effect_expired", "effect", station), 1, "and its end is said in the tick he turned it")
+		if station == "news":
+			check(not _sim.effects.has(DriveSim.AWAKE), "a silent radio keeps nobody awake")
+		else:
+			check(_sim.items.pair("bead_calm").is_empty(), "and the beads have no music to answer to")
+		_ticks(_ticks_in(every * 0.5))
+		check(not _sim.effects.has(StringName(station)), "(nor does it come back by itself)")

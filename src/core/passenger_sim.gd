@@ -418,10 +418,12 @@ func step(dt: float, gear: int, raining: bool) -> void:
 	if weighing and not _weighing:
 		_say("prayer")
 	_weighing = weighing
-	# His drum is music as the radio's is (GDD 6.1), unless the radio plays
-	# music already: music is music once.
-	if drumming and _held.has(ItemSim.MUSIC) and _items.radio != ItemSim.MUSIC:
-		_nerves.add_rate(_music_rate)
+	# His drum is music as the radio's is (GDD 6.1), and music is music once:
+	# where the radio or a tape plays as well, the drum gives only what it is
+	# stronger by. (An open window lets out what comes from the dash, GDD 4.6;
+	# his drum is not the radio.)
+	if drumming and _held.has(ItemSim.MUSIC):
+		_nerves.add_rate(minf(_music_rate - _items.music_rate, 0.0))
 
 
 ## One fault per leg (GDD 8.2): announced, then for a while he leans across
