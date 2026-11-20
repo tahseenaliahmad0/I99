@@ -1778,3 +1778,98 @@ built by the workflow `m6-fixes`; this entry is what that work is held to.
   the Arrival (NEEDS OWNER: `subtitle_bottom_margin`). No font slot per
   language yet (GDD 17.3; with the settings). For M9: a heckle's subtitle
   is its 2 s tell, and a line that waits behind another shortens it.
+
+## D-055 (M6 review, 2026-11-20) How the rulings of D-049 were built
+
+Built by the workflow `m6-fixes` on branches of their own and merged here
+(`m6fix/seams`, `m6fix/rituals`; what `m6fix/misc` and the tests after it
+add is entered below when it is merged). This amends D-031, D-036, D-038,
+D-040, D-041 and D-042 where they describe stops and pull-overs.
+
+- **Where the night waits** (`DriveSim._standing()`: at a stop, with the
+  officer) step 9 does not run: no effect timer, no item, no Nerves; only
+  a Snap's seconds are counted down. The hand is offered what
+  `_ritual_at` gives there: at a stop the stop's rituals (the tray,
+  placing what he bought, a hitcher's door), with the officer the controls
+  whose `requires` name `pulled_over` (his licence, banknotes). An anchor
+  is in use only where a ritual is offered, so the lever and the thumb
+  keypad wait for the road too.
+- **Pulled over** he is found with his eyes open (`NervesSim.rouse`): a
+  blink or Nod in progress would otherwise leave them shut for as long as
+  the officer waits. A call that was ringing is not dropped there; it
+  cannot be answered, and rings on for its remaining seconds when he is
+  let go. (At a stop a ringing call is dropped, as D-042 has it, and now
+  announced: `call_resolved` with `answered: false`, `dropped: true`.)
+- **A Snap that is running as he pulls into a stop is over there** (the
+  simulation is made anew and the save does not hold it). The countdown at
+  a stop is for a Snap that begins there.
+- **Once per leg at the edges.** `_set_stretch(plan, renews)`: a leg and a
+  boss renew, the road to a fork, the street of the Arrival and the road
+  beside a stop do not. On the road from Baghdad to the first fork nothing
+  has been done yet, so a look at the photo there counts and the first leg
+  renews it. What lasts "for the leg" and is taken in a boss lasts through
+  the boss stop and the road to the next fork and ends at the gore.
+  Passengers renew what they do once per leg at the same places (D-051).
+- **The save holds two more numbers**, each as the exact bits of a float:
+  `lapse` on an item (the seconds until its Craving bites; only while one
+  is owed) and `call_wait` in `item_state` (the seconds to the next ring;
+  negative while the wait is not drawn). A save without them loads with no
+  Craving owed and the wait still to be drawn. A cigarette that a stop
+  puts out starts its Craving there.
+- **Firsts.** `leg_state.spared` and `item_state.tape_spent` keep their
+  names and now say that the leg's first scrape, and the act's first
+  fault, is behind him, with or without the charm or the tape aboard.
+- **What a stop ends is said before it is rebuilt** (`_save_point`,
+  `_announce_what_ends`): `effect_expired` for every status that is on
+  except those the leg holds to its end; what the tape or the radio holds
+  on (`music`, `news`) ends there too and is announced again on the first
+  tick after he leaves. Statuses are reported a second time each tick,
+  after leg progress, so that what the gore ends is said in its tick; a
+  Snap that a missed Exit brings is announced as well (it used to reset
+  his Nerves and block his hand without a word).
+- **Requirements at completion.** `ItemSim.complete()` asks them again and
+  says whether the ritual ran; `ritual_completed` and the ritual's sound
+  follow only if it did. The gesture is not cancelled when its ritual
+  stops being possible: the hand's time is spent and nothing happens. (A
+  TAP on his pocket that ends after the Call has rung out therefore takes
+  nothing and Noor says nothing.)
+- **The same place** is the same place under the pointer: an anchor whose
+  pointer position equals that of an anchor the carried thing may be put
+  down on is switched off while the carry lasts. Today only `radio` and
+  `tape` coincide; with the rule above the dial is not in use at a stop
+  anyway, so this matters only for a tape carried on the road.
+- **A gust** is a countdown in the road's seconds: 120 ticks without
+  Focus, 141 with it, the car carried `gust_push` times `gust_duration`
+  either way.
+- **Drips** (a resource entry with `over`) are kept as 64-bit seconds: a
+  cigarette's calm falls on exactly its 3,000 ticks, the tick it is lit
+  included. The order of statuses within a tick is unchanged: what reads a
+  timed status in step 9 sees it for one tick less than its number.
+- **Left as it is, seen on the way:** a stop reorders the cabin's list
+  (items before Adaptations), which only tests that compare the order
+  see; the weather cramp's hum runs on while he is pulled over (it is the
+  hand's, like a Snap); the indicator's, the craving's and the horn's
+  countdowns are bare countdowns that land on their tick with today's
+  numbers.
+
+## D-056 (M10, 2026-11-20) What of M10 is built now, and what waits for the frame
+
+- **Context.** While M8 was being built the owner said: "Finish m6, m7, m8,
+  and m10 then pause for now". M9 is not on that list, and GDD 18 says not
+  to start a milestone before the tests of the one before it pass. Three
+  pieces of M10 had been built ahead of their milestone by workflows,
+  while the main line was on M6 to M8, under the rule that they touch
+  nothing in `src/core`; they lay parked in `wip/`.
+- **Reading.** "Finish" means the work that was in flight on those four:
+  the review fixes of M6, the review of M7 and its fixes, M8 with its
+  review, and of M10 the three presentation pieces, taken in, reviewed and
+  merged (D-052 to D-054). M9 is not started.
+- **What of M10 waits for M9.** The eleven settings of GDD 17.1 and their
+  effects, the mouse-only menus, and the three tests. T-SMOKE-ALL starts
+  the title, the wedding room and the drive scene in each of its kinds;
+  T-ONEHAND-01 walks every menu; T-SETTINGS-01 changes a setting
+  mid-Telling through them. None of these scenes exists before M9. Only
+  the settings store and the two Subtitles keys exist. Building the
+  settings without the menus that change them would be a second milestone
+  begun ahead of its turn, and the owner asked for a pause.
+- **The three tests of M10 stay registered as failing** until then.
