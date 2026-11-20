@@ -26,7 +26,9 @@ extends CanvasLayer
 ##
 ## The two Subtitles settings of GDD 17.1 are read from Settings and applied
 ## the moment they change: `subtitle_size` (small, medium or large) and
-## `subtitle_background` (on or off). Every size, margin and colour is in
+## `subtitle_background` (on or off). So is the font slot of the language
+## the lines are in (GDD 17.3: `font_en`, `font_ar`); while a slot is empty
+## the labels take the theme's font. Every size, margin and colour is in
 ## data/tuning.json (subtitles_view).
 ##
 ## The view changes nothing in the simulation and reads nothing from it: its
@@ -34,6 +36,10 @@ extends CanvasLayer
 
 const SIZE_SETTING: String = "subtitle_size"
 const BACKGROUND_SETTING: String = "subtitle_background"
+## A font slot for each language (GDD 17.3): this and the locale's code
+## (`font_en`, `font_ar`). The setting holds the path of a font of the
+## project for the lines of that language; "" is the theme's own font.
+const FONT_SETTING: String = "font_"
 ## The size shown when the setting names one that tuning does not have
 ## (a settings file edited by hand): the default of GDD 17.1.
 const DEFAULT_SIZE: String = "medium"
@@ -52,6 +58,10 @@ var _box: PanelContainer
 var _rows: VBoxContainer
 var _speaker: Label
 var _text: Label
+## What the font slot held when it was last read, and the font it named
+## (null for the theme's own).
+var _font_path: String = ""
+var _font: Font
 
 
 func setup(data: GameData) -> void:
@@ -85,6 +95,8 @@ func setup(data: GameData) -> void:
 		Events.wreck.connect(_on_wreck)
 	if not Settings.changed.is_connected(_on_setting_changed):
 		Settings.changed.connect(_on_setting_changed)
+	if not Lines.locale_changed.is_connected(_on_locale_changed):
+		Lines.locale_changed.connect(_on_locale_changed)
 
 
 ## Shows a line of the line table by its id, after whatever is showing and
@@ -207,6 +219,42 @@ func _apply_settings() -> void:
 	_speaker.add_theme_font_size_override("font_size", speaker_size)
 	_speaker.add_theme_constant_override("outline_size", roundi(float(speaker_size) * outline_share))
 	_box.add_theme_stylebox_override("panel", _background(GameData.as_bool(Settings.get_value(BACKGROUND_SETTING))))
+	_apply_font()
+
+
+## The font slot of the language the lines are in (GDD 17.3): both labels
+## take the font it names. An empty slot leaves them the theme's font, and
+## so does one that names no font.
+func _apply_font() -> void:
+	var face: Font = _slot_font(FONT_SETTING + Lines.locale)
+	for label: Label in [_speaker, _text]:
+		if face == null:
+			label.remove_theme_font_override("font")
+		else:
+			label.add_theme_font_override("font", face)
+
+
+## The font a font slot names, null for the theme's own. The theme's font
+## stands behind it for the letters it does not have: a line the writer has
+## not come to yet is shown in English, whatever the font of the language.
+func _slot_font(slot: String) -> Font:
+	var path: String = GameData.as_string(Settings.get_value(slot)) if Settings.has_setting(slot) else ""
+	if path == _font_path:
+		return _font
+	_font_path = path
+	_font = null
+	if path.is_empty():
+		return null
+	var font: Font = load(path) as Font if ResourceLoader.exists(path, "Font") else null
+	if font == null:
+		push_warning("Subtitles: the setting '%s' names no font ('%s'); showing the theme's" % [slot, path])
+		return null
+	var behind: Array[Font] = [_text.get_theme_default_font()]
+	var face: FontVariation = FontVariation.new()
+	face.base_font = font
+	face.fallbacks = behind
+	_font = face
+	return _font
 
 
 ## What the text stands on. The room around the text is the same with the
@@ -238,5 +286,10 @@ func _on_wreck(_data: Dictionary) -> void:
 
 
 func _on_setting_changed(key: String, _value: Variant) -> void:
-	if _tuning != null and (key == SIZE_SETTING or key == BACKGROUND_SETTING):
+	if _tuning != null and (key == SIZE_SETTING or key == BACKGROUND_SETTING or key.begins_with(FONT_SETTING)):
 		_apply_settings()
+
+
+func _on_locale_changed(_locale: String) -> void:
+	if _tuning != null:
+		_apply_font()

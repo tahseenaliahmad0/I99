@@ -15,7 +15,7 @@ extends SceneTree
 ##   - the view, from a line asked for on the Events bus to what its labels hold
 ##   - a line is not said twice over, and only a few wait
 ##   - a line table as the writer will leave it: names, right to left, an
-##     exchange
+##     exchange, a font
 ##   - the Call of Dawn: the simulation asks for what Noor says, and it is shown
 ##   - the Subtitles layer of scenes/drive.tscn
 ##   - the drive scene running: --say, the Call answered, and the night begun again

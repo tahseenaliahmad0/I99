@@ -62,6 +62,10 @@ func _ready() -> void:
 		# Subtitles (GDD 17.1): size small, medium or large; background on or off.
 		"subtitle_size": "medium",
 		"subtitle_background": true,
+		# A font slot for each language (GDD 17.3): the path of a font of the
+		# project, "" for the theme's own.
+		"font_en": "",
+		"font_ar": "",
 	})
 	Lines.setup(data)
 	Audio.setup(data)

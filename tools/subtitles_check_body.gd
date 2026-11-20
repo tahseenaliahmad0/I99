@@ -597,6 +597,15 @@ func _settings() -> void:
 	var sizes: Dictionary = _tuning.d("subtitle_font_sizes")
 	_check(sizes.size() == 3 and GameData.as_float(sizes.get("small")) > 0.0 and GameData.as_float(sizes.get("small")) < GameData.as_float(sizes.get("medium")) and GameData.as_float(sizes.get("medium")) < GameData.as_float(sizes.get("large")),
 			"tuning has the three sizes, small under medium under large (%s)" % str(sizes))
+	# GDD 17.3: "Use a font slot per language in settings; the owner will add an Arabic font."
+	var slots: PackedStringArray = []
+	var empty: bool = true
+	for locale: String in GameData.LINE_LOCALES:
+		var slot: String = SubtitlesView.FONT_SETTING + locale
+		if Settings.has_setting(slot):
+			slots.append(slot)
+			empty = empty and Settings.get_value(slot) is String and GameData.as_string(Settings.get_value(slot)).is_empty()
+	_check(slots.size() == GameData.LINE_LOCALES.size() and empty, "Settings has a font slot for each language of the line files, empty by default (%s)" % ", ".join(slots))
 
 
 ## The validator knows the constants of GDD 15 by name; these it only reads
@@ -885,9 +894,11 @@ func _new_queue() -> SubtitleQueue:
 ## in as well, in Arabic, which no writer is asked for. What is held: the tag
 ## is the text of the speaker's own line; both lines of a subtitle run the
 ## way their sentence does; and who speaks, and how many they are, is read
-## from the English table whatever another one says.
+## from the English table whatever another one says. Then the font the owner
+## will add for the language (GDD 17.3): its slot in the settings, with a
+## font made here standing in for it.
 func _written() -> void:
-	_heading("a line table as the writer will leave it: names, right to left, an exchange")
+	_heading("a line table as the writer will leave it: names, right to left, an exchange, a font")
 	var english: Dictionary = GameData.as_dict(_data.lines.get("en")).duplicate(true)
 	var arabic: Dictionary = GameData.as_dict(_data.lines.get("ar")).duplicate(true)
 	var written: Dictionary = {"speaker": "", "text": "", "needs_writer": false}
@@ -945,11 +956,38 @@ func _written() -> void:
 	_check(asked == "%s: %s" % [RTL_CHILD, RTL_ASKED] and answered == "%s: %s" % [RTL_SPEAKER, RTL_ANSWERED] and not view.is_showing(),
 			"so it is still two subtitles, each under the name its speaker's own line gives in Arabic")
 
+	# The font slot of the language (GDD 17.3). A font made here stands in
+	# for the one the owner will add. (Test runs in other checkouts clear the
+	# folder the tools share, so it is made again before the font goes in.)
+	var speaker: Label = view.get_node("Box/Rows/Speaker") as Label
+	var slot: String = SubtitlesView.FONT_SETTING + "ar"
+	var font_path: String = Game.user_dir.path_join("subtitles_check_font_%d.tres" % OS.get_process_id())
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(Game.user_dir))
+	var saved: Error = ResourceSaver.save(SystemFont.new(), font_path)
+	var own: Font = text.get_theme_font("font")
+	_check(saved == OK and _given_font(text).is_empty() and _given_font(speaker).is_empty(), "while the slots are empty the labels take the theme's font")
+	Settings.set_value(slot, font_path)
+	_check(_given_font(text) == font_path and _given_font(speaker) == font_path,
+			"a font named in `%s` is taken by the tag and the text as soon as it is set, the lines being in Arabic" % slot)
+	var face: FontVariation = text.get_theme_font("font") as FontVariation
+	_check(face != null and face.fallbacks.size() == 1 and is_same(face.fallbacks[0], own), "with the theme's font behind it, for the letters it does not have")
+	Lines.set_locale(Lines.FALLBACK_LOCALE)
+	_check(_given_font(text).is_empty() and _given_font(speaker).is_empty(), "in English, whose slot is empty, they take the theme's font again")
+	Lines.set_locale("ar")
+	_check(_given_font(text) == font_path and _given_font(speaker) == font_path, "and in Arabic the Arabic font")
+	Settings.set_value(slot, "")
+	_check(_given_font(text).is_empty() and _given_font(speaker).is_empty(), "an emptied slot gives the theme's font back at once")
+	# A settings file edited by hand may name what is no font: the view says so (one warning) and keeps the theme's.
+	print("        (one warning about the font 'res://data/tuning.json' is expected here)")
+	Settings.set_value(slot, "res://data/tuning.json")
+	_check(_given_font(text).is_empty() and _given_font(speaker).is_empty(), "a slot that names no font leaves the theme's font")
+
 	# Nothing is left behind for the next tool or test.
 	Lines.set_locale(Lines.FALLBACK_LOCALE)
 	Lines.setup(_data)
 	Settings.reset_to_defaults()
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(Game.user_dir.path_join(Settings.FILE_NAME)))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(font_path))
 	view.free()
 
 
@@ -1316,6 +1354,15 @@ func _line_text(id: String) -> String:
 ## Who says a line, as the speaker column of the English table writes it.
 func _line_speaker(id: String) -> String:
 	return GameData.as_string(_data.line(id).get("speaker"))
+
+
+## The path of the font a label has been given in place of the theme's own
+## ("" while it has the theme's).
+func _given_font(label: Label) -> String:
+	if not label.has_theme_font_override("font"):
+		return ""
+	var face: FontVariation = label.get_theme_font("font") as FontVariation
+	return face.base_font.resource_path if face != null and face.base_font != null else "?"
 
 
 func _longest(lines: PackedStringArray) -> int:
