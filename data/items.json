@@ -21,7 +21,8 @@
     { "id": "hook_set" },
     { "id": "hook_cooldown" },
     { "id": "the_call" },
-    { "id": "in_bay" }
+    { "id": "in_bay" },
+    { "id": "at_window" }
   ],
 
   "synergy_tokens": ["music", "photo"],
@@ -126,7 +127,7 @@
     { "id": "arak_flask", "kind": "deal", "slots": ["cup_a", "cup_b"], "tags": ["drink"],
       "rarity": "uncommon", "price": 45, "contraband": true,
       "supply": { "uses": 6, "restock": 20 },
-      "rituals": ["flask_sip"],
+      "rituals": ["stow", "flask_sip"],
       "gives": [ { "resource": "nerves", "amount": -5 },
                  { "effect": "courage", "duration": 45 } ],
       "takes": [],
@@ -243,7 +244,7 @@
       "line_ids": { "name": "item.wide_mirror.name" } },
     { "id": "forged_papers", "kind": "deal", "slots": ["dash_1", "dash_2", "glovebox_a", "glovebox_b"], "tags": ["small", "papers", "stowed"],
       "rarity": "rare", "price": 60, "contraband": true,
-      "rituals": [],
+      "rituals": ["stow"],
       "gives": [],
       "takes": [],
       "params": { "passes": "papers" },

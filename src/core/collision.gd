@@ -280,6 +280,9 @@ func _move_clear(vehicle: TrafficSim.Vehicle, car: CarSim, vehicles: Array[Traff
 func _is_free(car: CarSim, s: float, x: float, vehicles: Array[TrafficSim.Vehicle], except: Array[TrafficSim.Vehicle]) -> bool:
 	if x - car.half_width() < car.left_limit_x() + _pushback or x + car.half_width() > car.guardrail_x() - _pushback:
 		return false
+	# Between a checkpoint's barriers there is no room beside anything.
+	if x - car.half_width() <= car.wall_left or x + car.half_width() >= car.wall_right:
+		return false
 	return _vehicle_at(car, s, vehicles, except, x) == null
 
 

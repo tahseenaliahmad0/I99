@@ -23,6 +23,10 @@ var _legs_met: int = 0
 var _was_stage: int = RunState.Stage.NONE
 ## Ticks the scripted driver's hand has been on the key.
 var _key_ticks: int = 0
+## What the scripted driver's hand is busy with: steps done one after the
+## other (see _work_the_hand).
+var _hand_steps: Array[Array] = []
+var _crank_heading: float = 0.0
 ## Legs (by number) whose passed Exit has been checked.
 var _missed_checked: Dictionary = {}
 
@@ -39,6 +43,8 @@ func before_each() -> void:
 	_legs_met = 0
 	_was_stage = RunState.Stage.NONE
 	_key_ticks = 0
+	_hand_steps = []
+	_crank_heading = 0.0
 	_missed_checked = {}
 
 
@@ -194,6 +200,14 @@ func test_run_01() -> void:
 	for index: int in mini(bosses.size(), 3):
 		check_eq(GameData.as_string(bosses[index].get("boss")), GameData.as_string(RunGenerator.boss_of(data, index + 1).get("id")), "act %d ends in its boss" % (index + 1))
 		check_eq(GameData.as_int(bosses[index].get("act")), index + 1, "in act %d" % (index + 1))
+	# The bosses were driven, not jumped over: he queued, opened his window and
+	# handed over what the soldier asked for, and was let through; at Dawn he
+	# took the last checkpoint's barriers at their speed.
+	var verdicts: Array[Dictionary] = _events_named("pulled_over")
+	check_eq(verdicts.size(), 1, "the law dealt with him once in the night: at the Checkpoint")
+	if verdicts.size() == 1:
+		check_eq(GameData.as_string(verdicts[0].get("paid")), "pass", "where he passed")
+		check(GameData.as_bool(verdicts[0].get("released")), "(and was let through)")
 
 	# The Arrival reads the Clock: what he drove, at 20 game seconds a second, and what his stops cost.
 	var arrived: Dictionary = _event("arrived")
@@ -626,6 +640,16 @@ func _script_tick() -> void:
 					x = _clear_lane_x()
 				if car.s > barriers.x + 10.0 and car.s < barriers.z:
 					gear = 2
+			elif _sim.boss.kind == BossSim.CHECKPOINT:
+				# The Checkpoint: the middle lane's queue in first gear, on the
+				# brake behind whatever is ahead and at the bar; then the window
+				# and whatever the soldier's sign asks for.
+				x = car.lane_center(1)
+				gear = tuning.i("start_gear")
+				_brake_behind(1)
+				if _sim.boss.phase == BossSim.PAPERS and _hand_steps.is_empty():
+					_plan_the_papers()
+				_work_the_hand()
 			else:
 				x = _clear_lane_x()
 		RunState.Stage.ARRIVAL:
@@ -637,6 +661,83 @@ func _script_tick() -> void:
 	if _sim.gate.gear != gear:
 		_sim.gate.reset(gear)
 	car.x = x
+
+
+## The brake goes on behind whatever is ahead in `lane`, and before the
+## Checkpoint's bar while it is down.
+func _brake_behind(lane: int) -> void:
+	var car: CarSim = _sim.car
+	var room: float = INF
+	if not _sim.boss.released:
+		room = _sim.boss.bar_at - (car.s + car.length() * 0.5)
+	for vehicle: TrafficSim.Vehicle in _sim.traffic.vehicles:
+		if absf(vehicle.x - car.lane_center(lane)) < car.lane_width() * 0.5 and vehicle.s > car.s:
+			room = minf(room, vehicle.s - vehicle.half_length - car.s - car.length() * 0.5)
+	var speed_ms: float = car.speed * KMH_TO_MS
+	if room < 1.5 + speed_ms * speed_ms / (2.0 * tuning.f("brake_decel") * KMH_TO_MS) + speed_ms * 0.15:
+		_input.rmb = true
+
+
+## What the hand must do for the soldier (GDD 10.2): the window, if it is
+## shut; then the document his sign asks for, from where it is kept.
+func _plan_the_papers() -> void:
+	if not _sim.items.flag(ItemSim.FLAG_WINDOW):
+		_hand_steps.append(["go", "window_crank"])
+		_hand_steps.append(["crank"])
+		_hand_steps.append(["up", 6])
+		return
+	var from: String = "dash_1"
+	match _sim.boss.wanted:
+		"id":
+			from = "pocket"
+		"registration":
+			from = "glovebox"
+			if not _sim.items.flag(ItemSim.FLAG_GLOVEBOX):
+				# A TAP opens the glovebox.
+				_hand_steps.append(["go", from])
+				_hand_steps.append(["down", 4])
+				_hand_steps.append(["up", 6])
+				return
+			if not _sim.items.flag(&"letter_aside"):
+				# The letter lies on top: held aside for 0.4 s.
+				_hand_steps.append(["go", from])
+				_hand_steps.append(["down", int(GameData.as_float(data.record("rituals", "letter_aside").get("hold_s")) / DT) + 2])
+				_hand_steps.append(["up", 6])
+				return
+	_hand_steps.append(["go", from])
+	_hand_steps.append(["down", 12])
+	_hand_steps.append(["carry", "driver_window"])
+	_hand_steps.append(["up", 30])
+
+
+## One tick of the hand's work: "go" (the pointer on an anchor until the hand
+## rests there), "down" and "up" (the button, for so many ticks), "carry"
+## (the button down, the pointer on another anchor until the hand is there),
+## "crank" (the button down, the pointer led round until the window is open).
+func _work_the_hand() -> void:
+	if _hand_steps.is_empty():
+		return
+	var step: Array = _hand_steps[0]
+	var what: String = step[0]
+	match what:
+		"go", "carry":
+			var anchor: StringName = StringName(GameData.as_string(step[1]))
+			_input.pointer_is_absolute = true
+			_input.pointer = _sim.hand.anchor_pointer(_sim.hand.anchor_index(anchor))
+			_input.lmb = what == "carry"
+			if _sim.hand.at_id() == anchor:
+				_hand_steps.remove_at(0)
+		"down", "up":
+			_input.lmb = what == "down"
+			step[1] = GameData.as_int(step[1]) - 1
+			if GameData.as_int(step[1]) <= 0:
+				_hand_steps.remove_at(0)
+		"crank":
+			_crank_heading += deg_to_rad(12.0)
+			_input.lmb = true
+			_input.pointer_delta = Vector2(cos(_crank_heading), sin(_crank_heading)) * 6.5
+			if _sim.items.flag(ItemSim.FLAG_WINDOW):
+				_hand_steps.remove_at(0)
 
 
 ## The Arrival (GDD 10.5): the brake goes on in time to stop in the middle of

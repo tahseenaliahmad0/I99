@@ -23,7 +23,8 @@ const THIN_SALT: int = 3
 const NIGHT: String = "night"
 const CORRIDOR: String = "corridor"
 
-## Dawn's three phases (GDD 10.4).
+## Dawn's three phases (GDD 10.4). `phase` holds these in Dawn and the
+## Checkpoint's at the Checkpoint.
 const FALSE_DAWN: int = 1
 const SUNRISE: int = 2
 const THE_CALL: int = 3
@@ -38,6 +39,16 @@ const CALL_OVER: String = "over"
 const TAKEN_ALONE: String = "alone"
 const TAKEN_WITH_PASSENGER: String = "passenger"
 const TAKEN_PARKED: String = "parked"
+
+## The Checkpoint's phases (GDD 10.2): the queue; the soldier on his way to
+## the window; the papers; let through.
+const QUEUE: int = 1
+const STOW: int = 2
+const PAPERS: int = 3
+const THROUGH: int = 4
+## Vehicles of the queue, and one that has been waved on.
+const QUEUE_ROLE: StringName = &"queue"
+const WAVED_ON_ROLE: StringName = &"waved_on"
 
 ## The boss he is in ("" on any other road) and its modifier ("" for none).
 var kind: String = ""
@@ -78,6 +89,17 @@ var call_answered: bool = false
 ## ear in his own hand.
 var wrist_steer: float = 1.0
 
+# --- The Checkpoint (GDD 10.2) -----------------------------------------------
+## Where the bar is along the road (0 on any other road), and whether it is up.
+var bar_at: float = 0.0
+var released: bool = false
+## Seconds until the soldier is at his window (the Stow phase).
+var stow_left: float = 0.0
+## The document the soldier's sign asks for now ("" when it asks for none),
+## and the seconds since that sign went up.
+var wanted: String = ""
+var delay: float = 0.0
+
 # --- The Arrival (GDD 10.5) --------------------------------------------------
 ## Where the marked bay begins and ends along the street (both 0 elsewhere).
 var bay_from: float = 0.0
@@ -99,10 +121,21 @@ var call_ended: bool = false
 var searched: bool = false
 ## He ran into the end of the street at this speed, km/h (0: he did not).
 var wall_speed: float = 0.0
+## He ran into the lowered bar at this speed, km/h (0: he did not).
+var bar_speed: float = 0.0
+## The soldier has reached his window: what he sees is counted now.
+var stow_ended: bool = false
+## A sign went up (the first, or the next document of a thorough check).
+var asked: bool = false
+## One more delay_every_s has gone by with the sign up.
+var delayed: bool = false
+## Every document asked for has been handed over.
+var papers_done: bool = false
 
 var _data: GameData
 var _car: CarSim
 var _rng: Rng
+var _traffic: TrafficSim
 var _thin_s: float = 0.0
 var _thin_m: float = 0.0
 var _thick_s: float = 0.0
@@ -135,12 +168,39 @@ var _call_at: float = 0.0
 var _ring_s: float = 0.0
 var _talk_s: float = 0.0
 var _bump_kmh: float = 0.0
+## The Checkpoint's queue: for each lane the vehicles still waiting, the one
+## at the bar first; the seconds that one has been served; and the vehicle
+## last waved on, until it is gone.
+var _queue: Array[Array] = []
+var _served: PackedFloat64Array = PackedFloat64Array()
+var _waved_on: Array[TrafficSim.Vehicle] = []
+## How fast each of those is by now, km/h (TrafficSim sets a vehicle's own
+## speed to its cruise every tick, and theirs is 0 for it).
+var _waved_speed: PackedFloat64Array = PackedFloat64Array()
+var _queue_plan: Array = []
+var _queue_gap: float = 0.0
+var _creep_ms: float = 0.0
+var _pull_up_rate: float = 0.0
+var _serve_s: float = 0.0
+var _leave_kmh: float = 0.0
+var _queue_clear: float = 0.0
+var _settle_m: float = 0.0
+var _leave_accel: float = 0.0
+var _stop_zone: float = 0.0
+var _stow_s: float = 0.0
+var _delay_every: float = 0.0
+## The documents the soldier will ask for, in order; those still to come; and
+## how many delays have been counted against the sign that is up.
+var _documents_plan: Array = []
+var _documents: Array[String] = []
+var _delays: int = 0
 
 
-func configure(data: GameData, car: CarSim, rng: Rng) -> void:
+func configure(data: GameData, car: CarSim, rng: Rng, traffic: TrafficSim) -> void:
 	_data = data
 	_car = car
 	_rng = rng
+	_traffic = traffic
 
 
 # --- The plan ----------------------------------------------------------------
@@ -161,11 +221,40 @@ static func plan(data: GameData, boss_id: String, modifier_id: String, boss_seed
 	out["seed"] = boss_seed
 	var random: RandomNumberGenerator = Rng.seeded(Rng.derive(boss_seed, PLAN_SALT))
 	match boss_id:
+		CHECKPOINT:
+			_plan_checkpoint(out, GameData.as_dict(record.get("checkpoint")), modifier, random)
 		STORM:
 			_plan_storm(data, out, GameData.as_dict(record.get("storm")), modifier, random)
 		DAWN:
 			_plan_dawn(data, out, GameData.as_dict(record.get("dawn")), modifier, boss_seed)
 	return out
+
+
+## The Checkpoint's plan (GDD 10.2): which vehicles stand in each lane's
+## queue, the one at the bar first (half as many again in a Long queue), and
+## which documents the soldier will ask for (two when he is Thorough, never
+## the same one twice).
+static func _plan_checkpoint(out: Dictionary, checkpoint: Dictionary, modifier: Dictionary, random: RandomNumberGenerator) -> void:
+	var queue: Dictionary = GameData.as_dict(checkpoint.get("queue"))
+	var types: Array = GameData.as_array(queue.get("vehicles"))
+	var cars: int = roundi(GameData.as_float(queue.get("cars")) * GameData.as_float(modifier.get("queue_mult"), 1.0))
+	var lines: Array = []
+	for _lane: int in GameData.as_int(out.get("lanes")):
+		var line: Array = []
+		for _index: int in cars:
+			if not types.is_empty():
+				line.append(GameData.as_string(types[random.randi_range(0, types.size() - 1)]))
+		lines.append(line)
+	out["queue"] = lines
+	var left: Array = GameData.as_array(checkpoint.get("documents")).duplicate()
+	var asks: Array = []
+	for _index: int in GameData.as_int(modifier.get("documents"), 1):
+		if left.is_empty():
+			break
+		var pick: int = random.randi_range(0, left.size() - 1)
+		asks.append(GameData.as_string(left[pick]))
+		left.remove_at(pick)
+	out["documents"] = asks
 
 
 ## The street of the Arrival (GDD 10.5): nothing on it but the bay at its end.
@@ -293,6 +382,27 @@ func begin(plan_of_road: Dictionary) -> void:
 		_bump_kmh = GameData.as_float(street.get("bump_kmh"))
 		return
 	var record: Dictionary = _data.record("bosses", kind)
+	if kind == CHECKPOINT:
+		var checkpoint: Dictionary = GameData.as_dict(record.get("checkpoint"))
+		var queue: Dictionary = GameData.as_dict(checkpoint.get("queue"))
+		_set_corridor(GameData.as_dict(checkpoint.get("corridor")))
+		bar_at = _corridor_to
+		_queue_gap = GameData.as_float(queue.get("gap_m"))
+		_creep_ms = GameData.as_float(queue.get("creep_kmh")) * KMH_TO_MS
+		_pull_up_rate = GameData.as_float(queue.get("pull_up_per_s"))
+		_serve_s = GameData.as_float(queue.get("serve_s"))
+		_leave_kmh = GameData.as_float(queue.get("leave_kmh"))
+		_queue_clear = GameData.as_float(queue.get("clear_m"))
+		_settle_m = GameData.as_float(queue.get("settle_m"))
+		_leave_accel = _data.tuning.f("accel")
+		_stop_zone = GameData.as_float(checkpoint.get("stop_zone_m"))
+		_stopped_kmh = GameData.as_float(checkpoint.get("stopped_kmh"))
+		_bump_kmh = GameData.as_float(checkpoint.get("bump_kmh"))
+		_stow_s = GameData.as_float(checkpoint.get("stow_s"))
+		_delay_every = GameData.as_float(checkpoint.get("delay_every_s"))
+		_queue_plan = GameData.as_array(plan_of_road.get("queue"))
+		_documents_plan = GameData.as_array(plan_of_road.get("documents"))
+		_begin_queue()
 	if kind == DAWN:
 		var dawn: Dictionary = GameData.as_dict(record.get("dawn"))
 		var check: Dictionary = GameData.as_dict(dawn.get("checkpoint"))
@@ -351,6 +461,17 @@ func stop() -> void:
 	bay_from = 0.0
 	bay_to = 0.0
 	in_bay = false
+	bar_at = 0.0
+	released = false
+	stow_left = 0.0
+	wanted = ""
+	delay = 0.0
+	_queue = []
+	_served = PackedFloat64Array()
+	_waved_on = []
+	_waved_speed = PackedFloat64Array()
+	_documents = []
+	_delays = 0
 	_corridor_from = 0.0
 	_corridor_at = 0.0
 	_corridor_to = 0.0
@@ -369,6 +490,11 @@ func begin_tick() -> void:
 	call_ended = false
 	searched = false
 	wall_speed = 0.0
+	bar_speed = 0.0
+	stow_ended = false
+	asked = false
+	delayed = false
+	papers_done = false
 
 
 ## Before the car moves: the boss's own clock, and what goes by it. `dt` is
@@ -383,6 +509,15 @@ func step_road(dt: float, cabin_dt: float, hazards_on: bool) -> void:
 		_step_standing(dt, hazards_on)
 	elif kind == DAWN:
 		_step_call(cabin_dt)
+	elif kind == CHECKPOINT:
+		_step_soldier(cabin_dt)
+
+
+## After the traffic has moved: the Checkpoint's queue, which this class
+## moves itself (stop and go, nose to tail).
+func step_traffic(dt: float) -> void:
+	if active and kind == CHECKPOINT:
+		_step_queue(dt)
 
 
 ## After the car has moved, from `s_then` to where it is now.
@@ -402,6 +537,16 @@ func step_after_car(s_then: float) -> void:
 		if not _corridor_judged and s_then < _corridor_at and _car.s >= _corridor_at:
 			_corridor_judged = true
 			searched = _car.speed > _corridor_max_kmh + 0.001
+	elif kind == CHECKPOINT:
+		var nose: float = _car.length() * 0.5
+		if not released and s_then + nose <= bar_at + 0.001 and _car.s + nose > bar_at:
+			# The bar is down: it holds him. (A car beyond it already is not held.)
+			bar_speed = _car.speed if _car.speed > _bump_kmh else 0.0
+			_car.s = bar_at - nose
+			_car.speed = 0.0
+		if phase == QUEUE and _first_in_line():
+			phase = STOW
+			stow_left = _stow_s
 	elif kind == ARRIVAL:
 		var half_length: float = _car.length() * 0.5
 		if _car.s + half_length >= _length:
@@ -412,6 +557,176 @@ func step_after_car(s_then: float) -> void:
 		in_bay = _car.speed <= _stopped_kmh and _car.s - half_length >= bay_from
 
 
+# --- The Checkpoint ----------------------------------------------------------
+
+## Puts the queue on the road: in each lane its vehicles nose to tail, the
+## first at the bar. The phases begin again with it.
+func _begin_queue() -> void:
+	for line: Array in _queue:
+		for waiting: Variant in line:
+			var vehicle: TrafficSim.Vehicle = waiting
+			_traffic.remove(vehicle)
+	for gone: TrafficSim.Vehicle in _waved_on:
+		if gone != null:
+			_traffic.remove(gone)
+	_queue = []
+	_waved_on = []
+	_waved_speed = PackedFloat64Array()
+	_served = PackedFloat64Array()
+	for lane: int in _queue_plan.size():
+		var line: Array = []
+		var nose: float = bar_at
+		for type: Variant in GameData.as_array(_queue_plan[lane]):
+			var vehicle: TrafficSim.Vehicle = _traffic.spawn(StringName(GameData.as_string(type)), lane, nose, 0.0)
+			if vehicle == null:
+				continue
+			vehicle.s = nose - vehicle.half_length
+			vehicle.cruise = 0.0
+			vehicle.speed = 0.0
+			vehicle.role = QUEUE_ROLE
+			# Between barriers nobody can move over for a horn.
+			vehicle.yields_to_horn = false
+			nose = vehicle.s - vehicle.half_length - _queue_gap
+			line.append(vehicle)
+		_queue.append(line)
+		_served.append(0.0)
+		_waved_on.append(null)
+		_waved_speed.append(0.0)
+	phase = QUEUE
+	released = false
+	stow_left = 0.0
+	wanted = ""
+	delay = 0.0
+	_delays = 0
+	_documents = []
+	for document: Variant in _documents_plan:
+		_documents.append(GameData.as_string(document))
+
+
+## One tick of the queue. The vehicle at the bar is served for serve_s and
+## waved on; the rest pull up behind it, each at room x pull_up_per_s and
+## never faster than creep_kmh. TrafficSim leaves them where they are (their
+## cruise is 0): its follow gap would spread the queue out.
+func _step_queue(dt: float) -> void:
+	for lane: int in _queue.size():
+		var line: Array = _queue[lane]
+		var nose: float = bar_at
+		var gone: TrafficSim.Vehicle = _waved_on[lane]
+		if gone != null:
+			_waved_speed[lane] = minf(_waved_speed[lane] + _leave_accel * dt, _leave_kmh)
+			gone.speed = _waved_speed[lane]
+			gone.s += gone.speed * KMH_TO_MS * dt
+			gone.cruise = 0.0
+			if gone.s - gone.half_length < bar_at + _queue_clear:
+				# Not yet clear of the bar: the next one waits behind it.
+				nose = minf(nose, gone.s - gone.half_length - _queue_gap)
+			elif gone.s - gone.half_length > _length:
+				_traffic.remove(gone)
+				_waved_on[lane] = null
+		for waiting: Variant in line:
+			var vehicle: TrafficSim.Vehicle = waiting
+			var room: float = nose - vehicle.half_length - vehicle.s
+			var speed_ms: float = clampf(room * _pull_up_rate, 0.0, _creep_ms)
+			vehicle.s += minf(speed_ms * dt, maxf(room, 0.0))
+			vehicle.speed = speed_ms / KMH_TO_MS
+			vehicle.cruise = 0.0
+			nose = vehicle.s - vehicle.half_length - _queue_gap
+		if line.is_empty():
+			continue
+		var first: TrafficSim.Vehicle = line[0]
+		if bar_at - (first.s + first.half_length) > _settle_m:
+			continue
+		_served[lane] += dt
+		if _served[lane] >= _serve_s - dt * 0.5:
+			_served[lane] = 0.0
+			line.remove_at(0)
+			first.role = WAVED_ON_ROLE
+			if _waved_on[lane] != null:
+				_traffic.remove(_waved_on[lane])
+			_waved_on[lane] = first
+			_waved_speed[lane] = 0.0
+
+
+## True when nothing of the queue is left ahead of him in his lane and he
+## stands within stop_zone_m of the bar.
+func _first_in_line() -> bool:
+	var lane: int = clampi(_car.lane_of(_car.x), 0, _car.lanes - 1)
+	if lane >= _queue.size() or not _queue[lane].is_empty():
+		return false
+	var gone: TrafficSim.Vehicle = _waved_on[lane]
+	if gone != null and gone.s - gone.half_length < bar_at + _queue_clear:
+		return false
+	var nose: float = _car.s + _car.length() * 0.5
+	return _car.speed <= _stopped_kmh and nose <= bar_at + 0.001 and bar_at - nose <= _stop_zone
+
+
+## The vehicles still waiting in a lane's queue (for the views and the tests).
+func queue_length(lane: int) -> int:
+	return _queue[lane].size() if lane >= 0 and lane < _queue.size() else 0
+
+
+## The soldier: on his way to the window for stow_s, then at it with his sign
+## up, counting the delay.
+func _step_soldier(dt: float) -> void:
+	if phase == STOW:
+		stow_left -= dt
+		if stow_left < dt * 0.5:
+			stow_left = 0.0
+			stow_ended = true
+			phase = PAPERS
+			_ask_next()
+	elif phase == PAPERS and not wanted.is_empty():
+		delay += dt
+		if delay >= float(_delays + 1) * _delay_every - dt * 0.5:
+			_delays += 1
+			delayed = true
+
+
+## The sign for the next document goes up; with none left, the papers are done.
+func _ask_next() -> void:
+	delay = 0.0
+	_delays = 0
+	if _documents.is_empty():
+		wanted = ""
+		papers_done = true
+		return
+	wanted = _documents[0]
+	_documents.remove_at(0)
+	asked = true
+
+
+## He handed a document out of the window. True when it was the one the sign
+## asks for; anything else is refused.
+func hand_over(document: String) -> bool:
+	if kind != CHECKPOINT or phase != PAPERS or wanted.is_empty() or document != wanted:
+		return false
+	_ask_next()
+	return true
+
+
+## The Papers phase is passed by itself (forged papers, GDD 7.7).
+func papers_passed() -> void:
+	if kind == CHECKPOINT and phase == PAPERS:
+		_documents = []
+		_ask_next()
+
+
+## The bar goes up: he may drive on.
+func release() -> void:
+	if kind != CHECKPOINT:
+		return
+	released = true
+	phase = THROUGH
+	wanted = ""
+	delay = 0.0
+
+
+## Turned back (GDD 10.2): the queue again, from its end.
+func turn_back() -> void:
+	if kind == CHECKPOINT:
+		_begin_queue()
+
+
 # --- Corridors ---------------------------------------------------------------
 
 func _set_corridor(check: Dictionary) -> void:
@@ -419,7 +734,7 @@ func _set_corridor(check: Dictionary) -> void:
 	_corridor_from = _corridor_at - GameData.as_float(check.get("taper_m"))
 	_corridor_to = _corridor_at + GameData.as_float(check.get("length_m"))
 	_corridor_half_gap = GameData.as_float(check.get("gap_m")) * 0.5
-	_corridor_sign_at = _corridor_from - GameData.as_float(check.get("sign_lead_s")) * _data.tuning.fi("gear_speeds", 2) * KMH_TO_MS
+	_corridor_sign_at = maxf(_corridor_from - GameData.as_float(check.get("sign_lead_s")) * _data.tuning.fi("gear_speeds", 2) * KMH_TO_MS, 0.0)
 	_corridor_judged = false
 
 
@@ -450,10 +765,11 @@ func corridor_gap() -> float:
 ## The checkpoint's sign, while it is ahead of the car within `ahead` metres.
 func signs_near(ahead: float) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
-	if active and _corridor_sign_at >= 0.0 and _corridor_max_kmh < INF:
+	if active and _corridor_to > _corridor_from and _corridor_sign_at >= 0.0:
 		var gap: float = _corridor_sign_at - _car.s
 		if gap >= 0.0 and gap <= ahead:
-			out.append({"kind": "checkpoint", "ahead": gap, "limit": _corridor_max_kmh})
+			# A limit of 0: the checkpoint is one to stop at.
+			out.append({"kind": "checkpoint", "ahead": gap, "limit": _corridor_max_kmh if _corridor_max_kmh < INF else 0.0})
 	return out
 
 
@@ -477,8 +793,12 @@ func pulled_over_safely(hazards_on: bool) -> bool:
 	return hazards_on and _car.speed <= _stopped_kmh and _car.x - _car.half_width() >= _car.road_right()
 
 
-## True while the car stands for a call taken pulled over.
+## True while the car stands whatever his foot does: for a call taken pulled
+## over (GDD 10.4), and at the Checkpoint from the moment the soldier starts
+## toward him until he is let through (GDD 10.2).
 func holds_car() -> bool:
+	if kind == CHECKPOINT:
+		return phase == STOW or phase == PAPERS
 	return call == CALL_TALKING and call_taken == TAKEN_PARKED
 
 

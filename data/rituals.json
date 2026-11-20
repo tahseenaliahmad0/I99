@@ -72,6 +72,22 @@
     { "id": "call_answer",     "anchor": "pocket",             "gesture": "TAP",
       "eyes_down": false, "over_items": true, "requires": ["the_call"], "on_complete": ["call:alone"] },
     { "id": "key_turn",        "anchor": "key",                "gesture": "TAP",
-      "eyes_down": false, "requires": ["in_bay"], "on_complete": ["key"] }
+      "eyes_down": false, "requires": ["in_bay"], "on_complete": ["key"] },
+
+    { "id": "papers_licence",  "anchor": "dash_1",             "gesture": "DRAG_TO", "to": "driver_window",
+      "eyes_down": true, "over_items": true, "requires": ["at_window", "flag:window_open"], "on_complete": ["hand:licence"] },
+    { "id": "papers_id",       "anchor": "pocket",             "gesture": "DRAG_TO", "to": "driver_window",
+      "eyes_down": true, "over_items": true, "requires": ["at_window", "flag:window_open"], "on_complete": ["hand:id"] },
+    { "id": "letter_aside",    "anchor": "glovebox",           "gesture": "HOLD", "hold_s": 0.4,
+      "eyes_down": true, "over_items": true, "requires": ["at_window", "flag:glovebox_open", "!flag:letter_aside"], "on_complete": ["toggle:letter_aside"] },
+    { "id": "papers_registration", "anchor": "glovebox",       "gesture": "DRAG_TO", "to": "driver_window",
+      "eyes_down": true, "over_items": true, "requires": ["at_window", "flag:glovebox_open", "flag:letter_aside", "flag:window_open"], "on_complete": ["hand:registration"] },
+    { "id": "checkpoint_bribe", "anchor": "cash",              "gesture": "DRAG_TO", "to": "driver_window",
+      "eyes_down": false, "over_items": true, "requires": ["at_window", "flag:window_open"], "on_complete": ["hand:banknotes"] },
+
+    { "id": "stow",            "anchor": "@slot", "shared": true, "gesture": "DRAG_TO", "to": "glovebox",
+      "eyes_down": true, "requires": ["flag:glovebox_open", "glovebox_room"], "on_complete": ["stow"] },
+    { "id": "unstow",          "anchor": "glovebox",           "gesture": "DRAG_TO", "to": "@home",
+      "eyes_down": true, "over_items": true, "requires": ["flag:glovebox_open", "stowed"], "on_complete": ["unstow"] }
   ]
 }

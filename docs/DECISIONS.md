@@ -1331,11 +1331,19 @@ Format: `D-NNN (milestone, date) Title` then Context / Decision / Why.
   where he goes: after 150 m at 70 he is off the plan's pace) and the
   Arrival (brake into the bay, hand to the key).
 
-## D-048 (M7, 2026-11-17) The Checkpoint: decided, not yet built
+## D-048 (M7, 2026-11-17, built 2026-11-20) The Checkpoint
 
-The design below is settled and is what T-BOSS-01 is to establish. None of
-it is in the tree yet (the session paused here); the records are given so
-that the next session can put them in as they stand.
+Decided on 2026-11-17 and built as written on 2026-11-20 (T-BOSS-01), with
+three additions made while building:
+- **The car stands from the Stow to the verdict.** Once the soldier starts
+  toward him the car is held where it stopped, whatever his foot does,
+  until he is let through or turned back (as for the Call taken pulled
+  over, D-047). Without that he would have to hold the brake through ten
+  seconds of hand work, or roll into the bar in first gear and be scraped
+  by it.
+- **"At the bar"** for a queue vehicle is within `settle_m` (0.1 m) of it.
+- **A search takes everything** at Dawn's last checkpoint too
+  (`take_all_contraband`): T-BOSS-03's check of that was changed with it.
 
 - **The road** (500 m, three lanes): a sign 5 s short of a 60 m taper; from
   200 m every lane is a corridor between barriers 2.34 m apart (the walls of

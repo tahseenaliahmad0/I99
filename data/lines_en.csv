@@ -150,3 +150,12 @@ call.noor,,Noor,true
 sign.checkpoint,,[CHECKPOINT / %s],false
 hud.the_call,,The Call: %s,false
 hud.bay,,In the bay: turn the key,false
+sign.document.licence,,[LICENCE],true
+sign.document.id,,[ID],true
+sign.document.registration,,[REGISTRATION],true
+soldier.window,,(he taps on the glass),true
+soldier.wrong,,(he shakes his head),true
+hud.checkpoint.queue,,Checkpoint: the queue,false
+hud.checkpoint.stow,,Checkpoint: the soldier is %s s away,false
+hud.checkpoint.papers,,Checkpoint: he wants %s (%s s),false
+hud.checkpoint.passed,,Checkpoint: through,false

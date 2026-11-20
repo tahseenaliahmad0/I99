@@ -19,6 +19,7 @@ func test_phantom_01() -> void:
 	_check_flinch_counters()
 	_check_cramp()
 	_check_cramp_counters()
+	_check_cramp_in_the_storm()
 
 
 # --- The wrong-hand flinch -----------------------------------------------------
@@ -189,6 +190,50 @@ func _check_cramp_counters() -> void:
 	var off: Dictionary = _drive_through_cramp("night", 2, 71, "off")
 	check_eq(GameData.as_int(off["hums"]), 0, "with the Phantom switched off there is no cramp")
 	check_near(GameData.as_float(off["nerves_jump"]), 0.0, 0.05, "and no +10 Nerves")
+
+
+## The weather cramp fires once in the Storm as well (GDD 7.9, 10.3), at the
+## same fixed share of its road, with the same hum, and the same counters.
+func _check_cramp_in_the_storm() -> void:
+	var storm_length: float = GameData.as_float(data.record("bosses", BossSim.STORM).get("length_m"))
+	var point: float = storm_length * tuning.f("phantom_cramp_at")
+	for doing: String in ["", "pill", "off"]:
+		_begin_quiet_boss(BossSim.STORM)
+		if doing == "off":
+			_sim.phantom_enabled = false
+		if doing == "pill":
+			_give("painkillers")
+			_hold_at("face", GameData.as_float(_ritual("painkillers_take").get("hold_s")))
+			_input.clear()
+		var hums: int = 0
+		var cramps: int = 0
+		var hum_ticks: int = 0
+		var cramp_ticks: int = 0
+		var hum_at: float = -1.0
+		var was: String = ""
+		var guard: int = _ticks_in(200.0)
+		while _sim.boss.active and guard > 0:
+			guard -= 1
+			_tick()
+			hum_ticks += 1 if _sim.cramp == DriveSim.HUM else 0
+			cramp_ticks += 1 if _sim.cramp == DriveSim.CRAMPED else 0
+			if _sim.cramp != was:
+				was = _sim.cramp
+				if was == DriveSim.HUM:
+					hums += 1
+					hum_at = _sim.car.s
+				elif was == DriveSim.CRAMPED:
+					cramps += 1
+		if doing == "":
+			check_eq(hums, 1, "in the Storm the hum comes once")
+			check_eq(cramps, 1, "and the cramp once")
+			check(hum_at >= point and hum_at < point + 1.0, "at its fixed point (%.1f m of %d)" % [hum_at, roundi(storm_length)])
+			check_eq(hum_ticks, _ticks_in(tuning.f("phantom_cramp_hum")), "after 1.5 s of hum")
+			check_eq(cramp_ticks, _ticks_in(tuning.f("phantom_cramp_length")), "for 0.5 s")
+		elif doing == "pill":
+			check_eq(hums + cramps, 0, "painkillers mute it in the Storm too")
+		else:
+			check_eq(hums + cramps, 0, "and switched off there is none")
 
 
 # --- Helpers -------------------------------------------------------------------
