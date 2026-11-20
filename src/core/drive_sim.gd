@@ -237,9 +237,9 @@ var _shady_here: bool = false
 var _left_here: String = ""
 ## Seconds until a wrecked Telling is told again.
 var _wreck_left: float = 0.0
-## The angle the wheel had when his hand last let go of it with nothing to
-## hold it, and the seconds for which a passenger asked to hold the wheel "at
-## its current angle" still takes it back there (GDD 8.2; 0: no longer).
+## The angle the wheel had when his hand last let go of it, and the seconds
+## for which a passenger asked to hold the wheel "at its current angle" still
+## takes it back there (GDD 8.2; 0: no longer).
 var _let_go_angle: float = 0.0
 var _catch_left: float = 0.0
 

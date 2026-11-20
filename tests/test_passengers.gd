@@ -458,6 +458,18 @@ func _check_nobody_stands_where_they_got_out() -> void:
 	# It is about this roadside: once he has driven on, nobody "has just got out".
 	_leave_stop()
 	check_eq(GameData.as_string(_sim.capture().get("left_here")), "", "once he has driven on, the save names nobody as just got out")
+	# "The next of the five" (D-051), in the order of passengers.json: past the
+	# one he carries and past the one who has just got out, whichever comes first.
+	var ids: PackedStringArray = data.record_ids("passengers")
+	for candidate: int in range(1, 101):
+		var drawn: int = ids.find(RunGenerator.hitcher(data, candidate, 1, 0, HITCHER_STOP, ""))
+		var next: String = ids[(drawn + 1) % ids.size()]
+		var after_next: String = ids[(drawn + 2) % ids.size()]
+		check_eq(RunGenerator.hitcher(data, candidate, 1, 0, HITCHER_STOP, "", ids[drawn]), next, "(seed %d: in place of the one who has just got out stands the next of the five)" % candidate)
+		check_eq(RunGenerator.hitcher(data, candidate, 1, 0, HITCHER_STOP, ids[drawn]), next, "(seed %d: and so in place of the one he carries)" % candidate)
+		check_eq(RunGenerator.hitcher(data, candidate, 1, 0, HITCHER_STOP, ids[drawn], next), after_next, "(seed %d: with the next one just got out, the one after)" % candidate)
+		check_eq(RunGenerator.hitcher(data, candidate, 1, 0, HITCHER_STOP, next, ids[drawn]), after_next, "(seed %d: and the other way round)" % candidate)
+		check_eq(RunGenerator.hitcher(data, candidate, 1, 0, HITCHER_STOP, after_next, next), ids[drawn], "(seed %d: who is neither carried nor just got out stands there as drawn)" % candidate)
 
 
 # --- T-PASS-HAJJIYA ----------------------------------------------------------
