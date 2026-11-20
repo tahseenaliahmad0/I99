@@ -707,8 +707,13 @@ func owner_of(ritual: Dictionary) -> Item:
 
 
 ## Runs a completed ritual. `direction` is the Gesture.DIR_* flag of a FLICK.
-func complete(ritual: Dictionary, direction: int) -> void:
+## What the ritual requires is asked again now that its gesture is done (the
+## glass may have spilled during the HOLD, the phone rung out during the
+## TAP): false, and nothing is done, when it no longer holds.
+func complete(ritual: Dictionary, direction: int) -> bool:
 	var owner: Item = owner_of(ritual)
+	if not _requirements_hold(ritual, owner):
+		return false
 	if owner != null:
 		# Using contraband, or the phone, is something a police car sees (GDD 6.5).
 		if GameData.as_bool(owner.record.get("contraband")):
@@ -721,6 +726,7 @@ func complete(ritual: Dictionary, direction: int) -> void:
 	var sfx: String = GameData.as_string(ritual.get("sfx"))
 	if not sfx.is_empty():
 		events.append({"type": "sfx_requested", "id": sfx})
+	return true
 
 
 ## One step of a DRAG ritual (the radio dial). `direction` is +1 right, -1 left.

@@ -290,6 +290,33 @@ func test_item_tea_glass() -> void:
 	_hold_at("cup_a", hold_s)
 	check_eq(_count_events("ritual_completed", "ritual", "tea_sip"), 0, "there is nothing left to sip")
 
+	# Spilled by a crash in the middle of a sip, the glass in his hand gives
+	# nothing: a truck in his lane that he runs into half-way through the HOLD.
+	_new_sim()
+	_cruise(3, 1)
+	glass = _item("tea_glass")
+	_sim.nerves.set_value(40.0)
+	_reach("cup_a")
+	var closing: float = (tuning.f("scrape_max_closing") + tuning.f("crash_max_closing")) * 0.5
+	var nose_to_tail: float = closing * CarSim.KMH_TO_MS * hold_s * 0.5
+	_sim.traffic.spawn(&"truck", 1, _sim.car.s + _sim.car.length() * 0.5 + GameData.as_float(data.record("vehicles", "truck").get("length")) * 0.5 + nose_to_tail,
+			tuning.fi("gear_speeds", 2) - closing)
+	var spilled_at: int = -1
+	var nerves_then: float = 0.0
+	_input.lmb = true
+	for index: int in _ticks_in(hold_s) + 1:
+		_tick()
+		if spilled_at < 0 and glass.supply == 0:
+			spilled_at = index
+			nerves_then = _sim.nerves.value
+	_input.lmb = false
+	_ticks(SETTLE)
+	check_eq(GameData.as_int(_event("hit").get("kind")), Collision.Hit.CRASH, "(he runs into a slow truck while he sips)")
+	check(spilled_at > 0 and spilled_at < _ticks_in(hold_s) - 1, "(the crash spills the glass in the middle of the HOLD: tick %d of %d)" % [spilled_at, _ticks_in(hold_s)])
+	check_eq(_count_events("ritual_completed", "ritual", "tea_sip"), 0, "the sip he was taking when it spilled is no sip")
+	check(_sim.nerves.value >= nerves_then, "it calms him by nothing")
+	check(not _sim.effects.has(&"awake"), "and does not wake him")
+
 	# Refill: 2 cash at a fuel station.
 	_to_quiet_leg("fuel_station")
 	_scrape()
@@ -1392,6 +1419,34 @@ func test_item_phone() -> void:
 	check_near(_sim.nerves.value - nerves, missed, 0.000001, "the call is missed: +4 Nerves")
 	check(not GameData.as_bool(_event("call_resolved").get("answered")), "(announced as missed)")
 	check(not _sim.hand.eyes_down, "and his eyes are back on the road")
+
+	# A TAP that ends after the phone has rung out answers nothing, and to a
+	# patrol that watches it is no use of the phone: the button goes down with
+	# two ticks of ringing left and comes up after them. Once as the only TAP
+	# of the call, once as its second.
+	for tapped_in_time: bool in [false, true]:
+		_begin_quiet_leg("patrol", 2, 71)
+		_give("phone")
+		_reach(mount)
+		if not check(_await_ring() and _sim.suspicion.watching, "(a call in view of a patrol)"):
+			continue
+		if tapped_in_time:
+			_tap()
+			check_eq(_sim.items.call_taps, 1, "(one TAP in time: the phone has been seen in his hand)")
+		while _sim.items.caller != &"" and _sim.items.ring_left > 2.5 * DT:
+			_tick()
+		var seen: float = _sim.suspicion.value
+		var announced: int = _count_events("ritual_completed", "ritual", "phone_answer")
+		_input.lmb = true
+		_tick()
+		check(_sim.gesture.is_active() and _sim.items.caller != &"", "(the TAP begins while it still rings)")
+		_ticks(TAP_TICKS - 1)
+		check(_sim.gesture.is_active() and _sim.items.caller == &"", "(and the ringing stops under his finger)")
+		_input.lmb = false
+		_ticks(SETTLE)
+		check(not GameData.as_bool(_event("call_resolved").get("answered")), "the call is missed")
+		check_eq(_count_events("ritual_completed", "ritual", "phone_answer"), announced, "a TAP that ends after the ringing answers nothing")
+		check(_sim.suspicion.value <= seen, "and is no use of the phone: the patrol has seen nothing new (%s, then %s)" % [str(snappedf(seen, 0.01)), str(snappedf(_sim.suspicion.value, 0.01))])
 
 	# One call in four is Um Noor: -8 Nerves.
 	_new_sim()

@@ -2151,7 +2151,11 @@ func _complete_ritual() -> void:
 	elif ritual_id == StopSim.PLACE:
 		stop.place(String(hand.anchor_id(_active_anchor)), String(hand.anchor_id(hand.at_index)))
 	else:
-		items.complete(_active_ritual, gesture.direction)
+		# What the ritual requires may have gone while the gesture was made (a
+		# crash spilled the glass, the phone rang out): then it is not done,
+		# and nothing is announced.
+		if not items.complete(_active_ritual, gesture.direction):
+			return
 		if items.paid != &"":
 			_pay_the_officer(items.paid)
 		if items.call_taken != &"":
