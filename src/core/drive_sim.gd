@@ -134,7 +134,8 @@ var grip_toggle: bool = false:
 ## log into a simulation started the same way gives the same state hash.
 var input_log: InputLog = null
 ## What the last stop saved: the Telling as the save file holds it (GDD 13.7).
-## It changes only when the car comes to a stop, never during a leg.
+## It changes only when the car comes to a stop, never during a leg; and it
+## is empty again once the Telling is told again after a Wreck (GDD 11.4).
 var checkpoint: Dictionary = {}
 var checkpoints: int = 0
 
@@ -1063,6 +1064,9 @@ func _retell() -> void:
 	var retellings: int = run.retellings
 	var pointer: Vector2 = hand.pointer
 	_build()
+	# After a Wreck there is no saved Telling to continue: what the last stop
+	# saved was the night that wrecked, and this one starts from Baghdad.
+	checkpoint = {}
 	run.table = table
 	run.seed = telling_seed
 	run.retellings = retellings
