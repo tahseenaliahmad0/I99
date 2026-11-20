@@ -4,21 +4,19 @@ of that work).
 
     python3 tools/mutants.py T-STOP,T-LEG-07,T-SAVE,T-REPLAY,T-RUN-01,T-NERVES-01,T-ITEM-BASE,T-ITEM-CIGARETTES,T-ITEM-PHONE,T-ITEM-PAINKILLERS,T-ITEM-ENERGY-DRINK,T-ITEM-CHARM,T-ITEM-DUCT-TAPE tools/mutants/seams.py
 
-Three of them live, and are meant to: a press is applied only at an anchor
-the hand could snap to, and where the night waits `_anchor_in_use` leaves
-the cabin's anchors out, so what `_begin_at` would do with a press there (the
-lever, the cabin's own ritual, a TAP beside a HOLD) cannot be reached by any
-input. They are labelled "(unreachable)".
+All 42 are killed. (Each group needs only the tests of its rule: the night
+waits: T-STOP,T-LEG-07,T-NERVES-01; once per leg: T-ITEM-BASE,T-ITEM-CHARM,
+T-ITEM-PAINKILLERS,T-SAVE; what is owed: T-ITEM-CIGARETTES,T-ITEM-PHONE,
+T-SAVE,T-REPLAY; the first scrape: T-ITEM-CHARM,T-ITEM-DUCT-TAPE; what a
+stop ends: T-ITEM-DUCT-TAPE,T-ITEM-PHONE,T-ITEM-ENERGY-DRINK,
+T-ITEM-PAINKILLERS,T-RUN-01,T-NERVES-01.)
 """
 D = 'src/core/drive_sim.gd'
 I = 'src/core/item_sim.gd'
 N = 'src/core/nerves_sim.gd'
 
 WAITS = '\tif _standing():\n\t\tnerves.step_snap(DT)\n\telse:\n\t\teffects.step(DT)\n'
-RITUAL_AT = ('\tif stopped:\n\t\treturn stop.ritual_at(anchor)\n\tif pulled_over:\n\t\treturn items.ritual_for(PULLED_OVER, anchor)\n'
-             '\treturn items.ritual_at(anchor)\n\n\n## True when the hand has something to do at an anchor now.\n'
-             'func _anchor_in_use(anchor: String) -> bool:\n\tif stopped:\n\t\treturn stop.anchor_in_use(anchor)\n'
-             '\tif pulled_over:\n\t\treturn not items.ritual_for(PULLED_OVER, anchor).is_empty()\n')
+IN_USE = '\tif _standing():\n\t\treturn not _ritual_at(anchor).is_empty()\n\treturn items.anchor_in_use(anchor)\n'
 
 MUTANTS = [
  # --- The night waits: a stop, and an officer at his window (D-a, D-b).
@@ -28,27 +26,17 @@ MUTANTS = [
  (D, WAITS, WAITS.replace('\t\tnerves.step_snap(DT)\n', '\t\tnerves.step_snap(DT)\n\t\titems.step(DT)\n'), 'items step where the night waits'),
  (D, WAITS, WAITS.replace('\t\tnerves.step_snap(DT)\n', '\t\tnerves.step(DT)\n'), 'he dozes where the night waits'),
  (N, '\tsnap_left -= dt\n\tif snap_left < dt * 0.5:', '\tsnap_left -= dt * 0.5\n\tif snap_left < dt * 0.5:', 'a Snap lasts twice as long'),
- (D, RITUAL_AT, RITUAL_AT.replace('\t\treturn stop.anchor_in_use(anchor)\n', '\t\treturn stop.anchor_in_use(anchor) or items.anchor_in_use(anchor)\n'),
-  'at a stop the cabin\'s anchors are in use'),
- (D, RITUAL_AT, RITUAL_AT.replace('\tif stopped:\n\t\treturn stop.ritual_at(anchor)\n', '\tif stopped and stop.anchor_in_use(anchor):\n\t\treturn stop.ritual_at(anchor)\n')
-                         .replace('\t\treturn stop.anchor_in_use(anchor)\n', '\t\treturn stop.anchor_in_use(anchor) or items.anchor_in_use(anchor)\n'),
+ (D, IN_USE, IN_USE.replace('if _standing():', 'if pulled_over:').replace('\treturn items.anchor_in_use(anchor)\n', '\treturn items.anchor_in_use(anchor) or stop.anchor_in_use(anchor)\n'),
+  'at a stop the cabin\'s anchors are in use beside the tray\'s (as before)'),
+ (D, IN_USE, IN_USE.replace('if _standing():', 'if stopped:'), 'pulled over, the cabin\'s anchors are in use (as before)'),
+ (D, '\tif stopped:\n\t\treturn stop.ritual_at(anchor)\n\tif pulled_over:', '\tif stopped and stop.anchor_in_use(anchor):\n\t\treturn stop.ritual_at(anchor)\n\tif pulled_over:',
   'at a stop the cabin\'s rituals are offered beside the tray (as before)'),
- (D, RITUAL_AT, RITUAL_AT.replace('\t\treturn not items.ritual_for(PULLED_OVER, anchor).is_empty()\n', '\t\treturn items.anchor_in_use(anchor)\n'),
-  'pulled over, the cabin\'s anchors are in use'),
- (D, RITUAL_AT, RITUAL_AT.replace('\tif pulled_over:\n\t\treturn items.ritual_for(PULLED_OVER, anchor)\n', '')
-                         .replace('\tif pulled_over:\n\t\treturn not items.ritual_for(PULLED_OVER, anchor).is_empty()\n', ''),
-  'pulled over, the cabin\'s rituals are offered (as before)'),
- (D, RITUAL_AT, RITUAL_AT.replace('\tif stopped:\n\t\treturn stop.ritual_at(anchor)\n', '\tif stopped and stop.anchor_in_use(anchor):\n\t\treturn stop.ritual_at(anchor)\n'),
-  'at a stop a press at a cabin anchor begins its ritual (unreachable)'),
+ (D, '\tif pulled_over:\n\t\treturn items.ritual_for(PULLED_OVER, anchor)\n', '', 'pulled over, the cabin\'s rituals are offered (as before)'),
  (I, 'if GameData.as_array(control.get("requires")).has(String(status)) and _requirements_hold(control, null):', 'if _requirements_hold(control, null):',
   'every control counts as the officer\'s'),
  (D, 'nerves.snap_left <= 0.0 and not _standing():', 'nerves.snap_left <= 0.0:', 'the thumb keypad works where the night waits'),
  (D, 'nerves.snap_left <= 0.0 and not _standing():', 'nerves.snap_left <= 0.0 and not stopped:', 'the thumb keypad works while he is pulled over'),
  (D, 'nerves.snap_left <= 0.0 and not _standing():', 'nerves.snap_left <= 0.0 and not pulled_over:', 'the thumb keypad works at a stop'),
- (D, 'if anchor == _lever_anchor and not sequential_shift and not _standing():', 'if anchor == _lever_anchor and not sequential_shift:',
-  'a press at the lever takes it where the night waits (unreachable)'),
- (D, '_tap_instead = {} if _standing() else items.tap_alternative(', '_tap_instead = items.tap_alternative(',
-  'the TAP beside a HOLD is looked for where the night waits (unreachable)'),
  (D, '\tnerves.rouse()\n', '', 'pulled over in a blink, his eyes stay shut'),
  (N, '\tlids = 0.0\n\teyes_shut = false\n\t_blink_clock = 0.0\n', '\teyes_shut = false\n\t_blink_clock = 0.0\n', 'his lids stay down while the officer waits'),
  (N, '\teyes_shut = false\n\t_blink_clock = 0.0\n\t_nod_clock = 0.0\n\t_nod_cancelled = false\n\n\nfunc _snap', '\teyes_shut = false\n\n\nfunc _snap',

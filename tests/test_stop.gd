@@ -483,6 +483,18 @@ func _check_only_the_shopping() -> void:
 	_sim.cash = 50.0
 	_tap(GameData.as_string(restock["anchor"]))
 	check_near(_sim.cash, 50.0 - GameData.as_float(restock["price"]), 0.000001, "the tray is: a TAP still buys")
+	# And what he has bought goes to its place, also where a control of the
+	# cabin lies: the tape deck is where the radio's dial is, and the dial,
+	# not in use at a stop, does not take the hand. (The vendor's first
+	# thing is made a tape he has paid for.)
+	var shelf_anchor: String = GameData.as_string(_of_kind(_offers(), StopSim.ITEM)[0]["anchor"])
+	var shelf: StopSim.Offer = _sim.stop.offer_at(shelf_anchor)
+	shelf.id = "mixtape"
+	shelf.bought = true
+	_drag(shelf_anchor, _sim.items.anchor_of_slot("tape"))
+	var tape: ItemSim.Item = _sim.items.item(&"mixtape")
+	check(tape != null and tape.slot == &"tape", "a tape he has bought goes into the deck: the hand carries it there, past the dial")
+	check(_offer_at(shelf_anchor).is_empty(), "and it is off the tray")
 	# And on the road again, so is the cabin.
 	_leave()
 	check(not _sim.stopped, "(he leaves)")

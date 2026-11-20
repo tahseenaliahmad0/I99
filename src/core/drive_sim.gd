@@ -2088,7 +2088,7 @@ func _report_effects() -> void:
 ## A press was applied at an anchor. `button_down` is false for a buffered
 ## click that was already released when the hand arrived.
 func _begin_at(anchor: int, button_down: bool) -> void:
-	if anchor == _lever_anchor and not sequential_shift and not _standing():
+	if anchor == _lever_anchor and not sequential_shift:
 		# The lever is held only by a button that is still down: a click that
 		# ended during the reach must not take it and knock it out of gear.
 		if button_down:
@@ -2104,7 +2104,7 @@ func _begin_at(anchor: int, button_down: bool) -> void:
 		return
 	_active_ritual = ritual
 	_active_anchor = anchor
-	_tap_instead = {} if _standing() else items.tap_alternative(String(hand.anchor_id(anchor)), ritual)
+	_tap_instead = items.tap_alternative(String(hand.anchor_id(anchor)), ritual)
 	gesture.begin(kind, _gesture_amount(ritual, kind), _gesture_dirs(ritual))
 	# Eyes-down rituals pull the eyes off the road while performed (GDD 4.7).
 	hand.eyes_down = GameData.as_bool(ritual.get("eyes_down"))
@@ -2231,12 +2231,12 @@ func _ritual_at(anchor: String) -> Dictionary:
 	return items.ritual_at(anchor)
 
 
-## True when the hand has something to do at an anchor now.
+## True when the hand has something to do at an anchor now: on the road
+## wherever a control or an item is, and where the night waits only where
+## a ritual is offered it.
 func _anchor_in_use(anchor: String) -> bool:
-	if stopped:
-		return stop.anchor_in_use(anchor)
-	if pulled_over:
-		return not items.ritual_for(PULLED_OVER, anchor).is_empty()
+	if _standing():
+		return not _ritual_at(anchor).is_empty()
 	return items.anchor_in_use(anchor)
 
 
