@@ -355,6 +355,7 @@ func _check_call() -> void:
 		return
 	# One ring as the Call begins, and one every `every` s while it rings.
 	var rings: int = ceili(ring_s / every)
+	_expect(rings >= 2, "phone_ring: one ring every %.1f s is a single ring in the %.0f s of the Call; a phone must ring again while it rings" % [every, ring_s])
 
 	# Ignored: it rings out.
 	var before: int = Audio.starts_of(Audio.RING)
