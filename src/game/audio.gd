@@ -278,6 +278,9 @@ func apply(snapshot: Dictionary) -> void:
 	_idle_frames = 0
 	_live = true
 	var wrecked: bool = snapshot["wrecked"]
+	# The key turned in the bay (GDD 10.5): the engine is off. (A snapshot
+	# that does not say runs.)
+	var engine_on: bool = GameData.as_bool(snapshot.get("engine_on", true), true)
 	var speed: float = snapshot["speed"]
 	var gear: int = snapshot["gear"]
 	var on_rumble: bool = snapshot["on_rumble"]
@@ -298,8 +301,8 @@ func apply(snapshot: Dictionary) -> void:
 	if _engine != null and _harmonic != null:
 		var hz: float = maxf(remap(speed, _speed_from, _speed_to, _hz_from, _hz_to), _idle_hz)
 		var harmonic: float = _per_gear[gear] if gear >= 0 and gear < _per_gear.size() else 0.0
-		_engine.wanted = not wrecked
-		_harmonic.wanted = not wrecked and harmonic > 0.0
+		_engine.wanted = not wrecked and engine_on
+		_harmonic.wanted = not wrecked and engine_on and harmonic > 0.0
 		_set_pitch(_engine, hz / _engine_hz)
 		if harmonic > 0.0:
 			_set_pitch(_harmonic, harmonic * hz / _harmonic_hz)
@@ -308,7 +311,7 @@ func apply(snapshot: Dictionary) -> void:
 	# as long as its lamp is lit and the engine runs.
 	if _rattle != null:
 		var faults: Array[StringName] = snapshot["faults"]
-		_rattle.wanted = faults.has(DriveSim.FAULT_RATTLE) and not wrecked
+		_rattle.wanted = faults.has(DriveSim.FAULT_RATTLE) and not wrecked and engine_on
 
 	# The rumble strip is heard while the car runs on it.
 	if _rumble != null:

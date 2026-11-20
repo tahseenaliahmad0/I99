@@ -97,6 +97,9 @@ var run: RunState = RunState.new()
 var stop: StopSim = StopSim.new()
 ## Who rides in the seat (GDD 8).
 var passengers: PassengerSim = PassengerSim.new()
+## The key is turned in the bay (GDD 10.5): the engine is off, the car and
+## the Clock stand. Any road begun anew starts it again.
+var parked: bool = false
 
 var tick: int = 0
 ## Thousands of dinars (GDD 6). Never below zero.
@@ -460,9 +463,10 @@ func step(input: DriveInput) -> void:
 	var walls: Vector2 = boss.walls(car.s, car.x)
 	car.wall_left = walls.x
 	car.wall_right = walls.y
-	if boss.holds_car():
+	if boss.holds_car() or parked:
 		# Pulled over for the Call, the car stands until he hangs up (GDD
-		# 10.4); first in line at the Checkpoint, until he is let through.
+		# 10.4); first in line at the Checkpoint, until he is let through;
+		# and with the key turned in the bay it is parked (GDD 10.5).
 		# A car that stands touches nothing: what it brushed in the last
 		# tick it moved is not brushed again.
 		car.speed = 0.0
@@ -545,8 +549,9 @@ func step(input: DriveInput) -> void:
 	if passengers.changed:
 		_fit_cabin()
 
-	# 10. Clock: it runs while he drives, not while he stands (GDD 6.4).
-	if not _standing():
+	# 10. Clock: it runs while he drives, not while he stands (GDD 6.4),
+	# and it is read when the key is turned: not after.
+	if not _standing() and not parked:
 		clock.step(DT)
 
 	# 12. Leg progress: Exit, Fork, boss and ending transitions.
@@ -608,6 +613,7 @@ func _announce_leg(plan: Dictionary) -> void:
 ## and nowhere else: not on the road to a fork, not on the street of the
 ## Arrival, not on the road he stands beside at a stop.
 func _set_stretch(plan: Dictionary, renews: bool = true) -> void:
+	parked = false
 	set_road(GameData.as_int(plan.get("lanes"), 3), GameData.as_bool(plan.get("divided"), true))
 	traffic.clear()
 	collision.reset()
@@ -1152,6 +1158,10 @@ func _arrive() -> void:
 	_in_bay = false
 	boss.stop()
 	leg.stop()
+	# The key is turned: the engine is off and the car stays where it is.
+	parked = true
+	car.speed = 0.0
+	car.v_lat = 0.0
 	_sync_anchors()
 	# Whoever he carried to Basra is a wedding guest from now on (GDD 8.1, 11.5).
 	_emit("arrived", {"table": table, "clock": clock.text(), "clock_minutes": clock.minutes, "late": clock.late(), "call": told_true,
@@ -1640,6 +1650,8 @@ func snapshot() -> Dictionary:
 		"bar_at": boss.bar_at,
 		"bar_up": boss.released,
 		"suspicion_by": "checkpoint" if boss.kind == BossSim.CHECKPOINT else ("patrol" if suspicion.watching else ""),
+		# False once the key is turned in the bay (GDD 10.5): the car is parked.
+		"engine_on": not parked,
 		"sun": boss.glare,
 		"sun_side": boss.sun_side,
 		# Where the light behind the Glare is, while the sun is up (degrees

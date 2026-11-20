@@ -2692,9 +2692,20 @@ func _check_arrival() -> void:
 	_events = []
 	_tap_at(KEY)
 	check_eq(_count_events("arrived"), 0, "he arrives once")
+	# The key is turned: the night is over. The car is parked and the Clock
+	# stands where it was read (it used to roll on through the street's end).
+	var parked_at: float = _sim.car.s
+	var read_at: float = _sim.clock.minutes
+	check(not GameData.as_bool(_sim.snapshot()["engine_on"]), "the key turned, the engine is off")
+	_input.clear()
+	_ticks(_ticks_in(5.0))
+	check_near(_sim.car.s, parked_at, 0.000001, "after the key the car stays where it is parked, foot off the brake")
+	check_near(_sim.car.speed, 0.0, 0.000001, "(standing)")
+	check_near(_sim.clock.minutes, read_at, 0.000001, "and the Clock stands where it was read")
 
 	# Stopped short of the bay, the key does nothing.
 	_arrive_at_the_street()
+	check(GameData.as_bool(_sim.snapshot()["engine_on"]), "(on a road begun anew the engine runs)")
 	while _sim.car.s < length - bay - 20.0:
 		_tick()
 	_input.rmb = true
