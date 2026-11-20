@@ -1742,6 +1742,28 @@ func _check_dawn_traffic_builds() -> void:
 				met_before += 1
 	check_eq(met_between, 0, "between the last checkpoint's barriers he meets no vehicle, in any of %d Dawns" % seeds)
 	check(met_before > seeds, "(on as long a stretch before them he meets %d)" % met_before)
+	# Nor is one beside him there: a vehicle slower than par is beside him
+	# from gen_block_margin before its bumper to as far behind it, and no
+	# such stretch reaches in between the barriers (he slows down there, and
+	# what the plan timed at par must not be near).
+	var par_kmh: float = tuning.fi("gear_speeds", 2)
+	var beside: int = 0
+	var slower: int = 0
+	for seed_value: int in range(1, 21):
+		for modifier: String in ["", "market_day"]:
+			for entry: Variant in GameData.as_array(BossSim.plan(data, DAWN, modifier, seed_value).get("spawns")):
+				var spawn: Dictionary = GameData.as_dict(entry)
+				var met: float = GameData.as_float(spawn.get("meet_s"), -1.0)
+				var speed: float = GameData.as_float(spawn.get("speed"))
+				if GameData.as_int(spawn.get("direction")) < 0 or met < 0.0 or speed >= par_kmh:
+					continue
+				slower += 1
+				var reach: float = GameData.as_float(data.record("vehicles", GameData.as_string(spawn.get("vehicle"))).get("length")) * 0.5 \
+						+ tuning.f("car_length") * 0.5 + tuning.f("gen_block_margin")
+				var along: float = reach / (1.0 - speed / par_kmh)
+				if met + along > closed_from and met - along < closed_to:
+					beside += 1
+	check_eq(beside, 0, "and none of the %d slower vehicles of forty Dawns is beside him between the barriers" % slower)
 	# The line the generator found through it still meets nothing (GDD 9.2, rule 3).
 	var checker: LegChecker = LegChecker.new(data)
 	for seed_value: int in [1, 2, 3]:

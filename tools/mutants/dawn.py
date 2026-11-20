@@ -1,7 +1,11 @@
 """Mutants of Dawn, the Call and the Arrival (GDD 10.4, 10.5) for T-BOSS-03 and T-CALL-01.
     python3 tools/mutants.py T-BOSS-03,T-CALL-01 tools/mutants/dawn.py
-Of the first 43, three lived: two are closed by checks added since, one is
-equivalent (the once-only flag of the speed check: the car crosses the barriers once).
+All 68 have been run. Those that live make no difference to play: the
+once-only flag of the speed check (the car crosses the barriers once); no
+hanging up at the road's end (nobody is still ringing there, and the stop
+that follows builds everything anew); the held car's speed (it is held only
+once it stands, and does not move either way); the key's own guard (its
+ritual already asks for the bay).
 """
 B = 'src/core/boss_sim.gd'
 D = 'src/core/drive_sim.gd'
