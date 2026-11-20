@@ -227,10 +227,14 @@ var call_taps: int = 0
 ## in a row.
 var calls: int = 0
 var answered_run: int = 0
-## The charm has turned a scrape aside this leg (GDD 7.5).
+## The leg's first scrape is behind him: the one the charm turns aside (GDD
+## 7.5). It is marked with or without a charm, so that one hung up later in
+## the leg does not take the next scrape for the first.
 var scrape_spared: bool = false
-## The duct tape has held a fault this act; the fault it is holding now and
-## how long until that fault is mended ("" and 0 when it holds none).
+## The act's first fault is behind him: the one the duct tape takes hold of
+## (GDD 7.5), marked with or without the tape for the same reason. Then the
+## fault the tape is holding now and how long until that fault is mended
+## ("" and 0 when it holds none).
 var tape_spent: bool = false
 var mending: StringName = &""
 var mend_left: float = 0.0
@@ -394,7 +398,8 @@ func set_radio(station: StringName) -> void:
 	_radio_time = 0.0
 
 
-## What resets when a new leg begins.
+## What is once per leg may be done again: a leg begins, or a boss does
+## (and nothing else renews it: no stop, no road to a fork, no street).
 func begin_leg() -> void:
 	photo_used = false
 	scrape_spared = false
@@ -409,7 +414,8 @@ func begin_act() -> void:
 
 
 ## What of this leg a stop must not forget (the save holds it): the photo
-## was looked at, and the statuses that last to the leg's end.
+## was looked at, the leg's first scrape is behind him, and the statuses
+## that last to the leg's end.
 func leg_state() -> Dictionary:
 	var held: Array = []
 	for status: StringName in _leg_holds:
@@ -417,15 +423,23 @@ func leg_state() -> Dictionary:
 	return {"photo": photo_used, "spared": scrape_spared, "held": held}
 
 
+## True for a status the leg holds to its end: it passes through a stop.
+func held_for_leg(status: StringName) -> bool:
+	return _leg_holds.has(status)
+
+
 ## What of this Telling a stop must not forget: how many calls there have
-## been, and how many were answered in a row.
+## been, how many were answered in a row and how long the wait for the next
+## one still is (its exact bits; negative while it is not drawn); and that
+## the act's first fault is behind him.
 func telling_state() -> Dictionary:
-	return {"calls": calls, "answered_run": answered_run, "tape_spent": tape_spent}
+	return {"calls": calls, "answered_run": answered_run, "call_wait": Save.exact(_call_wait), "tape_spent": tape_spent}
 
 
 func set_telling_state(state: Dictionary) -> void:
 	calls = GameData.as_int(state.get("calls"))
 	answered_run = GameData.as_int(state.get("answered_run"))
+	_call_wait = Save.from_exact(state.get("call_wait"), -1.0)
 	tape_spent = GameData.as_bool(state.get("tape_spent"))
 
 
@@ -727,6 +741,16 @@ func ritual_at(anchor: String) -> Dictionary:
 	for offered: Variant in GameData.as_array(_controls.get(anchor)):
 		var control: Dictionary = offered
 		if _requirements_hold(control, null):
+			return control
+	return {}
+
+
+## The control at this anchor that asks for `status` (what he may hand an
+## officer asks for "pulled_over"), if its conditions hold now; {} for none.
+func ritual_for(status: StringName, anchor: String) -> Dictionary:
+	for offered: Variant in GameData.as_array(_controls.get(anchor)):
+		var control: Dictionary = offered
+		if GameData.as_array(control.get("requires")).has(String(status)) and _requirements_hold(control, null):
 			return control
 	return {}
 
@@ -1308,22 +1332,25 @@ func use_pass(what: String) -> bool:
 	return false
 
 
-## The charm (GDD 7.5): the first scrape of a leg lights no lamp. True when
-## this scrape is that one; it is then spent for the leg.
+## A scrape. The charm (GDD 7.5): the first scrape of a leg lights no lamp.
+## True when this scrape is that one and a charm hangs there to turn it
+## aside. Charm or no charm, the leg's first scrape is behind him after it.
 func absorbs_scrape() -> bool:
-	if scrape_spared or passive("first_scrape_free") <= 0.0:
-		return false
+	var first: bool = not scrape_spared
 	scrape_spared = true
-	return true
+	return first and passive("first_scrape_free") > 0.0
 
 
 ## Lamps have just lit. Duct tape (GDD 7.5) takes hold of the first fault of
-## the act: it mends itself after self_repair_s.
+## the act: it mends itself after self_repair_s. Tape or no tape, the act's
+## first fault is behind him after it.
 func on_faults_lit(drawn: Array[StringName]) -> void:
-	var after: float = passive("self_repair_s")
-	if drawn.is_empty() or tape_spent or after <= 0.0:
+	if drawn.is_empty() or tape_spent:
 		return
 	tape_spent = true
+	var after: float = passive("self_repair_s")
+	if after <= 0.0:
+		return
 	mending = drawn[0]
 	mend_left = after
 
@@ -1345,6 +1372,22 @@ func _step_mending(dt: float) -> void:
 	mend_left -= dt
 	if mend_left < dt * 0.5:
 		finish_mending()
+
+
+## He has come to a stop (GDD 9.6), where the night waits: what cannot wait
+## is settled first, and said (`events`). The fault the tape holds is
+## mended; a call still ringing is dropped, unanswered and at no cost to his
+## Nerves or to his row of answered calls; a cigarette that is burning is
+## put out, and its craving waits from here.
+func come_to_a_stop() -> void:
+	finish_mending()
+	if caller != &"":
+		events.append({"type": "call_resolved", "caller": String(caller), "answered": false, "dropped": true,
+				"cash": 0.0, "nerves": 0.0, "in_a_row": answered_run})
+		_hang_up()
+	for candidate: Item in items:
+		if candidate.burning:
+			_burn_out(candidate)
 
 
 ## The officer takes the contraband he can see (GDD 6.5): everything marked
@@ -1474,10 +1517,15 @@ func _step_smoke(candidate: Item, dt: float) -> void:
 			candidate.ash_fell = true
 			_nerves.add(_param(candidate, "ash_nerves", 0.0))
 	elif candidate.burning:
-		candidate.burning = false
-		var lapse: Dictionary = GameData.as_dict(candidate.record.get("lapse"))
-		if lapse.has("after"):
-			candidate.lapse_left = GameData.as_float(lapse.get("after"))
+		_burn_out(candidate)
+
+
+## A smoke is out: from now the craving waits (GDD 7.4).
+func _burn_out(candidate: Item) -> void:
+	candidate.burning = false
+	var lapse: Dictionary = GameData.as_dict(candidate.record.get("lapse"))
+	if lapse.has("after"):
+		candidate.lapse_left = GameData.as_float(lapse.get("after"))
 
 
 ## Lapse (GDD 7.2): what happens when a habit is neglected.

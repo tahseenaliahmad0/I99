@@ -25,6 +25,7 @@ func test_item_base() -> void:
 	_check_cigarettes()
 	_check_tea()
 	_check_visor_photo()
+	_check_photo_through_a_telling()
 	_check_slap()
 	_check_window()
 	_check_through_the_hand()
@@ -363,6 +364,49 @@ func _check_visor_photo() -> void:
 	check_near(_sim.nerves.value, 60.0 + tuning.f("visor_nerves"), 0.000001, "in the next leg it does again")
 
 
+## "Once per leg" along a Telling: the photo calms again when a leg begins
+## and when a boss begins, and nowhere else. A stop, a boss stop and the road
+## from it to the next fork are no leg of their own.
+func _check_photo_through_a_telling() -> void:
+	var calm: float = tuning.f("visor_nerves")
+	_sim = DriveSim.new(fresh_data())
+	_sim.begin_telling("drivers", 31)
+	_telling_on_to(RunState.Stage.LEG, 0)
+	check_near(_look_at_the_photo(), calm, 0.25, "on the first leg a look at the photo calms him by 20")
+	check_near(_look_at_the_photo(), 0.0, 0.25, "a second look on that leg does not")
+
+	# The leg's stop is no new leg.
+	_into_the_stall()
+	check(_sim.stopped and _sim.items.photo_used, "at the leg's stop he has still had this leg's look")
+	_leave_the_stop()
+	check_near(_look_at_the_photo(), 0.0, 0.25, "after the stop it is the same leg: no calm")
+
+	# Each leg begins at its gore; the boss begins as a leg does.
+	_telling_on_to(RunState.Stage.LEG, 2)
+	check_near(_look_at_the_photo(), calm, 0.25, "on a later leg it calms him again")
+	_telling_on_to(RunState.Stage.BOSS, RunGenerator.LEGS_PER_ACT)
+	check_near(_look_at_the_photo(), calm, 0.25, "and again when the boss begins")
+	check_near(_look_at_the_photo(), 0.0, 0.25, "once in the boss")
+
+	# The boss stop and the road to the next fork renew nothing.
+	_telling_on_to(RunState.Stage.BOSS_STOP, RunGenerator.LEGS_PER_ACT)
+	check(_sim.stopped and _sim.items.photo_used, "at the boss stop he has still had the boss's look")
+	_leave_the_stop()
+	check_eq(_sim.run.stage, RunState.Stage.APPROACH, "(from the boss stop the road leads to the next act's first fork)")
+	check_near(_look_at_the_photo(), 0.0, 0.25, "on the road to the fork there is no calm in it")
+	_telling_on_to(RunState.Stage.LEG, 0)
+	check_eq(_sim.run.act, 2, "(past the gore: the first leg of Act 2)")
+	check_near(_look_at_the_photo(), calm, 0.25, "the leg that begins there has its look")
+
+	# Nor does the street of the Arrival, after the last boss and its stop.
+	_telling_on_to(RunState.Stage.BOSS, RunGenerator.LEGS_PER_ACT, RunGenerator.ACTS)
+	check_near(_look_at_the_photo(), calm, 0.25, "(in the last boss he looks at it)")
+	_telling_on_to(RunState.Stage.BOSS_STOP, RunGenerator.LEGS_PER_ACT, RunGenerator.ACTS)
+	_leave_the_stop()
+	check_eq(_sim.run.stage, RunState.Stage.ARRIVAL, "(from the last boss stop the road is the street of the Arrival)")
+	check_near(_look_at_the_photo(), 0.0, 0.25, "on the street of the Arrival there is no calm in it: the street is no leg")
+
+
 func _check_slap() -> void:
 	_new_sim()
 	_sim.nerves.value = 20.0
@@ -498,6 +542,83 @@ func _aim(anchor: StringName) -> void:
 	_input.clear()
 	_input.pointer_is_absolute = true
 	_input.pointer = _sim.hand.anchor_pointer(_sim.hand.anchor_index(anchor))
+
+
+## A look at the photo, by the hand: the visor is flicked down. Returns what
+## the look did to his Nerves; the visor is then left to go up again.
+func _look_at_the_photo() -> float:
+	_aim(&"visor")
+	_in_lane(80)
+	_sim.nerves.value = 60.0
+	_input.pointer_is_absolute = false
+	_input.lmb = true
+	_input.pointer_delta = Vector2(0.0, tuning.f("flick_min_distance") * 1.5 / 10.0)
+	_in_lane(10)
+	_input.pointer_delta = Vector2.ZERO
+	_input.lmb = false
+	_in_lane(5)
+	var took: float = _sim.nerves.value - 60.0
+	_input.clear()
+	_in_lane(roundi((tuning.f("visor_time") + 0.2) / DT))
+	return took
+
+
+## Steps `count` ticks with the car kept in the middle of the lane it is in.
+func _in_lane(count: int) -> void:
+	for _tick: int in count:
+		_sim.car.x = _sim.car.lane_center(clampi(_sim.car.lane_of(_sim.car.x), 0, _sim.car.lanes - 1))
+		_sim.step(_input)
+
+
+## Drives a Telling on, each stretch to its end at once and out of every
+## stop on the way, until it is at `stage` with `legs_done` legs of the act
+## behind him, in `act` if one is named (a stop named as the goal is stood
+## at, not left).
+func _telling_on_to(stage: int, legs_done: int, act: int = 0) -> void:
+	var guard: int = 40000
+	_input.clear()
+	while not (_sim.run.stage == stage and _sim.run.legs_done == legs_done and (act == 0 or _sim.run.act == act)) and guard > 0:
+		guard -= 1
+		if _sim.stopped:
+			_leave_the_stop()
+			continue
+		_sim.car.x = _sim.car.lane_center(1 if _sim.car.lanes > 1 else 0)
+		if _sim.leg.active and _sim.car.s < _sim.leg.length - 2.0:
+			_sim.car.s = _sim.leg.length - 1.0
+		_sim.step(_input)
+	check(_sim.run.stage == stage and _sim.run.legs_done == legs_done and (act == 0 or _sim.run.act == act), "(the Telling comes to %s)" % RunState.STAGE_NAMES[stage])
+
+
+## Into the slip lane and to the stall of the leg he is on, in second gear: he stops.
+func _into_the_stall() -> void:
+	var stall: float = _sim.leg.length - tuning.f("leg_tail") + tuning.f("exit_slip_length")
+	var lanes: int = _sim.car.lanes
+	_sim.car.s = stall - 20.0
+	_sim.gate.reset(2)
+	_input.clear()
+	var guard: int = int(10.0 / DT)
+	while not _sim.stopped and guard > 0:
+		guard -= 1
+		_sim.car.x = _sim.car.lane_center(lanes)
+		_sim.car.speed = tuning.f("exit_max_speed")
+		_sim.step(_input)
+	check(_sim.stopped, "(he stops at the stall)")
+
+
+## Grips the wheel until he has left the stop he stands at.
+func _leave_the_stop() -> void:
+	_input.clear()
+	for _tick: int in int(0.2 / DT):
+		_sim.step(_input)
+	_input.pointer_is_absolute = true
+	_input.pointer = _sim.space.point_to_pointer(_sim.space.grip_reference)
+	_input.lmb = true
+	var guard: int = int(5.0 / DT)
+	while _sim.stopped and guard > 0:
+		guard -= 1
+		_sim.step(_input)
+	_input.clear()
+	_sim.step(_input)
 
 
 func _give_duration(item: Dictionary, effect: String) -> float:

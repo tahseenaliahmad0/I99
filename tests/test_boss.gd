@@ -2588,7 +2588,8 @@ func _check_call_and_the_ending() -> void:
 		check_eq(GameData.as_bool(_sim.checkpoint.get("call_answered")), answers, "the save made there knows whether he answered")
 		_ticks(3)
 		check(not GameData.as_bool(_sim.snapshot()["at_ear"]), "at the stop the phone is put away")
-		check(_reach("glovebox"), "(his hand is free for the stop)")
+		# (At a stop the hand goes to the vendor's tray, and to nothing else.)
+		check(not _offers().is_empty() and _reach(GameData.as_string(_offers()[0]["anchor"])), "(his hand is free for the stop)")
 		_leave_stop()
 		_sim.car.s = _sim.leg.length - GameData.as_float(_street().get("bay_m")) * 0.5
 		_sim.car.speed = 0.0

@@ -706,6 +706,7 @@ func test_leg_07() -> void:
 		check(police.s < _sim.car.s and is_equal_approx(police.x, _sim.car.x) and police.speed == 0.0, "parked behind him")
 	var anchors: Array = GameData.as_array(_sim.snapshot()["anchors_in_use"])
 	check(anchors.has(&"dash_1") and anchors.has(&"cash"), "his licence on the dash and the banknotes can be reached")
+	check_eq(anchors.size(), 2, "and nothing else: with the officer at his window the hand does only what he is there for")
 	# Nothing moves on while the officer waits.
 	var leg_time: float = _sim.leg.time
 	var s_before: float = _sim.car.s
@@ -777,6 +778,135 @@ func test_leg_07() -> void:
 	_sim.items.add_item(&"tea_glass", &"glovebox_a")
 	_hand_over(&"cash")
 	check_eq(_contraband_count(), 2, "with a bribe he keeps everything")
+
+	_check_the_night_waits_for_the_officer()
+
+
+## While the officer waits at his window the night waits, as it does at a
+## stop (GDD 6.4, 6.5): nothing burns down, cools, rings or calms, and the
+## hand does only what the officer is there for. Standing there earns and
+## mends nothing. A Snap's seconds are the hand's own and run on; and the
+## night does not stop on a man with his eyes shut.
+func _check_the_night_waits_for_the_officer() -> void:
+	var phone: Dictionary = GameData.as_dict(data.record("items", "phone").get("params"))
+	var longest_gap: float = GameData.as_float(GameData.as_array(phone.get("call_gap_s"))[1])
+	var burn: float = 0.0
+	for give: Variant in GameData.as_array(data.record("items", "cigarettes").get("gives")):
+		if GameData.as_string(GameData.as_dict(give).get("effect")) == "lit":
+			burn = GameData.as_float(GameData.as_dict(give).get("duration"))
+
+	# A cabin full of what runs by the second: a tape that calms, a phone
+	# that is due to ring, a cigarette burning, tea going cold, Awake from a slap.
+	_until_watched(100.0)
+	_sim.give_item(&"mixtape")
+	_sim.give_item(&"phone")
+	_sim.give_item(&"beads")
+	_sim.give_item(&"thumb_keypad")
+	_sim.items.complete(data.record("rituals", "cig_light"), 0)
+	_sim.items.complete(data.record("rituals", "slap"), 0)
+	var lit_before: float = _sim.effects.time_left(&"lit")
+	var hot_before: float = _sim.items.item(&"tea_glass").hot_left
+	var nerves_before: float = _sim.nerves.value
+	_drive_clean(1.0)
+	check_near(lit_before - _sim.effects.time_left(&"lit"), 1.0, 0.000001, "(on the road the cigarette burns down)")
+	check_near(hot_before - _sim.items.item(&"tea_glass").hot_left, 1.0, 0.000001, "(the tea cools)")
+	check(_sim.nerves.value < nerves_before - 0.5 and _sim.effects.has(&"music"), "(and the tape calms him)")
+
+	_pull_over_now()
+	var nerves: float = _sim.nerves.value
+	var lit_left: float = _sim.effects.time_left(&"lit")
+	var awake_left: float = _sim.effects.time_left(&"awake")
+	var hot_left: float = _sim.items.item(&"tea_glass").hot_left
+	var haze: float = _sim.items.haze
+	var side: float = _sim.items.item(&"mixtape").side_time
+	var cash: float = _sim.cash
+	var clock: float = _sim.clock.minutes
+	_events = []
+	_input.clear()
+	for _tick: int in int((longest_gap + burn) / DT):
+		_sim.step(_input)
+	_collect()
+	check(_sim.pulled_over, "(he waits with the officer for over a minute)")
+	check_eq(_sim.nerves.value, nerves, "while the officer waits his Nerves stand: the tape does not calm him, nor the cigarette, nor the quiet")
+	check_eq(_sim.effects.time_left(&"lit"), lit_left, "the cigarette does not burn down")
+	check_eq(_sim.effects.time_left(&"awake"), awake_left, "no status runs out")
+	check_eq(_sim.items.item(&"tea_glass").hot_left, hot_left, "the tea does not cool")
+	check_eq(_sim.items.haze, haze, "the smoke stands in the air")
+	check_eq(_sim.items.item(&"mixtape").side_time, side, "the tape's side does not run")
+	check(not _has_event_named("call_started"), "no call comes in, however long he waits: the phone earns nothing there")
+	check_eq(_sim.cash, cash, "his cash is what it was")
+	check_eq(_sim.clock.minutes, clock, "and the Clock stands with all the rest")
+
+	# The hand does only what the officer is there for.
+	var anchors: Array = GameData.as_array(_sim.snapshot()["anchors_in_use"])
+	check(anchors.size() == 2 and anchors.has(&"dash_1") and anchors.has(&"cash"),
+			"with beads, a tape and a phone aboard the hand still has his licence and the banknotes to go to, and nothing else")
+	check_eq(_try_what_calms(), [], "what calms him is not offered there: not a bead, not the horn, not the horn under his thumb")
+	check_eq(_sim.nerves.value, nerves, "and his Nerves are as they were")
+
+	# A Snap's seconds are the hand's: they run down while the officer waits.
+	_sim.nerves.add(tuning.f("snap_at"))
+	check(_sim.nerves.snap_left > 0.0, "(a Snap, with the officer at his window)")
+	_hand_over(&"dash_1")
+	check(_sim.pulled_over, "in a Snap he cannot reach for his licence")
+	check(not GameData.as_bool(_sim.snapshot()["snap"]), "but the Snap runs down while the officer waits")
+	_hand_over(&"dash_1")
+	check(not _sim.pulled_over, "and then he hands it over")
+
+	# Let go, the night goes on from where it stood.
+	_events = []
+	check_eq(_try_what_calms(), ["beads_count", "horn", "horn (keypad)"], "on the road again the cabin is his: a bead, the horn, the horn under his thumb")
+	_drive_clean(longest_gap)
+	check(_has_event_named("call_started"), "the phone rings again")
+	check(not _sim.effects.has(&"lit"), "and the cigarette burns down")
+
+	# Pulled over in the middle of a blink, he is not left with his eyes shut.
+	_until_watched(100.0)
+	var guard: int = int(tuning.f("blink_period") * 2.0 / DT)
+	while not _sim.nerves.eyes_shut and guard > 0:
+		guard -= 1
+		_sim.nerves.set_value(_sim.heavy_floor() * 0.5)
+		_keep_to_the_line(true)
+		_sim.step(_input)
+	check(_sim.nerves.eyes_shut and _sim.nerves.lids > 0.0, "(Heavy under the eyes of the police: his lids droop and he blinks)")
+	_pull_over_now()
+	check(not _sim.nerves.eyes_shut, "pulled over in the middle of a blink, his eyes are open")
+	check_eq(_sim.nerves.lids, 0.0, "and so are his lids, as at a stop")
+	_events = []
+	var dozed: bool = false
+	_input.clear()
+	for _tick: int in int(tuning.f("blink_period") * 2.0 / DT):
+		_sim.step(_input)
+		dozed = dozed or _sim.nerves.eyes_shut or _sim.nerves.lids > 0.0
+	_collect()
+	check(not dozed and not _has_event_named("blink"), "and he does not doze while the officer waits")
+	# Let go, the rhythm of his blinking starts anew, as after a stop.
+	var paid_at: int = -1
+	_input.clear()
+	_input.pointer_is_absolute = true
+	_input.pointer = _sim.hand.anchor_pointer(_sim.hand.anchor_index(&"dash_1"))
+	for _tick: int in int(1.5 / DT):
+		_sim.step(_input)
+	_input.lmb = true
+	for _tick: int in int(0.1 / DT):
+		_sim.step(_input)
+	_input.pointer = _sim.hand.anchor_pointer(_sim.hand.anchor_index(&"driver_window"))
+	for _tick: int in int(2.5 / DT):
+		_sim.step(_input)
+	_input.clear()
+	var shut_at: int = -1
+	guard = int(tuning.f("blink_period") * 2.0 / DT)
+	while shut_at < 0 and guard > 0:
+		guard -= 1
+		_sim.nerves.set_value(_sim.heavy_floor() * 0.5)
+		_keep_to_the_line(true)
+		_sim.step(_input)
+		if paid_at < 0 and not _sim.pulled_over:
+			paid_at = _sim.tick
+		if paid_at >= 0 and _sim.nerves.eyes_shut:
+			shut_at = _sim.tick
+	check(paid_at >= 0, "(he hands his licence over and is let go)")
+	check_near(float(shut_at - paid_at) * DT, tuning.f("blink_period"), 2.0 * DT, "on the road again, as Heavy as before, his next blink comes a whole blink_period after he is let go")
 
 
 ## T-LEG-08: Two-lane: an undivided road; trucks ahead hold 60 km/h; oncoming
@@ -1463,6 +1593,78 @@ func _pull_over_with(game_data: GameData, cash: float) -> void:
 	_sim.step(_input)
 	_collect()
 	check(_sim.pulled_over and not plan.is_empty(), "(pulled over with %s cash)" % str(cash))
+
+
+## A Patrol leg driven clean until the police car watches him, with `cash`
+## to his name.
+func _until_watched(cash: float) -> void:
+	_sim = DriveSim.new(fresh_data())
+	_events = []
+	_input.clear()
+	_begin("patrol", 2, 555)
+	_sim.cash = cash
+	var guard: int = int(60.0 / DT)
+	while not _sim.suspicion.watching and guard > 0:
+		guard -= 1
+		_keep_to_the_line(true)
+		_sim.step(_input)
+	_collect()
+	check(_sim.suspicion.watching, "(the police car watches him)")
+
+
+## Suspicion is put at the top: on the next tick he is pulled over.
+func _pull_over_now() -> void:
+	_sim.suspicion.add(_sim.suspicion.maximum())
+	_keep_to_the_line(true)
+	_sim.step(_input)
+	_collect()
+	check(_sim.pulled_over, "(he is pulled over)")
+
+
+## Steps for `seconds`, the car on the plan's line while it is not standing
+## with the officer.
+func _ticks_on_the_line(seconds: float) -> void:
+	for _tick: int in roundi(seconds / DT):
+		if not _sim.pulled_over:
+			_keep_to_the_line(true)
+		_sim.step(_input)
+	_collect()
+
+
+## Drives on the plan's line, indicating, with his hand left alone.
+func _drive_clean(seconds: float) -> void:
+	_input.clear()
+	_ticks_on_the_line(seconds)
+
+
+## What calms him for a click, each tried by the hand: a bead at the mirror,
+## the horn at the hub, and the horn under the thumb of the hand that grips
+## (the thumb keypad). Returns the rituals that were completed, in order.
+func _try_what_calms() -> Array:
+	_collect()
+	_events = []
+	for anchor: StringName in [&"mirror", &"horn"]:
+		_input.clear()
+		_input.pointer_is_absolute = true
+		_input.pointer = _sim.hand.anchor_pointer(_sim.hand.anchor_index(anchor))
+		_ticks_on_the_line(1.0)
+		_input.lmb = true
+		_ticks_on_the_line(tuning.f("tap_max_time") * 0.3)
+		_input.clear()
+		_ticks_on_the_line(0.3)
+	_input.pointer_is_absolute = true
+	_input.pointer = _sim.space.point_to_pointer(_sim.space.grip_reference)
+	_input.lmb = true
+	_ticks_on_the_line(1.0)
+	_input.pad_horn = true
+	_ticks_on_the_line(3.0 * DT)
+	_input.clear()
+	_ticks_on_the_line(0.3)
+	var done: Array = []
+	for event: Dictionary in _events:
+		if GameData.as_string(event.get("type")) == "ritual_completed":
+			done.append(GameData.as_string(event.get("ritual")) + (" (keypad)" if GameData.as_bool(event.get("keypad")) else ""))
+	return done
 
 
 ## The fine his licence costs with `cash` to his name.
