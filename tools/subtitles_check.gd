@@ -13,6 +13,7 @@ extends SceneTree
 ##   - the Subtitles settings of GDD 17.1
 ##   - the tuning constants of the subtitles
 ##   - the view, from a line asked for on the Events bus to what its labels hold
+##   - a line is not said twice over, and only a few wait
 ##   - a line table as the writer will leave it: names, right to left, an
 ##     exchange
 ##   - the Call of Dawn: the simulation asks for what Noor says, and it is shown

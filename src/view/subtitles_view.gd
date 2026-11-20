@@ -7,10 +7,12 @@ extends CanvasLayer
 ##
 ## The view listens to the Events bus. A `line_requested` (payload "id") is
 ## looked up in the line table and shown; a line asked for while another is
-## showing waits its turn. SubtitleQueue holds the wrapping, the timing and
-## the queue. A row of the line table that holds an exchange ("Guest, then
-## Abu Noor" says "... / ...") is shown as what each of them says, one after
-## the other, each under its own name.
+## showing waits its turn. A line that is showing or waiting already is not
+## queued again, and no more than `subtitle_max_waiting` lines wait: for one
+## more, the one that has waited longest gives way. SubtitleQueue holds the
+## wrapping, the timing and the queue. A row of the line table that holds an
+## exchange ("Guest, then Abu Noor" says "... / ...") is shown as what each
+## of them says, one after the other, each under its own name.
 ##
 ## A `wreck` cuts off what was being said, as it cuts off the picture
 ## (GDD 3.2): what the Table says about the Wreck is asked for after it and
@@ -90,8 +92,7 @@ func setup(data: GameData) -> void:
 func say(line_id: String) -> void:
 	if _tuning == null:
 		return
-	if not Lines.has_line(line_id):
-		push_error("Subtitles: a line was asked for that the line table does not have: '%s'" % line_id)
+	if not _begin(line_id):
 		return
 	for said: PackedStringArray in SubtitleQueue.exchange(Lines.get_speaker(line_id), Lines.get_text(line_id)):
 		_queue.push(Lines.get_speaker_name(said[0]), said[1])
@@ -134,6 +135,17 @@ func _process(delta: float) -> void:
 		_configure()
 	_queue.advance(delta)
 	_show(_queue.current())
+
+
+## Whether a line that is asked for is to be said: not one the line table
+## does not have (an error), and not one that is showing or waiting already.
+## A line that is makes room for itself among those that wait
+## (SubtitleQueue.begin_line).
+func _begin(line_id: String) -> bool:
+	if not Lines.has_line(line_id):
+		push_error("Subtitles: a line was asked for that the line table does not have: '%s'" % line_id)
+		return false
+	return _queue.begin_line(line_id)
 
 
 func _show(part: SubtitleQueue.Part) -> void:

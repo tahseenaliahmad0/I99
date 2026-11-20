@@ -114,6 +114,7 @@ func run(tree: SceneTree) -> int:
 	_settings()
 	_numbers()
 	_view()
+	_few_wait()
 	_written()
 	_the_call()
 	_scene()
@@ -610,6 +611,8 @@ func _numbers() -> void:
 	_check(bad.is_empty(), "the four colours are colours%s" % ("" if bad.is_empty() else ": not " + ", ".join(bad)))
 	_check(_tuning.i("subtitle_line_chars") >= 1 and _tuning.i("subtitle_max_lines") >= 1 and _tuning.f("subtitle_min_duration") > 0.0 and _tuning.f("subtitle_char_duration") >= 0.0,
 			"a line has room for a character, a subtitle for a line, and it is held for some time")
+	_check(_tuning.has("subtitle_max_waiting") and GameData.is_number(_tuning.raw("subtitle_max_waiting")) and _tuning.i("subtitle_max_waiting") >= 1,
+			"one line at least may wait behind the one on screen (%d)" % _tuning.i("subtitle_max_waiting"))
 	_check(_tuning.f("subtitle_speaker_scale") > 0.0 and _tuning.f("subtitle_outline_share") >= 0.0 and _tuning.f("subtitle_bottom_margin") >= 0.0
 			and _tuning.a("subtitle_padding").size() == 2 and _tuning.fi("subtitle_padding", 0) >= 0.0 and _tuning.fi("subtitle_padding", 1) >= 0.0
 			and _tuning.f("subtitle_line_spacing") >= 0.0 and _tuning.f("subtitle_speaker_gap") >= 0.0 and _tuning.f("subtitle_corner_radius") >= 0.0,
@@ -739,6 +742,140 @@ func _view() -> void:
 	Settings.reset_to_defaults()
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(Game.user_dir.path_join(Settings.FILE_NAME)))
 	view.free()
+
+
+## GDD 16.6 says nothing of a queue. Lines wait their turn, so that nothing
+## said is cut short; but a line of the line table is not queued again while
+## it is showing or waiting, and only `subtitle_max_waiting` of them wait:
+## for one more, the one that has waited longest gives way. Otherwise six
+## TAPs on a passenger's shoulder are six subtitles, and what is said after
+## them (the ring of his phone) comes seconds late.
+func _few_wait() -> void:
+	_heading("a line is not said twice over, and only a few wait")
+	var most: int = _tuning.i("subtitle_max_waiting")
+	var queue: SubtitleQueue = _new_queue()
+	_check(queue.max_waiting == most and most >= 2, "%d lines may wait behind the one on screen (tuning): three asked for at once are all shown" % most)
+	var texts: PackedStringArray = [_text_of(30), _text_of(40), _text_of(50), _text_of(60)]
+	var hold: int = _frames_in(queue.duration_of(texts[0].length()))
+
+	# Asked for again while it is showing, and while it waits.
+	var said: bool = _say(queue, "line.a", texts[0])
+	queue.advance(FRAME)
+	for _frame: int in hold / 2:
+		queue.advance(FRAME)
+	var again: bool = _say(queue, "line.a", texts[0])
+	_check(said and not again and queue.size() == 1 and queue.holds("line.a"), "a line asked for again while it is showing is not queued again")
+	var next: bool = _say(queue, "line.b", texts[1])
+	var next_again: bool = _say(queue, "line.b", texts[1])
+	_check(next and not next_again and queue.size() == 2 and queue.lines_waiting() == 1, "nor is one that waits")
+	var frames: int = 1 + hold / 2
+	while queue.current() != null and queue.current().line_id == "line.a" and frames < MOST_FRAMES:
+		queue.advance(FRAME)
+		frames += 1
+	_check(_held_for(frames - 1, queue.duration_of(texts[0].length())), "and the line on screen is held no longer for it (%d frames)" % (frames - 1))
+	_check(queue.current() != null and queue.current().line_id == "line.b" and not queue.holds("line.a") and _say(queue, "line.a", texts[0]) and queue.size() == 2,
+			"once it has had its time it can be said again")
+
+	# One more than may wait: the one that has waited longest gives way.
+	queue = _new_queue()
+	var ids: PackedStringArray = []
+	for index: int in most + 2:
+		ids.append("line.%d" % index)
+	for index: int in most + 1:
+		_say(queue, ids[index], texts[index % texts.size()])
+	queue.advance(FRAME)
+	_check(queue.lines_waiting() == most and queue.size() == most + 1, "with one line on screen, %d wait" % most)
+	for _frame: int in hold / 2:
+		queue.advance(FRAME)
+	_check(_say(queue, ids[most + 1], texts[0]) and queue.lines_waiting() == most and not queue.holds(ids[1]) and queue.holds(ids[0]) and queue.holds(ids[most + 1]),
+			"one more is asked for: the line that has waited longest gives way to it, and the line on screen stays")
+	var order: PackedStringArray = []
+	frames = 1 + hold / 2
+	var head_frames: int = 0
+	for _frame: int in MOST_FRAMES:
+		var part: SubtitleQueue.Part = queue.current()
+		if part == null:
+			break
+		if order.is_empty() or order[order.size() - 1] != part.line_id:
+			order.append(part.line_id)
+		if part.line_id == ids[0]:
+			head_frames = frames
+		queue.advance(FRAME)
+		frames += 1
+	var kept: PackedStringArray = ids.duplicate()
+	kept.remove_at(1)
+	_check(order == kept, "what is left is shown in the order it was asked for (%s)" % ", ".join(order))
+	_check(_held_for(head_frames, queue.duration_of(texts[0].length())), "and the line on screen had its whole time, no more (%d frames)" % head_frames)
+
+	# A line of several parts is one line: on screen, its parts to come are
+	# not counted; waiting, it gives way whole.
+	queue = _new_queue()
+	var long_text: String = _text_of(queue.line_chars * (queue.max_lines * 2 + 1))
+	var long_parts: int = queue.parts_of("", long_text).size()
+	_say(queue, "long.a", long_text)
+	queue.advance(FRAME)
+	_say(queue, "long.b", long_text)
+	for index: int in most - 1:
+		_say(queue, ids[index], texts[0])
+	_check(long_parts > 2 and queue.lines_waiting() == most and queue.size() == long_parts * 2 + most - 1,
+			"a line of %d parts on screen: its parts to come are not lines that wait" % long_parts)
+	_check(_say(queue, ids[most], texts[0]) and not queue.holds("long.b") and queue.lines_waiting() == most and queue.size() == long_parts + most,
+			"a waiting line of %d parts gives way whole; the parts of the line on screen stay" % long_parts)
+
+	# What is pushed without a line of the table is neither counted nor dropped.
+	queue = _new_queue()
+	for text: String in texts:
+		queue.push("", text)
+	queue.advance(FRAME)
+	for index: int in most + 1:
+		_say(queue, ids[index], texts[0])
+	_check(queue.size() == texts.size() + most and queue.lines_waiting() == most and not queue.holds(ids[0]) and not queue.holds(""),
+			"what is pushed without a line is not counted and does not give way (%d parts, %d lines waiting)" % [queue.size(), queue.lines_waiting()])
+	queue.clear()
+	queue.push("", texts[0])
+	_check(queue.current().line_id.is_empty(), "after clear() what is pushed belongs to no line")
+
+	# The same through the view: lines asked for on the Events bus.
+	Settings.reset_to_defaults()
+	var view: SubtitlesView = SubtitlesView.new()
+	view.name = "Subtitles"
+	_root.add_child(view)
+	view.setup(_data)
+	var asked: PackedStringArray = [SHORT_LINE, "heckle.children.twist.sheep", "heckle.drivers.dare.gear4", "heckle.uncles.doubt.1", "heckle.aunts.order.tea"]
+	Events.emit_event("line_requested", {"id": asked[0]})
+	Events.emit_event("line_requested", {"id": asked[0]})
+	view._process(FRAME)
+	Events.emit_event("line_requested", {"id": asked[0]})
+	_check(view.is_showing() and view.waiting() == 1, "%s asked for three times on the bus is on screen once" % asked[0])
+	for index: int in range(1, most + 2):
+		Events.emit_event("line_requested", {"id": asked[index]})
+		Events.emit_event("line_requested", {"id": asked[index]})
+	var shown: PackedStringArray = []
+	while view.is_showing() and shown.size() < MOST_FRAMES:
+		shown.append(" ".join(view.shown_lines()))
+		_frames_until_change(view)
+	var expected: PackedStringArray = [Lines.get_text(asked[0])]
+	for index: int in range(2, most + 2):
+		expected.append(Lines.get_text(asked[index]))
+	_check(most + 2 <= asked.size() and shown == expected, "%d more asked for twice each: all but the first of them are shown, once each, in order (%d subtitles)" % [most + 1, shown.size()])
+	Settings.reset_to_defaults()
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(Game.user_dir.path_join(Settings.FILE_NAME)))
+	view.free()
+
+
+## A line of the line table said to a bare queue, as the view says it: false
+## if the queue would not have it again.
+func _say(queue: SubtitleQueue, line_id: String, text: String) -> bool:
+	if not queue.begin_line(line_id):
+		return false
+	queue.push("", text)
+	return true
+
+
+func _new_queue() -> SubtitleQueue:
+	var queue: SubtitleQueue = SubtitleQueue.new()
+	queue.configure(_tuning)
+	return queue
 
 
 ## The line table as a writer will leave it, made in memory (lines_ar.csv
