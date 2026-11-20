@@ -2546,6 +2546,42 @@ func _check_last_checkpoint() -> void:
 		check_eq(_count_events("pulled_over"), 0, "(searched once, he drives on)")
 		check(_sim.car.speed > 0.0, "(the car moves again)")
 
+	# "Waves him through at 70 km/h between barriers" (GDD 10.4): between
+	# them, not only at their mouth. (The review of M7: the foot brake down
+	# to 70 at the line and fourth gear before and after it passed them
+	# faster than at par, with the hand never off the wheel.)
+	_begin_quiet_boss(DAWN)
+	_cruise(4, 1)
+	_sim.car.s = at - 3.0
+	_events = []
+	var guard: int = _ticks_in(20.0)
+	var crossed: bool = false
+	while _sim.car.s < at + corridor_length and _event("pulled_over").is_empty() and guard > 0:
+		guard -= 1
+		if _sim.car.s < at + 1.0:
+			# On the brake to just under 70 as he comes to the barriers.
+			_sim.car.speed = limit - 1.0
+		else:
+			crossed = true
+		_tick()
+	check(crossed, "(at 69 km/h he is let into the corridor)")
+	check_eq(GameData.as_string(_event("pulled_over").get("paid")), "search", "in fourth gear, off the brake past the mouth, he is stopped and searched between the barriers")
+	check(_sim.car.s > at + 1.0 and _sim.car.s < at + corridor_length, "(inside the corridor: at %.0f m of its %.0f)" % [_sim.car.s - at, corridor_length])
+	# In second gear, which holds 70, he is waved all the way through.
+	_begin_quiet_boss(DAWN)
+	_cruise(2, 1)
+	_sim.car.s = at - 3.0
+	_events = []
+	guard = _ticks_in(20.0)
+	while _sim.car.s < at + corridor_length + 5.0 and guard > 0:
+		guard -= 1
+		_tick()
+	check(guard > 0 and _event("pulled_over").is_empty(), "in second gear all the way he is waved through")
+	# And past the barriers the road is his again.
+	_sim.gate.reset(3)
+	_ticks(_ticks_in(4.0))
+	check(_sim.car.speed > limit + 5.0 and _event("pulled_over").is_empty(), "past the barriers he may drive at par again (%.0f km/h)" % _sim.car.speed)
+
 
 ## The Call starts 833 m from the end and rings for 8 s.
 func _check_call_rings() -> void:

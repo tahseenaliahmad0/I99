@@ -580,11 +580,15 @@ func step_after_car(s_then: float) -> void:
 			call = CALL_RINGING
 			call_left = _ring_s
 			call_began = true
-		# The soldiers wave through whoever comes to the barriers at
-		# corridor_max_kmh or less (GDD 10.4). Anyone faster is stopped.
-		if not _corridor_judged and s_then < _corridor_at and _car.s >= _corridor_at:
-			_corridor_judged = true
-			searched = _car.speed > _corridor_max_kmh + 0.001
+		# The soldiers wave through whoever drives between the barriers at
+		# corridor_max_kmh or less (GDD 10.4): from their mouth to their
+		# end, not only as he comes to them. Anyone faster is stopped, once.
+		if not _corridor_judged and _car.s >= _corridor_at:
+			if _car.s > _corridor_to:
+				_corridor_judged = true
+			elif _car.speed > _corridor_max_kmh + 0.001:
+				_corridor_judged = true
+				searched = true
 	elif kind == CHECKPOINT:
 		var nose: float = _car.length() * 0.5
 		if not released and s_then + nose <= bar_at + 0.001 and _car.s + nose > bar_at:
