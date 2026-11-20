@@ -441,14 +441,14 @@ func step(dt: float, gear: int, raining: bool) -> void:
 
 
 ## One fault per leg (GDD 8.2): announced, then for a while he leans across
-## the gear lever, and then the oldest fault is mended.
+## the gear lever, and then the oldest fault that is his to mend is mended.
 func _step_repair(dt: float) -> void:
 	var repairs: Dictionary = GameData.as_dict(record.get("repairs"))
 	if repairs.is_empty():
 		return
 	match repair:
 		REPAIR_IDLE:
-			if repaired < GameData.as_int(repairs.get("per_leg")) and not _faults.active.is_empty():
+			if repaired < GameData.as_int(repairs.get("per_leg")) and _fault_to_mend() != &"":
 				repair = REPAIR_ANNOUNCED
 				repair_left = GameData.as_float(repairs.get("announce_s"))
 				_say("repair")
@@ -462,11 +462,21 @@ func _step_repair(dt: float) -> void:
 			if repair_left < dt * 0.5:
 				repair = REPAIR_IDLE
 				repair_left = 0.0
-				repaired += 1
-				if not _faults.active.is_empty():
-					var fault: StringName = _faults.active[0]
+				var fault: StringName = _fault_to_mend()
+				if fault != &"":
+					repaired += 1
 					_faults.repair(fault)
 					events.append({"type": "fault_repaired", "fault": String(fault), "lamps": _faults.lamps, "price": 0.0, "by": id})
+
+
+## The fault he would mend: the oldest lit one that duct tape is not already
+## mending (GDD 7.5: that one repairs itself; he does not spend his repair
+## on it). Empty when there is none.
+func _fault_to_mend() -> StringName:
+	for fault: StringName in _faults.active:
+		if fault != _items.mending:
+			return fault
+	return &""
 
 
 ## The radio, turned to static every so often (GDD 8.2). Where it is there

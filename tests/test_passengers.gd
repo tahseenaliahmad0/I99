@@ -647,6 +647,69 @@ func test_pass_conscript() -> void:
 		check_near(_sim.cash - cash_without, 10.0, 0.000001, "fare 10: the night is 10 richer than the same night without him")
 		check_near(_sim.suspicion.gain_mult, 1.0, 0.000001, "(and his uniform has gone with him)")
 
+	# What the review of M8 found (RULES-04, -05, -08, -09).
+	_check_a_snap_wakes_him()
+
+
+## The number of a ritual's "nerves:<n>" op.
+func _nerves_of(ritual_id: String) -> float:
+	for op: Variant in GameData.as_array(_ritual(ritual_id).get("on_complete")):
+		if GameData.as_string(op).begins_with("nerves:"):
+			return GameData.as_string(op).substr(7).to_float()
+	return 0.0
+
+
+## A Snap is two seconds of his horn (GDD 6.1: "he leans on the horn for
+## 2 s"), and the horn wakes the soldier (GDD 8.2). On the road: where the
+## night waits nothing of a passenger runs, and the horn's own TAP is not
+## offered either.
+func _check_a_snap_wakes_him() -> void:
+	var awake_s: float = GameData.as_float(GameData.as_dict(_passenger("conscript").get("sleeps")).get("awake_s"))
+	var slap: float = _nerves_of("slap")
+	_on_the_road("conscript")
+	check(GameData.as_bool(_shot("passenger_asleep")), "(he sleeps)")
+	_sim.nerves.set_value(tuning.f("snap_at") - slap * 0.5)
+	_reach("face")
+	_events = []
+	_tap()
+	check_eq(_count_events("snap"), 1, "(a slap too many: a Snap)")
+	check_eq(_count_events("sfx_requested", "id", "horn"), 1, "(he leans on the horn)")
+	check_eq(_count_events("ritual_completed", "ritual", "horn"), 0, "(not by a TAP on it)")
+	check(not GameData.as_bool(_shot("passenger_asleep")), "the two seconds of horn of a Snap wake the soldier")
+	check_near(GameData.as_float(_shot("passenger_awake_left")), awake_s, float(TAP_TICKS + SETTLE + 2) * DT, "for his 20 s")
+	check_eq(_count_events("line_requested", "id", "passenger.conscript.wake"), 1, "(and he says he was awake)")
+	# When the Snap lets his hand go, one tap is a cigarette: the horn did the waking.
+	_ticks(_ticks_in(tuning.f("snap_duration")))
+	check(not GameData.as_bool(_shot("snap")), "(the Snap is over)")
+	_events = []
+	_ask()
+	check(_item("cigarettes").burning, "woken by the Snap, the first tap on his shoulder is a cigarette")
+	check_eq(_count_events("line_requested", "id", "passenger.conscript.wake"), 0, "(not a second waking)")
+	# With an officer at his window the night waits for the soldier too. A
+	# Snap can still begin there: the weather cramp is the hand's and runs on
+	# (D-055), and its Nerves can be the last. That Snap wakes nobody.
+	_begin_quiet_leg("rain", 1, 3)
+	check(_sim.board("conscript"), "(he rides along on a Rain leg)")
+	_sim.car.s = _sim.leg.length * tuning.f("phantom_cramp_at") - 1.0
+	var guard: int = _ticks_in(2.0)
+	while GameData.as_string(_shot("cramp")) != DriveSim.HUM and guard > 0:
+		guard -= 1
+		_tick()
+	check_eq(GameData.as_string(_shot("cramp")), DriveSim.HUM, "(the hum of the weather cramp)")
+	_sim.suspicion.begin_watch()
+	# (His uniform halves what is added: twice the top takes it to the top.)
+	_sim.suspicion.add(tuning.f("suspicion_max") / _sim.suspicion.gain_mult)
+	_tick()
+	check(GameData.as_bool(_shot("pulled_over")), "(and in the same breath he is pulled over)")
+	check(GameData.as_bool(_shot("passenger_asleep")), "(the soldier sleeps)")
+	_sim.nerves.set_value(tuning.f("snap_at") - tuning.f("phantom_cramp_nerves") * 0.5)
+	_events = []
+	_ticks(_ticks_in(tuning.f("phantom_cramp_hum")) + 2)
+	check_eq(_count_events("snap"), 1, "(the cramp bites while the officer waits: a Snap)")
+	check(GameData.as_bool(_shot("pulled_over")), "(the officer is still at his window)")
+	check(GameData.as_bool(_shot("passenger_asleep")), "with the officer at the window a Snap does not wake him: nothing of a passenger runs there")
+	check_eq(_count_events("line_requested", "id", "passenger.conscript.wake"), 0, "(and he says nothing)")
+
 
 # --- T-PASS-DRUMMER ----------------------------------------------------------
 
@@ -1243,6 +1306,7 @@ func test_pass_apprentice() -> void:
 	# What the review of M8 found (RULES-01, -02, -03, -05, -07, -10).
 	_check_retune_ends_the_station()
 	_check_radio_line_only_when_playing()
+	_check_tape_and_apprentice()
 
 
 ## The dial dragged `steps` stations to the right, through the hand.
@@ -1256,6 +1320,72 @@ func _tune(steps: int) -> void:
 	_input.lmb = false
 	_ticks(SETTLE)
 	_input.clear()
+
+
+## Duct tape and the boy do not mend the same fault (GDD 7.5: the act's first
+## fault "repairs itself"; 8.2: he repairs one fault per leg): he takes the
+## oldest fault that the tape is not mending, and keeps his repair while the
+## tape's is the only one lit.
+func _check_tape_and_apprentice() -> void:
+	var repairs: Dictionary = GameData.as_dict(_passenger("apprentice").get("repairs"))
+	var his: float = GameData.as_float(repairs.get("announce_s")) + GameData.as_float(repairs.get("lean_s"))
+	var after: float = 0.0
+	for give: Variant in GameData.as_array(_record("duct_tape").get("gives")):
+		if GameData.as_string(GameData.as_dict(give).get("passive")) == "self_repair_s":
+			after = GameData.as_float(GameData.as_dict(give).get("amount"))
+	check(after > his, "(the tape takes longer over a fault than he does: %.0f s against %.0f s)" % [after, his])
+	var say: String = "passenger.apprentice.repair"
+
+	# A crash, the act's first hit: two lamps. The tape has the first; he takes the other.
+	_on_the_road("apprentice")
+	_give("duct_tape")
+	_sim.traffic.spawn(&"truck", 1, _sim.car.s + 30.0, tuning.fi("gear_speeds", 2) - 50.0)
+	_events = []
+	var guard: int = _ticks_in(10.0)
+	while _sim.collision.hit == Collision.Hit.NONE and guard > 0:
+		guard -= 1
+		_tick()
+	var hit_at: int = _sim.tick
+	_sim.traffic.clear()
+	if check_eq(_sim.faults.lamps, 2, "(a crash into a slow truck: two lamps)"):
+		var first: String = String(_sim.faults.active[0])
+		var second: String = String(_sim.faults.active[1])
+		check_eq(String(_sim.items.mending), first, "(the tape has taken hold of the first of them)")
+		check_eq(_count_events("line_requested", "id", say), 1, "with two lamps lit and one in the tape, he announces a repair")
+		_ticks(hit_at + _ticks_in(his) + 2 - _sim.tick)
+		var mended: Dictionary = _event("fault_repaired")
+		check_eq(GameData.as_string(mended.get("by")), "apprentice", "after his 5 s a fault is mended by him")
+		check_eq(GameData.as_string(mended.get("fault")), second, "the one the tape is not mending")
+		check(_sim.faults.has(StringName(first)) and _sim.faults.lamps == 1, "(the tape's fault is still lit)")
+		_events = []
+		_ticks(hit_at + _ticks_in(after) + 2 - _sim.tick)
+		mended = _event("fault_repaired")
+		check_eq(GameData.as_string(mended.get("by")), "duct_tape", "after the tape's 10 s its fault has repaired itself")
+		check_eq(GameData.as_string(mended.get("fault")), first, "(the act's first)")
+		check_eq(_sim.faults.lamps, 0, "two repairs, two lamps out: neither was spent on the other's fault")
+
+	# One scrape, the act's first fault: it is the tape's. He keeps his repair
+	# for the next fault of the leg.
+	_on_the_road("apprentice")
+	_give("duct_tape")
+	_events = []
+	_scrape_rail()
+	hit_at = _sim.tick - _ticks_in(tuning.f("hit_immunity") + 0.2)
+	check_eq(_sim.faults.lamps, 1, "(a scrape: one lamp)")
+	check_eq(String(_sim.items.mending), String(_sim.faults.active[0]), "(the tape has taken hold of it)")
+	_ticks(hit_at + _ticks_in(his) + 2 - _sim.tick)
+	check_eq(_count_events("line_requested", "id", say), 0, "the only lamp lit is in the tape: he does not start on it")
+	check_eq(_sim.faults.lamps, 1, "(after his 5 s it is still lit)")
+	_ticks(hit_at + _ticks_in(after) + 2 - _sim.tick)
+	check_eq(GameData.as_string(_event("fault_repaired").get("by")), "duct_tape", "it repairs itself after the tape's 10 s")
+	check_eq(_sim.faults.lamps, 0, "(the lamp is out)")
+	_events = []
+	_scrape_rail()
+	check_eq(_sim.faults.lamps, 1, "(another scrape on the same leg: the act's second fault, not the tape's)")
+	check_eq(_count_events("line_requested", "id", say), 1, "his one repair of the leg is still his: he announces it")
+	_ticks(_ticks_in(his))
+	check_eq(GameData.as_string(_event("fault_repaired").get("by")), "apprentice", "and mends it")
+	check_eq(_sim.faults.lamps, 0, "the tape did not cost him his repair")
 
 
 ## "(he turns the dial)" is said when he turns a station off, not every 30 s

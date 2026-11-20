@@ -538,8 +538,7 @@ func step(input: DriveInput) -> void:
 		_announce(event)
 	stop.events.clear()
 	cash = maxf(cash + passengers.cash_delta, 0.0)
-	for event: Dictionary in passengers.events:
-		_announce(event)
+	_announce_passenger()
 	if passengers.changed:
 		_fit_cabin()
 
@@ -563,6 +562,7 @@ func step(input: DriveInput) -> void:
 	_report_effects()
 	if nerves.snapped and not snap_said:
 		_report_snap()
+		_announce_passenger()
 
 	tick += 1
 
@@ -1514,11 +1514,17 @@ func give_item(id: StringName, slot: StringName = &"") -> ItemSim.Item:
 func board(passenger_id: String) -> bool:
 	if not passengers.board(passenger_id):
 		return false
+	_announce_passenger()
+	_fit_cabin()
+	return true
+
+
+## What whoever rides with him has said or done since this was last asked:
+## each is announced once.
+func _announce_passenger() -> void:
 	for event: Dictionary in passengers.events:
 		_announce(event)
 	passengers.events.clear()
-	_fit_cabin()
-	return true
 
 
 ## Sets the road the car is on: 1 to 3 lanes, divided or not (GDD 5.1).
@@ -2216,6 +2222,10 @@ func _report_snap() -> void:
 	_snapped = true
 	_emit("snap", {"nerves": nerves.value})
 	_emit("sfx_requested", {"id": "horn"})
+	if not _standing():
+		# Two seconds of his horn wake one who sleeps (GDD 8.2) as its TAP
+		# does: on the road. Where the night waits, nothing of a passenger runs.
+		passengers.on_horn()
 	if gesture.is_active():
 		gesture.cancel()
 	if _lever_in_hand:
