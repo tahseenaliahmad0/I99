@@ -9,7 +9,8 @@ extends TestSuite
 ##   3. Each way of breaking that fixture is caught with the right error code,
 ##      so "validates" means something.
 
-const BROKEN_DIR: String = "user://test_runs/broken_data"
+## Under this process's own test folder (Smoke.test_user_root()).
+var _broken_dir: String = Smoke.test_user_root().path_join("broken_data")
 
 ## The records of GDD 14, verbatim.
 const GDD_ITEM: String = """
@@ -825,14 +826,14 @@ func _check_broken_tuning_anchors_lines() -> void:
 
 
 func _check_broken_files() -> void:
-	var dir_path: String = ProjectSettings.globalize_path(BROKEN_DIR)
+	var dir_path: String = ProjectSettings.globalize_path(_broken_dir)
 	DirAccess.make_dir_recursive_absolute(dir_path)
-	_write(BROKEN_DIR.path_join("tuning.json"), "{ \"hand_wheel\": { \"hand_speed\": 1.5 ")
-	_write(BROKEN_DIR.path_join("items.json"), "[1, 2, 3]")
-	_write(BROKEN_DIR.path_join("lines_en.csv"), "key,en,ar\nnarrator.start,hello,\n")
-	_write(BROKEN_DIR.path_join("lines_ar.csv"),
+	_write(_broken_dir.path_join("tuning.json"), "{ \"hand_wheel\": { \"hand_speed\": 1.5 ")
+	_write(_broken_dir.path_join("items.json"), "[1, 2, 3]")
+	_write(_broken_dir.path_join("lines_en.csv"), "key,en,ar\nnarrator.start,hello,\n")
+	_write(_broken_dir.path_join("lines_ar.csv"),
 			"id,speaker,text,needs_writer\na.b,,,true\na.b,,,true\nc.d,,\ne.f,,,maybe\n")
-	var broken: GameData = GameData.load_from(BROKEN_DIR)
+	var broken: GameData = GameData.load_from(_broken_dir)
 	var errors: PackedStringArray = DataValidator.validate(broken)
 	check(_has(errors, "E_JSON", "tuning.json"), "a JSON syntax error is reported with its file")
 	check(_has(errors, "E_JSON", "items.json"), "a JSON file whose top level is not an object is reported")
