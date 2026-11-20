@@ -38,6 +38,7 @@ func test_stop_01() -> void:
 	_check_hitcher()
 	_check_shady_guy()
 	_check_boss_stop()
+	_check_boss_pick_for_the_deck()
 	_check_rarity()
 
 
@@ -434,6 +435,33 @@ func _check_boss_stop() -> void:
 		check_eq(_sim.run.act, 2, "in Act 2")
 
 
+## A boss stop whose free pick is the mixtape. Its slot is the tape deck,
+## which lies where the radio's dial is (GDD 16.2): the pick must still go in
+## with a DRAG_TO, and the services must then be held out.
+func _check_boss_pick_for_the_deck() -> void:
+	# The first of forty Tellings whose first boss stop holds out a mixtape.
+	var pick: Dictionary = {}
+	for telling_seed: int in range(1, 41):
+		_to_boss_stop(telling_seed)
+		pick = _offer_with("mixtape")
+		if not pick.is_empty():
+			break
+	if not check(not pick.is_empty() and GameData.as_bool(pick["free"]), "(the first boss stop of one of forty Tellings holds out a mixtape)"):
+		return
+	check_eq(_sim.items.anchor_of_slot("tape"), "tape", "(the mixtape's slot is the tape deck)")
+	check(_sim.hand.anchor_pointer(_sim.hand.anchor_index(&"tape")).is_equal_approx(_sim.hand.anchor_pointer(_sim.hand.anchor_index(&"radio"))),
+			"(which lies where the radio's dial is)")
+	_tap(GameData.as_string(pick["anchor"]))
+	check(GameData.as_bool(_offer_with("mixtape").get("bought")), "he takes the mixtape as his free pick")
+	check(_of_kind(_offers(), StopSim.SERVICE).is_empty(), "(the services wait until it is off the tray)")
+	_drag(GameData.as_string(_offer_with("mixtape")["anchor"]), "tape")
+	var placed: ItemSim.Item = _sim.items.item(&"mixtape")
+	if check(placed != null, "a DRAG_TO puts it in the deck, though the dial is there"):
+		check_eq(placed.slot, &"tape", "in its slot")
+	check(_offer_with("mixtape").is_empty(), "it is off the tray")
+	check_eq(_of_kind(_offers(), StopSim.SERVICE).size(), 5, "and the five services are then his to choose from")
+
+
 # --- Rarity ------------------------------------------------------------------
 
 func _check_rarity() -> void:
@@ -548,11 +576,11 @@ func _into_stall() -> void:
 
 ## Through Act 1 to its boss stop: every stretch is driven to its end at once,
 ## with one scrape in the boss so that a lamp is lit.
-func _to_boss_stop() -> void:
+func _to_boss_stop(telling_seed: int = 31) -> void:
 	_sim = DriveSim.new(fresh_data())
 	_events = []
 	_input.clear()
-	_sim.begin_telling(TABLE, 31)
+	_sim.begin_telling(TABLE, telling_seed)
 	var guard: int = 4000
 	var scraped: bool = false
 	while not _sim.stopped and guard > 0:

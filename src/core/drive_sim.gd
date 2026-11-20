@@ -2180,6 +2180,17 @@ func _sync_anchors() -> void:
 		var in_use: bool = items.anchor_in_use(anchor) or (stopped and stop.anchor_in_use(anchor))
 		# What is carried can be put down where its ritual says.
 		hand.set_anchor_active(index, in_use or (hand.carrying and _drag_destinations.has(index)))
+	if not hand.carrying:
+		return
+	# Another anchor at the same place gives way to it (the radio's dial to the
+	# tape deck, GDD 16.2): the pointer could not tell the two apart, and the
+	# hand would rest on the one where the thing cannot be put down.
+	for destination: int in _drag_destinations:
+		if destination == HandSim.NO_ANCHOR:
+			continue
+		for index: int in hand.anchor_count():
+			if not _drag_destinations.has(index) and hand.anchor_pointer(index).is_equal_approx(hand.anchor_pointer(destination)):
+				hand.set_anchor_active(index, false)
 
 
 func _gesture_kind(ritual: Dictionary) -> Gesture.Kind:

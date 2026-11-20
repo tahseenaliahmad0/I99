@@ -744,6 +744,26 @@ func test_item_mixtape() -> void:
 	_run(side - 2.0)
 	check(_sim.effects.has(&"music"), "and plays its 60 s from there")
 
+	# Bought for 25 at a fuel station and carried to the deck: the radio's dial
+	# is at the same place and gives way to the tape in his hand.
+	var price: float = GameData.as_float(record.get("price"))
+	var sold: Dictionary = _to_fuel_station_selling("mixtape")
+	if check(not sold.is_empty(), "one of the first fuel stations of forty Tellings sells a mixtape"):
+		check_near(GameData.as_float(sold["price"]), price, 0.000001, "for its 25")
+		_sim.cash = price + 5.0
+		_tap_at(GameData.as_string(sold["anchor"]))
+		check(GameData.as_bool(_offer(StopSim.ITEM, "mixtape").get("bought")), "a TAP buys it")
+		check_near(_sim.cash, 5.0, 0.000001, "for 25")
+		_drag(GameData.as_string(sold["anchor"]), "tape")
+		check(_item("mixtape") != null and _anchor_of("mixtape") == "tape", "a DRAG from the tray puts it in the deck, where the radio's dial was")
+		check(_offer(StopSim.ITEM, "mixtape").is_empty(), "and it is off the tray")
+		_leave_stop()
+		check_near(_sim.cash, 5.0, 0.000001, "nothing is paid back when he leaves: the tape is in its place")
+		_run(0.5)
+		check(_sim.effects.has(&"music"), "and on the road it plays")
+		check(not _sim.hand.is_anchor_active(_sim.hand.anchor_index(&"radio")) and _sim.hand.is_anchor_active(_sim.hand.anchor_index(&"tape")),
+				"the deck has taken the dial's place")
+
 	# The deck plays the tape, not the radio.
 	_new_sim()
 	_sim.items.drag_step(_ritual("radio_tune"), 1)
@@ -1675,3 +1695,17 @@ func _starting_supply(item_id: String) -> int:
 		if GameData.as_string(start.get("item")) == item_id:
 			return GameData.as_int(start.get("supply"), -1)
 	return -1
+
+
+## A Telling's first leg driven to a fuel station that sells `item_id`: the
+## first of forty Tellings whose first stop is one and has it on the tray.
+## Returns the offer; {} when none of them sells it.
+func _to_fuel_station_selling(item_id: String) -> Dictionary:
+	for skip: int in 40:
+		_to_quiet_leg("fuel_station", skip)
+		_scrape()
+		_into_stall()
+		var sold: Dictionary = _offer(StopSim.ITEM, item_id)
+		if not sold.is_empty():
+			return sold
+	return {}
