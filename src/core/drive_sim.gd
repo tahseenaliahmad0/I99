@@ -735,6 +735,10 @@ func _enter_approach() -> void:
 
 
 func _step_telling(button_down: bool) -> void:
+	if wrecked:
+		# The Wreck is where the Telling stops (GDD 11.4): in its tick he
+		# neither pulls in at a stall nor passes a gore or the end of a road.
+		return
 	if stopped:
 		_step_stop(button_down)
 		return

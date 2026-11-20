@@ -1872,6 +1872,46 @@ D-040, D-041 and D-042 where they describe stops and pull-overs.
   hand's, like a Snap); the indicator's, the craving's and the horn's
   countdowns are bare countdowns that land on their tick with today's
   numbers.
+- **The third branch and the tests** (merged as `m6fix/tests`):
+  - *After a Wreck there is nothing saved.* `_retell()` empties
+    `checkpoint`, and the drive controller writes the file with no Telling
+    as soon as a Telling's `wreck` passes through it, three seconds before
+    the night is told again, so that quitting during the cut does not
+    bring the wrecked night back. A Wreck on a road of no Telling (the
+    sandbox, `--leg=`, `--boss=`) leaves the file alone; so must the
+    Children's free rewind of GDD 11.2 when M9 builds it. T-RUN-02 runs
+    the real drive scene inside the test for this, the only test that
+    does.
+  - *The Wreck is where the Telling stops.* In the tick of a Wreck he
+    neither pulls in at a stall nor passes a gore or the end of a road:
+    with the last lamp lit in the tick he reached a stall, the stop saved
+    him standing there with every lamp lit and the night went on (the
+    fix branch saw it and left it; fixed on the main line, T-RUN-02).
+  - *The validator holds an item's rules to what the simulation reads.*
+    A synergy says its numbers (`amount`; `every` and `amount` for calls
+    in a row); an entry that takes its amount from a synergy needs every
+    such synergy of the item to carry one; a DRAG_TO that ends where it
+    began needs `out_m`; no anchor is `over` itself; `per_s` is for Nerves
+    only.
+  - *The tick reads no item record.* What the tick needs of a record is
+    read when the item enters the cabin; the cabin's phone, its tape and
+    what depends on the whole cabin are read again when the cabin changes.
+  - *The tests* gained 283 checks in 13 tests, and
+    `tools/mutants/m6_items.py` holds 45 mutants in groups by the test of
+    their rule (`M6_GROUP=<test id>` runs one group); all are killed.
+    What the new checks pin where D-041 and D-042 were silent: under Focus
+    Suspicion keeps his own time, like Nerves, while the Patrol that
+    watches him runs with the road; the road's time also runs the
+    potholes' cooldown, what crosses the road, a gust's tell and the
+    immunity after a hit, while the tea's cooling and the clearing of the
+    glass keep his; for the duct tape the act's boss is of that act; Lag
+    is measured on the car's sideways speed, not on the wheel's read-out.
+  - *Seen and left:* a phone taken out of the cabin while it rings ends
+    its call without `call_resolved`, and a pack taken out while a
+    cigarette burns leaves the rest of its calm dripping (nothing in the
+    game takes either out); an item's `params` and its `lapse` are not
+    checked by the validator; the stand-in at the wheel hands a Patrol's
+    officer nothing and waits there for ever.
 
 ## D-056 (M10, 2026-11-20) What of M10 is built now, and what waits for the frame
 

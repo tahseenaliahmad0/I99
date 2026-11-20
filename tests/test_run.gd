@@ -451,6 +451,7 @@ func _check_seeds_kept_apart() -> void:
 	# after a Wreck there is no saved Telling to continue.
 	_check_no_save_after_a_wreck()
 	_check_the_games_file_after_a_wreck()
+	_check_a_wreck_at_the_stall()
 
 
 # --- T-RUN-01, in parts ------------------------------------------------------
@@ -685,6 +686,49 @@ func _check_no_save_after_a_wreck() -> void:
 		check_eq(Save.seed_in(_sim.checkpoint.get("seed")), second_seed, "under its own seed")
 		check_eq(GameData.as_int(_sim.checkpoint.get("retellings")), 1, "as the night told a second time")
 		check_eq(GameData.as_array(_sim.checkpoint.get("faults")).size(), 0, "with none of the lamps of the first")
+
+
+## The last lamp lit in the very tick he pulls in at a stall. The Wreck is
+## where the Telling stops (GDD 11.4), not the stall: the stop used to save
+## him standing there with every lamp lit and the night going on.
+func _check_a_wreck_at_the_stall() -> void:
+	_begin_quiet_leg()
+	while _sim.faults.lamps < _sim.faults.capacity - 1:
+		var lamps: int = _sim.faults.lamps
+		_scrape()
+		if _sim.faults.lamps == lamps:
+			break
+	if not check(_sim.faults.lamps == _sim.faults.capacity - 1 and not _sim.wrecked, "(one lamp short of a Wreck)"):
+		return
+	var stall: float = _sim.leg.length - tuning.f("leg_tail") + tuning.f("exit_slip_length")
+	var slow: float = tuning.f("exit_max_speed")
+	var lanes: int = _sim.car.lanes
+	_sim.gate.reset(2)
+	_input.clear()
+	# Into the slip lane, a little short of the stall.
+	_sim.car.s = stall - 5.0
+	_sim.car.x = _sim.car.lane_center(lanes)
+	_sim.car.speed = slow
+	_sim.step(_input)
+	_collect()
+	check(not _sim.stopped and not _sim.wrecked and _sim.car.lanes == lanes + 1, "(in the slip lane, the stall just ahead)")
+	# The next tick takes him past the stall, along the slip lane's guardrail.
+	_events = []
+	_sim.car.s = stall - slow * KMH_TO_MS * DT * 0.5
+	_sim.car.x = _sim.car.guardrail_x()
+	_sim.car.speed = slow
+	_sim.step(_input)
+	_collect()
+	check(_sim.wrecked and _has_event("wreck"), "the last lamp is lit in the tick he reaches the stall: a Wreck")
+	check(not _sim.stopped and not _has_event("stop_entered"), "and no stop: he is not found standing at the stall with every lamp lit")
+	check(_sim.checkpoint.is_empty(), "nothing is saved of that night")
+	_input.clear()
+	var guard: int = int(10.0 / DT)
+	while _sim.wrecked and guard > 0:
+		guard -= 1
+		_sim.step(_input)
+	check(not _sim.wrecked and _sim.run.active and _sim.run.retellings == 1 and _sim.faults.lamps == 0 and not _sim.stopped,
+			"after the cut the Telling is told again from Baghdad, with no lamp lit")
 
 
 ## The same through the game: the drive scene with its controller, and the
