@@ -40,6 +40,11 @@ const WEIGHT_RESOURCES: PackedStringArray = ["nerves", "suspicion"]
 const WEIGHT_WHENS: PackedStringArray = ["asleep", "scrape", "drumming&patrol"]
 ## The lines every passenger has (GDD 3.6).
 const PASSENGER_LINES: PackedStringArray = ["name", "board", "leave"]
+## What a passenger may leave him with as they get out ("on_leave"):
+## PassengerSim runs these and no other op of a ritual.
+const LEAVE_OPS: PackedStringArray = ["nerves", "cash", "add_effect"]
+## The one Weight that weighs on Suspicion, and on nothing else.
+const WEIGHT_ON_SUSPICION: String = "drumming&patrol"
 ## What can be handed out of the driver's window (GDD 10.2).
 const DOCUMENTS: PackedStringArray = ["licence", "id", "registration"]
 const BANKNOTES: String = "banknotes"
@@ -1060,7 +1065,7 @@ func _check_cross_rules() -> void:
 	for passenger: Dictionary in _data.records("passengers"):
 		var leave_ops: Array = GameData.as_array(passenger.get("on_leave"))
 		for index: int in leave_ops.size():
-			_check_op(GameData.as_string(leave_ops[index]), "passengers.json",
+			_check_leave_op(GameData.as_string(leave_ops[index]),
 					"passengers[%s].on_leave[%d]" % [GameData.as_string(passenger.get("id"), "?"), index])
 	var items_root: Dictionary = _data.root("items")
 	var starting: Array = GameData.as_array(items_root.get("starting_cabin"))
@@ -1262,14 +1267,57 @@ func _check_op(op: String, file_label: String, where: String) -> void:
 				_err("E_REF", file_label, where, "unknown lines id '%s'" % argument)
 
 
+## One op of a passenger's "on_leave". PassengerSim runs "nerves:<n>",
+## "cash:<n>" and "add_effect:<id>:<seconds>" ("add_effect:blessing" by
+## itself: the blessing lasts until a scrape uses it), and nothing else that
+## a ritual may do.
+func _check_leave_op(op: String, where: String) -> void:
+	var parts: PackedStringArray = op.split(":")
+	if not LEAVE_OPS.has(parts[0]):
+		_err("E_ENUM", "passengers.json", where, "'%s' is not something a passenger leaves him with (%s)" % [parts[0], ", ".join(LEAVE_OPS)])
+		return
+	_check_op(op, "passengers.json", where)
+	if parts[0] != "add_effect" or parts.size() < 2:
+		return
+	var blessing: bool = parts[1] == String(PassengerSim.BLESSING)
+	if blessing and parts.size() > 2:
+		_err("E_RULE", "passengers.json", where, "the blessing lasts until a scrape uses it: it takes no seconds")
+	elif not blessing and parts.size() < 3:
+		_err("E_RULE", "passengers.json", where, "a status left behind needs its seconds (\"add_effect:%s:<s>\"): only the blessing lasts until it is used" % parts[1])
+
+
+## The lines a passenger must have: those every passenger has, and those
+## their record makes the simulation ask for where a silent act would tell
+## the player nothing: the word of a Hand asked for by a tap or of a call
+## taken for him, the drum beginning again, the waking, the announcement of
+## a repair (GDD 8.2: "announced 2 s ahead").
+func _passenger_lines(passenger: Dictionary) -> PackedStringArray:
+	var lines: PackedStringArray = PASSENGER_LINES.duplicate()
+	var kind: String = GameData.as_string(GameData.as_dict(passenger.get("hand")).get("kind"))
+	if kind != "always" or GameData.as_bool(GameData.as_dict(passenger.get("always")).get("answers_calls")):
+		lines.append("hand")
+	if kind == "pass_tea":
+		lines.append("drum")
+	if passenger.has("sleeps"):
+		lines.append("wake")
+	if passenger.has("repairs"):
+		lines.append("repair")
+	return lines
+
+
 ## What the schema cannot say of a passenger: a Hand that lasts needs its
-## time, a passed thing its place, each Weight a moment it bites and either
-## an amount or a rate, and the passenger the lines every passenger has.
+## time, a passed thing its place, each Weight a moment it bites, the meter
+## that moment weighs on and either an amount or a rate, and the passenger
+## the lines their record asks for.
 func _check_passenger(passenger: Dictionary, label: String) -> void:
 	var hand: Dictionary = GameData.as_dict(passenger.get("hand"))
 	var kind: String = GameData.as_string(hand.get("kind"))
 	if (kind == "hold_wheel_straight" or kind == "hold_wheel") and GameData.as_float(hand.get("duration_s")) <= 0.0:
 		_err("E_RULE", "passengers.json", label + ".hand", "a hand that holds the wheel needs a \"duration_s\" above 0")
+	if kind == "hold_wheel" and GameData.as_float(hand.get("catch_s")) <= 0.0:
+		_err("E_RULE", "passengers.json", label + ".hand", "a hand that holds the wheel at its current angle needs a \"catch_s\" above 0: by the time a TAP lands, a wheel let go is back at its centre (GDD 4.3)")
+	if kind != "hold_wheel" and hand.has("catch_s"):
+		_err("E_RULE", "passengers.json", label + ".hand", "\"catch_s\" is for a hand that holds the wheel at its current angle (hold_wheel)")
 	if kind == "pass_tea" and not hand.has("at"):
 		_err("E_RULE", "passengers.json", label + ".hand", "a hand that passes something needs \"at\": where it is held")
 	if kind == "pass_tea" and not passenger.has("drums"):
@@ -1298,6 +1346,9 @@ func _check_passenger(passenger: Dictionary, label: String) -> void:
 			_err("E_RULE", "passengers.json", where, "needs exactly one of \"amount\" and \"per_s\"")
 		elif weight.has("per_s") != by_the_second:
 			_err("E_RULE", "passengers.json", where, "'%s' weighs %s" % [when, "by the second: it needs \"per_s\"" if by_the_second else "once each time: it needs \"amount\""])
+		if weight.has("resource") and (GameData.as_string(weight.get("resource")) == "suspicion") != (when == WEIGHT_ON_SUSPICION):
+			_err("E_RULE", "passengers.json", where + ".resource", "'%s' weighs on %s" % [when,
+					"suspicion: a Patrol hears it" if when == WEIGHT_ON_SUSPICION else "nerves: only \"%s\" weighs on suspicion" % WEIGHT_ON_SUSPICION])
 		if when == "drumming&patrol" and not passenger.has("drums"):
 			_err("E_RULE", "passengers.json", where + ".when", "only a passenger with \"drums\" drums")
 		if when == "asleep" and not passenger.has("sleeps"):
@@ -1310,7 +1361,7 @@ func _check_passenger(passenger: Dictionary, label: String) -> void:
 		if GameData.as_float(retunes.get("every_s")) <= 0.0:
 			_err("E_RULE", "passengers.json", label + ".retunes.every_s", "must be above 0")
 	var prefix: String = GameData.as_string(passenger.get("line_prefix"))
-	for line: String in PASSENGER_LINES:
+	for line: String in _passenger_lines(passenger):
 		if not prefix.is_empty() and not _data.has_line("%s.%s" % [prefix, line], "en"):
 			_err("E_REF", "passengers.json", label + ".line_prefix", "the line '%s.%s' is missing" % [prefix, line])
 
