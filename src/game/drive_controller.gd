@@ -14,20 +14,22 @@ var _pending_motion: Vector2 = Vector2.ZERO
 var _factory: PlaceholderFactory
 var _aim_anchor: int = HandSim.NO_ANCHOR
 var _shot_path: String = ""
-var _shot_frame: int = 0
+## The rendered frames to save: one, or several (`--shot-frame=a,b,c`), each
+## then saved under the shot's name with its frame number added.
+var _shot_frames: PackedInt32Array = PackedInt32Array()
 var _frames: int = 0
 ## `--leg=<id>[,act[,modifier]]`: the leg being driven, and how many of it
 ## have been started (each with the next seed).
 var _leg_spec: String = ""
 var _legs_begun: int = 0
-var _plan: Dictionary = {}
-## `--bot=`: until the DriverBot of GDD 13.8 is built (M11), any value holds
-## the car on the plan's line, which is enough to look at a leg. In a
-## Telling it also keeps third gear, pulls in at every Exit and leaves each
-## stop after a moment.
-var _bot: bool = false
-## Seconds the stand-in bot has stood at a stop.
-var _bot_stood: float = 0.0
+## `--boss=<id>[,modifier]`: the set piece being driven by itself, a boss of
+## legs.json or "arrival" for the last street. It begins again with the next
+## seed whenever it ends.
+var _boss_spec: String = ""
+## `--bot=`: until the DriverBot of GDD 13.8 is built (M11), any value puts a
+## stand-in at the wheel, which is enough to look at a leg, a set piece or a
+## whole Telling (null: the player drives).
+var _bot: StandInBot = null
 
 @onready var _camera: Camera3D = $Camera3D
 @onready var _cabin: CabinView = $Cabin
@@ -58,7 +60,8 @@ func _ready() -> void:
 	_sky.setup(data, _factory)
 	_pointer.setup(data, _factory)
 	sim.rng.reseed(int(str(Game.args.get("seed", "1"))))
-	_bot = Game.args.has("bot")
+	if Game.args.has("bot"):
+		_bot = StandInBot.new(sim, data)
 	if Game.args.has("continue") and not Game.saved_telling.is_empty() and sim.restore(Game.saved_telling):
 		print("[drive] continuing the Telling of %s" % sim.run.table)
 	elif Game.args.has("table"):
@@ -68,6 +71,9 @@ func _ready() -> void:
 	elif Game.args.has("leg"):
 		_leg_spec = str(Game.args["leg"])
 		_begin_leg()
+	elif Game.args.has("boss"):
+		_boss_spec = str(Game.args["boss"])
+		_begin_boss()
 	else:
 		sim.free_traffic_per_km = tuning.f("free_traffic_per_km")
 
@@ -83,9 +89,11 @@ func _ready() -> void:
 			push_error("Drive: --aim names an unknown anchor '%s'" % str(Game.args["aim"]))
 	if Game.args.has("shot"):
 		_shot_path = str(Game.args["shot"])
-		_shot_frame = tuning.i("screenshot_frame")
 		if Game.args.has("shot-frame"):
-			_shot_frame = maxi(1, str(Game.args["shot-frame"]).to_int())
+			for frame: String in str(Game.args["shot-frame"]).split(",", false):
+				_shot_frames.append(maxi(1, frame.to_int()))
+		if _shot_frames.is_empty():
+			_shot_frames.append(tuning.i("screenshot_frame"))
 
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	print("[drive] ready anchors=%d rituals=%d" % [sim.hand.anchor_count(), data.records("rituals").size()])
@@ -117,8 +125,10 @@ func _physics_process(_delta: float) -> void:
 		_input.pointer = sim.hand.anchor_pointer(_aim_anchor)
 	if not _leg_spec.is_empty() and not sim.leg.active:
 		_begin_leg()
-	if _bot:
-		_stand_in_bot()
+	if not _boss_spec.is_empty() and not sim.leg.active:
+		_begin_boss()
+	if _bot != null:
+		_bot.drive(_input)
 	sim.step(_input)
 	for event: Dictionary in sim.drain_events():
 		var type: String = GameData.as_string(event.get("type"))
@@ -127,7 +137,12 @@ func _physics_process(_delta: float) -> void:
 			# The game saves at every stop and after every boss (GDD 11.1).
 			Game.write_save(sim.checkpoint)
 			print("[drive] stop %s, saved (frame %d, clock %s)" % [str(event.get("stop")), _frames, sim.clock.text()])
-		elif type == "arrived":
+		elif type == "boss_ended" or type == "pulled_over" or type == "call_resolved" or type == "wrecked":
+			# What became of a set piece, for whoever reads the console.
+			print("[drive] %s at %.1f s: %s" % [type, sim.seconds(), JSON.stringify(event)])
+		if type == "arrived":
+			print("[drive] arrived at %s (frame %d)" % [sim.clock.text(), _frames])
+		if type == "arrived" and _boss_spec.is_empty():
 			# Until the wedding room exists (M9) the night simply begins again.
 			Game.write_save({})
 			sim.begin_telling(sim.run.table, sim.run.seed + 1)
@@ -150,45 +165,8 @@ func _process(delta: float) -> void:
 	_hud.apply(snapshot)
 
 	_frames += 1
-	if not _shot_path.is_empty() and _frames == _shot_frame:
+	if not _shot_path.is_empty() and _shot_frames.has(_frames):
 		_save_shot()
-
-
-## The stand-in for the DriverBot (M11): it sets the car on a line and works
-## the gear and the wheel through the input, so that a leg or a whole
-## Telling can be looked at without a player.
-func _stand_in_bot() -> void:
-	if sim.stopped:
-		# A moment at the stop, then the wheel is held until he is off.
-		_bot_stood += DriveSim.DT
-		if _bot_stood > 2.0:
-			_input.pointer_is_absolute = true
-			_input.pointer = sim.space.point_to_pointer(sim.space.grip_reference)
-			_input.lmb = true
-		return
-	_bot_stood = 0.0
-	if not sim.leg.active or sim.wrecked or sim.leg.on_side_road:
-		return
-	var car: CarSim = sim.car
-	if not sim.run.active:
-		car.x = _line_x(car.s)
-		return
-	if not is_same(_plan, sim.leg.plan):
-		_plan = sim.leg.plan
-	var gear: int = 3
-	var x: float = _line_x(car.s)
-	var slip: Vector2 = sim.exit_slip()
-	if slip.x >= 0.0 and car.s >= slip.x:
-		# Into the slip lane in second gear: he stops at every stop.
-		gear = 2
-		x = lerpf(x, car.lane_center(car.lanes - 1), clampf((car.s - slip.x) / (0.5 * (slip.y - slip.x)), 0.0, 1.0))
-	elif sim.run.fork_ahead() and sim.leg.length - car.s < 120.0:
-		# The left branch on even legs, the right on odd ones.
-		var side: float = 0.25 if sim.run.legs_done % 2 == 0 else 0.75
-		x = lerpf(x, car.road_right() * side, clampf(1.0 - (sim.leg.length - car.s - 40.0) / 80.0, 0.0, 1.0))
-	if sim.gate.gear != gear:
-		sim.gate.reset(gear)
-	car.x = x
 
 
 ## Starts the leg named by `--leg=<id>[,act[,modifier]]` in third gear; each
@@ -211,34 +189,36 @@ func _begin_leg() -> void:
 		modifier = ""
 	var leg_seed: int = int(str(Game.args.get("seed", "1"))) + _legs_begun
 	_legs_begun += 1
-	_plan = LegGenerator.generate(data, leg_id, act, leg_seed, modifier)
 	sim.gate.reset(3)
-	sim.begin_leg(_plan)
+	sim.begin_leg(LegGenerator.generate(data, leg_id, act, leg_seed, modifier))
 	print("[drive] leg %s act %d seed %d modifier '%s'" % [leg_id, act, leg_seed, modifier])
 
 
-## Where across the road the plan's line is at `s`: the middle of the lane
-## the plan drives in, moving over during gen_lane_change metres.
-func _line_x(s: float) -> float:
-	var path: Array = GameData.as_array(_plan.get("path"))
-	if path.is_empty():
-		return sim.car.x
-	var change: float = Game.data.tuning.f("gen_lane_change")
-	var x: float = _lane_x(GameData.as_int(GameData.as_array(path[0])[1]))
-	for index: int in range(1, path.size()):
-		var at: Array = GameData.as_array(path[index])
-		var from_s: float = GameData.as_float(at[0])
-		if s < from_s:
-			break
-		var before: Array = GameData.as_array(path[index - 1])
-		x = lerpf(_lane_x(GameData.as_int(before[1])), _lane_x(GameData.as_int(at[1])), clampf((s - from_s) / change, 0.0, 1.0))
-	return x
-
-
-func _lane_x(lane: int) -> float:
-	if lane == LegGenerator.SHOULDER_LANE:
-		return (sim.car.road_right() + sim.car.guardrail_x()) * 0.5
-	return sim.car.lane_center(lane)
+## Starts the set piece named by `--boss=<id>[,modifier]`: a boss of
+## legs.json in third gear, or the last street ("arrival") in first; each
+## time it is called it has the next seed.
+func _begin_boss() -> void:
+	var data: GameData = Game.data
+	var parts: PackedStringArray = _boss_spec.split(",")
+	var boss_id: String = parts[0]
+	var boss_seed: int = int(str(Game.args.get("seed", "1"))) + _legs_begun
+	_legs_begun += 1
+	if boss_id == BossSim.ARRIVAL:
+		sim.gate.reset(data.tuning.i("start_gear"))
+		sim.begin_arrival()
+		print("[drive] the arrival")
+		return
+	if not data.has_record("bosses", boss_id):
+		push_error("Drive: --boss names an unknown boss '%s'" % boss_id)
+		_boss_spec = ""
+		return
+	var modifier: String = parts[1] if parts.size() > 1 else ""
+	if not modifier.is_empty() and not GameData.as_array(data.record("bosses", boss_id).get("modifiers")).has(modifier):
+		push_error("Drive: --boss names a modifier that is not this boss's: '%s'" % modifier)
+		modifier = ""
+	sim.gate.reset(3)
+	sim.begin_boss(boss_id, modifier, boss_seed)
+	print("[drive] boss %s seed %d modifier '%s'" % [boss_id, boss_seed, modifier])
 
 
 ## Saves one rendered frame and quits (needs a real renderer; see DECISIONS D-015).
@@ -248,6 +228,14 @@ func _save_shot() -> void:
 	if image == null or image.is_empty():
 		print("[drive] no image to save: this renderer draws nothing")
 	else:
-		var err: Error = image.save_png(_shot_path)
-		print("[drive] shot %s (%s)" % [_shot_path, error_string(err)])
-	get_tree().quit()
+		var path: String = _shot_path
+		if _shot_frames.size() > 1:
+			path = "%s_%d.%s" % [_shot_path.get_basename(), _frames, _shot_path.get_extension()]
+		var err: Error = image.save_png(path)
+		print("[drive] shot %s (%s)" % [path, error_string(err)])
+	# The last one asked for ends the run.
+	var last: int = 0
+	for frame: int in _shot_frames:
+		last = maxi(last, frame)
+	if _frames >= last:
+		get_tree().quit()

@@ -1,6 +1,7 @@
 """Mutants of Dawn, the Call and the Arrival (GDD 10.4, 10.5) for T-BOSS-03 and T-CALL-01.
     python3 tools/mutants.py T-BOSS-03,T-CALL-01 tools/mutants/dawn.py
-Of the first 43, three live (see docs/PROGRESS.md); 44 to 66 have not been run yet.
+Of the first 43, three lived: two are closed by checks added since, one is
+equivalent (the once-only flag of the speed check: the car crosses the barriers once).
 """
 B = 'src/core/boss_sim.gd'
 D = 'src/core/drive_sim.gd'
@@ -34,13 +35,13 @@ MUTANTS = [
  (B, 'searched = _car.speed > _corridor_max_kmh + 0.001', 'searched = _car.speed > _corridor_max_kmh + 10.0', 'ten over is waved through'),
  (B, 'searched = _car.speed > _corridor_max_kmh + 0.001', 'searched = _car.speed >= _corridor_max_kmh - 0.001', 'seventy is too fast'),
  (B, '\t\t\t_corridor_judged = true\n\t\t\tsearched', '\t\t\tsearched', 'judged again and again'),
- (B, "out.append({\"kind\": \"checkpoint\", \"ahead\": gap, \"limit\": _corridor_max_kmh})", "pass", 'no sign'),
+ (B, "out.append({\"kind\": \"checkpoint\", \"ahead\": gap, \"limit\": _corridor_max_kmh if _corridor_max_kmh < INF else 0.0})", "pass", 'no sign'),
  (C, '\t\tvar push: float = minf(_pushback, slack)\n', '\t\tvar push: float = _pushback\n', 'pushed into the other barrier'),
  (C, '\telif right_edge >= wall_right or left_edge <= wall_left:', '\telif false:', 'barriers are air'),
  (C, '\t\tif right_edge >= wall_right:\n\t\t\tedge_touched = EDGE_RIGHT\n\t\t\tx = wall_right - _half_width - push', '\t\tif right_edge >= wall_right:\n\t\t\tedge_touched = EDGE_RIGHT\n\t\t\tx = wall_right + _half_width + push', 'through the right barrier'),
- (D, '\tcar.speed = 0.0\n\tcar.v_lat = 0.0\n\tclock_minutes_owed += minutes\n\tclock.add_minutes(minutes)\n\tvar taken_ids', '\tcar.v_lat = 0.0\n\tclock_minutes_owed += minutes\n\tclock.add_minutes(minutes)\n\tvar taken_ids', 'searched without stopping'),
- (D, '\tclock_minutes_owed += minutes\n\tclock.add_minutes(minutes)\n\tvar taken_ids', '\tclock_minutes_owed += minutes\n\tvar taken_ids', 'a search costs no time'),
- (D, '\tfor id: StringName in items.take_visible_contraband():\n\t\ttaken_ids.append(String(id))\n\t_fit_cabin()\n\t_emit("pulled_over", {"released": true, "paid": "search"', '\t_fit_cabin()\n\t_emit("pulled_over", {"released": true, "paid": "search"', 'a search takes nothing'),
+ (D, '\tcar.speed = 0.0\n\tcar.v_lat = 0.0\n\tclock_minutes_owed += minutes\n\tclock.add_minutes(minutes)\n\t# A search finds everything', '\tcar.v_lat = 0.0\n\tclock_minutes_owed += minutes\n\tclock.add_minutes(minutes)\n\t# A search finds everything', 'searched without stopping'),
+ (D, '\tclock_minutes_owed += minutes\n\tclock.add_minutes(minutes)\n\t# A search finds everything', '\tclock_minutes_owed += minutes\n\t# A search finds everything', 'a search costs no time'),
+ (D, '\tfor id: StringName in items.take_all_contraband():\n\t\ttaken_ids.append(String(id))\n\t_fit_cabin()\n\t_emit("pulled_over", {"released": true, "paid": "search", "cost": 0.0, "minutes": minutes, "taken": taken_ids})', '\t_fit_cabin()\n\t_emit("pulled_over", {"released": true, "paid": "search", "cost": 0.0, "minutes": minutes, "taken": taken_ids})', 'a search takes nothing'),
  # the Call
  (B, '\t\tif call == CALL_NONE and _car.s >= _call_at:', '\t\tif call == CALL_NONE and _car.s >= _call_at + 100.0:', 'the Call comes 100 m late'),
  (B, '\t\t\tcall_left = _ring_s\n', '\t\t\tcall_left = _ring_s * 0.5\n', 'rings half as long'),
@@ -80,4 +81,7 @@ MUTANTS = [
  (D, '\teffects.hold(IN_BAY, SET_PIECE, false)\n\t_in_bay = false\n\tboss.stop()\n', '', 'he can arrive twice'),
  (D, '"late": clock.late(), "call": told_true})', '"late": clock.late(), "call": false})', 'arrival never knows of the Call'),
  (D, '\t\t\t_set_stretch(BossSim.arrival_plan(data, run.act))', '\t\t\t_set_stretch(RunGenerator.blank_plan(run.act, RunGenerator.ROAD_LANES, true, 300.0))', 'no street after Dawn'),
+ # D-050: his eyes during the Call; the ring written out
+ (H, '\tif at_ear:\n\t\t# A phone held to his ear is no reach: his eyes stay on the road.\n\t\twant = Vector2.ZERO\n', '', 'his eyes follow the phone to his ear'),
+ (D, '\t\t_emit("line_requested", {"id": "call.noor.rings"})\n', '', 'the ring is not written out'),
 ]

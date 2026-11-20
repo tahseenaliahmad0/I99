@@ -676,11 +676,22 @@ func _anchor_schema() -> Dictionary:
 
 
 func _prop_schema() -> Dictionary:
+	# A prop may show a cabin switch: it is drawn only while every one of its
+	# `flags` is as written ("!" before a switch that must be off), and with
+	# `blink` it comes and goes at the indicators' rate. `alpha` makes it
+	# see-through (glass).
+	var switches: PackedStringArray = PackedStringArray()
+	for flag: String in CABIN_FLAGS:
+		switches.append(flag)
+		switches.append("!" + flag)
 	return _obj({
 		"id": _str(),
 		"placeholder": _ref("placeholders"),
 		"pos": _t("vec3"),
 		"rot": _opt(_t("vec3")),
+		"flags": _opt(_list(_enum(switches))),
+		"blink": _opt(_bool()),
+		"alpha": _opt(_num(0.0, 1.0)),
 	})
 
 

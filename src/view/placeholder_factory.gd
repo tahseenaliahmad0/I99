@@ -153,6 +153,23 @@ func material_for(color: Color) -> StandardMaterial3D:
 	return material
 
 
+## Makes a placeholder see-through (glass, a light that comes on by
+## degrees): it gets a material of its own, with this opacity.
+static func set_alpha(node: Node3D, alpha: float) -> void:
+	var instance: MeshInstance3D = node as MeshInstance3D
+	if instance == null:
+		return
+	var own: StandardMaterial3D = instance.material_override as StandardMaterial3D
+	if own == null:
+		return
+	if own.transparency != BaseMaterial3D.TRANSPARENCY_ALPHA:
+		# The first time: no longer the material it shares with its colour.
+		own = own.duplicate() as StandardMaterial3D
+		own.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		instance.material_override = own
+	own.albedo_color.a = clampf(alpha, 0.0, 1.0)
+
+
 func _size(spec: Dictionary) -> Vector3:
 	var list: Array = GameData.as_array(spec.get("size"))
 	var out: Vector3 = Vector3.ZERO

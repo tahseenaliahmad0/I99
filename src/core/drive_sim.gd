@@ -868,6 +868,9 @@ func _step_set_piece() -> void:
 		effects.hold(THE_CALL, SET_PIECE, true)
 		_emit("call_started", {"caller": NOOR})
 		_emit("sfx_requested", {"id": "phone_ring"})
+		# His pocket is out of his sight: the ring is written out as well
+		# (GDD 17.2: every tell has both a sound and a visual).
+		_emit("line_requested", {"id": "call.noor.rings"})
 		_sync_anchors()
 	if boss.searched:
 		_search_at_the_barriers()

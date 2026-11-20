@@ -36,7 +36,7 @@ MUTANTS = [
  (D, '\t_roll_into(BossSim.plan(data, run.boss, run.boss_modifier, RunGenerator.boss_seed(run.seed, run.act)))', '\t_roll_into(BossSim.plan(data, run.boss, "", RunGenerator.boss_seed(run.seed, run.act)))', 'the Telling\'s modifier dropped'),
  (D, '\t\t"dust_thick": boss.thick,', '\t\t"dust_thick": false,', 'snapshot never thick'),
  (D, '\t\t\tboss.stop()\n\t\t\t_clear_weather()\n', '\t\t\tboss.stop()\n', 'weather kept after a boss by itself'),
- (D, '\tboss.step_road(_road_dt, items.flag(FLAG_HAZARDS))', '\tboss.step_road(DT, false)', 'hazard lights not passed on'),
+ (D, '\tboss.step_road(_road_dt, DT, items.flag(FLAG_HAZARDS))', '\tboss.step_road(_road_dt, DT, false)', 'hazard lights not passed on'),
  (L, '\tdust_rate = GameData.as_float(plan.get("window_haze_per_s"))', '\tdust_rate = 0.0', 'open window lets no dust in'),
  (L, '\twipe_haze = GameData.as_float(plan.get("wipe_haze"))', '\twipe_haze = 0.0', 'wipers smear nothing'),
  (L, '\t\tif gust_tell_left < dt * 0.5:', '\t\tif gust_tell_left <= 0.0:', 'tell runs a tick over'),

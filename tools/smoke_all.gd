@@ -16,6 +16,13 @@ const WITH_ARGUMENTS: Array = [
 			"--give=beads,seeds,phone,arak_flask,mixtape,thermos,forged_papers,tissue_box,bull_bar,fog_lamps,taxi_sign,spinner_knob,wheel_ring,crossover_stalk,thumb_keypad,wide_mirror,tinted_glass,turbo,good_stuff"], 3000],
 	# A Telling to its first stop and on: fork, leg, Exit, stop and save, fork again.
 	["res://scenes/drive.tscn", ["--table=drivers", "--seed=7", "--bot=line"], 9000],
+	# The set pieces by themselves, each to its end and into its next round:
+	# the queue, the soldier and two documents; the dust and its gusts; the
+	# glow, the sun, the last checkpoint and the Call; the street and the key.
+	["res://scenes/drive.tscn", ["--boss=checkpoint,thorough", "--bot=line", "--hud"], 5400],
+	["res://scenes/drive.tscn", ["--boss=storm,crosswind", "--bot=line", "--hud"], 5400],
+	["res://scenes/drive.tscn", ["--boss=dawn,early_sun", "--bot=line", "--hud"], 9600],
+	["res://scenes/drive.tscn", ["--boss=arrival", "--bot=line", "--hud"], 2400],
 ]
 
 

@@ -11,6 +11,8 @@ byte. A mutant is killed when a test fails or no longer compiles. A mutant
 that lives shows where the tests do not reach: strengthen the test, or note
 why the change makes no difference.
 
+MUT_ONLY=3,5,9 runs only those numbers of the list (as its log numbers them).
+
 MUT_ROOT names a copy of the project to work in (default: this project), so
 that the working tree stays free during a long run:
 
@@ -35,7 +37,12 @@ log = open(sys.argv[3], 'w') if len(sys.argv) > 3 else sys.stdout
 backup = os.path.join(tempfile.gettempdir(), 'mutants.%d.backup' % os.getpid())
 godot = os.environ.get('GODOT', 'godot')
 alive = []
+only = {int(number) for number in os.environ.get('MUT_ONLY', '').split(',') if number.strip()}
+ran = 0
 for index, (path, old, new, label) in enumerate(mutants):
+    if only and index + 1 not in only:
+        continue
+    ran += 1
     full = os.path.join(root, path)
     text = open(full).read()
     if text.count(old) != 1:
@@ -58,4 +65,4 @@ for index, (path, old, new, label) in enumerate(mutants):
         alive.append(label)
 if os.path.exists(backup):
     os.remove(backup)
-print(f'DONE: {len(mutants) - len(alive)} of {len(mutants)} killed; alive: {alive}', file=log, flush=True)
+print(f'DONE: {ran - len(alive)} of {ran} killed; alive: {alive}', file=log, flush=True)

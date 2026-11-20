@@ -1473,3 +1473,88 @@ built by the workflow `m6-fixes`; this entry is what that work is held to.
   from the tick it is added; what reads it late in that last tick misses
   it: 0.03% of a 25 s status).
 - **After a Wreck there is no saved Telling** to continue.
+
+## D-050 (M7, 2026-11-20) The views of the set pieces; `--boss=`; the stand-in at the wheel
+
+- **Context.** GDD 10.2 to 10.5 say what happens at a set piece and 16.1 how
+  things look; nothing says where anything stands. The pictures taken while
+  building the views also showed two things the rules had left open.
+- **On the road** (`SetPieceView`, a child of `RoadView`):
+  - *Barriers* are drawn where the simulation has them: from each lane's own
+    lines two faces close in to the corridor's mouth, and from there one
+    block of concrete fills what the corridors leave of a lane. Each has a
+    lighter cap, so that in flat colours its top can be told from its face.
+  - *The bar* is one per lane, hinged on its left. His own goes up when he
+    is let through; another lane's is up while a vehicle that was waved on
+    drives under it.
+  - *The soldier* is a khaki capsule. He waits beyond the bar on the
+    driver's side, walks to the car during the Stow, and stands beside the
+    front wing for the Papers: there his sign (`sign.document.<id>`, a text
+    that always faces the driver) is in the windscreen and not behind the
+    pillar. At Dawn's last checkpoint one stands at the barriers' mouth.
+  - *Signs.* "[CHECKPOINT / 70]" before Dawn's barriers, "[CHECKPOINT /
+    STOP]" before the Checkpoint's. After tea the fork's sign carries the
+    boss ahead over its two branches: "[CHECKPOINT / LONG QUEUE]", or
+    "[CHECKPOINT]" when it has no modifier. The lines
+    `sign.boss_modifier.*` are names without brackets now, parts of that
+    sign like `modifier.*.name`.
+  - *The Arrival.* The bay is paint and four lines on the lane's last 12 m.
+    The street ends at a house, "[THE HOUSE]" (`sign.arrival`, a
+    placeholder for the writer).
+  - *A gust's tell* (`GustView`): streaks of dust that blow across the road
+    the way the car will be pushed, for the second before it is. GDD 5.4
+    asks for it on every leg; until now it was only a number on the HUD.
+- **In the sky:** Dawn's glow is a flat orange band on the right of the
+  horizon, the sun a disc ahead and to the left that climbs as its Glare
+  comes on (the flare on his view is the post effects'). Dawn driven by
+  itself lightens along its road; in a Telling the sky follows the Clock.
+- **In the cabin:**
+  - A prop may show a cabin switch: `flags` (drawn only while each is as
+    written, "!" for off), `blink`, `alpha`. With that the window has
+    glass, the hazard button a lamp, the glovebox a door; in the open
+    glovebox lie the letter, the registration under it (the letter leans
+    aside once it has been moved), and what is stowed, each thing in its
+    cell. Shut, none of it is seen. His licence stands clipped on the dash.
+  - The mirror has a glass. In it: the two lights of what comes up behind
+    him in the dust, nearer and wider apart through the second of tell
+    (GDD 10.3), and the blue of a Patrol, brighter with his Suspicion (GDD
+    16.3). At the Checkpoint nobody is behind him and the mirror stays
+    dark. A wide mirror now widens in place (the group it hung in was
+    scaled about the wheel hub, which slid it 21 cm to the right).
+  - During the Call the phone is in the hand at his ear; while it rings,
+    his own phone is lit at his pocket.
+- **Two rules the pictures asked for.**
+  - *With the phone at his ear his eyes are on the road.* The Glance of GDD
+    4.7 follows a reach ("far reaches cost road view"); a phone held to
+    his ear is none. Read to the letter it turned the view 35 degrees to
+    the right for all 30 s of the Call, in rush traffic, steering at 40%.
+    The cost of answering alone is the wrist and the hand (GDD 10.4).
+    T-CALL-01 checks it.
+  - *The ring is written out.* His pocket is below what he can see, so the
+    phone's shaking is no tell. When the Call begins the simulation asks
+    for the line `call.noor.rings` beside the sound (GDD 17.2: every tell
+    has both a sound and a visual). T-BOSS-03 checks it.
+- **`--boss=<id>[,modifier]`** drives a boss of legs.json by itself, and
+  `--boss=arrival` the last street; each begins again with the next seed
+  when it ends. `--shot-frame=a,b,c` saves several pictures in one run.
+- **The stand-in at the wheel** (`StandInBot`, behind `--bot=`) is a class
+  of its own now and gets through every set piece: the brake behind the
+  queue and at the bar, the window and whatever the soldier's sign asks
+  for, second gear between Dawn's barriers, the lane with the most room in
+  the dust, the brake into the bay and the key. It works the hand through
+  the input as a player does and puts the car where it wants it; it lets
+  the Call ring out. The DriverBot of GDD 13.8 (M11) replaces it.
+- **Smoke runs:** the four set pieces, each to its end and into its next
+  round.
+- **Tests.** The mutation run of the Checkpoint (54 changes, 46 caught)
+  left eight alive, and Dawn's two: T-BOSS-01 now also checks that
+  Thorough never asks twice for one document, that nobody in a queue
+  drives into the vehicle leaving it, that a honk moves nobody out of a
+  queue even with free road beside it, that he does not tap on an open
+  window, that scraping a vehicle is no touch of a barrier, that a car
+  inside a queue vehicle is never put through a barrier, that a stowed
+  flask cannot be drunk from behind the shut door, and that a full
+  glovebox takes nothing more; T-BOSS-03 that most of the traffic is there
+  by the second half of the false dawn and that he meets no vehicle between
+  the last checkpoint's barriers.
+- **Pictures:** `artifacts/m7_*.png`.

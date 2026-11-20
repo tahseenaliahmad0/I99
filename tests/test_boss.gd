@@ -36,6 +36,7 @@ func test_boss_01() -> void:
 	_check_checkpoint_forged_papers()
 	_check_checkpoint_modifiers()
 	_check_checkpoint_in_a_telling()
+	_check_checkpoint_fine_print()
 
 
 ## The road, its numbers, and who is watching.
@@ -864,6 +865,171 @@ func _follow_the_queue(lane: int) -> void:
 	_input.clear()
 
 
+## What a mutation run of the Checkpoint found unwatched
+## (tools/mutants/checkpoint.py): each of these was a rule a wrong build
+## could break with every other check still passing.
+func _check_checkpoint_fine_print() -> void:
+	var queue: Dictionary = GameData.as_dict(_checkpoint().get("queue"))
+	var corridor: Dictionary = GameData.as_dict(_checkpoint().get("corridor"))
+	var gap: float = GameData.as_float(queue.get("gap_m"))
+	var width: float = GameData.as_float(corridor.get("gap_m"))
+	var half_width: float = tuning.f("car_width") * 0.5
+
+	# Thorough never asks for the same document twice, whatever the seed.
+	var firsts: Dictionary = {}
+	for boss_seed: int in range(1, 61):
+		var asks: Array = GameData.as_array(BossSim.plan(data, CHECKPOINT, "thorough", boss_seed).get("documents"))
+		check(asks.size() == 2 and GameData.as_string(asks[0]) != GameData.as_string(asks[1]), "Thorough, seed %d: two different documents" % boss_seed)
+		if not asks.is_empty():
+			firsts[GameData.as_string(asks[0])] = true
+	check_eq(firsts.size(), 3, "(over the seeds each of the three documents is asked for first)")
+
+	# Nobody in a queue drives into the one ahead: the vehicle that was waved
+	# on keeps its gap like any other until it is clear of the bar.
+	_begin_checkpoint("", 3)
+	_stand_short_of_the_queue()
+	var least: float = INF
+	for _index: int in _ticks_in(30.0):
+		_tick()
+		for lane: int in 3:
+			var line: Array[TrafficSim.Vehicle] = []
+			for vehicle: TrafficSim.Vehicle in _sim.traffic.vehicles:
+				if absf(vehicle.x - _sim.car.lane_center(lane)) < 0.01:
+					line.append(vehicle)
+			line.sort_custom(func(a: TrafficSim.Vehicle, b: TrafficSim.Vehicle) -> bool: return a.s > b.s)
+			for index: int in range(1, line.size()):
+				least = minf(least, (line[index - 1].s - line[index - 1].half_length) - (line[index].s + line[index].half_length))
+	check(least >= gap - 0.001, "bumper to bumper the queue's vehicles are never nearer than gap_m, the one that drives off included (least %.2f m)" % least)
+
+	# A queue with free road on either side of it: the horn still moves nobody
+	# over. Its last vehicle is of a kind that would move over anywhere else.
+	var horn_seed: int = 0
+	for candidate: int in range(1, 60):
+		var line: Array = GameData.as_array(GameData.as_array(BossSim.plan(data, CHECKPOINT, "", candidate).get("queue"))[1])
+		if GameData.as_bool(data.record("vehicles", GameData.as_string(line[line.size() - 1])).get("yields_to_horn")):
+			horn_seed = candidate
+			break
+	check(horn_seed > 0, "(a queue whose last vehicle is one that moves over for a horn on the open road)")
+	_begin_checkpoint_with(_lone_queue(horn_seed))
+	var tail: TrafficSim.Vehicle = _queue_tail(1)
+	_cruise(1, 1)
+	_sim.car.s = tail.s - tail.half_length - _sim.car.length() * 0.5 - 8.0
+	_sim.car.speed = 0.0
+	_input.rmb = true
+	_tick()
+	_events = []
+	_tap_at("horn")
+	_input.rmb = true
+	_ticks(_ticks_in(2.0))
+	check_eq(_count_events("ritual_completed", "ritual", "horn"), 1, "(he sounds the horn right behind the queue)")
+	var moved_over: int = 0
+	for vehicle: TrafficSim.Vehicle in _sim.traffic.vehicles:
+		if vehicle.signalling != 0 or vehicle.changing or absf(vehicle.x - _sim.car.lane_center(1)) > 0.001:
+			moved_over += 1
+	check_eq(moved_over, 0, "with free road beside the queue a honk still moves nobody out of it: there are barriers between")
+
+	# The window open when the sign goes up: he does not tap on the glass.
+	_begin_checkpoint("", _seed_asking_for("licence"), false)
+	_sim.items.flags[ItemSim.FLAG_WINDOW] = true
+	_events = []
+	check(_stand_at_the_bar(), "(first in line, the window open)")
+	check(_until_checkpoint_phase(BossSim.PAPERS, _checkpoint_number("stow_s") + 1.0), "(the soldier arrives)")
+	check_eq(_sim.boss.wanted, "licence", "(his sign is up)")
+	check_eq(_count_events("line_requested", "id", "soldier.window"), 0, "the window is open when his sign goes up: he does not tap on the glass")
+
+	# Rolled into at a crawl, the back of the queue is a scrape, and a vehicle
+	# is no barrier: no Suspicion.
+	_begin_checkpoint("", 3)
+	tail = _queue_tail(1)
+	_cruise(1, 1)
+	_sim.car.s = tail.s - tail.half_length - _sim.car.length() * 0.5 - 1.0
+	_events = []
+	var guard: int = _ticks_in(5.0)
+	while _event("hit").is_empty() and guard > 0:
+		guard -= 1
+		_sim.car.speed = tuning.f("scrape_max_closing") * 0.5
+		_tick()
+	check_eq(GameData.as_int(_event("hit").get("kind")), Collision.Hit.SCRAPE, "rolled into at a crawl, the back of the queue is a scrape")
+	check_eq(GameData.as_int(_event("hit").get("vehicle")), tail.id, "(of its last vehicle)")
+	check_near(_sim.suspicion.value, 0.0, 0.000001, "a scrape of a vehicle is no touch of a barrier: no Suspicion")
+
+	# Whatever puts him inside a vehicle of the queue, he comes out of it
+	# between his own barriers, even with free road beyond them.
+	_begin_checkpoint_with(_lone_queue(horn_seed))
+	tail = _queue_tail(1)
+	_cruise(1, 1)
+	_keep_lane = false
+	var middle: float = _sim.car.lane_center(1)
+	_sim.car.s = tail.s - 0.5
+	_sim.car.x = middle + 0.1
+	_sim.car.speed = 0.0
+	_input.rmb = true
+	_tick()
+	check(absf(_sim.car.x - middle) <= width * 0.5 - half_width + 0.000001, "set down inside the queue's last vehicle, with free road beyond the barrier, he is not put through the barrier (%.2f m off the lane's middle)" % absf(_sim.car.x - middle))
+	check(_sim.car.s + _sim.car.length() * 0.5 <= tail.s - tail.half_length + 0.000001, "(he is put behind the vehicle)")
+	_keep_lane = true
+
+	# Behind the shut door of the glovebox a stowed flask cannot be drunk from.
+	_begin_checkpoint("", 1, false)
+	var hidden: ItemSim.Item = _give("arak_flask", "cup_b")
+	hidden.slot = &"glovebox_a"
+	check(not _sim.items.flag(ItemSim.FLAG_GLOVEBOX), "(the glovebox is shut)")
+	_events = []
+	_hold_at("glovebox", GameData.as_float(_ritual("flask_sip").get("hold_s")))
+	check_eq(_count_events("ritual_completed", "ritual", "flask_sip"), 0, "stowed behind the shut door of the glovebox, the flask cannot be drunk from")
+	check_eq(_sim.courage(), 0, "(no Courage)")
+
+	# With no cell free nothing more can be stowed (a glovebox of one cell).
+	var small: GameData = fresh_data()
+	var slots: Array = GameData.as_array(GameData.as_dict(small.roots["anchors"]).get("slots"))
+	for index: int in range(slots.size() - 1, -1, -1):
+		if GameData.as_string(GameData.as_dict(slots[index]).get("id")) == "glovebox_b":
+			slots.remove_at(index)
+	var quiet: Dictionary = BossSim.plan(data, CHECKPOINT, "", 1)
+	quiet["queue"] = [[], [], []]
+	_begin_checkpoint_with(quiet, small)
+	_give("arak_flask", "cup_b")
+	_give("forged_papers", "dash_1")
+	_sim.items.flags[ItemSim.FLAG_GLOVEBOX] = true
+	_drag("cup_b", "glovebox")
+	check(_sim.items.is_stowed(_item("arak_flask")), "(a glovebox of one cell: the flask goes in)")
+	check_eq(_sim.items.free_cell(), "", "(and it is full)")
+	_events = []
+	_drag("dash_1", "glovebox")
+	check_eq(_count_events("ritual_completed", "ritual", "stow"), 0, "with no cell free, nothing more can be stowed")
+	check_eq(String(_item("forged_papers").slot), "dash_1", "(the papers stay where they are)")
+	check_eq(_sim.items.contraband_in_view(), 1, "(and in view)")
+
+
+## The Checkpoint's plan for `boss_seed` with a queue in the middle lane only.
+func _lone_queue(boss_seed: int) -> Dictionary:
+	var plan: Dictionary = BossSim.plan(data, CHECKPOINT, "", boss_seed)
+	plan["queue"] = [[], GameData.as_array(GameData.as_array(plan.get("queue"))[1]), []]
+	return plan
+
+
+## The Checkpoint by itself with a plan of the test's own making (and, if
+## given, data of its own making), rolling in as _begin_checkpoint has it.
+func _begin_checkpoint_with(plan: Dictionary, changed: GameData = null) -> void:
+	_sim = DriveSim.new(changed if changed != null else fresh_data())
+	_events = []
+	_keep_lane = true
+	_input.clear()
+	_sim.gate.reset(3)
+	_sim.begin_leg(plan)
+	_sim.in_encounter = true
+	_sim.drain_events()
+
+
+## The last vehicle of a lane's queue.
+func _queue_tail(lane: int) -> TrafficSim.Vehicle:
+	var tail: TrafficSim.Vehicle = null
+	for vehicle: TrafficSim.Vehicle in _sim.traffic.vehicles:
+		if vehicle.lane == lane and vehicle.role == BossSim.QUEUE_ROLE and (tail == null or vehicle.s < tail.s):
+			tail = vehicle
+	return tail
+
+
 # --- T-BOSS-02: the Storm (GDD 10.3) -----------------------------------------
 
 func test_boss_02() -> void:
@@ -1554,9 +1720,28 @@ func _check_dawn_traffic_builds() -> void:
 	check(early < later and later < after, "traffic builds through the false dawn: %.1f, then %.1f, then %.1f vehicles per km" % [early, later, after])
 	check(early < after * 0.6, "it begins well under what it becomes")
 	check(early > 0.0, "(but the road is not empty)")
+	check(later > after * 0.5, "and through the second half of the false dawn more than half of it is there (%.1f of %.1f per km)" % [later, after])
 	check(absf(after - per_km) < per_km * 0.35, "after sunrise it is the rush's: about %d per km (%.1f)" % [roundi(per_km), after])
 	check_eq(JSON.stringify(BossSim.plan(data, DAWN, "", 5)), JSON.stringify(BossSim.plan(data, DAWN, "", 5)), "the same seed gives the same Dawn")
 	check(JSON.stringify(BossSim.plan(data, DAWN, "", 5)) != JSON.stringify(BossSim.plan(data, DAWN, "", 6)), "another seed another")
+	# Between the last checkpoint's barriers nobody is beside him: the plan
+	# has him meet no vehicle there, as it has him meet them just before.
+	var barriers: Dictionary = GameData.as_dict(dawn.get("checkpoint"))
+	var closed_from: float = GameData.as_float(barriers.get("at_m")) - GameData.as_float(barriers.get("taper_m"))
+	var closed_to: float = GameData.as_float(barriers.get("at_m")) + GameData.as_float(barriers.get("length_m"))
+	var met_between: int = 0
+	var met_before: int = 0
+	for seed_value: int in range(1, seeds + 1):
+		for entry: Variant in GameData.as_array(BossSim.plan(data, DAWN, "", seed_value).get("spawns")):
+			var met: float = GameData.as_float(GameData.as_dict(entry).get("meet_s"), -1.0)
+			if GameData.as_int(GameData.as_dict(entry).get("direction")) < 0 or met < 0.0:
+				continue
+			if met >= closed_from and met <= closed_to:
+				met_between += 1
+			elif met >= closed_from - (closed_to - closed_from) and met < closed_from:
+				met_before += 1
+	check_eq(met_between, 0, "between the last checkpoint's barriers he meets no vehicle, in any of %d Dawns" % seeds)
+	check(met_before > seeds, "(on as long a stretch before them he meets %d)" % met_before)
 	# The line the generator found through it still meets nothing (GDD 9.2, rule 3).
 	var checker: LegChecker = LegChecker.new(data)
 	for seed_value: int in [1, 2, 3]:
@@ -1767,6 +1952,8 @@ func _check_call_rings() -> void:
 	check(_sim.car.s >= call_at and _sim.car.s < call_at + 0.5, "at 833 m from the end (%.2f m)" % (GameData.as_float(record.get("length_m")) - _sim.car.s))
 	check_eq(GameData.as_string(_event("call_started").get("caller")), "noor", "it is Noor")
 	check_eq(_count_events("sfx_requested", "id", "phone_ring"), 1, "(it is heard)")
+	check_eq(_count_events("line_requested", "id", "call.noor.rings"), 1, "(and written out: his pocket is out of his sight)")
+	check(data.has_line("call.noor.rings"), "(a line that exists)")
 	var shot: Dictionary = _sim.snapshot()
 	check_eq(GameData.as_string(shot["caller"]), "noor", "(the snapshot says who)")
 	check_eq(GameData.as_string(shot["call"]), BossSim.CALL_RINGING, "(and that it rings)")
@@ -2010,6 +2197,7 @@ func test_call_01() -> void:
 	check_near(GameData.as_float(ring.get("talk_s")) * tuning.f("clock_scale") / 60.0, 10.0, 0.000001, "30 s standing is 10 game minutes")
 	_check_call_ignored()
 	_check_call_alone()
+	_check_call_and_the_eyes()
 	_check_call_with_a_passenger()
 	_check_call_pulled_over()
 	_check_call_and_the_ending()
@@ -2137,6 +2325,27 @@ func _check_call_alone() -> void:
 	check(_sim.hand.gripping, "(and take the wheel)")
 	check_near(_pull(100.0), in_hand, 0.05, "(with all of his steering)")
 	_release()
+
+
+## Answered alone, his hand is at his ear for 30 s, but his eyes are on the
+## road: the Glance (GDD 4.7) follows a reach, and this is none (D-050).
+func _check_call_and_the_eyes() -> void:
+	check(absf(_sim.space.glance_for(_sim.space.ear).x) > tuning.f("glance_max_yaw") * 0.5, "(a hand at his ear is far off the forward axis: a Glance would turn his view well away)")
+	_to_the_call()
+	_reach(POCKET)
+	_input.lmb = true
+	_ticks(TAP_TICKS)
+	_input.lmb = false
+	_ticks(SETTLE * 2)
+	_input.clear()
+	check_eq(_sim.boss.call, BossSim.CALL_TALKING, "(he answered alone)")
+	var most: float = 0.0
+	for index: int in _ticks_in(5.0):
+		_tick()
+		if index >= _ticks_in(1.0):
+			most = maxf(most, maxf(absf(_sim.hand.cam_yaw), absf(_sim.hand.cam_pitch)))
+	check(GameData.as_bool(_sim.snapshot()["at_ear"]), "(the phone is at his ear)")
+	check(most < 0.5, "with the phone at his ear his eyes stay on the road (%.1f degrees off it at most)" % most)
 
 
 ## 3. Answer with a passenger: DRAG the phone to them. They hold it to his
