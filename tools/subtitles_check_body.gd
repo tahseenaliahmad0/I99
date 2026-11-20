@@ -34,6 +34,22 @@ const RTL_MIXED: String = "الطريق I-99 طويل، 540 كيلومترا ح�
 ## The characters that force a direction on text: the marks, embeddings,
 ## overrides and isolates of the bidirectional algorithm.
 const DIRECTION_MARKS: String = "\u200E\u200F\u061C\u202A\u202B\u202C\u202D\u202E\u2066\u2067\u2068\u2069"
+## An Arabic sentence that is cut so that its second line begins with a
+## Latin word: "the road to Basra is long, my daughter; I-99 is the name of
+## this long road".
+const RTL_LATIN_SECOND: String = "الطريق إلى البصرة طويل يا ابنتي I-99 هو اسم هذا الطريق الطويل"
+const LATIN_WORD: String = "I-99"
+## An exchange as a writer may leave it (wreck.children.1): what each says,
+## divided as the English row divides it, and the speaker column filled in
+## too, in Arabic ("a child, then Abu Noor"), which is not asked of them.
+const RTL_EXCHANGE_LINE: String = "wreck.children.1"
+const RTL_CHILD: String = "طفل"
+const RTL_SPEAKERS: String = "طفل، ثم أبو نور"
+const RTL_ASKED: String = "كيف أنت هنا إذن؟"
+const RTL_ANSWERED: String = "سؤال جيد. من جديد."
+## A name as its own line may come to be written: not what the speaker
+## columns say.
+const WRITTEN_NAME: String = "Noor, the bride"
 
 ## The Call of Dawn (GDD 10.4): what Noor says when he answers (GDD 3.6), the
 ## rituals that take it (data/rituals.json), and where his hand goes for it.
@@ -98,6 +114,7 @@ func run(tree: SceneTree) -> int:
 	_settings()
 	_numbers()
 	_view()
+	_written()
 	_the_call()
 	_scene()
 	await _in_the_scene(tree)
@@ -112,11 +129,22 @@ func run(tree: SceneTree) -> int:
 ## text for that line and for its speaker's name. That table is made in
 ## memory; lines_ar.csv itself stays empty (GDD 17.3).
 func rtl_shot(tree: SceneTree, path: String) -> void:
+	await _rtl_picture(tree, path, RTL_LONG)
+
+
+## The same picture with a sentence whose second line begins with a Latin
+## word (I-99): it stands at the right end of that line, where an Arabic
+## reader begins it, because both lines are one paragraph.
+func rtl_latin_shot(tree: SceneTree, path: String) -> void:
+	await _rtl_picture(tree, path, RTL_LATIN_SECOND)
+
+
+func _rtl_picture(tree: SceneTree, path: String, said: String) -> void:
 	var shipped: GameData = Game.data
 	var english: Dictionary = GameData.as_dict(shipped.lines.get("en")).duplicate(true)
 	var arabic: Dictionary = GameData.as_dict(shipped.lines.get("ar")).duplicate(true)
 	arabic[Lines.speaker_line_id(GameData.as_string(shipped.line(TWO_LINE_LINE).get("speaker")))] = {"speaker": "", "text": RTL_SPEAKER, "needs_writer": false}
-	arabic[TWO_LINE_LINE] = {"speaker": "", "text": RTL_LONG, "needs_writer": false}
+	arabic[TWO_LINE_LINE] = {"speaker": "", "text": said, "needs_writer": false}
 	tree.change_scene_to_file(DRIVE_SCENE)
 	for frame: int in SCENE_FRAMES:
 		await tree.process_frame
@@ -293,6 +321,9 @@ func _wrapping(queue: SubtitleQueue) -> void:
 
 	var spaced: PackedStringArray = queue.lines_of("  one   two\tthree\nfour  ")
 	_check(spaced.size() == 1 and spaced[0] == "one two three four", "spaces, tabs and line ends between words count as one space")
+	# A label breaks the line at these by itself: left in a line, they would make three lines of two.
+	var ended: PackedStringArray = queue.lines_of("one\u2028two\u2029three\r\nfour\u000Bfive\u000Csix\u0085seven")
+	_check(ended.size() == 1 and ended[0] == "one two three four five six seven", "and so does every other kind of line end (the line separator, the paragraph separator)")
 
 	var word: String = "x".repeat(chars * 2 + 16)
 	var word_lines: PackedStringArray = queue.lines_of(word)
@@ -537,6 +568,24 @@ func _speakers() -> void:
 	_check(Lines.get_speaker_name("A stranger") == "A stranger", "a speaker with no line is shown as the speaker column has it")
 	_check(Lines.speaker_line_id(RTL_SHORT).is_empty() and Lines.get_speaker_name(RTL_SHORT) == RTL_SHORT, "and so is a name written in Arabic")
 
+	# Who speaks is read from the English table alone (Lines.get_speaker): the
+	# other files translate what is said and, once, each name. So their
+	# speaker column stays empty, and what an exchange says stays divided.
+	var named: PackedStringArray = []
+	var undivided: PackedStringArray = []
+	for locale: String in GameData.LINE_LOCALES:
+		for id: String in _data.line_ids(locale):
+			var row: Dictionary = _data.line(id, locale)
+			if locale != Lines.FALLBACK_LOCALE and not GameData.as_string(row.get("speaker")).strip_edges().is_empty():
+				named.append("%s (%s)" % [id, locale])
+			var who: String = GameData.as_string(_data.line(id).get("speaker")) if _data.has_line(id) else ""
+			var speakers: int = who.split(SubtitleQueue.SPEAKERS_THEN).size()
+			var text: String = GameData.as_string(row.get("text"))
+			if speakers > 1 and not text.strip_edges().is_empty() and SubtitleQueue.exchange(who, text).size() != speakers:
+				undivided.append("%s (%s)" % [id, locale])
+	_check(named.is_empty(), "no row of another language's file names a speaker: who speaks is the English table's to say%s" % ("" if named.is_empty() else "; named in: " + ", ".join(named)))
+	_check(undivided.is_empty(), "a row that holds an exchange says as much as it names speakers, in every language that has its text%s" % ("" if undivided.is_empty() else "; not: " + ", ".join(undivided)))
+
 
 func _settings() -> void:
 	_heading("the Subtitles settings of GDD 17.1")
@@ -604,8 +653,10 @@ func _view() -> void:
 	var short_frames: int = _frames_until_change(view)
 	_check(_held_for(short_frames, queue.duration_of(Lines.get_text(SHORT_LINE).length())), "it is held 1.5 s (%d frames)" % short_frames)
 	var narrator: PackedStringArray = view.shown_lines()
-	_check(view.shown_speaker() == "Abu Noor" and narrator.size() == 2 and " ".join(narrator) == Lines.get_text(TWO_LINE_LINE) and text.text == "\n".join(narrator),
+	_check(view.shown_speaker() == "Abu Noor" and narrator.size() == 2 and " ".join(narrator) == Lines.get_text(TWO_LINE_LINE) and text.text == SubtitlesView.LINE_BREAK.join(narrator),
 			"then %s, on two lines: %s" % [TWO_LINE_LINE, " | ".join(narrator)])
+	_check(SubtitlesView.LINE_BREAK == "\u2028" and not text.text.contains("\n") and text.get_line_count() == 2,
+			"the label breaks the line at a line separator, not a line end: its two lines are one paragraph")
 	var narrator_frames: int = _frames_until_change(view)
 	_check(_held_for(narrator_frames, queue.duration_of(Lines.get_text(TWO_LINE_LINE).length())) and not view.is_showing() and view.waiting() == 0,
 			"held %s s (%d frames), and then nothing is drawn" % [str(queue.duration_of(Lines.get_text(TWO_LINE_LINE).length())), narrator_frames])
@@ -685,6 +736,81 @@ func _view() -> void:
 	_check(text.get_theme_font_size("font_size") == GameData.as_int(sizes.get(SubtitlesView.DEFAULT_SIZE)), "a size that tuning does not have is shown as %s" % SubtitlesView.DEFAULT_SIZE)
 
 	# Nothing is left behind for the next tool or test.
+	Settings.reset_to_defaults()
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(Game.user_dir.path_join(Settings.FILE_NAME)))
+	view.free()
+
+
+## The line table as a writer will leave it, made in memory (lines_ar.csv
+## itself stays empty, GDD 17.3): a name line that says more than the speaker
+## columns do; Arabic for a line that needs two lines, cut so that the second
+## begins with a Latin word; and an exchange whose speaker column is filled
+## in as well, in Arabic, which no writer is asked for. What is held: the tag
+## is the text of the speaker's own line; both lines of a subtitle run the
+## way their sentence does; and who speaks, and how many they are, is read
+## from the English table whatever another one says.
+func _written() -> void:
+	_heading("a line table as the writer will leave it: names, right to left, an exchange")
+	var english: Dictionary = GameData.as_dict(_data.lines.get("en")).duplicate(true)
+	var arabic: Dictionary = GameData.as_dict(_data.lines.get("ar")).duplicate(true)
+	var written: Dictionary = {"speaker": "", "text": "", "needs_writer": false}
+	var exchange: Array[PackedStringArray] = SubtitleQueue.exchange(_line_speaker(RTL_EXCHANGE_LINE), _line_text(RTL_EXCHANGE_LINE))
+	english[Lines.speaker_line_id(_line_speaker(SHORT_LINE))] = written.merged({"text": WRITTEN_NAME}, true)
+	arabic[Lines.speaker_line_id(_line_speaker(TWO_LINE_LINE))] = written.merged({"text": RTL_SPEAKER}, true)
+	arabic[Lines.speaker_line_id(exchange[0][0])] = written.merged({"text": RTL_CHILD}, true)
+	arabic[TWO_LINE_LINE] = written.merged({"text": RTL_LATIN_SECOND}, true)
+	arabic[RTL_EXCHANGE_LINE] = written.merged({"speaker": RTL_SPEAKERS, "text": RTL_ASKED + SubtitleQueue.SAID_THEN + RTL_ANSWERED}, true)
+	Lines.setup(GameData.from_parts(_data.roots, {"en": english, "ar": arabic}))
+	Settings.reset_to_defaults()
+	var view: SubtitlesView = SubtitlesView.new()
+	view.name = "Subtitles"
+	_root.add_child(view)
+	view.setup(_data)
+	var text: Label = view.get_node("Box/Rows/Text") as Label
+
+	# A name is a line: what the tag shows is that line's text.
+	Events.emit_event("line_requested", {"id": SHORT_LINE})
+	view._process(FRAME)
+	_check(_line_speaker(SHORT_LINE) != WRITTEN_NAME and view.shown_speaker() == WRITTEN_NAME,
+			"the tag is the text of the speaker's own line, not what the speaker column writes: %s" % view.shown_speaker())
+	view.clear()
+
+	# Arabic on two lines, the second beginning with a Latin word.
+	Lines.set_locale("ar")
+	Events.emit_event("line_requested", {"id": TWO_LINE_LINE})
+	view._process(FRAME)
+	var lines: PackedStringArray = view.shown_lines()
+	_check(view.shown_speaker() == RTL_SPEAKER and lines.size() == 2 and " ".join(lines) == RTL_LATIN_SECOND and lines[1].begins_with(LATIN_WORD),
+			"in Arabic, %s is under his Arabic name on two lines, the second beginning with %s" % [TWO_LINE_LINE, LATIN_WORD])
+	# Where the label draws its letters: a line that runs right to left has
+	# its first letter at its right end. (No frame is drawn here, so the box
+	# has not grown yet: the label is given the room its text asks for.)
+	text.reset_size()
+	var upper_first: Rect2 = text.get_character_bounds(0)
+	var upper_last: Rect2 = text.get_character_bounds(lines[0].length() - 1)
+	var lower_first: Rect2 = text.get_character_bounds(text.text.find(LATIN_WORD))
+	var lower_last: Rect2 = text.get_character_bounds(text.text.length() - 1)
+	_check(text.get_line_count() == 2 and upper_first.position.y < lower_first.position.y and is_equal_approx(lower_first.position.y, lower_last.position.y),
+			"the label draws them as two lines")
+	_check(upper_first.position.x > upper_last.position.x, "the first line runs right to left")
+	_check(lower_first.position.x > lower_last.position.x,
+			"and so does the second, though it begins with a Latin word: %s stands at its right end (%d px right of its last letter)" % [LATIN_WORD, roundi(lower_first.position.x - lower_last.position.x)])
+	view.clear()
+
+	# An exchange: who speaks, and how many they are, is the English table's to say.
+	Events.emit_event("line_requested", {"id": RTL_EXCHANGE_LINE})
+	view._process(FRAME)
+	var asked: String = "%s: %s" % [view.shown_speaker(), " | ".join(view.shown_lines())]
+	_frames_until_change(view)
+	var answered: String = "%s: %s" % [view.shown_speaker(), " | ".join(view.shown_lines())]
+	_frames_until_change(view)
+	_check(Lines.get_speaker(RTL_EXCHANGE_LINE) == _line_speaker(RTL_EXCHANGE_LINE), "who says %s is read from the English table, whatever the Arabic row's speaker column holds" % RTL_EXCHANGE_LINE)
+	_check(asked == "%s: %s" % [RTL_CHILD, RTL_ASKED] and answered == "%s: %s" % [RTL_SPEAKER, RTL_ANSWERED] and not view.is_showing(),
+			"so it is still two subtitles, each under the name its speaker's own line gives in Arabic")
+
+	# Nothing is left behind for the next tool or test.
+	Lines.set_locale(Lines.FALLBACK_LOCALE)
+	Lines.setup(_data)
 	Settings.reset_to_defaults()
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(Game.user_dir.path_join(Settings.FILE_NAME)))
 	view.free()
@@ -943,20 +1069,33 @@ func _scene() -> void:
 	print("        %s" % ", ".join(order))
 
 
-## The drive scene itself, running (it needs no renderer), driven through the
-## game's own input as far as M7 lets it be driven in a moment: the Call
-## answered on Dawn's road, and a Telling ended with the key in the bay of
-## the Arrival. What is checked is the scene's own wiring: its controller
-## sends what the simulation announces to the Events bus, its Subtitles layer
-## listens there, and the controller clears it where the night begins again.
+## The drive scene itself, running (it needs no renderer): started with
+## `--say=`, and driven through the game's own input as far as M7 lets it be
+## driven in a moment: the Call answered on Dawn's road, and a Telling ended
+## with the key in the bay of the Arrival. What is checked is the scene's own
+## wiring: its controller asks for the lines of `--say`, it sends what the
+## simulation announces to the Events bus, its Subtitles layer listens there,
+## and the controller clears it where the night begins again.
 func _in_the_scene(tree: SceneTree) -> void:
-	_heading("the drive scene running: the Call answered, and the night begun again")
+	_heading("the drive scene running: --say, the Call answered, and the night begun again")
 	Events.line_requested.connect(_on_bus_line)
 	Events.arrived.connect(_on_bus_arrived)
 
+	# `--say=`: the scene asks for those lines as it starts, and they are shown.
+	_bus_lines = []
+	var said: PackedStringArray = [LONG_LINE, SHORT_LINE]
+	var drive: Node = await _drive_scene(tree, {"say": ",".join(said)})
+	var layer: SubtitlesView = drive.get_node("Subtitles") as SubtitlesView
+	var queue: SubtitleQueue = SubtitleQueue.new()
+	queue.configure(_tuning)
+	var first: Array[SubtitleQueue.Part] = queue.parts_of("", Lines.get_text(said[0]))
+	_check(_bus_lines == said, "started with --say=%s, the scene asks for those lines on the Events bus, in that order" % ",".join(said))
+	_check(layer.is_showing() and layer.shown_lines() == first[0].lines and layer.shown_speaker() == Lines.get_speaker_name(Lines.get_speaker(said[0])) and layer.waiting() == first.size() + 1,
+			"and its Subtitles layer shows the first of them, the other waiting: %s: %s" % [layer.shown_speaker(), " | ".join(layer.shown_lines())])
+
 	# Dawn's road: the phone rings, the hand is on his pocket, a TAP.
 	_bus_lines = []
-	var drive: Node = await _answer_in_the_scene(tree)
+	drive = await _answer_in_the_scene(tree)
 	var sim: DriveSim = drive.get("sim") as DriveSim
 	var view: SubtitlesView = drive.get_node("Subtitles") as SubtitlesView
 	_check(sim.boss.call == BossSim.CALL_TALKING and sim.boss.call_taken == BossSim.TAKEN_ALONE,
@@ -1035,6 +1174,11 @@ func _text_of(length: int) -> String:
 
 func _line_text(id: String) -> String:
 	return GameData.as_string(_data.line(id).get("text"))
+
+
+## Who says a line, as the speaker column of the English table writes it.
+func _line_speaker(id: String) -> String:
+	return GameData.as_string(_data.line(id).get("speaker"))
 
 
 func _longest(lines: PackedStringArray) -> int:

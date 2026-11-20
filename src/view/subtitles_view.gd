@@ -20,7 +20,7 @@ extends CanvasLayer
 ##
 ## Speaker names are lines themselves (Lines.get_speaker_name). The labels'
 ## text direction is automatic, so right-to-left text runs the right way when
-## Arabic lines arrive; they take the theme's font, whatever it comes to be.
+## Arabic lines arrive, on both lines of a subtitle (LINE_BREAK).
 ##
 ## The two Subtitles settings of GDD 17.1 are read from Settings and applied
 ## the moment they change: `subtitle_size` (small, medium or large) and
@@ -35,6 +35,12 @@ const BACKGROUND_SETTING: String = "subtitle_background"
 ## The size shown when the setting names one that tuning does not have
 ## (a settings file edited by hand): the default of GDD 17.1.
 const DEFAULT_SIZE: String = "medium"
+## What stands between the two lines of a subtitle in its label: the line
+## separator (U+2028). The label breaks the line there and keeps both lines
+## in one paragraph. A line end would begin a new paragraph, which takes its
+## direction from its own first letter: a right-to-left sentence whose
+## second line begins with a Latin word would run the wrong way from there.
+const LINE_BREAK: String = "\u2028"
 
 var _tuning: Tuning
 var _serial: int = -1
@@ -113,7 +119,7 @@ func shown_speaker() -> String:
 func shown_lines() -> PackedStringArray:
 	if not is_showing():
 		return PackedStringArray()
-	return _text.text.split("\n")
+	return _text.text.split(LINE_BREAK)
 
 
 ## Subtitles showing and waiting.
@@ -139,7 +145,7 @@ func _show(part: SubtitleQueue.Part) -> void:
 		return
 	_speaker.text = part.speaker
 	_speaker.visible = not part.speaker.is_empty()
-	_text.text = "\n".join(part.lines)
+	_text.text = LINE_BREAK.join(part.lines)
 
 
 func _make_label(node_name: String) -> Label:

@@ -42,10 +42,15 @@ func get_text(id: String) -> String:
 	return _field(id, "text")
 
 
-## The speaker column of a line ("" when it has none): who says it, as the
-## line table writes it. What a speaker tag shows is get_speaker_name().
+## Who says a line ("" when nobody is named): its speaker column in the
+## English table, whatever the locale. Who speaks is not text to translate:
+## a row that holds an exchange names its speakers in a form ("Guest, then
+## Abu Noor") that another language would not keep, so the speaker column of
+## the other line files stays empty and is not read. A name is translated
+## once, in the speaker's own line: what a speaker tag shows is
+## get_speaker_name().
 func get_speaker(id: String) -> String:
-	return _field(id, "speaker")
+	return _field(id, "speaker", false)
 
 
 ## A speaker's name as a speaker tag shows it (GDD 16.6): the text of the
@@ -85,11 +90,13 @@ func needs_writer(id: String) -> bool:
 	return GameData.as_bool(_data.line(id, FALLBACK_LOCALE).get("needs_writer"))
 
 
-func _field(id: String, field: String) -> String:
+## A column of a line: as the writer of the current locale has filled it in,
+## if `translated` and they have; as the English table has it otherwise.
+func _field(id: String, field: String, translated: bool = true) -> String:
 	if not has_line(id):
 		push_error("Lines: unknown line id '%s'" % id)
 		return "[%s]" % id
-	if locale != FALLBACK_LOCALE and _data.has_line(id, locale):
+	if translated and locale != FALLBACK_LOCALE and _data.has_line(id, locale):
 		var localized: String = GameData.as_string(_data.line(id, locale).get(field))
 		if not localized.strip_edges().is_empty():
 			return localized

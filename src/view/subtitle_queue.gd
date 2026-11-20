@@ -23,6 +23,9 @@ extends RefCounted
 ## what each of them says, divided by " / ".
 const SPEAKERS_THEN: String = ", then "
 const SAID_THEN: String = " / "
+## What divides the words of a text besides the space: the tab, and every
+## kind of line end (a label begins a new line at each of these by itself).
+const LINE_ENDS: PackedStringArray = ["\t", "\n", "\r", "\u000B", "\u000C", "\u0085", "\u2028", "\u2029"]
 
 
 ## What is on screen at one time: a speaker tag and a few lines.
@@ -174,11 +177,15 @@ func clear() -> void:
 
 # --- Internals ---------------------------------------------------------------
 
-## The words of a text: what stands between its spaces, tabs and line ends.
-## A word longer than a line comes as pieces of a line's length.
+## The words of a text: what stands between its spaces, tabs and line ends
+## (the line and paragraph separators are line ends too: a label would break
+## the line at them). A word longer than a line comes as pieces of a line's
+## length.
 func _words(text: String) -> PackedStringArray:
 	var words: PackedStringArray = []
-	var spaced: String = text.replace("\n", " ").replace("\r", " ").replace("\t", " ")
+	var spaced: String = text
+	for line_end: String in LINE_ENDS:
+		spaced = spaced.replace(line_end, " ")
 	for entry: String in spaced.split(" ", false):
 		var word: String = entry
 		while word.length() > line_chars:

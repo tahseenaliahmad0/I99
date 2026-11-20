@@ -17,6 +17,9 @@
 #   rtl             right-to-left: an Arabic subtitle under an Arabic name,
 #                   from a line table made in memory (tools/subtitles_check.gd
 #                   with --rtl-shot=; lines_ar.csv itself stays empty)
+#   rtl_latin       the same with a sentence whose second line begins with a
+#                   Latin word: I-99 stands at the right end of that line
+#                   (--rtl-latin-shot=)
 #   call            the line the simulation asks for: Dawn's road, the Call
 #                   answered with a TAP on his pocket through the game's own
 #                   input, the phone at his ear (--call-shot=)
@@ -69,6 +72,7 @@ tool_shot() {
     "--$2=$OUT/m10_subtitles_$1.png" 2>&1 | grep -E '^shot|ERROR' || echo "no picture for $1"
 }
 
-tool_shot rtl  rtl-shot
-tool_shot call call-shot
-tool_shot key  key-shot
+tool_shot rtl       rtl-shot
+tool_shot rtl_latin rtl-latin-shot
+tool_shot call      call-shot
+tool_shot key       key-shot
