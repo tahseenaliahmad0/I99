@@ -1,9 +1,10 @@
 extends RefCounted
 ## The checks of tools/subtitles_check.gd (GDD 16.6, with 17.1, 17.3 and
-## 3.6), and its picture of right-to-left subtitles: the body of that tool.
-## It is a file of its own because it names the autoloads (Lines, Settings,
-## Events, Game), and a script started with `--script` is read before the
-## engine knows them. See there for what is checked and how to run it.
+## 3.6), and its pictures (right-to-left subtitles, the Call, the key): the
+## body of that tool. It is a file of its own because it names the autoloads
+## (Lines, Settings, Events, Game), and a script started with `--script` is
+## read before the engine knows them. See there for what is checked and how
+## to run it.
 
 const DRIVE_SCENE: String = "res://scenes/drive.tscn"
 const VIEW_SCRIPT: String = "res://src/view/subtitles_view.gd"
@@ -34,22 +35,54 @@ const RTL_MIXED: String = "الطريق I-99 طويل، 540 كيلومترا ح�
 ## overrides and isolates of the bidirectional algorithm.
 const DIRECTION_MARKS: String = "\u200E\u200F\u061C\u202A\u202B\u202C\u202D\u202E\u2066\u2067\u2068\u2069"
 
+## The Call of Dawn (GDD 10.4): what Noor says when he answers (GDD 3.6), the
+## rituals that take it (data/rituals.json), and where his hand goes for it.
+const CALL_LINE: String = SHORT_LINE
+const POCKET: StringName = &"pocket"
+const SHOULDER: StringName = &"passenger_shoulder"
+const KEY: StringName = &"key"
+## Frames the button is down for a TAP, and seconds it is down at the pocket
+## before the phone is carried off, then carried, in a DRAG_TO.
+const TAP_FRAMES: int = 2
+const DRAG_PRESS: float = 0.1
+const DRAG_CARRY: float = 2.5
+
 ## Frames the drive scene is given to stand before a line is asked for, and
 ## frames the line is given before the picture is taken.
 const SCENE_FRAMES: int = 10
 const SHOT_FRAMES: int = 30
+## Ticks the drive scene is given to come to what is asked of it.
+const SCENE_GUARD: int = 600
+## The Table of the Telling the drive scene is started with.
+const TABLE: String = "drivers"
 
 var _root: Window
 var _data: GameData
 var _tuning: Tuning
 var _checks: int = 0
 var _failed: int = 0
+## A drive of this check's own (the Call): the simulation and what its player
+## does; and, since that drive began, the line ids the simulation asked for,
+## the events it announced, and each subtitle the view showed with the frames
+## it was up.
+var _sim: DriveSim
+var _input: DriveInput = DriveInput.new()
+var _asked: PackedStringArray = []
+var _announced: Array[Dictionary] = []
+var _seen: PackedStringArray = []
+var _seen_frames: PackedInt32Array = []
+var _showing: String = ""
+## While the drive scene runs: the line ids that went over the Events bus,
+## and how often a night ended there.
+var _bus_lines: PackedStringArray = []
+var _bus_arrivals: int = 0
 
 
 ## Runs every check, printing a PASS or FAIL line for each; returns how many
-## failed. `root` is the scene tree's root, where the view is put.
-func run(root: Window) -> int:
-	_root = root
+## failed. A view is put under the root of `tree`; the last checks run the
+## drive scene in it, so this takes some frames and is awaited.
+func run(tree: SceneTree) -> int:
+	_root = tree.root
 	_data = Game.data
 	_tuning = _data.tuning
 	var queue: SubtitleQueue = SubtitleQueue.new()
@@ -65,7 +98,9 @@ func run(root: Window) -> int:
 	_settings()
 	_numbers()
 	_view()
+	_the_call()
 	_scene()
+	await _in_the_scene(tree)
 
 	print("subtitles check: %d checks, %d failure(s)" % [_checks, _failed])
 	return _failed
@@ -92,13 +127,124 @@ func rtl_shot(tree: SceneTree, path: String) -> void:
 		await tree.process_frame
 	var view: SubtitlesView = tree.current_scene.get_node("Subtitles") as SubtitlesView
 	print("right-to-left: %s | %s" % [view.shown_speaker(), " | ".join(view.shown_lines())])
+	_save_picture(tree, path)
+	Lines.set_locale(Lines.FALLBACK_LOCALE)
+	Lines.setup(shipped)
+
+
+## A picture of what the simulation asks for, saved as a PNG at `path` (it
+## needs a renderer): the drive scene on Dawn's road as the phone in his
+## pocket rings (GDD 10.4), the pointer on the pocket, and a TAP there through
+## the game's own input. Nothing is put on the Events bus by hand: the
+## subtitle in the picture is the one the Call's ritual asked for.
+func call_shot(tree: SceneTree, path: String) -> void:
+	var drive: Node = await _answer_in_the_scene(tree)
+	var sim: DriveSim = drive.get("sim") as DriveSim
+	var view: SubtitlesView = drive.get_node("Subtitles") as SubtitlesView
+	for frame: int in SHOT_FRAMES:
+		_keep_lane(sim)
+		await tree.process_frame
+	print("the Call (%s, taken %s): %s | %s" % [sim.boss.call, sim.boss.call_taken, view.shown_speaker(), " | ".join(view.shown_lines())])
+	_save_picture(tree, path)
+	Game.args = {}
+
+
+## A picture of a subtitle over the key (it needs a renderer): the street of
+## the Arrival (GDD 10.5), the car standing in the bay, the pointer on the
+## key under the wheel, which he must find and TAP to end the night, and a
+## line of two lines asked for on the Events bus.
+func key_shot(tree: SceneTree, path: String) -> void:
+	var drive: Node = await _park_in_the_scene(tree, {})
+	var sim: DriveSim = drive.get("sim") as DriveSim
+	var view: SubtitlesView = drive.get_node("Subtitles") as SubtitlesView
+	Events.emit_event("line_requested", {"id": TWO_LINE_LINE})
+	for frame: int in SHOT_FRAMES:
+		await tree.process_frame
+	print("in the bay (%s), the hand at %s: %s | %s" % [str(sim.boss.in_bay), sim.hand.at_id(), view.shown_speaker(), " | ".join(view.shown_lines())])
+	_save_picture(tree, path)
+	Input.action_release("brake")
+	Game.args = {}
+
+
+## The drive scene on Dawn's road with nothing on it, a moment short of where
+## the phone rings (GDD 10.4), the pointer held on his pocket; when it rings
+## and the hand is there, a TAP through the game's own input. Returns the
+## scene once the Call is no longer ringing and a frame has been drawn.
+func _answer_in_the_scene(tree: SceneTree) -> Node:
+	var drive: Node = await _drive_scene(tree, {"aim": String(POCKET)})
+	var sim: DriveSim = drive.get("sim") as DriveSim
+	sim.gate.reset(3)
+	sim.begin_leg(_quiet_dawn(Game.data))
+	sim.car.s = sim.leg.length - GameData.as_float(GameData.as_dict(GameData.as_dict(Game.data.record("bosses", BossSim.DAWN).get(BossSim.DAWN)).get("call")).get("from_end_m")) - 2.0
+	var guard: int = SCENE_GUARD
+	while (sim.boss.call != BossSim.CALL_RINGING or sim.hand.at_id() != POCKET) and guard > 0:
+		guard -= 1
+		_keep_lane(sim)
+		await tree.physics_frame
+	await _tap(tree)
+	guard = SCENE_GUARD
+	while sim.boss.call == BossSim.CALL_RINGING and guard > 0:
+		guard -= 1
+		_keep_lane(sim)
+		await tree.physics_frame
+	await _a_frame_drawn(tree)
+	return drive
+
+
+## The drive scene on the street of the Arrival (GDD 10.5): the car standing
+## in its bay with the brake held, the pointer and the hand on the key under
+## the wheel. `more` are further arguments for the scene (a Telling). The
+## brake stays held: whoever asked lets it go.
+func _park_in_the_scene(tree: SceneTree, more: Dictionary) -> Node:
+	var arguments: Dictionary = {"aim": String(KEY)}
+	arguments.merge(more)
+	var drive: Node = await _drive_scene(tree, arguments)
+	var sim: DriveSim = drive.get("sim") as DriveSim
+	sim.begin_arrival()
+	sim.car.s = sim.leg.length - GameData.as_float(GameData.as_dict(Game.data.root("legs").get(BossSim.ARRIVAL)).get("bay_m")) * 0.5
+	sim.car.speed = 0.0
+	Input.action_press("brake")
+	var guard: int = SCENE_GUARD
+	while (not sim.boss.in_bay or sim.hand.at_id() != KEY) and guard > 0:
+		guard -= 1
+		await tree.physics_frame
+	return drive
+
+
+## The drive scene, started with `arguments` (those of the command line) on
+## an empty road, and given a moment to stand.
+func _drive_scene(tree: SceneTree, arguments: Dictionary) -> Node:
+	Game.args = arguments
+	tree.change_scene_to_file(DRIVE_SCENE)
+	for frame: int in SCENE_FRAMES:
+		await tree.process_frame
+	var sim: DriveSim = tree.current_scene.get("sim") as DriveSim
+	sim.free_traffic_per_km = 0.0
+	sim.traffic.clear()
+	return tree.current_scene
+
+
+## A TAP of the grip button, as a player's: down for the ticks of TAP_FRAMES.
+func _tap(tree: SceneTree) -> void:
+	Input.action_press("grip")
+	for tick: int in TAP_FRAMES * roundi(FRAME / DriveSim.DT):
+		await tree.physics_frame
+	Input.action_release("grip")
+
+
+## Waits until the scene has drawn a frame after this moment: every node has
+## had its _process once more.
+func _a_frame_drawn(tree: SceneTree) -> void:
+	await tree.process_frame
+	await tree.process_frame
+
+
+func _save_picture(tree: SceneTree, path: String) -> void:
 	var image: Image = tree.root.get_texture().get_image()
 	if image == null or image.is_empty():
 		print("no picture: this renderer draws nothing")
 	else:
 		print("shot %s (%s)" % [path, error_string(image.save_png(path))])
-	Lines.set_locale(Lines.FALLBACK_LOCALE)
-	Lines.setup(shipped)
 
 
 # --- The pure class ----------------------------------------------------------
@@ -506,6 +652,208 @@ func _view() -> void:
 	view.free()
 
 
+# --- What the simulation asks for ---------------------------------------------
+
+## The Call (GDD 10.4, the simulation's since M7) is the first thing in play
+## that somebody says. Dawn's road is driven here by a simulation of this
+## check's own, a frame at a time as the drive scene runs it, to where the
+## phone in his pocket rings; then it is left to ring out, answered alone
+## with a TAP, and handed to a passenger. Nothing is put on the Events bus
+## by hand: what the view shows is what the simulation asked for.
+func _the_call() -> void:
+	_heading("the Call of Dawn (GDD 10.4): the simulation asks for what Noor says, and it is shown")
+	Settings.reset_to_defaults()
+	var view: SubtitlesView = SubtitlesView.new()
+	view.name = "Subtitles"
+	_root.add_child(view)
+	view.setup(_data)
+	var queue: SubtitleQueue = SubtitleQueue.new()
+	queue.configure(_tuning)
+	var ring_s: float = GameData.as_float(_call_numbers().get("ring_s"))
+	var tag: String = Lines.get_speaker_name(Lines.get_speaker(CALL_LINE))
+	var said: String = "%s: %s" % [tag, Lines.get_text(CALL_LINE)]
+	var hold: float = queue.duration_of(Lines.get_text(CALL_LINE).length())
+
+	# What takes the Call is a ritual at his pocket, and it is the ritual that asks for her line.
+	var takers: PackedStringArray = []
+	var asking: PackedStringArray = []
+	for ritual: Dictionary in _data.records("rituals"):
+		var takes: bool = false
+		var lines: PackedStringArray = []
+		for op: Variant in GameData.as_array(ritual.get("on_complete")):
+			var text: String = GameData.as_string(op)
+			if text.begins_with("call:"):
+				takes = true
+			elif text.begins_with("line:"):
+				lines.append(text.trim_prefix("line:"))
+		if takes:
+			takers.append(GameData.as_string(ritual.get("id")))
+			if lines == PackedStringArray([CALL_LINE]):
+				asking.append(GameData.as_string(ritual.get("id")))
+	_check(not takers.is_empty() and asking == takers, "each ritual that takes the Call asks for %s, once (%s)" % [CALL_LINE, ", ".join(takers)])
+
+	# It rings, and rings out.
+	_to_the_ring(view, false)
+	var rang: Dictionary = _last("call_started")
+	_check(_count("call_started") == 1 and _asked.is_empty() and not view.is_showing(), "the phone in his pocket rings: nothing is said yet")
+	_check(Lines.speaker_line_id(Lines.get_speaker(CALL_LINE)) == Lines.SPEAKER_PREFIX + GameData.as_string(rang.get("caller")),
+			"who rings is who speaks in %s (%s)" % [CALL_LINE, GameData.as_string(rang.get("caller"))])
+	_drive(view, _frames_in(ring_s + 1.0))
+	_check(_count("call_resolved") == 1 and not GameData.as_bool(_last("call_resolved").get("answered")) and _asked.is_empty() and _seen.is_empty(),
+			"left to ring for its %s s it is over unanswered, and nothing was said" % str(ring_s))
+
+	# Answered alone: a TAP on his pocket.
+	_to_the_ring(view, false)
+	var at_pocket: bool = _reach(view, POCKET)
+	_input.lmb = true
+	_drive(view, TAP_FRAMES)
+	_input.lmb = false
+	_until_answered(view)
+	_check(at_pocket and GameData.as_bool(_last("call_resolved").get("answered")) and GameData.as_string(_last("call_resolved").get("taken")) == BossSim.TAKEN_ALONE,
+			"a TAP on his pocket answers it alone")
+	_check_said(view, said, hold)
+
+	# Handed to a passenger: nothing is said while the phone is carried.
+	_to_the_ring(view, true)
+	_reach(view, POCKET)
+	_input.lmb = true
+	_drive(view, _frames_in(DRAG_PRESS))
+	_input.pointer = _sim.hand.anchor_pointer(_sim.hand.anchor_index(SHOULDER))
+	_drive(view, _frames_in(DRAG_CARRY))
+	var carried_in_silence: bool = _asked.is_empty() and _seen.is_empty() and _count("call_resolved") == 0
+	_input.lmb = false
+	_until_answered(view)
+	_check(carried_in_silence and GameData.as_bool(_last("call_resolved").get("answered")) and GameData.as_string(_last("call_resolved").get("taken")) == BossSim.TAKEN_WITH_PASSENGER,
+			"dragged to a passenger's shoulder and let go there, it is answered with them; nothing is said while it is carried")
+	_check_said(view, said, hold)
+
+	Settings.reset_to_defaults()
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(Game.user_dir.path_join(Settings.FILE_NAME)))
+	view.free()
+	_sim = null
+
+
+## After an answer: her line was asked for once, in the frame of the answer,
+## and it is on screen from that frame for its own time, under her name, with
+## nothing behind it.
+func _check_said(view: SubtitlesView, said: String, hold: float) -> void:
+	_check(_asked == PackedStringArray([CALL_LINE]) and view.waiting() == 1, "the simulation asks for %s as he answers, once" % CALL_LINE)
+	_check(_showing == said, "and it is on screen in that frame: %s" % _showing)
+	var guard: int = MOST_FRAMES
+	while view.is_showing() and guard > 0:
+		guard -= 1
+		_drive(view, 1)
+	var frames: int = _seen_frames[0] if _seen_frames.size() == 1 else 0
+	_check(_seen == PackedStringArray([said]) and _held_for(frames, hold) and _asked.size() == 1,
+			"held %s s (%d frames); then nothing is drawn and nothing more was asked for" % [str(hold), frames])
+
+
+## The numbers of the Call in Dawn's record (data/legs.json).
+func _call_numbers() -> Dictionary:
+	return GameData.as_dict(GameData.as_dict(_data.record("bosses", BossSim.DAWN).get(BossSim.DAWN)).get("call"))
+
+
+## A new drive: Dawn's road with nothing on it (its plan without its
+## vehicles), the car in third gear a moment short of where the phone rings,
+## driven on until it does. `passenger`: somebody sits beside him.
+func _to_the_ring(view: SubtitlesView, passenger: bool) -> void:
+	view.clear()
+	_sim = DriveSim.new(_data)
+	_input.clear()
+	_asked = []
+	_announced = []
+	_seen = []
+	_seen_frames = []
+	_showing = ""
+	_sim.gate.reset(3)
+	_sim.begin_leg(_quiet_dawn(_data))
+	_sim.items.flags[&"passenger"] = passenger
+	_sim.car.s = _sim.leg.length - GameData.as_float(_call_numbers().get("from_end_m")) - 2.0
+	var guard: int = _frames_in(5.0)
+	while _sim.boss.call != BossSim.CALL_RINGING and guard > 0:
+		guard -= 1
+		_drive(view, 1)
+
+
+## Dawn's road as BossSim plans it, without the vehicles of its plan.
+func _quiet_dawn(data: GameData) -> Dictionary:
+	var plan: Dictionary = BossSim.plan(data, BossSim.DAWN, "", 1)
+	for key: String in ["spawns", "hazards", "curves"]:
+		plan[key] = []
+	return plan
+
+
+## Frames of the drive scene as its controller makes them: the simulation's
+## ticks, every event it announces sent to the Events bus, then the view's
+## frame. Nobody steers here, so the road is kept under the car.
+func _drive(view: SubtitlesView, frames: int) -> void:
+	for _frame: int in frames:
+		for _tick: int in roundi(FRAME / DriveSim.DT):
+			_keep_lane(_sim)
+			_sim.step(_input)
+			for event: Dictionary in _sim.drain_events():
+				var type: String = GameData.as_string(event.get("type"))
+				_announced.append(event)
+				if type == "line_requested":
+					_asked.append(GameData.as_string(event.get("id")))
+				Events.emit_event(type, event)
+		view._process(FRAME)
+		var now: String = "%s: %s" % [view.shown_speaker(), " | ".join(view.shown_lines())] if view.is_showing() else ""
+		if not now.is_empty():
+			if now != _showing:
+				_seen.append(now)
+				_seen_frames.append(0)
+			_seen_frames[_seen_frames.size() - 1] += 1
+		_showing = now
+
+
+## The car in the middle of the lane it is in.
+func _keep_lane(sim: DriveSim) -> void:
+	sim.car.x = sim.car.lane_center(clampi(sim.car.lane_of(sim.car.x), 0, sim.car.lanes - 1))
+
+
+## The pointer goes to an anchor and stays there; the hand follows until it
+## rests on it.
+func _reach(view: SubtitlesView, anchor: StringName) -> bool:
+	_input.clear()
+	_input.pointer_is_absolute = true
+	_input.pointer = _sim.hand.anchor_pointer(_sim.hand.anchor_index(anchor))
+	var guard: int = _frames_in(3.0)
+	while _sim.hand.at_id() != anchor and guard > 0:
+		guard -= 1
+		_drive(view, 1)
+	return _sim.hand.at_id() == anchor
+
+
+## Drives on, a frame at a time, until the Call has been answered or has rung out.
+func _until_answered(view: SubtitlesView) -> void:
+	var guard: int = _frames_in(1.0)
+	while _count("call_resolved") == 0 and guard > 0:
+		guard -= 1
+		_drive(view, 1)
+
+
+## The last event of a kind that the drive announced ({} when there was none).
+func _last(type: String) -> Dictionary:
+	for index: int in range(_announced.size() - 1, -1, -1):
+		if GameData.as_string(_announced[index].get("type")) == type:
+			return _announced[index]
+	return {}
+
+
+func _count(type: String) -> int:
+	var count: int = 0
+	for event: Dictionary in _announced:
+		if GameData.as_string(event.get("type")) == type:
+			count += 1
+	return count
+
+
+## Whole frames in a time.
+func _frames_in(seconds: float) -> int:
+	return roundi(seconds / FRAME)
+
+
 func _scene() -> void:
 	_heading("the Subtitles layer of %s" % DRIVE_SCENE)
 	var scene: PackedScene = load(DRIVE_SCENE) as PackedScene
@@ -534,6 +882,65 @@ func _scene() -> void:
 	else:
 		print("        (no PostFX layer in this scene yet: it belongs before Subtitles)")
 	print("        %s" % ", ".join(order))
+
+
+## The drive scene itself, running (it needs no renderer), driven through the
+## game's own input as far as M7 lets it be driven in a moment: the Call
+## answered on Dawn's road, and a Telling ended with the key in the bay of
+## the Arrival. What is checked is the scene's own wiring: its controller
+## sends what the simulation announces to the Events bus, its Subtitles layer
+## listens there, and the controller clears it where the night begins again.
+func _in_the_scene(tree: SceneTree) -> void:
+	_heading("the drive scene running: the Call answered, and the night begun again")
+	Events.line_requested.connect(_on_bus_line)
+	Events.arrived.connect(_on_bus_arrived)
+
+	# Dawn's road: the phone rings, the hand is on his pocket, a TAP.
+	_bus_lines = []
+	var drive: Node = await _answer_in_the_scene(tree)
+	var sim: DriveSim = drive.get("sim") as DriveSim
+	var view: SubtitlesView = drive.get_node("Subtitles") as SubtitlesView
+	_check(sim.boss.call == BossSim.CALL_TALKING and sim.boss.call_taken == BossSim.TAKEN_ALONE,
+			"on Dawn's road a TAP of the grip button with the pointer on his pocket answers the Call")
+	_check(_bus_lines == PackedStringArray([CALL_LINE]), "the scene sends what the Call's ritual asks for to the Events bus, once (%s)" % ", ".join(_bus_lines))
+	_check(view.is_showing() and view.shown_speaker() == Lines.get_speaker_name(Lines.get_speaker(CALL_LINE)) and view.shown_lines() == PackedStringArray([Lines.get_text(CALL_LINE)]) and view.waiting() == 1,
+			"and its Subtitles layer shows it: %s: %s" % [view.shown_speaker(), " | ".join(view.shown_lines())])
+
+	# A Telling, its car put in the bay of the Arrival while something is being said: the key ends the night.
+	drive = await _park_in_the_scene(tree, {"table": TABLE, "seed": "1"})
+	sim = drive.get("sim") as DriveSim
+	view = drive.get_node("Subtitles") as SubtitlesView
+	var telling_seed: int = sim.run.seed
+	var parked: bool = sim.run.active and sim.boss.in_bay and sim.hand.at_id() == KEY
+	Events.emit_event("line_requested", {"id": LONG_LINE})
+	await _a_frame_drawn(tree)
+	_check(parked and view.is_showing() and view.waiting() == 2, "a Telling's car stands in the bay of the Arrival, the hand on the key, while a line of two parts is said")
+	_bus_arrivals = 0
+	await _tap(tree)
+	var guard: int = SCENE_GUARD
+	while _bus_arrivals == 0 and guard > 0:
+		guard -= 1
+		await tree.physics_frame
+	await _a_frame_drawn(tree)
+	Input.action_release("brake")
+	_check(_bus_arrivals == 1 and sim.run.active and sim.run.seed == telling_seed + 1, "a TAP on the key ends the night (`arrived`), and the scene begins the Telling again")
+	_check(not view.is_showing() and view.waiting() == 0, "nothing that was being said is left on screen or waiting")
+
+	# Nothing is left behind for the next tool or test.
+	Events.line_requested.disconnect(_on_bus_line)
+	Events.arrived.disconnect(_on_bus_arrived)
+	Game.args = {}
+	drive.queue_free()
+	await tree.process_frame
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(Game.save_path()))
+
+
+func _on_bus_line(event: Dictionary) -> void:
+	_bus_lines.append(GameData.as_string(event.get("id")))
+
+
+func _on_bus_arrived(_event: Dictionary) -> void:
+	_bus_arrivals += 1
 
 
 # --- Helpers -----------------------------------------------------------------

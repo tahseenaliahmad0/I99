@@ -17,6 +17,11 @@
 #   rtl             right-to-left: an Arabic subtitle under an Arabic name,
 #                   from a line table made in memory (tools/subtitles_check.gd
 #                   with --rtl-shot=; lines_ar.csv itself stays empty)
+#   call            the line the simulation asks for: Dawn's road, the Call
+#                   answered with a TAP on his pocket through the game's own
+#                   input, the phone at his ear (--call-shot=)
+#   key             the bay of the Arrival, the pointer on the key under the
+#                   wheel, and a subtitle of two lines over it (--key-shot=)
 #
 #   tools/subtitles_shots.sh [output folder]     (default: artifacts)
 #
@@ -57,6 +62,13 @@ shot small          60 night,2   radio.news.patrol '{"subtitle_size": "small"}'
 shot no_background  60 open_road radio.news.patrol '{"subtitle_background": false}'
 shot pointer        70 night,2   radio.news.patrol '' --aim=horn
 
-xvfb-run -a "$GODOT" --path . --rendering-method gl_compatibility --rendering-driver opengl3 \
-  --audio-driver Dummy --fixed-fps 60 --script res://tools/subtitles_check.gd -- \
-  "--rtl-shot=$OUT/m10_subtitles_rtl.png" 2>&1 | grep -E '^shot|ERROR' || echo "no picture for rtl"
+# tool_shot <name> <the argument of tools/subtitles_check.gd that takes it>
+tool_shot() {
+  xvfb-run -a "$GODOT" --path . --rendering-method gl_compatibility --rendering-driver opengl3 \
+    --audio-driver Dummy --fixed-fps 60 --script res://tools/subtitles_check.gd -- \
+    "--$2=$OUT/m10_subtitles_$1.png" 2>&1 | grep -E '^shot|ERROR' || echo "no picture for $1"
+}
+
+tool_shot rtl  rtl-shot
+tool_shot call call-shot
+tool_shot key  key-shot
