@@ -1,8 +1,8 @@
 extends RefCounted
 ## The second half of the sound check (tools/audio_check.gd): the Audio
 ## autoload, taken through the states of a drive and the events of the bus,
-## and through what two set pieces bring with simulations of their own: the
-## horn behind a car that stands in the Storm, the Call at Dawn.
+## and through what simulations of its own bring: the horn behind a car that
+## stands in the Storm, the Call at Dawn, a Wreck in a Telling.
 ## Loaded by the first half once the autoloads are there.
 ##
 ## Nothing here waits for a sound to play out: frames are stepped by hand
@@ -30,6 +30,12 @@ const BOSS_SEED: int = 1
 const STORM_WAITS: int = 30
 ## How far short of where the Call begins the check sets the car down, m.
 const CALL_RUN_UP: float = 2.0
+## What any sound may say about how it is played; every other key of
+## Audio.PLAY_KEYS is read from some sounds only.
+const ANY_SOUND_KEYS: PackedStringArray = ["gain_db", "functional", "note"]
+## The Telling the check wrecks: its Table (the Drivers', GDD 11.2) and seed.
+const TABLE: String = "drivers"
+const TELLING_SEED: int = 1
 
 var _data: GameData
 var _tuning: Tuning
@@ -66,6 +72,7 @@ func run(data: GameData) -> PackedStringArray:
 		_check_horn_behind()
 		_check_indicator()
 		_check_events()
+		_check_wreck()
 		_check_scene_gone()
 		_check_stream_files()
 		_time_a_frame()
@@ -77,13 +84,38 @@ func run(data: GameData) -> PackedStringArray:
 
 # --- The entries -------------------------------------------------------------
 
-## An entry says nothing that neither the generator nor the player reads: a
-## misspelt key would otherwise be a number that silently does nothing.
+## An entry says nothing that neither the generator nor the player reads, and
+## nothing about how it is played that means nothing for its sound: a misspelt
+## key, or a key on the wrong sound, would otherwise be a number that silently
+## does nothing.
 func _check_entries() -> void:
 	for key: Variant in _data.root("sfx"):
-		for name: Variant in _synth(str(key)):
+		var id: String = str(key)
+		for name: Variant in _synth(id):
 			_expect(SfxSynth.KEYS.has(str(name)) or Audio.PLAY_KEYS.has(str(name)),
-					"%s: nothing reads its key \"%s\"" % [str(key), str(name)])
+					"%s: nothing reads its key \"%s\"" % [id, str(name)])
+		var idle: PackedStringArray = Audio.idle_keys(id, _synth(id))
+		_expect(idle.is_empty(), "%s: \"%s\" says nothing about how a sound like this one is played" % [id, "\", \"".join(idle)])
+	# The rule itself. Every key that only some sounds are played by, taken
+	# from a sound that has it and put on one that ends, is no cue and does
+	# not repeat (the crash), is found idle there, and nothing else with it.
+	var bare: Dictionary = _synth(Audio.CRASH).duplicate()
+	for name: String in Audio.PLAY_KEYS:
+		if not ANY_SOUND_KEYS.has(name):
+			bare.erase(name)
+	var tried: Dictionary = {}
+	for key: Variant in _data.root("sfx"):
+		var spec: Dictionary = _synth(str(key))
+		for name: String in Audio.PLAY_KEYS:
+			if ANY_SOUND_KEYS.has(name) or tried.has(name) or not spec.has(name):
+				continue
+			tried[name] = true
+			var planted: Dictionary = bare.duplicate()
+			planted[name] = spec[name]
+			var found: PackedStringArray = Audio.idle_keys(Audio.CRASH, planted)
+			_expect(found.size() == 1 and found[0] == name, "\"%s\" on a sound that it means nothing for is not found idle" % name)
+	_expect(tried.size() == Audio.PLAY_KEYS.size() - ANY_SOUND_KEYS.size(),
+			"%d of the %d keys that only some sounds are played by could be tried on another sound" % [tried.size(), Audio.PLAY_KEYS.size() - ANY_SOUND_KEYS.size()])
 
 
 # --- The buses ---------------------------------------------------------------
@@ -242,6 +274,11 @@ func _check_heartbeat() -> void:
 		_expect(beats >= floori(asked) and beats <= ceili(asked) + 1,
 				"heartbeat: %d beats in %.0f s at Nerves %.0f; %.0f a minute is %.1f" % [beats, COUNT_SECONDS, nerves, rate, asked])
 	_expect(_count(Audio.HEARTBEAT, _snap({"pound": false, "nerves": pound_from}), COUNT_SECONDS) == 0, "heartbeat: heard without Pound")
+	# Nerves that jump (a hit, a slap) are heard at the pace they have jumped to.
+	var slow: float = Audio.SECONDS_PER_MINUTE / GameData.as_float(per_minute[0])
+	var fast: float = Audio.SECONDS_PER_MINUTE / GameData.as_float(per_minute[1])
+	_expect(_jump_is_heard(Audio.HEARTBEAT, _snap({"pound": true, "nerves": pound_from}), _snap({"pound": true, "nerves": snap_at}), slow, fast),
+			"heartbeat: Nerves that jump to the edge of a Snap are not heard within %.2f s; the slow beat is waited out" % fast)
 
 
 func _check_radio() -> void:
@@ -327,6 +364,10 @@ func _check_siren() -> void:
 	_expect(_count(Audio.SIREN, _snap({"suspicion_watching": true, "suspicion": most, "pulled_over": true}), calm * 2.0) == 0,
 			"siren_chirp: heard while the officer stands at the window")
 	_expect(_count(Audio.SIREN, _snap({}), calm * 2.0) == 0, "siren_chirp: heard with nobody behind him")
+	# Suspicion that jumps (the phone, contraband: GDD 6.5) is heard at the
+	# pace it has jumped to, not after the long gap that began before it.
+	_expect(_jump_is_heard(Audio.SIREN, _snap({"suspicion_watching": true, "suspicion": 0.0}), _snap({"suspicion_watching": true, "suspicion": most}), calm, hot),
+			"siren_chirp: Suspicion that jumps to the top is not heard within %.1f s; the calm gap is waited out" % hot)
 
 
 func _check_phone() -> void:
@@ -575,6 +616,81 @@ func _check_events() -> void:
 	_expect(Audio.starts_of(Audio.HECKLE) == dings + 1, "a heckle begins without its ding")
 
 
+## A Wreck stops the Telling where it stands (GDD 3.2): while the Table
+## objects the snapshot stays what it was, and nothing that it says is going
+## on is heard to go on. Only the radio plays over the cut.
+func _check_wreck() -> void:
+	var cut: float = _tuning.f("wreck_to_wheel")
+	var music: String = Audio.RADIO % String(ItemSim.MUSIC)
+	var going: Dictionary = {
+		"speed": _tuning.fi("gear_speeds", 2), "gear": PAR_GEAR, "on_rumble": true, "radio": ItemSim.MUSIC,
+		"snap": true, "cramp": DriveSim.HUM, "rear_end_in": cut,
+		"pound": true, "nerves": _tuning.f("snap_at"), "caller": String(ItemSim.CALLER_DISPATCHER),
+		"suspicion_watching": true, "suspicion": _tuning.f("suspicion_max"), "indicator": 1,
+	}
+	var repeating: PackedStringArray = [Audio.HEARTBEAT, Audio.RING, Audio.SIREN, Audio.TICK]
+	var starts: Dictionary = {}
+	_rest()
+	for id: String in repeating:
+		starts[id] = Audio.starts_of(id)
+	_run(_snap(going), 1.0)
+	for id: String in [Audio.ENGINE, Audio.RUMBLE, Audio.HORN, Audio.HORN_BEHIND, Audio.HUM, music]:
+		_expect(Audio.is_sounding(id), "the Wreck: %s is not heard before it" % id)
+	for id: String in repeating:
+		_expect(Audio.starts_of(id) > GameData.as_int(starts[id]), "the Wreck: %s is not heard before it" % id)
+		starts[id] = Audio.starts_of(id)
+	going["wrecked"] = true
+	_run(_snap(going), STEP)
+	_expect(not Audio.is_sounding(Audio.RING), "the Wreck: the ring that was sounding is not cut")
+	_run(_snap(going), cut)
+	for id: String in Audio.ids():
+		if GameData.as_bool(_synth(id).get("loop")):
+			_expect(Audio.is_sounding(id) == (id == music), "the Wreck: %s %s through the cut" % [id, "is not heard" if id == music else "is heard"])
+	for id: String in repeating:
+		_expect(Audio.starts_of(id) == GameData.as_int(starts[id]), "the Wreck: %s goes on through the cut (%d times)" % [id, Audio.starts_of(id) - GameData.as_int(starts[id])])
+
+	# A Telling of its own: four lamps lit, his Nerves a scrape short of a
+	# Snap, and the guardrail. The scrape is the last lamp and the last straw
+	# at once, so the snapshot says "snap" for as long as the Table objects:
+	# his horn is heard for the honk he gave and no longer, the engine is dead,
+	# and both are as they were when the Telling is told again.
+	var sim: DriveSim = DriveSim.new(_data)
+	sim.begin_telling(TABLE, TELLING_SEED)
+	_rest()
+	_drive(sim, 1.0)
+	_expect(Audio.is_sounding(Audio.ENGINE), "the Wreck: the engine is not heard in a Telling")
+	sim.faults.light(sim.faults.capacity - 1)
+	sim.nerves.add(_tuning.f("snap_at") - _tuning.fi("hit_nerves", 0) * 0.5 - sim.nerves.value)
+	sim.car.x = sim.car.guardrail_x()
+	var guard: int = roundi(FPS)
+	while not sim.wrecked and guard > 0:
+		guard -= 1
+		_drive(sim, STEP, null, false)
+	if not _expect(sim.wrecked and GameData.as_bool(sim.snapshot()["snap"]), "the Wreck: a scrape with four lamps lit did not wreck him in a Snap; the cut was not checked"):
+		return
+	var honk: float = GameData.as_float(_synth(Audio.HORN).get("hold")) + GameData.as_float(_synth(Audio.HORN).get("fade_out"))
+	var horn_frames: int = 0
+	var cut_frames: int = 0
+	var engine_heard: bool = true
+	guard = roundi((cut + 1.0) * FPS)
+	while sim.wrecked and guard > 0:
+		guard -= 1
+		_drive(sim, STEP, null, false)
+		cut_frames += 1
+		if Audio.is_sounding(Audio.HORN):
+			horn_frames += 1
+		if sim.wrecked:
+			engine_heard = Audio.is_sounding(Audio.ENGINE)
+	_expect(absi(cut_frames - roundi(cut * FPS)) <= 1, "the Wreck: the cut lasted %.2f s, not %.1f" % [float(cut_frames) * STEP, cut])
+	_expect(horn_frames > 0 and float(horn_frames) * STEP <= honk + STEP * 2.0,
+			"the Wreck: his horn is heard for %.2f s of the cut; the honk he gave is %.2f s" % [float(horn_frames) * STEP, honk])
+	_expect(not engine_heard or cut < GameData.as_float(_synth(Audio.ENGINE).get("fade_out")),
+			"the Wreck: the engine is still heard at the end of the cut")
+	_drive(sim, 1.0)
+	_expect(not sim.wrecked and Audio.is_sounding(Audio.ENGINE), "the Wreck: the engine does not start again when the Telling is told again")
+	_expect(not Audio.is_sounding(Audio.HORN), "the Wreck: his horn sounds on when the Telling is told again")
+
+
 ## When no snapshot comes any more, what it asked for goes quiet.
 func _check_scene_gone() -> void:
 	_rest()
@@ -596,6 +712,11 @@ func _check_stream_files() -> void:
 	var yawn: AudioStreamWAV = Audio.stream_of("yawn") as AudioStreamWAV
 	var music: String = Audio.RADIO % String(ItemSim.MUSIC)
 	var disk_path: String = Game.user_dir.path_join(STREAM_FILE)
+	var changed: GameData = GameData.load_from(_data.dir)
+	# Every copy of the project shares this folder, and a test run of any of
+	# them clears it away as it ends: it is made again here, as Game.write_save
+	# makes it, and the file is read back as soon as it is written.
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(Game.user_dir))
 	if yawn == null or yawn.save_to_wav(disk_path) != OK:
 		_fail("stream: cannot write %s to try it" % disk_path)
 		return
@@ -605,7 +726,6 @@ func _check_stream_files() -> void:
 	# read from the disk.
 	var shared: AudioStreamWAV = yawn.duplicate() as AudioStreamWAV
 	shared.take_over_path(SHARED_STREAM)
-	var changed: GameData = GameData.load_from(_data.dir)
 	GameData.as_dict(changed.root("sfx").get(Audio.HECKLE))["stream"] = SHARED_STREAM
 	GameData.as_dict(changed.root("sfx").get(music))["stream"] = SHARED_STREAM
 	GameData.as_dict(changed.root("sfx").get(Audio.SCRAPE))["stream"] = disk_path
@@ -621,6 +741,9 @@ func _check_stream_files() -> void:
 			"stream: a file that an entry loops must itself be left as it is")
 	_expect(read != null and read.loop_mode == AudioStreamWAV.LOOP_DISABLED and read.data.size() / 2 == frames,
 			"stream: scrape must play the file on the disk that its entry names")
+	# The file on the disk has been read: it is not asked for again.
+	GameData.as_dict(changed.root("sfx").get(Audio.SCRAPE))["stream"] = null
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(disk_path))
 	# A file that loops by itself keeps its loop for an entry that loops, and
 	# is played once, as a copy, by an entry that ends.
 	shared.loop_mode = AudioStreamWAV.LOOP_FORWARD
@@ -635,7 +758,6 @@ func _check_stream_files() -> void:
 	_expect(Audio.stream_of(Audio.HECKLE).get_length() < yawn.get_length() * 0.5
 			and (Audio.stream_of(music) as AudioStreamWAV).loop_end != frames,
 			"stream: the generated sounds did not come back")
-	DirAccess.remove_absolute(ProjectSettings.globalize_path(disk_path))
 
 
 ## What a frame of sound costs: a busy snapshot applied and stepped.
@@ -699,6 +821,22 @@ func _count(id: String, snapshot: Dictionary, seconds: float) -> int:
 	return Audio.starts_of(id) - before
 
 
+## True when a sound that repeats every `slow_gap` seconds in the state `slow`
+## is heard again within `fast_gap` of the state changing to `fast`, half a
+## fast gap after it was last heard: the old gap is not waited out.
+func _jump_is_heard(id: String, slow: Dictionary, fast: Dictionary, slow_gap: float, fast_gap: float) -> bool:
+	_rest()
+	var heard: int = Audio.starts_of(id)
+	var guard: int = roundi((slow_gap + 1.0) * FPS)
+	while Audio.starts_of(id) == heard and guard > 0:
+		guard -= 1
+		_run(slow, STEP)
+	_run(slow, fast_gap * 0.5)
+	heard = Audio.starts_of(id)
+	_run(fast, fast_gap + STEP * 2.0)
+	return guard > 0 and Audio.starts_of(id) == heard + 1
+
+
 ## The numbers of a boss: the object of its own name in its record.
 func _boss_numbers(boss_id: String) -> Dictionary:
 	return GameData.as_dict(_data.record("bosses", boss_id).get(boss_id))
@@ -756,14 +894,16 @@ func _stand_in_the_storm(brake: DriveInput) -> DriveSim:
 
 
 ## A simulation driven as the drive scene drives it: two ticks a frame, its
-## events onto the bus, its snapshot to Audio. The car is kept in its lane.
-## `input` is what the player does meanwhile (nothing, if it is not given).
-func _drive(sim: DriveSim, seconds: float, input: DriveInput = null) -> void:
+## events onto the bus, its snapshot to Audio. The car is kept in its lane
+## unless `in_lane` is false. `input` is what the player does meanwhile
+## (nothing, if it is not given).
+func _drive(sim: DriveSim, seconds: float, input: DriveInput = null, in_lane: bool = true) -> void:
 	if input == null:
 		input = DriveInput.new()
 	for frame: int in roundi(seconds * FPS):
 		for tick: int in roundi(STEP / DriveSim.DT):
-			sim.car.x = sim.car.lane_center(clampi(sim.car.lane_of(sim.car.x), 0, sim.car.lanes - 1))
+			if in_lane:
+				sim.car.x = sim.car.lane_center(clampi(sim.car.lane_of(sim.car.x), 0, sim.car.lanes - 1))
 			sim.step(input)
 			for event: Dictionary in sim.drain_events():
 				Events.emit_event(GameData.as_string(event.get("type")), event)

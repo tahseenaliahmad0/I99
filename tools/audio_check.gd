@@ -13,7 +13,10 @@ extends SceneTree
 ##     off at its end);
 ##   - an event of GDD 16.5's table has no sound, or its entry does not hold
 ##     the numbers the table gives;
-##   - a functional cue would not be heard over everything else at once;
+##   - a functional cue would not be heard over everything else at once, or
+##     the cues at once would go over full scale;
+##   - a sound that is not of the table (the engine's added harmonic, the
+##     horn behind him) could be lost in another or taken for it;
 ##   - a sound the simulation asks for, or a state of the drive, is not heard.
 
 ## "Longer than a few seconds": no placeholder is.
@@ -25,6 +28,8 @@ const SILENT_DB: float = -30.0
 const LOUD_WINDOW: float = 0.05
 ## How far a functional cue must stand above everything else at once, dB.
 const CLEAR_DB: float = 6.0
+## The share of full scale above which the mix is clipped.
+const CLIPPED: float = 1.0
 ## A loop's jump from its last sample to its first, against the largest step
 ## inside it: above this it is a seam.
 const SEAM_RATIO: float = 1.5
@@ -36,11 +41,15 @@ const WAV_OPTION: String = "--wav="
 const DRIVE_CHECK: String = "res://tools/audio_drive_check.gd"
 ## squeal_1, squeal_2 ...
 const SQUEAL: String = "squeal_%d"
-## The horn of another (the Audio autoload's name for it: this half of the
-## check is compiled before the autoloads are there).
+## The horn of another and the engine's two loops (the Audio autoload's names
+## for them: this half of the check is compiled before the autoloads are
+## there).
 const HORN_BEHIND: String = "horn_behind"
-## Sounds of which only one is heard at a time: the radio's loops, the squeals.
-const FAMILIES: PackedStringArray = ["radio_", "squeal_"]
+const ENGINE: String = "engine"
+const ENGINE_HARMONIC: String = "engine_harmonic"
+## Sounds of which only one is heard at a time: the radio's loops, the
+## squeals, the two yawns (GDD 5.8: he blinks or he nods).
+const FAMILIES: PackedStringArray = ["radio_", "squeal_", "yawn"]
 ## The events of GDD 16.5's table.
 const TABLE_IDS: PackedStringArray = [
 	"engine", "rumble_strip", "indicator_tick", "lighter_click", "bead_click", "horn", "wiper",
@@ -68,7 +77,8 @@ const TABLE_NUMBERS: Array = [
 var _data: GameData
 var _failures: PackedStringArray = []
 var _checks: int = 0
-## id -> {"loud": dB, "gain": dB, "functional": bool, "duck": dB}.
+## id -> {"loud": dB, "gain": dB, "functional": bool, "duck": dB, "peak": share
+## of full scale}.
 var _levels: Dictionary = {}
 
 
@@ -142,6 +152,7 @@ func _check_buffers(wav_dir: String) -> void:
 		_levels[id] = {
 			"loud": _db(loud), "gain": GameData.as_float(spec.get("gain_db")),
 			"functional": functional, "duck": GameData.as_float(spec.get("duck_db")),
+			"peak": peak,
 		}
 		_expect(count > 0, "%s: the buffer is empty" % id)
 		_expect(_db(peak) >= SILENT_DB, "%s: the buffer is silent (its peak is %.1f dB)" % [id, _db(peak)])
@@ -309,6 +320,49 @@ func _check_table() -> void:
 	_expect(not behind.is_empty(), "%s: a horn has its notes in \"freqs\"" % HORN_BEHIND)
 	for note: Variant in behind:
 		_expect(GameData.as_float(note) < own_lowest, "%s: its note of %s Hz is not lower than his own horn's %s" % [HORN_BEHIND, str(note), str(own_lowest)])
+	_check_added_harmonic()
+
+
+## "A different added harmonic per gear." The engine's loop and the
+## harmonic's run each at its own phase, so what is added may as well be taken
+## from the harmonic that the engine's wave has there itself. In every gear
+## the added one must be strong enough to leave that harmonic CLEAR_DB over
+## the engine's own even then: it is heard as added, never as taken away.
+func _check_added_harmonic() -> void:
+	var per_gear: Array = GameData.as_array(_synth(ENGINE_HARMONIC).get("per_gear"))
+	var added: float = _partial(ENGINE_HARMONIC, 1.0) * db_to_linear(GameData.as_float(_synth(ENGINE_HARMONIC).get("gain_db")))
+	if not _expect(added > 0.0 and not per_gear.is_empty(), "%s: there is no harmonic to add" % ENGINE_HARMONIC):
+		return
+	var gain: float = db_to_linear(GameData.as_float(_synth(ENGINE).get("gain_db")))
+	var need: float = 1.0 + db_to_linear(CLEAR_DB)
+	for gear: int in per_gear.size():
+		var multiple: float = GameData.as_float(per_gear[gear])
+		if multiple <= 0.0:
+			continue
+		var own: float = _partial(ENGINE, multiple) * gain
+		print("engine: gear %d adds harmonic %s at %.1f dB, %.1f dB over the engine's own" % [gear, str(multiple).trim_suffix(".0"), _db(added), _db(added) - _db(own)])
+		_expect(added >= own * need, "%s: in gear %d harmonic %s is added %.1f dB over the engine's own; %.1f dB is asked, so that it stands %.1f dB clear whatever the phase of the two loops" % [
+			ENGINE_HARMONIC, gear, str(multiple).trim_suffix(".0"), _db(added) - _db(own), _db(need), CLEAR_DB])
+
+
+## How strong the `multiple`-th harmonic of a loop's "freq" is in its buffer,
+## as a share of full scale (a loop holds a whole number of its periods).
+func _partial(id: String, multiple: float) -> float:
+	var spec: Dictionary = _synth(id)
+	var problems: PackedStringArray = []
+	var stream: AudioStreamWAV = SfxSynth.build(spec, problems)
+	if stream == null or stream.loop_mode == AudioStreamWAV.LOOP_DISABLED or stream.loop_end <= 0:
+		return 0.0
+	var bytes: PackedByteArray = stream.data
+	var count: int = stream.loop_end
+	var turn: float = TAU * multiple * GameData.as_float(spec.get("freq")) / float(stream.mix_rate)
+	var along: float = 0.0
+	var across: float = 0.0
+	for index: int in count:
+		var value: float = float(bytes.decode_s16(index * 2)) / SfxSynth.FULL_SCALE
+		along += value * cos(turn * float(index))
+		across += value * sin(turn * float(index))
+	return 2.0 * sqrt(along * along + across * across) / float(count)
 
 
 ## The rhythm of a row of notes: sounding or resting, and for what share.
@@ -343,7 +397,8 @@ func _same(a: Variant, b: Variant) -> bool:
 ## "The functional cues must be audible over everything else": each of them,
 ## at its loudest, against every other sound at once at its loudest, turned
 ## down as that cue turns it down. Of the radio's loops and of the squeals
-## only one sounds at a time: the loudest counts.
+## only one sounds at a time: the loudest counts. And the cues themselves,
+## each at its peak and all at once, must fit under full scale.
 func _check_mix() -> void:
 	var families: Dictionary = {}
 	for key: Variant in _levels:
@@ -351,10 +406,7 @@ func _check_mix() -> void:
 		var level: Dictionary = _levels[key]
 		if GameData.as_bool(level.get("functional")):
 			continue
-		var family: String = id
-		for prefix: String in FAMILIES:
-			if id.begins_with(prefix):
-				family = prefix
+		var family: String = _family(id)
 		var heard: float = GameData.as_float(level.get("loud")) + GameData.as_float(level.get("gain"))
 		families[family] = maxf(GameData.as_float(families.get(family), -INF), heard)
 	var power: float = 0.0
@@ -373,6 +425,31 @@ func _check_mix() -> void:
 			str(key), heard, -duck, clear])
 		_expect(clear >= CLEAR_DB, "%s: it stands %.1f dB clear of everything else at once; %.1f dB is asked" % [
 			str(key), clear, CLEAR_DB])
+	# Nothing turns the cues down. Where they meet (he yawns and drifts onto
+	# the strip with the indicator on) their peaks add up as they are, and what
+	# goes over full scale is clipped: the cues would distort each other.
+	var peaks: Dictionary = {}
+	for key: Variant in _levels:
+		var level: Dictionary = _levels[key]
+		if not GameData.as_bool(level.get("functional")):
+			continue
+		var family: String = _family(str(key))
+		var peak: float = GameData.as_float(level.get("peak")) * db_to_linear(GameData.as_float(level.get("gain")))
+		peaks[family] = maxf(GameData.as_float(peaks.get(family)), peak)
+	var together: float = 0.0
+	for family: Variant in peaks:
+		together += GameData.as_float(peaks[family])
+	print("mix: the functional cues at their peaks, all at once, come to %.2f of full scale" % together)
+	_expect(together <= CLIPPED, "the functional cues at once come to %.2f of full scale: where they meet they are clipped" % together)
+
+
+## The family of a sound: of a family only one member is heard at a time. A
+## sound of no family is a family by itself.
+func _family(id: String) -> String:
+	for prefix: String in FAMILIES:
+		if id.begins_with(prefix):
+			return prefix
+	return id
 
 
 # --- Helpers -----------------------------------------------------------------

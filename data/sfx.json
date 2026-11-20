@@ -3,7 +3,7 @@
     "synth": {
       "wave": "saw", "freq": 60, "harmonics": 24,
       "rate": 22050, "duration": 0.1, "peak": 0.9, "loop": true,
-      "gain_db": -18, "fade_in": 0.3, "fade_out": 0.6,
+      "gain_db": -23, "fade_in": 0.3, "fade_out": 0.6,
       "speed_kmh": [40, 160], "speed_hz": [60, 180], "idle_hz": 30,
       "note": "Saw wave loop, 60 Hz at 40 km/h to 180 Hz at 160. The buffer is at freq and its player turns it to the speed; under 40 km/h the pitch falls on the same line, no lower than idle_hz."
     },
@@ -13,9 +13,9 @@
     "synth": {
       "wave": "sine", "freq": 240,
       "rate": 22050, "duration": 0.1, "peak": 0.9, "loop": true,
-      "gain_db": -26, "fade_in": 0.3, "fade_out": 0.6,
-      "per_gear": [0, 6, 5, 4, 3, 2],
-      "note": "A different added harmonic per gear: the harmonic of the engine's pitch heard in neutral and in gears 1 to 5 (0 is none). The buffer is at freq and its player turns it to that harmonic."
+      "gain_db": -31, "fade_in": 0.3, "fade_out": 0.6,
+      "per_gear": [0, 12, 11, 10, 9, 8],
+      "note": "A different added harmonic per gear: the harmonic of the engine's pitch heard in neutral and in gears 1 to 5 (0 is none). The buffer is at freq and its player turns it to that harmonic. They are harmonics the saw itself has only faintly: the two loops run each at its own phase, and a low one could cancel the saw's own instead of adding to it."
     },
     "stream": null
   },
@@ -25,7 +25,7 @@
       "filter": "bandpass", "cutoff": 250, "q": 0.6,
       "burst_hz": 30, "burst_decay": 0.02,
       "rate": 22050, "duration": 0.5, "peak": 0.9, "loop": true,
-      "gain_db": -3, "fade_in": 0.01, "fade_out": 0.05,
+      "gain_db": -8, "fade_in": 0.01, "fade_out": 0.05,
       "functional": true, "duck_db": -15, "duck_attack": 0.02, "duck_release": 0.25,
       "note": "30 Hz noise bursts, while the car is on the strip"
     },
@@ -35,7 +35,7 @@
     "synth": {
       "wave": "sine", "freq": 1200, "decay": 0.02,
       "rate": 22050, "duration": 0.08, "peak": 0.9,
-      "gain_db": -2, "every": 0.4,
+      "gain_db": -7, "every": 0.4,
       "functional": true, "duck_db": -13.5, "duck_attack": 0, "duck_release": 1.2,
       "note": "A short click, again every `every` seconds while the indicator signals. duck_release is longer than that, so the rest stays down between the ticks instead of pumping"
     },
@@ -45,7 +45,7 @@
     "synth": {
       "wave": "sine", "freq": 2400, "decay": 0.005,
       "rate": 22050, "duration": 0.03, "peak": 0.9,
-      "gain_db": -10,
+      "gain_db": -15,
       "note": "A short click, higher than the indicator's"
     },
     "stream": null
@@ -54,7 +54,7 @@
     "synth": {
       "wave": "sine", "freq": 1800, "decay": 0.004,
       "rate": 22050, "duration": 0.02, "peak": 0.9,
-      "gain_db": -12,
+      "gain_db": -17,
       "note": "A short click, between the other two"
     },
     "stream": null
@@ -63,7 +63,7 @@
     "synth": {
       "wave": "square", "freqs": [400, 500], "harmonics": 9,
       "rate": 22050, "duration": 0.1, "peak": 0.9, "loop": true,
-      "gain_db": -9, "fade_in": 0.01, "fade_out": 0.05, "hold": 0.4,
+      "gain_db": -14, "fade_in": 0.01, "fade_out": 0.05, "hold": 0.4,
       "note": "Two square waves, 400 and 500 Hz. A honk lasts `hold`; a Snap holds it down"
     },
     "stream": null
@@ -72,7 +72,7 @@
     "synth": {
       "wave": "square", "freqs": [310, 370], "harmonics": 9,
       "rate": 22050, "duration": 0.1, "peak": 0.9, "loop": true,
-      "gain_db": -10, "fade_in": 0.01, "fade_out": 0.05, "hold": 1.0,
+      "gain_db": -15, "fade_in": 0.01, "fade_out": 0.05, "hold": 1.0,
       "note": "The horn of what comes up behind his standing car in the Storm (a `horn` asked for with `behind`): two square waves lower than his own, so that he knows it is not his. It sounds for as long as the snapshot says something is coming, or for `hold` if it is only asked for"
     },
     "stream": null
@@ -83,7 +83,7 @@
       "filter": "bandpass", "cutoff": 300, "cutoff_to": 900, "q": 4,
       "attack": 0.1, "release": 0.15,
       "rate": 22050, "duration": 0.5, "peak": 0.9,
-      "gain_db": -14,
+      "gain_db": -19,
       "note": "Filtered noise sweep"
     },
     "stream": null
@@ -94,7 +94,7 @@
       "filter": "bandpass", "cutoff": 1600, "q": 1,
       "burst_hz": 90, "burst_decay": 0.004, "release": 0.04,
       "rate": 22050, "duration": 0.25, "peak": 0.9,
-      "gain_db": -5,
+      "gain_db": -10,
       "note": "Ratchet noise: 90 teeth a second"
     },
     "stream": null
@@ -105,7 +105,7 @@
       "filter": "highpass", "cutoff": 1200, "q": 0.7,
       "attack": 0.005, "decay": 0.11, "release": 0.03,
       "rate": 22050, "duration": 0.3, "peak": 0.9,
-      "gain_db": -8,
+      "gain_db": -13,
       "note": "Noise burst, 0.3 s"
     },
     "stream": null
@@ -116,7 +116,7 @@
       "filter": "lowpass", "cutoff": 5000, "cutoff_to": 500, "q": 0.7,
       "decay": 0.2, "release": 0.05,
       "rate": 22050, "duration": 0.8, "peak": 0.9,
-      "gain_db": -4,
+      "gain_db": -9,
       "note": "Noise burst, 0.8 s"
     },
     "stream": null
@@ -126,7 +126,7 @@
       "wave": "sine", "partials": [1, 0.35], "freq": 810, "freq_to": 870,
       "attack": 0.012, "release": 0.05,
       "rate": 22050, "duration": 0.18, "peak": 0.9,
-      "gain_db": -12,
+      "gain_db": -17,
       "note": "Rising tone per chain step: the first close call"
     },
     "stream": null
@@ -136,7 +136,7 @@
       "wave": "sine", "partials": [1, 0.35], "freq": 920, "freq_to": 985,
       "attack": 0.012, "release": 0.05,
       "rate": 22050, "duration": 0.18, "peak": 0.9,
-      "gain_db": -12
+      "gain_db": -17
     },
     "stream": null
   },
@@ -145,7 +145,7 @@
       "wave": "sine", "partials": [1, 0.35], "freq": 1030, "freq_to": 1100,
       "attack": 0.012, "release": 0.05,
       "rate": 22050, "duration": 0.18, "peak": 0.9,
-      "gain_db": -12
+      "gain_db": -17
     },
     "stream": null
   },
@@ -154,7 +154,7 @@
       "wave": "sine", "partials": [1, 0.35], "freq": 1140, "freq_to": 1220,
       "attack": 0.012, "release": 0.05,
       "rate": 22050, "duration": 0.18, "peak": 0.9,
-      "gain_db": -12
+      "gain_db": -17
     },
     "stream": null
   },
@@ -163,7 +163,7 @@
       "wave": "sine", "partials": [1, 0.35], "freq": 1250, "freq_to": 1340,
       "attack": 0.012, "release": 0.05,
       "rate": 22050, "duration": 0.18, "peak": 0.9,
-      "gain_db": -12
+      "gain_db": -17
     },
     "stream": null
   },
@@ -172,7 +172,7 @@
       "wave": "sine", "partials": [1, 0.35], "freq": 1360, "freq_to": 1455,
       "attack": 0.012, "release": 0.05,
       "rate": 22050, "duration": 0.18, "peak": 0.9,
-      "gain_db": -12
+      "gain_db": -17
     },
     "stream": null
   },
@@ -181,7 +181,7 @@
       "wave": "sine", "partials": [1, 0.35], "freq": 1470, "freq_to": 1575,
       "attack": 0.012, "release": 0.05,
       "rate": 22050, "duration": 0.18, "peak": 0.9,
-      "gain_db": -12
+      "gain_db": -17
     },
     "stream": null
   },
@@ -190,7 +190,7 @@
       "wave": "sine", "partials": [1, 0.35], "freq": 1580, "freq_to": 1690,
       "attack": 0.012, "release": 0.05,
       "rate": 22050, "duration": 0.18, "peak": 0.9,
-      "gain_db": -12,
+      "gain_db": -17,
       "note": "The last step: every later close call of the chain sounds like this one"
     },
     "stream": null
@@ -200,7 +200,7 @@
       "wave": "sine", "partials": [1, 0.5, 0.25], "freq": 120, "freq_to": 50,
       "attack": 0.003, "decay": 0.05, "release": 0.02,
       "rate": 22050, "duration": 0.16, "peak": 0.9,
-      "gain_db": -8, "per_minute": [60, 120],
+      "gain_db": -13, "per_minute": [60, 120],
       "note": "A thump, per_minute times a minute: the first where Pound begins, the second at the edge of a Snap"
     },
     "stream": null
@@ -210,7 +210,7 @@
       "wave": "sine", "freq": 400, "freq_to": 200,
       "attack": 0.12, "release": 0.3,
       "rate": 11025, "duration": 0.8, "peak": 0.9,
-      "gain_db": -8,
+      "gain_db": -13,
       "functional": true, "duck_db": -13, "duck_attack": 0.03, "duck_release": 0.3,
       "note": "A sine falling from 400 to 200 Hz, 0.8 s"
     },
@@ -221,7 +221,7 @@
       "wave": "sine", "freq": 400, "freq_to": 200,
       "attack": 0.2, "release": 0.5,
       "rate": 11025, "duration": 1.3, "peak": 0.9,
-      "gain_db": -8,
+      "gain_db": -13,
       "functional": true, "duck_db": -13, "duck_attack": 0.03, "duck_release": 0.3,
       "note": "A sine falling from 400 to 200 Hz, 1.3 s"
     },
@@ -231,7 +231,7 @@
     "synth": {
       "wave": "sine", "partials": [1, 0.5, 0.25], "freq": 55,
       "rate": 11025, "duration": 0.2, "peak": 0.9, "loop": true,
-      "gain_db": -11, "fade_in": 0.25, "fade_out": 0.15, "hold": 1.5,
+      "gain_db": -16, "fade_in": 0.25, "fade_out": 0.15, "hold": 1.5,
       "note": "55 Hz sine, with two faint harmonics so that small speakers carry it; it sounds for as long as the hum lasts"
     },
     "stream": null
@@ -241,7 +241,7 @@
       "wave": "square", "harmonics": 5, "notes": [[880, 1], [660, 1]],
       "note_attack": 0.005, "note_release": 0.02,
       "rate": 22050, "duration": 0.3, "peak": 0.9,
-      "gain_db": -14, "every": [3.0, 0.8],
+      "gain_db": -19, "every": [3.0, 0.8],
       "note": "Two-note pattern; `every` is the seconds between chirps with no Suspicion and with all of it"
     },
     "stream": null
@@ -251,7 +251,7 @@
       "wave": "square", "harmonics": 3, "notes": [[1320, 1], [1100, 1]], "repeat": 4,
       "note_attack": 0.003, "note_release": 0.006,
       "rate": 22050, "duration": 0.5, "peak": 0.9,
-      "gain_db": -14, "every": 1.4,
+      "gain_db": -19, "every": 1.4,
       "note": "Two-note pattern, again every `every` seconds while the call rings"
     },
     "stream": null
@@ -262,7 +262,7 @@
       "notes": [[330, 1], [392, 1], [440, 1], [392, 1]],
       "note_attack": 0.01, "note_decay": 0.2, "note_release": 0.04,
       "rate": 11025, "duration": 1.6, "peak": 0.9, "loop": true,
-      "gain_db": -20, "fade_in": 0.15, "fade_out": 0.15,
+      "gain_db": -25, "fade_in": 0.15, "fade_out": 0.15,
       "warble": {"hz": 3, "depth": 0.05},
       "note": "A four-note loop. A tape plays it too; past the end of its side the pitch wavers by `warble`"
     },
@@ -275,7 +275,7 @@
       "note_attack": 0.012, "note_release": 0.02,
       "filter": "bandpass", "cutoff": 1000, "q": 1.5,
       "rate": 11025, "duration": 1.2, "peak": 0.9, "loop": true,
-      "gain_db": -20, "fade_in": 0.15, "fade_out": 0.15,
+      "gain_db": -25, "fade_in": 0.15, "fade_out": 0.15,
       "note": "Speech-like blips"
     },
     "stream": null
@@ -287,7 +287,7 @@
       "note_attack": 0.012, "note_release": 0.02,
       "filter": "bandpass", "cutoff": 1300, "q": 1.5,
       "rate": 11025, "duration": 0.9, "peak": 0.9, "loop": true,
-      "gain_db": -20, "fade_in": 0.15, "fade_out": 0.15,
+      "gain_db": -25, "fade_in": 0.15, "fade_out": 0.15,
       "note": "A different blip rhythm"
     },
     "stream": null
@@ -297,7 +297,7 @@
       "wave": "noise", "seed": 60,
       "filter": "bandpass", "cutoff": 2500, "q": 0.6,
       "rate": 11025, "duration": 1.0, "peak": 0.9, "loop": true,
-      "gain_db": -28, "fade_in": 0.15, "fade_out": 0.15,
+      "gain_db": -33, "fade_in": 0.15, "fade_out": 0.15,
       "note": "Noise"
     },
     "stream": null
@@ -308,7 +308,7 @@
       "filter": "bandpass", "cutoff": 1500, "q": 0.8,
       "decay": 0.012,
       "rate": 22050, "duration": 0.05, "peak": 0.9,
-      "gain_db": -6,
+      "gain_db": -11,
       "note": "A noise click"
     },
     "stream": null
@@ -319,7 +319,7 @@
       "trill": {"hz": 13, "ratio": 1.22},
       "attack": 0.04, "release": 0.15,
       "rate": 22050, "duration": 0.9, "peak": 0.9,
-      "gain_db": -12,
+      "gain_db": -17,
       "note": "A fast trill"
     },
     "stream": null
@@ -329,7 +329,7 @@
       "wave": "sine", "partials": [1, 0, 0.2], "freq": 880,
       "attack": 0.004, "decay": 0.07, "release": 0.03,
       "rate": 22050, "duration": 0.25, "peak": 0.9,
-      "gain_db": -14,
+      "gain_db": -19,
       "note": "A soft ding before each heckle subtitle"
     },
     "stream": null
