@@ -755,6 +755,43 @@ func test_pass_drummer() -> void:
 
 	# What the review of M8 found (RULES-05, -10, -11).
 	_check_one_music()
+	_check_tea_only_where_there_is_tea()
+
+
+## He passes the tea, and says so, only when a tea glass stands in a cup
+## holder; with none the tap stops and starts the drum and nothing else.
+func _check_tea_only_where_there_is_tea() -> void:
+	var tea_line: String = "passenger.drummer.hand"
+	var drum_line: String = "passenger.drummer.drum"
+	# Another drink has taken the tea's place: there is no tea in the car.
+	_on_the_road("drummer")
+	_give("energy_drink", "cup_a")
+	check(_item("tea_glass") == null, "(an energy drink stands where the tea stood: no tea in the car)")
+	_events = []
+	_ask()
+	check(not GameData.as_bool(_shot("passenger_drumming")), "with no tea in the car a tap still stops the drum")
+	check_eq(_count_events("line_requested", "id", tea_line), 0, "but he does not say \"your tea\" over a tea that is not there")
+	check(not GameData.as_bool(_shot("tea_passed")), "and nothing is said to be held out")
+	check(GameData.as_dict(_shot("anchor_moves")).is_empty(), "(no drink is moved: the can stays in its holder)")
+	_events = []
+	_ask()
+	check(GameData.as_bool(_shot("passenger_drumming")), "the next tap starts the drum again")
+	check_eq(_count_events("line_requested", "id", drum_line), 1, "(and that is said)")
+	check_eq(_count_events("line_requested", "id", tea_line), 0, "(still no word of tea)")
+	# A tea in the other cup holder is a tea to pass.
+	_on_the_road("drummer")
+	_give("tea_glass", "cup_b")
+	check_eq(_anchor_of("tea_glass"), "cup_b", "(the tea stands in the far cup holder)")
+	_events = []
+	_ask()
+	check_eq(_count_events("line_requested", "id", tea_line), 1, "a tea in either cup holder he passes, with his word")
+	check(GameData.as_bool(_shot("tea_passed")), "(it is held out)")
+	check_eq(GameData.as_vec3(GameData.as_dict(_shot("anchor_moves")).get("cup_b")), GameData.as_vec3(GameData.as_dict(_passenger("drummer").get("hand")).get("at")), "(beside the wheel)")
+	# The tea is taken away while he holds it out (the can put in its place): he holds out nothing.
+	_give("energy_drink", "cup_b")
+	_tick()
+	check(not GameData.as_bool(_shot("tea_passed")), "when the tea is gone from the car he holds out nothing")
+	check(GameData.as_dict(_shot("anchor_moves")).is_empty(), "(and the can that took its place stays in the holder)")
 
 
 ## Nerves by the second on the empty road with what plays: his drum, the
@@ -963,6 +1000,43 @@ func test_pass_student() -> void:
 	check(not _sim.effects.has(DriveSim.AWAKE) or _sim.run.stop == "tea_stall", "(and nobody talks him awake any more)")
 	check(not _sim.items.answered_for_him, "(nor answers his phone)")
 
+	# What the review of M8 found (RULES-05, -06, -10).
+	_check_her_word_for_the_call()
+
+
+## She is the only one who tells him what the call was (GDD 8): the line of
+## her Hand is the dispatcher's fare, so it is said for his calls and for no
+## other; the call of his family has a word of its own.
+func _check_her_word_for_the_call() -> void:
+	var every: int = GameData.as_int(_params("phone").get("family_every"))
+	var fare_line: String = "passenger.student.hand"
+	var family_line: String = "passenger.student.family"
+	check(data.has_line(fare_line, "en") and data.has_line(fare_line, "ar"), "(the line of her Hand is in both line files)")
+	check(data.has_line(family_line, "en") and data.has_line(family_line, "ar"), "(and so is her word for a call from his family)")
+	_on_the_road("student")
+	_give("phone")
+	var fares: int = 0
+	var family: int = 0
+	var unasked: int = 0
+	var guard: int = _ticks_in(400.0)
+	while fares + family < every and guard > 0:
+		guard -= 1
+		_events = []
+		_tick()
+		if _count_events("call_started") == 0:
+			unasked += _count_events("line_requested", "id", fare_line) + _count_events("line_requested", "id", family_line)
+			continue
+		if GameData.as_string(_event("call_resolved").get("caller")) == String(ItemSim.CALLER_DISPATCHER):
+			fares += 1
+			check_eq(_count_events("line_requested", "id", fare_line), 1, "the dispatcher's call: she tells him the fare in the tick she takes it")
+			check_eq(_count_events("line_requested", "id", family_line), 0, "(and nothing else)")
+		else:
+			family += 1
+			check_eq(_count_events("line_requested", "id", fare_line), 0, "Um Noor's call is no fare: she does not say what the dispatcher offers")
+			check_eq(_count_events("line_requested", "id", family_line), 1, "it has her word of its own")
+	check(fares == every - 1 and family == 1, "(of %d calls one was his family's)" % every)
+	check_eq(unasked, 0, "between the calls she has nothing to pass on")
+
 
 # --- T-PASS-APPRENTICE -------------------------------------------------------
 
@@ -1168,6 +1242,7 @@ func test_pass_apprentice() -> void:
 
 	# What the review of M8 found (RULES-01, -02, -03, -05, -07, -10).
 	_check_retune_ends_the_station()
+	_check_radio_line_only_when_playing()
 
 
 ## The dial dragged `steps` stations to the right, through the hand.
@@ -1181,6 +1256,36 @@ func _tune(steps: int) -> void:
 	_input.lmb = false
 	_ticks(SETTLE)
 	_input.clear()
+
+
+## "(he turns the dial)" is said when he turns a station off, not every 30 s
+## over a radio that is silent anyway or a deck that plays a tape.
+func _check_radio_line_only_when_playing() -> void:
+	var every: float = GameData.as_float(GameData.as_dict(_passenger("apprentice").get("retunes")).get("every_s"))
+	var line: String = "passenger.apprentice.radio"
+	_on_the_road("apprentice")
+	_events = []
+	_ticks(_ticks_in(every * 2.0 + 1.0))
+	check_eq(_sim.items.radio, ItemSim.STATIC, "(the radio is silent all along)")
+	check_eq(_count_events("line_requested", "id", line), 0, "over a silent radio he has no dial to turn: nothing is said")
+	# A station that plays is turned off, and that is said, each time.
+	var stations: Array = tuning.a("radio_stations")
+	for round: int in 2:
+		_tune(stations.find("music") + 1)
+		check_eq(_sim.items.radio, ItemSim.MUSIC, "(the driver tunes to music)")
+		_events = []
+		var guard: int = _ticks_in(every + 1.0)
+		while _sim.items.radio != ItemSim.STATIC and guard > 0:
+			guard -= 1
+			_tick()
+		check_eq(_count_events("line_requested", "id", line), 1, "a station that plays he turns off, and that is said (%d)" % (round + 1))
+	# A tape in the deck plays on: the dial behind it is not his to turn.
+	_on_the_road("apprentice")
+	_give("mixtape")
+	_events = []
+	_ticks(_ticks_in(every * 1.5))
+	check(_sim.effects.has(ItemSim.MUSIC), "a tape in the deck plays on past his 30 s")
+	check_eq(_count_events("line_requested", "id", line), 0, "and he says nothing of a dial")
 
 
 ## When the boy turns the dial to static, what the station held on ends as it

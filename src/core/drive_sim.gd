@@ -59,7 +59,7 @@ const HIDES_COURAGE: String = "hides_courage"
 const COURAGE: StringName = &"courage"
 const PAINKILLERS: StringName = &"painkillers"
 ## What the tea is tagged (the Drummer passes it, GDD 8.2).
-const TEA: String = "tea"
+const TEA: String = ItemSim.TAG_TEA
 ## The two parts of the weather cramp (GDD 7.9).
 const HUM: String = "hum"
 const CRAMPED: String = "cramp"
@@ -2013,11 +2013,7 @@ func _fit_cabin() -> void:
 func _anchor_moves() -> Dictionary:
 	var moves: Dictionary = items.anchor_moves()
 	if passengers.passes_tea():
-		for tea: ItemSim.Item in items.tagged(TEA):
-			var anchor: String = items.anchor_of(tea)
-			if not anchor.is_empty() and not items.is_stowed(tea):
-				moves[anchor] = passengers.tea_at()
-				break
+		moves[items.anchor_of(items.in_reach(TEA))] = passengers.tea_at()
 	return moves
 
 
@@ -2028,6 +2024,8 @@ func _step_passenger() -> void:
 		passengers.ask()
 	if items.horn_blown:
 		passengers.on_horn()
+	if items.taken_for_him != &"":
+		passengers.on_call_taken(items.taken_for_him)
 	if not items.used_tags.is_empty():
 		passengers.on_used(items.used_tags)
 	passengers.step(DT, gate.gear, leg.active and leg.raining)

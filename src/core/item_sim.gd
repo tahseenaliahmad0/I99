@@ -37,6 +37,8 @@ const SEAT: StringName = &"seat"
 const BACK_SEAT: StringName = &"back_seat"
 ## What a smoke is tagged, and where one handed to him burns (GDD 8.2).
 const TAG_SMOKE: String = "smoke"
+## What the tea is tagged (a tea stall fills it; the Drummer passes it, GDD 8.2).
+const TAG_TEA: String = "tea"
 const STATIC: StringName = &"static"
 const AWAKE: StringName = &"awake"
 const VISOR_DOWN: StringName = &"visor_down"
@@ -219,6 +221,8 @@ var used_tags: PackedStringArray = PackedStringArray()
 var seat_occupied: bool = false
 ## His passenger answers every call for him (GDD 8.2, the Student).
 var answered_for_him: bool = false
+## Who called, in the tick his passenger took the call for him; else empty.
+var taken_for_him: StringName = &""
 ## What the music out of the dash does to his Nerves this tick, by the second
 ## (GDD 6.1): the radio's or a tape's, after an open window; 0 when neither
 ## plays. Music is music once: whoever else makes music (a drum, GDD 8.2)
@@ -486,6 +490,7 @@ func begin_tick() -> void:
 	contraband_used = false
 	phone_used = false
 	asked = false
+	taken_for_him = &""
 	used_tags.clear()
 
 
@@ -578,6 +583,15 @@ func tagged(tag: String) -> Array[Item]:
 		if GameData.as_array(candidate.record.get("tags")).has(tag):
 			out.append(candidate)
 	return out
+
+
+## The first thing so tagged that stands where the hand can use it: in a
+## slot that has an anchor, and not stowed in the glovebox. Null for none.
+func in_reach(tag: String) -> Item:
+	for candidate: Item in tagged(tag):
+		if not is_stowed(candidate) and not anchor_of(candidate).is_empty():
+			return candidate
+	return null
 
 
 func item_in_slot(slot: StringName) -> Item:
@@ -1259,6 +1273,8 @@ func _answer(handset: Item, for_him: bool) -> void:
 		paid += GameData.as_float(in_a_row.get("amount"))
 	cash_delta += paid
 	events.append({"type": "call_resolved", "caller": String(caller), "answered": true, "cash": paid, "nerves": calmed, "in_a_row": answered_run, "for_him": for_him})
+	if for_him:
+		taken_for_him = caller
 	_hang_up()
 
 

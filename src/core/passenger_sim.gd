@@ -285,11 +285,15 @@ func ask() -> void:
 				return
 		HAND_TEA:
 			# A tap stops the drum, and his hands are free for the tea; the
-			# next starts it again.
+			# next starts it again. With no tea to pass, the tap stops and
+			# starts the drum and he says nothing of tea.
 			drumming = not drumming
 			_hold_statuses()
 			changed = true
-			events.append({"type": "line_requested", "id": _line("hand" if not drumming else "drum")})
+			if drumming:
+				_say("drum")
+			elif passes_tea():
+				_say("hand")
 			return
 		_:
 			return
@@ -305,6 +309,13 @@ func _wake() -> void:
 func on_horn() -> void:
 	if aboard() and awake_left <= 0.0 and GameData.as_bool(GameData.as_dict(record.get("sleeps")).get("horn_wakes")):
 		_wake()
+
+
+## One who answers his calls took one (GDD 8.2): what they tell him of it.
+## The line of that Hand is the dispatcher's fare; a call from his family has
+## a word of its own.
+func on_call_taken(caller: StringName) -> void:
+	_say("hand" if caller == ItemSim.CALLER_DISPATCHER else "family")
 
 
 ## He took the wheel himself: nobody holds it for him any more.
@@ -326,10 +337,13 @@ func asleep() -> bool:
 	return record.has("sleeps") and awake_left <= 0.0
 
 
-## The tea is held out to him beside the wheel: where, in the cabin frame.
+## The tea is held out to him beside the wheel (tea_at: where, in the cabin
+## frame): by one whose Hand that is, while his own hands are off the drum
+## and a tea stands in the cabin for him to take.
 func passes_tea() -> bool:
 	return aboard() and record.has("drums") and not drumming \
-			and GameData.as_string(GameData.as_dict(record.get("hand")).get("kind")) == HAND_TEA
+			and GameData.as_string(GameData.as_dict(record.get("hand")).get("kind")) == HAND_TEA \
+			and _items.in_reach(ItemSim.TAG_TEA) != null
 
 
 func tea_at() -> Vector3:
@@ -455,7 +469,9 @@ func _step_repair(dt: float) -> void:
 					events.append({"type": "fault_repaired", "fault": String(fault), "lamps": _faults.lamps, "price": 0.0, "by": id})
 
 
-## The radio, turned to static every so often (GDD 8.2).
+## The radio, turned to static every so often (GDD 8.2). Where it is there
+## already (nothing plays, or a tape is in the deck) there is no dial for him
+## to turn and nothing to say.
 func _step_retune(dt: float) -> void:
 	var retunes: Dictionary = GameData.as_dict(record.get("retunes"))
 	if retunes.is_empty():
@@ -463,8 +479,10 @@ func _step_retune(dt: float) -> void:
 	retune_in -= dt
 	if retune_in < dt * 0.5:
 		retune_in = GameData.as_float(retunes.get("every_s"))
-		_items.set_radio(StringName(GameData.as_string(retunes.get("to"))))
-		_say("radio")
+		var to: StringName = StringName(GameData.as_string(retunes.get("to")))
+		if _items.radio != to:
+			_items.set_radio(to)
+			_say("radio")
 
 
 ## He used things with these tags (a cigarette lit, a sip from the flask):

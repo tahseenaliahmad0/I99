@@ -27,6 +27,7 @@ passenger.student.name,,,true
 passenger.student.board,,,true
 passenger.student.leave,,,true
 passenger.student.hand,,,true
+passenger.student.family,,,true
 passenger.student.weight,,,true
 passenger.apprentice.name,,,true
 passenger.apprentice.board,,,true
