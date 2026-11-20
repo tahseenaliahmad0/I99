@@ -16,7 +16,7 @@ extends SceneTree
 ##   - a functional cue would not be heard over everything else at once, or
 ##     the cues at once would go over full scale;
 ##   - a sound that is not of the table (the engine's added harmonic, the
-##     horn behind him) could be lost in another or taken for it;
+##     horn behind him, the Rattle) could be lost in another or taken for it;
 ##   - a sound the simulation asks for, or a state of the drive, is not heard.
 
 ## "Longer than a few seconds": no placeholder is.
@@ -41,12 +41,14 @@ const WAV_OPTION: String = "--wav="
 const DRIVE_CHECK: String = "res://tools/audio_drive_check.gd"
 ## squeal_1, squeal_2 ...
 const SQUEAL: String = "squeal_%d"
-## The horn of another and the engine's two loops (the Audio autoload's names
-## for them: this half of the check is compiled before the autoloads are
-## there).
+## The horn of another, the engine's two loops, the Rattle and the cue it must
+## not be taken for (the Audio autoload's names for them: this half of the
+## check is compiled before the autoloads are there).
 const HORN_BEHIND: String = "horn_behind"
 const ENGINE: String = "engine"
 const ENGINE_HARMONIC: String = "engine_harmonic"
+const RATTLE: String = "rattle"
+const RUMBLE: String = "rumble_strip"
 ## Sounds of which only one is heard at a time: the radio's loops, the
 ## squeals, the two yawns (GDD 5.8: he blinks or he nods).
 const FAMILIES: PackedStringArray = ["radio_", "squeal_", "yawn"]
@@ -321,6 +323,19 @@ func _check_table() -> void:
 	for note: Variant in behind:
 		_expect(GameData.as_float(note) < own_lowest, "%s: its note of %s Hz is not lower than his own horn's %s" % [HORN_BEHIND, str(note), str(own_lowest)])
 	_check_added_harmonic()
+	# Not of the table: the Rattle (GDD 6.3) has nothing to show, so it is
+	# heard (GDD 16.3). It is noise in bursts, as the rumble strip is, and must
+	# not be taken for that cue: its noise lies higher and its bursts come
+	# slower, and it is no cue itself.
+	if _expect(registry.has(RATTLE), "sfx.json has no '%s' for the fault that has nothing to show" % RATTLE):
+		var rattle: Dictionary = _synth(RATTLE)
+		var rumble: Dictionary = _synth(RUMBLE)
+		_expect(GameData.as_bool(rattle.get("loop")), "%s: it must be a loop, heard for as long as the fault is lit" % RATTLE)
+		_expect(_same(rattle.get("wave"), "noise") and GameData.as_float(rattle.get("burst_hz")) > 0.0, "%s: a rattle is noise in bursts" % RATTLE)
+		_expect(GameData.as_float(rattle.get("burst_hz")) < GameData.as_float(rumble.get("burst_hz")),
+				"%s: its %s bursts a second are not slower than the rumble strip's %s" % [RATTLE, str(rattle.get("burst_hz")), str(rumble.get("burst_hz"))])
+		_expect(GameData.as_float(rattle.get("cutoff")) > GameData.as_float(rumble.get("cutoff")),
+				"%s: its noise at %s Hz does not lie higher than the rumble strip's at %s" % [RATTLE, str(rattle.get("cutoff")), str(rumble.get("cutoff"))])
 
 
 ## "A different added harmonic per gear." The engine's loop and the

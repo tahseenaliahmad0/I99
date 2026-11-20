@@ -14,7 +14,7 @@ extends Node
 ##     rumble strip, the heartbeat, the radio, the siren, the ringing phone
 ##     (the one on its mount, and the one in his pocket at Dawn), the
 ##     indicator's tick, the Phantom's hum, the horn of a Snap, the horn of
-##     what comes up behind his standing car.
+##     what comes up behind his standing car, the Rattle.
 ##
 ## What an entry says about how its sound is played, beside how it is made:
 ##
@@ -53,6 +53,8 @@ const BUS_BED: StringName = &"Bed"
 
 const ENGINE: String = "engine"
 const ENGINE_HARMONIC: String = "engine_harmonic"
+## The Rattle fault (GDD 6.3): the one fault with nothing to show for itself.
+const RATTLE: String = "rattle"
 const RUMBLE: String = "rumble_strip"
 const HEARTBEAT: String = "heartbeat"
 const HORN: String = "horn"
@@ -162,6 +164,7 @@ var _clock: float = 0.0
 var _elapsed: float = 0.0
 var _engine: Voice
 var _harmonic: Voice
+var _rattle: Voice
 var _rumble: Voice
 var _horn: Voice
 var _horn_behind: Voice
@@ -300,6 +303,12 @@ func apply(snapshot: Dictionary) -> void:
 		_set_pitch(_engine, hz / _engine_hz)
 		if harmonic > 0.0:
 			_set_pitch(_harmonic, harmonic * hz / _harmonic_hz)
+
+	# The Rattle (GDD 6.3) has nothing to show, so it is heard (GDD 16.3): for
+	# as long as its lamp is lit and the engine runs.
+	if _rattle != null:
+		var faults: Array[StringName] = snapshot["faults"]
+		_rattle.wanted = faults.has(DriveSim.FAULT_RATTLE) and not wrecked
 
 	# The rumble strip is heard while the car runs on it.
 	if _rumble != null:
@@ -468,6 +477,7 @@ func _clear() -> void:
 	_squeals.clear()
 	_engine = null
 	_harmonic = null
+	_rattle = null
 	_rumble = null
 	_horn = null
 	_horn_behind = null
@@ -618,11 +628,12 @@ func _configure(tuning: Tuning) -> void:
 		if _speed_to <= _speed_from:
 			push_error("Audio: sfx '%s': \"speed_kmh\" must rise" % ENGINE)
 
+	_rattle = _voices.get(RATTLE)
 	_rumble = _voices.get(RUMBLE)
 	_horn = _voices.get(HORN)
 	_horn_behind = _voices.get(HORN_BEHIND)
 	_hum = _voices.get(HUM)
-	for id: String in [RUMBLE, HORN, HORN_BEHIND, HUM]:
+	for id: String in [RATTLE, RUMBLE, HORN, HORN_BEHIND, HUM]:
 		var voice: Voice = _voices.get(id)
 		if voice == null or not voice.looped:
 			push_error("Audio: sfx.json needs '%s', as a loop" % id)

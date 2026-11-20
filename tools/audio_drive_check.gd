@@ -2,7 +2,8 @@ extends RefCounted
 ## The second half of the sound check (tools/audio_check.gd): the Audio
 ## autoload, taken through the states of a drive and the events of the bus,
 ## and through what simulations of its own bring: the horn behind a car that
-## stands in the Storm, the Call at Dawn, a Wreck in a Telling.
+## stands in the Storm, the Call at Dawn, a lamp lit and put out again, a
+## Wreck in a Telling.
 ## Loaded by the first half once the autoloads are there.
 ##
 ## Nothing here waits for a sound to play out: frames are stepped by hand
@@ -60,6 +61,7 @@ func run(data: GameData) -> PackedStringArray:
 		_check_requests()
 		_check_engine()
 		_check_rumble()
+		_check_rattle()
 		_check_heartbeat()
 		_check_radio()
 		_check_tape()
@@ -255,6 +257,44 @@ func _check_rumble() -> void:
 	_expect(Audio.duck_db() == 0.0 and AudioServer.get_bus_volume_db(bed) == 0.0, "rumble_strip: everything else did not come back")
 	_run(_snap({"on_rumble": true, "speed": 0.0}), 1.0)
 	_expect(not Audio.is_sounding(Audio.RUMBLE), "rumble_strip: heard under a car that stands")
+
+
+## The Rattle (GDD 6.3) has nothing to show, so it is heard (GDD 16.3): for as
+## long as its lamp is lit and the engine runs, and no longer.
+func _check_rattle() -> void:
+	var out: float = GameData.as_float(_synth(Audio.RATTLE).get("fade_out")) + STEP * 3.0
+	var cruise: float = _tuning.fi("gear_speeds", 2)
+	var rattling: Array[StringName] = [DriveSim.FAULT_RATTLE]
+	var pulling: Array[StringName] = [DriveSim.FAULT_PULL]
+	_rest()
+	_run(_snap({"speed": cruise}), 1.0)
+	_expect(not Audio.is_sounding(Audio.RATTLE), "rattle: heard with no lamp lit")
+	_run(_snap({"speed": cruise, "faults": pulling}), 1.0)
+	_expect(not Audio.is_sounding(Audio.RATTLE), "rattle: heard with the lamp of another fault lit")
+	_run(_snap({"speed": cruise, "faults": rattling}), 1.0)
+	_expect(Audio.is_sounding(Audio.RATTLE), "rattle: not heard with the Rattle's lamp lit")
+	_expect(is_equal_approx(Audio.volume_of(Audio.RATTLE), GameData.as_float(_synth(Audio.RATTLE).get("gain_db"))), "rattle: not all the way in after a second")
+	_expect(Audio.duck_db() == 0.0, "rattle: it turns everything else down; it is no functional cue")
+	# It frays him standing as it does driving (GDD 6.1): the engine runs.
+	_run(_snap({"speed": 0.0, "gear": GearGate.NEUTRAL, "faults": rattling}), 1.0)
+	_expect(Audio.is_sounding(Audio.RATTLE), "rattle: not heard in a car that stands with its engine running")
+	_run(_snap({"speed": cruise, "faults": rattling, "wrecked": true}), out)
+	_expect(not Audio.is_sounding(Audio.RATTLE), "rattle: still heard after a Wreck")
+	# Through a simulation of its own: the lamp that a hit lights, and that a
+	# fitter puts out again.
+	var sim: DriveSim = DriveSim.new(_data)
+	sim.in_encounter = true
+	_rest()
+	_drive(sim, 1.0)
+	_expect(not Audio.is_sounding(Audio.RATTLE), "rattle: heard in a car with no fault")
+	sim.faults.deck.erase(DriveSim.FAULT_RATTLE)
+	sim.faults.deck.push_front(DriveSim.FAULT_RATTLE)
+	sim.faults.light(1)
+	_drive(sim, 1.0)
+	_expect(sim.faults.has(DriveSim.FAULT_RATTLE) and Audio.is_sounding(Audio.RATTLE), "rattle: the fault is lit and not heard")
+	sim.faults.repair(DriveSim.FAULT_RATTLE)
+	_drive(sim, out)
+	_expect(not Audio.is_sounding(Audio.RATTLE), "rattle: still heard when the fault has been repaired")
 
 
 ## The heartbeat is the tell of Pound: from the first of per_minute where
@@ -622,9 +662,10 @@ func _check_events() -> void:
 func _check_wreck() -> void:
 	var cut: float = _tuning.f("wreck_to_wheel")
 	var music: String = Audio.RADIO % String(ItemSim.MUSIC)
+	var rattling: Array[StringName] = [DriveSim.FAULT_RATTLE]
 	var going: Dictionary = {
 		"speed": _tuning.fi("gear_speeds", 2), "gear": PAR_GEAR, "on_rumble": true, "radio": ItemSim.MUSIC,
-		"snap": true, "cramp": DriveSim.HUM, "rear_end_in": cut,
+		"snap": true, "cramp": DriveSim.HUM, "rear_end_in": cut, "faults": rattling,
 		"pound": true, "nerves": _tuning.f("snap_at"), "caller": String(ItemSim.CALLER_DISPATCHER),
 		"suspicion_watching": true, "suspicion": _tuning.f("suspicion_max"), "indicator": 1,
 	}
@@ -634,7 +675,7 @@ func _check_wreck() -> void:
 	for id: String in repeating:
 		starts[id] = Audio.starts_of(id)
 	_run(_snap(going), 1.0)
-	for id: String in [Audio.ENGINE, Audio.RUMBLE, Audio.HORN, Audio.HORN_BEHIND, Audio.HUM, music]:
+	for id: String in [Audio.ENGINE, Audio.RATTLE, Audio.RUMBLE, Audio.HORN, Audio.HORN_BEHIND, Audio.HUM, music]:
 		_expect(Audio.is_sounding(id), "the Wreck: %s is not heard before it" % id)
 	for id: String in repeating:
 		_expect(Audio.starts_of(id) > GameData.as_int(starts[id]), "the Wreck: %s is not heard before it" % id)

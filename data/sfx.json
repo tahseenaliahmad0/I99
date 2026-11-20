@@ -19,6 +19,17 @@
     },
     "stream": null
   },
+  "rattle": {
+    "synth": {
+      "wave": "noise", "seed": 34,
+      "filter": "bandpass", "cutoff": 3200, "q": 3,
+      "burst_hz": 14, "burst_decay": 0.01,
+      "rate": 22050, "duration": 1.0, "peak": 0.9, "loop": true,
+      "gain_db": -18, "fade_in": 0.05, "fade_out": 0.1,
+      "note": "The Rattle fault (GDD 6.3), which has nothing to show: short dry bursts of noise, higher and slower than the rumble strip's and far quieter, for as long as the fault's lamp is lit and the engine runs"
+    },
+    "stream": null
+  },
   "rumble_strip": {
     "synth": {
       "wave": "noise", "seed": 33,
