@@ -13,9 +13,12 @@ extends SceneTree
 ##   - the Subtitles settings of GDD 17.1
 ##   - the tuning constants of the subtitles
 ##   - the view, from a line asked for on the Events bus to what its labels hold
+##   - a line is not said twice over, and only a few wait
+##   - a line table as the writer will leave it: names, right to left, an
+##     exchange, a font
 ##   - the Call of Dawn: the simulation asks for what Noor says, and it is shown
 ##   - the Subtitles layer of scenes/drive.tscn
-##   - the drive scene running: the Call answered, and the night begun again
+##   - the drive scene running: --say, the Call answered, and the night begun again
 ##
 ##   godot --headless --path . --script res://tools/subtitles_check.gd
 ##
@@ -25,7 +28,8 @@ extends SceneTree
 ## driven beside it, and its events go to the Events bus as the drive scene
 ## sends them. The last runs the drive scene itself for a second or two and
 ## plays it through the game's own input. The numbers are those of
-## data/tuning.json, and the lines those of data/lines_en.csv. tools/check.sh
+## data/tuning.json, and the lines those of data/lines_en.csv (a writer's
+## lines, Arabic among them, are a table made in memory). tools/check.sh
 ## runs it (with `--fixed-fps 60`, as it runs the smoke tests).
 ##
 ## With a renderer, and one of these after `--`, it takes a picture of the
@@ -33,6 +37,8 @@ extends SceneTree
 ##
 ##   --rtl-shot=<file.png>   a subtitle in Arabic, to see right-to-left text
 ##                           run the right way before the writer's lines arrive
+##   --rtl-latin-shot=<file.png>  the same, its second line beginning with a
+##                           Latin word, which stands at that line's right end
 ##   --call-shot=<file.png>  Dawn's road, the Call answered with a TAP on his
 ##                           pocket: the line the simulation asks for
 ##   --key-shot=<file.png>   the bay of the Arrival, the pointer on the key,
@@ -46,6 +52,7 @@ const BODY: String = "res://tools/subtitles_check_body.gd"
 ## takes it.
 const SHOTS: Dictionary = {
 	"--rtl-shot=": "rtl_shot",
+	"--rtl-latin-shot=": "rtl_latin_shot",
 	"--call-shot=": "call_shot",
 	"--key-shot=": "key_shot",
 }
