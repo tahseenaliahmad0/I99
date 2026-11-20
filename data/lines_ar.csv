@@ -223,6 +223,10 @@ sign.document.id,,,true
 sign.document.registration,,,true
 soldier.window,,,true
 soldier.wrong,,,true
+soldier.pass,,,true
+soldier.search,,,true
+soldier.turned_back,,,true
+soldier.bribe,,,true
 hud.checkpoint.queue,,,true
 hud.checkpoint.stow,,,true
 hud.checkpoint.papers,,,true

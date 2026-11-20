@@ -1018,6 +1018,7 @@ func _search_at_the_barriers() -> void:
 		taken_ids.append(String(id))
 	_fit_cabin()
 	_emit("pulled_over", {"released": true, "paid": "search", "cost": 0.0, "minutes": minutes, "taken": taken_ids})
+	_emit("line_requested", {"id": "soldier.search"})
 
 
 # --- The Checkpoint (GDD 10.2) -----------------------------------------------
@@ -1116,6 +1117,8 @@ func _let_through(how: String, cost: float, minutes: float, taken: Array[String]
 	suspicion.end_watch()
 	_hold_at_window()
 	_emit("pulled_over", {"released": true, "paid": how, "cost": cost, "minutes": minutes, "taken": taken, "suspicion": level})
+	# The verdict is said (GDD 16.3: what he is told, he reads).
+	_emit("line_requested", {"id": "soldier.%s" % how})
 	_emit("suspicion_changed", {"value": 0.0, "watching": false})
 
 
@@ -1138,6 +1141,7 @@ func _turn_back(level: float) -> void:
 	suspicion.begin_watch()
 	_hold_at_window()
 	_emit("pulled_over", {"released": false, "paid": "turned_back", "cost": 0.0, "minutes": minutes, "taken": [], "suspicion": level})
+	_emit("line_requested", {"id": "soldier.turned_back"})
 	_emit("suspicion_changed", {"value": 0.0, "watching": true})
 
 

@@ -1281,6 +1281,31 @@ func _check_checkpoint_rows() -> void:
 	check_eq(_count_events("hit"), 0, "(with the brake behind whatever is ahead the queue is driven without a touch)")
 	check_eq(_sim.boss.phase, BossSim.STOW, "(to the bar, where the soldier sets out)")
 
+	# Each verdict is said (GDD 16.3: lines are what he reads; a verdict
+	# was an event and nothing on the screen).
+	var said: Dictionary = {"pass": 0.0, "search": 60.0, "turned_back": 100.0}
+	for verdict: String in said:
+		_begin_checkpoint("", _seed_asking_for("licence"), false)
+		_sim.items.flags[ItemSim.FLAG_WINDOW] = true
+		_stand_at_the_bar()
+		_until_checkpoint_phase(BossSim.PAPERS, _checkpoint_number("stow_s") + 1.0)
+		_sim.suspicion.add(GameData.as_float(said[verdict]))
+		_events = []
+		_hand_out_document("licence")
+		check_eq(GameData.as_string(_event("pulled_over").get("paid")), verdict, "(the verdict: %s)" % verdict)
+		check_eq(_count_events("line_requested", "id", "soldier.%s" % verdict), 1, "the verdict '%s' is said: a line" % verdict)
+		check(data.has_line("soldier.%s" % verdict), "(which exists)")
+	_begin_checkpoint("", _seed_asking_for("licence"), false)
+	_sim.items.flags[ItemSim.FLAG_WINDOW] = true
+	_sim.cash = tuning.f("checkpoint_bribe") + 5.0
+	_stand_at_the_bar()
+	_until_checkpoint_phase(BossSim.PAPERS, _checkpoint_number("stow_s") + 1.0)
+	_events = []
+	_drag("cash", "driver_window")
+	check_eq(GameData.as_string(_event("pulled_over").get("paid")), "bribe", "(banknotes handed out)")
+	check_eq(_count_events("line_requested", "id", "soldier.bribe"), 1, "and so is the taking of banknotes")
+	check(data.has_line("soldier.bribe"), "(a line that exists)")
+
 
 ## A number of the Checkpoint's queue (data/legs.json).
 func _checkpoint_number_of_queue(key: String) -> float:
