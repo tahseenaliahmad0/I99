@@ -835,10 +835,12 @@ func _hand_out_document(document: String) -> void:
 
 
 ## The car stands in the middle lane far short of the queue, the brake held:
-## the queue is only watched.
+## the queue is only watched. He stands where the barriers begin: the queue
+## is served once he has come to it (see _check_checkpoint_rows).
 func _stand_short_of_the_queue() -> void:
 	_cruise(1, 1)
-	_sim.car.s = 5.0
+	var mouth: Dictionary = GameData.as_dict(_checkpoint().get("corridor"))
+	_sim.car.s = GameData.as_float(mouth.get("at_m")) - GameData.as_float(mouth.get("taper_m")) + 1.0
 	_sim.car.speed = 0.0
 	_input.clear()
 	_input.rmb = true
@@ -1068,6 +1070,84 @@ func _check_checkpoint_rows() -> void:
 	check(_until_checkpoint_phase(BossSim.THROUGH, _checkpoint_number("stow_s") + 1.0), "on the next visit they pass the Papers by themselves")
 	check_eq(GameData.as_string(_event("pulled_over").get("paid")), "pass", "(and he passes)")
 	check(_item("forged_papers") == null, "(now they are used up)")
+
+	# Focus (GDD 7.4): the road runs at 85% speed, the hand at full speed.
+	# The soldier is of the road: his walk and his patience take longer of
+	# the hand's time, which is what Focus is bought for.
+	var road_speed: float = GameData.as_float(data.record("effects", "focus").get("road_speed"))
+	check(road_speed > 0.0 and road_speed < 1.0, "(Focus slows the road)")
+	for focused: bool in [false, true]:
+		_begin_checkpoint("", _seed_asking_for("licence"), false)
+		_sim.items.flags[ItemSim.FLAG_WINDOW] = true
+		if focused:
+			_sim.effects.add(&"focus", 600.0)
+		check(_stand_at_the_bar(), "(first in line)")
+		var from_tick: int = _sim.tick
+		check(_until_checkpoint_phase(BossSim.PAPERS, _checkpoint_number("stow_s") / road_speed + 1.0), "(the soldier arrives)")
+		var walk: float = float(_sim.tick - from_tick) * DT
+		var wanted_walk: float = _checkpoint_number("stow_s") / (road_speed if focused else 1.0)
+		check_near(walk, wanted_walk, 2.0 * DT, "%s the soldier's walk takes %.2f s of the hand's time" % ["with Focus" if focused else "without Focus", wanted_walk])
+		from_tick = _sim.tick
+		guard = _ticks_in(_checkpoint_number("delay_every_s") / road_speed + 1.0)
+		while _sim.suspicion.value <= 0.0 and guard > 0:
+			guard -= 1
+			_tick()
+		var patience: float = float(_sim.tick - from_tick) * DT
+		var wanted_patience: float = _checkpoint_number("delay_every_s") / (road_speed if focused else 1.0)
+		check_near(patience, wanted_patience, 2.0 * DT, "and his first +10 for the delay comes after %.2f s" % wanted_patience)
+
+	# The law at his window is no empty road (GDD 6.1: "no vehicle within
+	# 60 m and no encounter"): until he is let through, standing at the
+	# Checkpoint does not calm him.
+	_begin_checkpoint("", _seed_asking_for("licence"), false)
+	_sim.in_encounter = false
+	check(_stand_at_the_bar(), "(first in line, nobody else on the road)")
+	_sim.nerves.set_value(50.0)
+	_ticks(_ticks_in(4.0))
+	check_near(_sim.nerves.value, 50.0, 0.000001, "with the soldier on his way his Nerves do not fall as on an empty road")
+	_sim.items.flags[ItemSim.FLAG_WINDOW] = true
+	check(_until_checkpoint_phase(BossSim.PAPERS, _checkpoint_number("stow_s") + 1.0), "(the soldier is at his window)")
+	_sim.nerves.set_value(50.0)
+	_ticks(_ticks_in(2.0))
+	check_near(_sim.nerves.value, 50.0, 0.000001, "nor with him at the window")
+	_drag("dash_1", "driver_window")
+	check(_until_checkpoint_phase(BossSim.THROUGH, 1.0), "(his licence handed out: he is let through)")
+	_sim.nerves.set_value(50.0)
+	_input.clear()
+	_input.rmb = true
+	_ticks(_ticks_in(4.0))
+	check_near(_sim.nerves.value, 50.0 + 4.0 * tuning.f("empty_road_rate"), 0.05, "let through, an empty road is an empty road again")
+	check(tuning.f("empty_road_rate") < 0.0, "(which calms)")
+
+	# The queue is served once he has come to it. Short of the barriers
+	# there is nothing to wait out: phase 1 is his to drive (GDD 10.2).
+	var plan: Dictionary = _begin_checkpoint("", 3)
+	var taper: float = GameData.as_float(GameData.as_dict(_checkpoint().get("corridor")).get("at_m")) - GameData.as_float(GameData.as_dict(_checkpoint().get("corridor")).get("taper_m"))
+	var waiting: Array[int] = []
+	for lane: int in GameData.as_int(plan.get("lanes")):
+		waiting.append(_sim.boss.queue_length(lane))
+	_cruise(1, 1)
+	_sim.car.s = taper - 10.0
+	_sim.car.speed = 0.0
+	_input.clear()
+	_input.rmb = true
+	_ticks(_ticks_in(_checkpoint_number_of_queue("serve_s") * 3.0 + 1.0))
+	var after: Array[int] = []
+	for lane: int in GameData.as_int(plan.get("lanes")):
+		after.append(_sim.boss.queue_length(lane))
+	check(_sim.car.s < taper and _sim.car.speed < 0.01, "(he stands on the brake short of the barriers)")
+	check_eq(after, waiting, "while he waits short of the barriers no queue gets shorter: there is nothing to wait out")
+	_sim.car.s = taper + 1.0
+	_ticks(_ticks_in(_checkpoint_number_of_queue("serve_s") + 0.5))
+	var served: int = 0
+	for lane: int in GameData.as_int(plan.get("lanes")):
+		served += waiting[lane] - _sim.boss.queue_length(lane)
+	check_eq(served, GameData.as_int(plan.get("lanes")), "once he is between the barriers each lane's first vehicle is waved on after its %s s" % str(_checkpoint_number_of_queue("serve_s")))
+
+
+## A number of the Checkpoint's queue (data/legs.json).
+func _checkpoint_number_of_queue(key: String) -> float:
+	return GameData.as_float(GameData.as_dict(_checkpoint().get("queue")).get(key))
 
 
 ## The Checkpoint's plan for `boss_seed` with a queue in the middle lane only.

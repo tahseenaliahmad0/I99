@@ -1965,7 +1965,9 @@ func _feed_nerves() -> void:
 		nearest = minf(nearest, distance)
 		if distance <= _traffic_radius:
 			near += 1
-	nerves.add_rate(nerves.road_rate(near, nearest, in_encounter or encounter.active))
+	# (The law at the Checkpoint is an encounter like a Patrol: no empty
+	# road calms him under its eyes.)
+	nerves.add_rate(nerves.road_rate(near, nearest, in_encounter or encounter.active or boss.watching()))
 	if car.on_shoulder:
 		nerves.add_rate(_shoulder_rate)
 	nerves.add_rate(faults.param(FAULT_RATTLE, "nerves_per_s", 0.0))

@@ -519,7 +519,9 @@ func step_road(dt: float, cabin_dt: float, hazards_on: bool) -> void:
 	elif kind == DAWN:
 		_step_call(cabin_dt)
 	elif kind == CHECKPOINT:
-		_step_soldier(cabin_dt)
+		# The soldier is of the road: Focus slows his walk and his patience
+		# with the queue, and buys the hand that time (GDD 7.4).
+		_step_soldier(dt)
 
 
 ## After the traffic has moved: the Checkpoint's queue, which this class
@@ -645,6 +647,10 @@ func _step_queue(dt: float) -> void:
 		var first: TrafficSim.Vehicle = line[0]
 		if bar_at - (first.s + first.half_length) > _settle_m:
 			continue
+		if _car.s < _corridor_from:
+			# The queue is served once he has come to it: short of the
+			# barriers there is nothing to wait out (GDD 10.2, phase 1).
+			continue
 		_served[lane] += dt
 		if _served[lane] >= _serve_s - dt * 0.5:
 			_served[lane] = 0.0
@@ -654,6 +660,12 @@ func _step_queue(dt: float) -> void:
 				_traffic.remove(_waved_on[lane])
 			_waved_on[lane] = first
 			_waved_speed[lane] = 0.0
+
+
+## True while the Checkpoint has him under its eyes: from its start until
+## he is let through. No empty road calms him there (GDD 6.1).
+func watching() -> bool:
+	return active and kind == CHECKPOINT and not released
 
 
 ## True when nothing of the queue is left ahead of him in his lane and he
