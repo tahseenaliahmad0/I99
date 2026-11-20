@@ -170,6 +170,7 @@ func _process(delta: float) -> void:
 	_sky.apply(snapshot)
 	_pointer.apply(snapshot, _camera, _cabin)
 	_hud.apply(snapshot)
+	Audio.apply(snapshot)
 
 	_frames += 1
 	if not _shot_path.is_empty() and _shot_frames.has(_frames):
