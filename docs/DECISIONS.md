@@ -1893,3 +1893,111 @@ D-040, D-041 and D-042 where they describe stops and pull-overs.
   settings without the menus that change them would be a second milestone
   begun ahead of its turn, and the owner asked for a pause.
 - **The three tests of M10 stay registered as failing** until then.
+
+## D-057 (M7 review, 2026-11-20) Rulings on the findings of the bosses' review
+
+The review `m7-review` read commit 2940233 through five lenses (the
+Checkpoint, the Storm, Dawn, the tests, the views), each finding with a
+probe. This entry is what was decided and built for the first four; where
+it changes D-046 to D-050, this is the later word. Every fix came with a
+check that failed before it.
+
+**The Checkpoint (amends D-048)**
+- *Which rows of Suspicion are its own.* Crossing a lane line without
+  indicating is the Patrol's row: before the barriers he may choose his
+  queue for nothing. A Snap is charged wherever the law watches (GDD 6.1
+  says "Suspicion +30" of the Snap itself): +30 at the Checkpoint too.
+- *Using contraband* (GDD 6.5, +40 in a Patrol's view) is a ritual that
+  gives the item's effect. Putting it away in the glovebox, or taking it
+  out, is none.
+- *A car that stands touches nothing.* Held at the bar (or for the Call) the
+  car is not stepped, so what it brushed in its last moving tick stayed
+  "touched" and was counted again every 0.8 s, to a Wreck.
+- *Forged papers* pass the Papers of the visit that gets him through. At
+  the top of Suspicion as the soldier arrives he is turned back as he
+  comes and they stay in the cabin. The shady guy holds them out only
+  while the Checkpoint is ahead: an item may name the boss it is for
+  (`until_boss`).
+- *The soldier is of the road.* Focus (GDD 7.4) slows his walk and his
+  patience with the queue: 11.8 s to stow, 5.9 s a delay, of the hand's
+  time. (Noor's ring stays on the cabin's time, D-047.)
+- *Under its eyes no empty road calms him* (GDD 6.1: "and no encounter"),
+  until he is let through.
+- *The queue is served once he has come to the barriers.* Standing short
+  of them there is nothing to wait out; phase 1 is his to drive.
+- *Stop and go needs the brake.* On the open road one contact is one hit
+  and he is held behind what he touched (D-023, D-029); in the queue that
+  carried him to the bar for one lamp. A queue vehicle he keeps pushing is
+  touched anew each time the last touch has worn off.
+- *The sign* stands 2 s short of the taper (it stood 1 m into the road).
+- *Whoever is waved on* drives to the road's end (each lane kept one, and
+  took the one before off the road in front of him).
+- *What a search takes is taken out of his hand*: a gesture on a thing that
+  has left the cabin is over.
+- *Concrete between the lanes*: `TrafficSim.walled` is the stretch where
+  nobody changes lane, whatever honks (the Loud horn at the Checkpoint,
+  any horn between Dawn's barriers).
+- *Suspicion's light* (GDD 16.3) shows in the mirror wherever he is
+  watched; D-050 kept it dark at the Checkpoint, where nothing else told
+  him where he stood between 0 and 100. The siren's chirps were already
+  heard there (D-052).
+- *Each verdict is said*: `soldier.pass`, `.search`, `.turned_back`,
+  `.bribe`, at the Checkpoint and at Dawn's barriers.
+
+**The Storm (amends D-046)**
+- *Standing* begins a wait when he stands (`stopped_kmh`) and it ends when
+  he has driven off (`moved_off_kmh`, 15) or made himself safe. A twitch
+  of the pedal neither begins the 10 s anew nor makes a hit miss. The horn
+  behind him sounds 2 s ahead (it was 1): time to reach 15 km/h from rest;
+  the validator holds the record to that.
+- *The safe place is safe for his Nerves too.* The shoulder frays him only
+  while the car moves (GDD 5.1: "drivable, +1 Nerves per second").
+- *Its lights in his mirror are a mirror tell* (GDD 7.6, 6.3): shown
+  `rear_end_tell_s` before the hit, 5 s earlier in the Wide mirror and not
+  before the hit in a cracked one (`rear_end_lights_in`). The horn keeps
+  its time.
+- *Tail lights leave a way past at any pace.* Each is put on the road only
+  where no other is nearer than the least gap (`apart_m`), and none is
+  faster than one ahead of it. A driver who followed them at their own
+  speed, as GDD 10.3 tells him to, used to get three abreast.
+- *A Telling told again* has a seed of its own: `RETELLING_SALT` was the
+  bosses' salt.
+- *Night storm* still changes nothing a driver with two headlights can
+  measure (the dust is always nearer than the cone, as D-046 has it):
+  NEEDS OWNER.
+
+**Dawn, the Call, the Arrival (amends D-047)**
+- *The 70 holds between the barriers*, not only at their mouth: searched,
+  once, on the first tick above it from the mouth to the corridors' end.
+- *Nothing wider than the barriers is on Dawn's road.* A road may say the
+  widest vehicle it lets through; the generator leaves wider types out
+  and gives a beat that names one the widest that fits.
+- *The end of the talk has a tell*, 1.5 s ahead: her last words
+  (`noor.call.bye`) and the phone's two notes. When the phone is put away
+  the pointer is on the wheel again, so his hand comes back to it. A car
+  that stood for the call stands until his hand has the wheel.
+- *The phone on its mount* keeps its own picture while Noor's rings
+  (`mount_caller`, `mount_ring_left`).
+- *The key parks the car*: the engine is off (`engine_on` in the snapshot),
+  the car and the Clock stand.
+- **Not built, known debt:** after the last checkpoint Dawn's traffic is
+  laid out for a driver at par, and the checkpoint makes every driver
+  slower than par: in about one Dawn in five a driver who took the
+  barriers in second gear meets vehicles across all three lanes during
+  the Call, and must brake behind them. The cure is in the generator
+  (nothing met after the barriers is on the road before he leaves them,
+  or a par frame that includes the slow passage) and belongs with
+  T-WALL-01 in M11. Without trucks on that road it is rarer than the
+  review measured. Also not built: a car across a lane line at the
+  taper's mouth is pushed up to 1.4 m sideways in one tick (it should
+  meet the barrier's head).
+
+**The tests**
+- The lens's 34 appended checks are in T-BOSS-01 to 03 and T-CALL-01 as
+  it wrote them. Four loops got guards. T-DATA-01 has the failure cases of
+  every boss rule. Where a rule changed, a step of an existing check was
+  corrected and its assertion kept: the queue's watcher stands at the
+  mouth of the barriers; the hazard-lights remedy keeps his foot on the
+  brake; after the Call the car moves off once he has the wheel.
+- Literals that stand beside a check pinning the data to the GDD's number
+  stay: changing such a number is a recorded decision anyway.
