@@ -1,8 +1,11 @@
 """Mutants of the rituals-and-timing fixes of the M6 review: a ritual's
 requirements asked again at completion, the anchor that gives way to what is
-carried, the gust in road time, the cigarette's calm in whole ticks. All ten
-are killed.
+carried, the gust in road time, the cigarette's calm in whole ticks. All
+twelve are killed.
     python3 tools/mutants.py T-ITEM-TEA-GLASS,T-ITEM-PHONE,T-ITEM-MIXTAPE,T-STOP-01,T-ITEM-ENERGY-DRINK,T-ITEM-CIGARETTES,T-CAR-05 tools/mutants/rituals.py
+(Where the night waits the cabin's anchors are not in use, so at a stop the
+dial is out of the tape's way without giving way. The anchor that gives way
+is held on the road: T-ITEM-MIXTAPE, with a tape that may be stowed.)
 """
 D = 'src/core/drive_sim.gd'
 I = 'src/core/item_sim.gd'
@@ -14,6 +17,9 @@ MUTANTS = [
  (D, '\tif not hand.carrying:\n\t\treturn\n', '\tif true:\n\t\treturn\n', 'no anchor gives way to what is carried'),
  (D, 'if not _drag_destinations.has(index) and hand.anchor_pointer(index).is_equal_approx(hand.anchor_pointer(destination)):',
      'if hand.anchor_pointer(index).is_equal_approx(hand.anchor_pointer(destination)):', 'the destination gives way to itself'),
+ (D, 'if not _drag_destinations.has(index) and hand.anchor_pointer(index).is_equal_approx(hand.anchor_pointer(destination)):',
+     'if not _drag_destinations.has(index) and stopped and hand.anchor_pointer(index).is_equal_approx(hand.anchor_pointer(destination)):', 'an anchor gives way only at a stop'),
+ (D, '\t\t\t_pinned_until_release = true\n\t\t_sync_anchors()\n', '\t\t\t_pinned_until_release = true\n', 'what gave way stays away when the carry is over'),
  # A gust lasts gust_duration of road time, in whole ticks.
  (D, '\t\t_gust_left -= _road_dt\n', '\t\t_gust_left -= DT\n', 'a gust counted in his time, not the road\'s'),
  (D, '\tif _gust_left >= _road_dt * 0.5:', '\tif _gust_left > 0.0:', 'a gust runs on while anything is left of it'),

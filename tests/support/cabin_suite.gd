@@ -322,6 +322,48 @@ func _release() -> void:
 	_ticks(SETTLE)
 
 
+## What the car does with one pull of the wheel: in third gear, gripping,
+## the wheel straight, the pointer is pulled `pixels` sideways in one tick.
+## Returns the car's sideways speed from steering (CarSim.v_lat) after that
+## tick and after each of those that follow, `ticks` values in all.
+func _answer_to_a_pull(pixels: float, ticks: int) -> PackedFloat64Array:
+	_cruise(3, 1)
+	_grip()
+	_ticks(_ticks_in(0.5))
+	check_near(_sim.car.v_lat, 0.0, 0.000000001, "(the wheel is straight and the car goes straight)")
+	var answer: PackedFloat64Array = PackedFloat64Array()
+	_input.pointer_is_absolute = false
+	_input.pointer_delta = Vector2(pixels, 0.0)
+	for _index: int in ticks:
+		_tick()
+		_input.pointer_delta = Vector2.ZERO
+		answer.append(_sim.car.v_lat)
+	_release()
+	return answer
+
+
+## Checks that the car answered a pull of the wheel (`answer`) as the car
+## without Lag did (`plain`, the same pull), `lag` seconds later: it stays as
+## it was for the Lag's whole ticks, and from then on does what the car
+## without Lag did that long before (between two ticks, in proportion).
+func _check_answer_lags(answer: PackedFloat64Array, plain: PackedFloat64Array, lag: float, what: String) -> void:
+	var behind: float = lag / DT
+	var whole: int = int(floorf(behind))
+	# (To a rounding error of a whole number of ticks: 200 ms are 24 of them.)
+	if behind - float(whole) > 0.999999:
+		whole += 1
+	var share: float = clampf(behind - float(whole), 0.0, 1.0)
+	var began: int = 0
+	while began < answer.size() and absf(answer[began]) <= 0.000000001:
+		began += 1
+	check_eq(began, whole, "%s: the car begins to answer a pull of the wheel %d ticks after the wheel moves" % [what, whole])
+	var worst: float = 0.0
+	for index: int in range(whole + 1, mini(answer.size(), plain.size())):
+		worst = maxf(worst, absf(answer[index] - lerpf(plain[index - whole], plain[index - whole - 1], share)))
+	check(answer.size() > whole + 1, "(%s: the pull is watched for longer than the Lag)" % what)
+	check_near(worst, 0.0, 0.000000001, "%s: and from then on it turns as the car without Lag does, %d ms later" % [what, roundi(lag * 1000.0)])
+
+
 # --- Items -------------------------------------------------------------------
 
 ## Puts an item in the cabin (as debug key F5 does), in a slot or in the
