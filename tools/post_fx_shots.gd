@@ -24,13 +24,14 @@ extends SceneTree
 ##   m10_postfx_rain_blur.png  --leg=rain,1 --bot=line --hud --shot-frame=480
 ##   m10_postfx_glare.png      --leg=motorcade,3 --bot=line --hud --shot-frame=2400
 ##
-## A boss has no argument on that command line yet, so the states of the
-## Storm and of Dawn (GDD 10.3, 10.4) are taken here, with nothing set by
-## hand: the tool starts the boss's road in the scene's own simulation
-## (DriveSim.begin_boss), lets the scene's stand-in driver hold the plan's
-## line, and has him do what the state names (a sweep of the wipers, the
-## visor). This tool is no view: it sets the stage. What the effects are
-## given is the simulation's snapshot.
+## The states of the Storm and of Dawn (GDD 10.3, 10.4) are taken here,
+## with nothing set by hand: the tool starts the boss's road in the scene's
+## own simulation (DriveSim.begin_boss; the scene's `--boss=` would start it
+## at its beginning, and a state wants a place along it), the scene's
+## stand-in driver holds whatever road the simulation is on, and he does
+## what the state names (a sweep of the wipers, the visor). This tool is no
+## view: it sets the stage. What the effects are given is the simulation's
+## snapshot.
 
 const DRIVE_SCENE: String = "res://scenes/drive.tscn"
 const POST_FX_NODE: String = "PostFX"
@@ -46,11 +47,6 @@ const FRAMES_PER_SECOND: float = 60.0
 const BOSS_GEAR: int = 3
 const BOSS_SEED: int = 1
 const KMH_TO_MS: float = 1.0 / 3.6
-## Where the drive scene's stand-in driver keeps the plan whose line he
-## holds. He takes it from `--leg=`; for a boss the tool hands it to him
-## (until the scene takes `--boss=`, which then is one more key of a state's
-## backdrop).
-const DRIVER_PLAN: StringName = &"_plan"
 ## Every how many pixels the brightness of a picture is sampled.
 const SAMPLE_STEP: int = 8
 
@@ -269,18 +265,15 @@ func _build_backdrop(shot: Dictionary) -> void:
 
 ## Starts the road of a boss (`<id>[,<modifier>]`) in the scene's own
 ## simulation, as the scene itself starts a leg: in third gear, with no
-## traffic but the boss's own. The scene's stand-in driver is given the
-## plan, whose line he then holds. With `at_m` the car is put that far along
-## the road, and what the road held before that point is behind him.
+## traffic but the boss's own. The scene's stand-in driver follows the road
+## the simulation is on. With `at_m` the car is put that far along the
+## road, and what the road held before that point is behind him.
 func _begin_boss(shot: Dictionary) -> void:
 	var sim: DriveSim = _drive.get("sim") as DriveSim
 	var parts: PackedStringArray = str(shot["boss"]).split(",")
 	sim.free_traffic_per_km = 0.0
 	sim.gate.reset(BOSS_GEAR)
 	sim.begin_boss(parts[0], parts[1] if parts.size() > 1 else "", BOSS_SEED)
-	_drive.set(DRIVER_PLAN, sim.leg.plan)
-	if not is_same(_drive.get(DRIVER_PLAN), sim.leg.plan):
-		push_error("post_fx_shots: the drive scene's stand-in driver takes no plan: nobody holds the car on the line of '%s'" % str(shot["boss"]))
 	var at: float = GameData.as_float(shot.get("at_m"))
 	if shot.has("at_m"):
 		sim.car.s = at
