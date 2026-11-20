@@ -833,6 +833,22 @@ func _the_call() -> void:
 	_check(_showing == said, "answered, the ring's line is gone and she is on screen in that frame: %s" % _showing)
 	_check_said(view, said, hold)
 	_check(_seen.count(ring) == 1, "and the ring's line does not come back")
+	# An answer that comes too late is none: a TAP on his pocket that ends
+	# after the Call has rung out takes nothing, and she says nothing.
+	_to_the_ring(view, false)
+	_reach(view, POCKET)
+	var guard: int = _frames_in(ring_s + 1.0)
+	while _sim.boss.call == BossSim.CALL_RINGING and _sim.boss.call_left > FRAME * 1.5 and guard > 0:
+		guard -= 1
+		_drive(view, 1)
+	var still_ringing: bool = _sim.boss.call == BossSim.CALL_RINGING and _sim.hand.at_id() == POCKET
+	_input.lmb = true
+	_drive(view, TAP_FRAMES)
+	_input.lmb = false
+	_drive(view, _frames_in(0.5))
+	_check(still_ringing and _count("call_resolved") == 1 and not GameData.as_bool(_last("call_resolved").get("answered")),
+			"(a TAP begun in the Call's last frame ends after it has rung out: unanswered)")
+	_check(_unspoken(said), "an answer that comes too late asks for nothing: she does not speak")
 	# Left to ring, the line has its own time: it is not held for all the ringing.
 	_to_the_ring(view, false)
 	_drive(view, _frames_in(ring_s + 1.0))

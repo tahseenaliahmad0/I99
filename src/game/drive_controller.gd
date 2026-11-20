@@ -147,7 +147,7 @@ func _physics_process(_delta: float) -> void:
 			# The game saves at every stop and after every boss (GDD 11.1).
 			Game.write_save(sim.checkpoint)
 			print("[drive] stop %s, saved (frame %d, clock %s)" % [str(event.get("stop")), _frames, sim.clock.text()])
-		elif type == "boss_ended" or type == "pulled_over" or type == "call_resolved" or type == "wrecked":
+		elif type == "boss_ended" or type == "pulled_over" or type == "call_resolved" or type == "wreck":
 			# What became of a set piece, for whoever reads the console.
 			print("[drive] %s at %.1f s: %s" % [type, sim.seconds(), JSON.stringify(event)])
 		if type == "arrived":

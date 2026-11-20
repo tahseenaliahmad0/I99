@@ -2,7 +2,10 @@ extends SceneTree
 ## Parse check (GDD 13.10): every script compiles and every scene and resource
 ## loads. Also lints the hard constraints of GDD 1.3 that text can show:
 ## the simulation in src/core is pure (no Node, no autoload, no wall clock)
-## and takes randomness only from its own seeded streams.
+## and takes randomness only from its own seeded streams. And what listens
+## to the simulation (src/game, src/view) names only events it announces: an
+## event's type compared with a name that is not in EventNames.ALL is a
+## branch that never runs.
 ##
 ##   godot --headless --path . --script res://tools/parse_check.gd
 
@@ -15,6 +18,10 @@ const WALL_CLOCK: String = "\\b(Time\\.get_|OS\\.get_|Engine\\.get_frames|Engine
 ## A generator of its own is unseeded until someone seeds it; rng.gd owns the streams.
 const OWN_GENERATOR: String = "RandomNumberGenerator\\.new\\s*\\(|\\.randomize\\s*\\("
 const RNG_FILE: String = "rng.gd"
+## Where the simulation's events are listened to, and how a listener names
+## one: `type == "wreck"`, or `...get("type")) == "wreck"`.
+const LISTENER_DIRS: PackedStringArray = ["res://src/game/", "res://src/view/"]
+const EVENT_COMPARED: String = "\\btype\\b\"?\\)*\\s*==\\s*\"([a-z0-9_]+)\""
 
 
 func _initialize() -> void:
@@ -36,6 +43,11 @@ func _initialize() -> void:
 		if path.begins_with(CORE_DIR):
 			core_scripts += 1
 			_lint_core(path, failures)
+
+	for path: String in scripts:
+		for dir: String in LISTENER_DIRS:
+			if path.begins_with(dir):
+				_lint_event_names(path, failures)
 
 	for failure: String in failures:
 		print("PARSE FAIL %s" % failure)
@@ -65,6 +77,19 @@ func _lint_core(path: String, failures: PackedStringArray) -> void:
 	var script: GDScript = load(path) as GDScript
 	if script != null:
 		_lint_base(path, script, "", failures)
+
+
+## An event's type is compared only with names the simulation announces.
+func _lint_event_names(path: String, failures: PackedStringArray) -> void:
+	var regex: RegEx = RegEx.new()
+	regex.compile(EVENT_COMPARED)
+	var lines: PackedStringArray = FileAccess.get_file_as_string(path).split("\n")
+	for index: int in lines.size():
+		var code: String = lines[index].get_slice("#", 0) if not lines[index].contains("\"") else lines[index]
+		for found: RegExMatch in regex.search_all(code):
+			if not EventNames.ALL.has(found.get_string(1)):
+				failures.append("%s:%d: an event's type is compared with \"%s\", which the simulation never announces (EventNames.ALL)" % [
+					path, index + 1, found.get_string(1)])
 
 
 func _lint_base(path: String, script: GDScript, inner: String, failures: PackedStringArray) -> void:
