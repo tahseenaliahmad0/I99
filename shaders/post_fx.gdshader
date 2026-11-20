@@ -49,7 +49,8 @@ uniform float beam_reach = 1.0;
 // Share of the light that sunglasses and tinted glass take at night, even
 // where the headlights shine.
 uniform float night_darker : hint_range(0.0, 1.0) = 0.0;
-// The veil's colour now: smoke, or dust in a dust haze.
+// The veil's colour now: smoke, or dust where dust is in the air (a dust
+// haze, the Storm).
 uniform vec3 haze_color : source_color;
 // The camera in the cabin frame (origin at the wheel hub, +X toward the
 // passenger, +Y up, +Z toward the driver): its axes, where the eye is, and

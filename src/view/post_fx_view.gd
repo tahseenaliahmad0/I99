@@ -32,11 +32,11 @@ const SCREEN_NODE: String = "Screen"
 ## of straight ahead and degrees above the horizon (Vector2). No simulation
 ## gives this key yet; when one does, it is believed before all else.
 const GLARE_POSITION_KEY: String = "glare_position"
-## The low sun of Dawn (GDD 10.4), if the snapshot has it: how strong it is
-## before his visor and what he wears, and where across his view it stands
-## (-1 the far left, 0 dead ahead, 1 the far right). While the sun is up the
-## light is the sun; otherwise it is where postfx_glare_position says (the
-## motorcade's spotlight, straight ahead).
+## The low sun of Dawn (GDD 10.4): how strong it is before his visor and
+## what he wears, and where across his view it stands (-1 the far left, 0
+## dead ahead, 1 the far right). While the sun is up the light is the sun,
+## his visor down or not; otherwise it is where postfx_glare_position says
+## (the motorcade's spotlight, straight ahead).
 const SUN_KEY: String = "sun"
 const SUN_SIDE_KEY: String = "sun_side"
 ## Below this a time is no time: nothing is divided by less.
@@ -65,6 +65,9 @@ var _smoke: Color = Color.WHITE
 var _dust: Color = Color.WHITE
 var _glare_from: Vector2 = Vector2.ZERO
 var _sun_position: Vector2 = Vector2.ZERO
+## Where the light is, or last was: degrees right of straight ahead and
+## above the horizon. A wash that is fading stays where its light was.
+var _light: Vector2 = Vector2.ZERO
 
 ## Per channel: what is shown now, which way it last moved (-1, 0, +1) and
 ## for how long it has been going that way.
@@ -101,6 +104,7 @@ func setup(data: GameData, camera: Camera3D, cabin: Node3D) -> void:
 	# Nothing to show yet: the screen is not even copied.
 	_screen.visible = false
 	_configure()
+	_light = _glare_from
 
 
 func apply(snapshot: Dictionary, delta: float) -> void:
@@ -116,21 +120,28 @@ func apply(snapshot: Dictionary, delta: float) -> void:
 	var raining: bool = snapshot["raining"]
 	var cracks_now: float = snapshot["cracks"]
 	var glare_now: float = snapshot["glare"]
+	var sun: float = snapshot[SUN_KEY]
+	var sun_side: float = snapshot[SUN_SIDE_KEY]
 	var night: bool = snapshot["night"]
 	var night_darker: float = snapshot["night_darker"]
 	var sight: float = snapshot["visibility"]
 	var cone: float = snapshot["headlight_cone"]
 	var time: float = snapshot["time"]
 
-	# The camera in the cabin frame, and where the light is in the picture.
+	# The camera in the cabin frame, and where the light is in the picture:
+	# where the snapshot says outright, else at the sun while it is up
+	# (behind his visor too), else where a spotlight is. When the light goes
+	# out (the end of Dawn's road), what is left of its wash fades where it
+	# was.
 	var eye: Transform3D = _eye()
 	var view_tan: Vector2 = _view_tan()
-	var light: Vector2 = _glare_from
 	if snapshot.has(GLARE_POSITION_KEY) and snapshot[GLARE_POSITION_KEY] is Vector2:
-		light = snapshot[GLARE_POSITION_KEY]
-	elif GameData.as_float(snapshot.get(SUN_KEY)) > 0.0:
-		light = Vector2(GameData.as_float(snapshot.get(SUN_SIDE_KEY)) * _sun_position.x, _sun_position.y)
-	var toward: Vector3 = eye.basis.inverse() * _direction(light)
+		_light = snapshot[GLARE_POSITION_KEY]
+	elif sun > 0.0:
+		_light = Vector2(sun_side * _sun_position.x, _sun_position.y)
+	elif glare_now > 0.0 or _values[Channel.GLARE] <= 0.0:
+		_light = _glare_from
+	var toward: Vector3 = eye.basis.inverse() * _direction(_light)
 	var light_uv: Vector2 = Vector2(0.5, 0.5)
 	if toward.z < 0.0:
 		light_uv = Vector2(0.5 + 0.5 * toward.x / (-toward.z * view_tan.x), 0.5 - 0.5 * toward.y / (-toward.z * view_tan.y))
@@ -140,13 +151,17 @@ func apply(snapshot: Dictionary, delta: float) -> void:
 
 	# Night: the dark beyond the headlights. Sunglasses and tinted glass
 	# take their share of what light is left, there and in the headlights'
-	# pool (GDD 7.5, 7.7); the pool is as large as he sees far.
+	# pool (GDD 7.5, 7.7); the pool is as large as the headlights let him
+	# see. Dust in the air ends his view sooner (a Night storm, GDD 10.3),
+	# but the lamps shine as wide as ever: the pool is no smaller for it, and
+	# what lies beyond the dust is hidden by the world's own haze.
 	var dark_now: float = 1.0 - (1.0 - _night_darkness) * (1.0 - night_darker) if night else 0.0
 	var reach_now: float = _values[Channel.REACH]
 	if night:
-		reach_now = (sight if is_finite(sight) else cone) / maxf(_low_beam, MIN_TIME)
-	# By day a view that ends is dust in the air: the haze is dust then.
-	var dusty: float = 1.0 if is_finite(sight) and not night else 0.0
+		reach_now = maxf(sight if is_finite(sight) else cone, cone * (1.0 - night_darker)) / maxf(_low_beam, MIN_TIME)
+	# What clouds the glass is dust wherever dust is in the air: in the Storm
+	# by day and by night, and by day wherever his view ends (a dust haze).
+	var dusty: float = 1.0 if str(snapshot["boss"]) == BossSim.STORM or (is_finite(sight) and not night) else 0.0
 
 	var tunnel: float = _ease(Channel.TUNNEL, tunnel_now, _fade_rate, delta)
 	var lids: float = _ease(Channel.LIDS, lids_now, _fade_rate, delta)

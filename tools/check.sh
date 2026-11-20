@@ -61,6 +61,7 @@ else
   run_step tests --script res://tests/run_tests.gd
 fi
 run_step smoke --script res://tools/smoke_all.gd
+run_step postfx --script res://tools/post_fx_check.gd
 
 if [ "${#FAILED[@]}" -ne 0 ]; then
   echo "CHECK FAILED: ${FAILED[*]}"
