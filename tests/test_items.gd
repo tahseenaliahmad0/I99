@@ -1554,7 +1554,7 @@ func test_item_phone() -> void:
 		_tap()
 	check_eq(_sim.items.answered_run, 1, "(one call answered)")
 	_input.rmb = true
-	check(_await_ring(), "(the next one rings as he reaches the Exit)")
+	check(_await_ring(), "(the next one rings, and he pulls in with it ringing)")
 	_events = []
 	var nerves_ringing: float = _sim.nerves.value
 	_into_stall()

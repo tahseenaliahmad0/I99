@@ -93,8 +93,8 @@ func test_save_01() -> void:
 	var into_stall: float = float(_sim.tick - tick_before) * DT
 	var here: Dictionary = data.record("stops", _sim.run.stop)
 	check_eq(_sim.checkpoints, 2, "the second stop saves again")
-	# What is owed him is still owed: the stop cancels nothing, and nothing
-	# of it runs while he stands there.
+	# What is owed him is still owed at the stop, to the second he arrived
+	# with: the stop cancels none of it.
 	check_near(_sim.items.item(&"cigarettes").lapse_left, craving_before - into_stall, 0.000000001, "the seconds until the Craving he drove in with")
 	check_near(_call_wait(_sim), call_before - into_stall, 0.000000001, "the seconds until the next call")
 	check(_sim.items.photo_used, "that he has had this leg's look at the photo")

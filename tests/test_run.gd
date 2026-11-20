@@ -567,7 +567,7 @@ func _check_exit_cases(exit_at: float, stall_at: float, third: float) -> void:
 	for event: Dictionary in _events_named("sfx_requested"):
 		leans_on_horn = leans_on_horn or GameData.as_string(event.get("id")) == "horn"
 	check(leans_on_horn, "with the horn he leans on")
-	check(GameData.as_bool(_sim.snapshot()["snap"]), "and for snap_duration he cannot reach")
+	check(GameData.as_bool(_sim.snapshot()["snap"]), "and the Snap is on him")
 
 
 ## The gore itself: a car on the split is on the right-hand road.
