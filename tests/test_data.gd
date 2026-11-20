@@ -104,6 +104,27 @@ func _check_broken_item_rules() -> void:
 	_record("items", "cigarettes")["synergies"] = [{"with": "tea_glass", "rule": "nonsense"}]
 	_expect("E_ENUM", "items[cigarettes].synergies[0].rule", "a synergy rule the simulation does not know")
 
+	# A synergy says the numbers its rule works with: without them the
+	# simulation would calm by nothing, pay nothing, multiply by nothing.
+	_reset_fixture()
+	_record("items", "cigarettes")["synergies"] = [{"with": "tea_glass", "rule": "sip_extends_burn"}]
+	_expect("E_RULE", "items[cigarettes].synergies[0]", "a sip that lengthens the burn by no time")
+	for case: Array in [["beads", "bead_calm", "amount"], ["arak_flask", "photo_sobers", "amount"], ["arak_flask", "numb_courage", "amount"],
+			["phone", "calls_in_a_row", "amount"], ["phone", "calls_in_a_row", "every"]]:
+		var owner: String = case[0]
+		var rule: String = case[1]
+		var number: String = case[2]
+		_reset_fixture()
+		var at: int = _synergy_index(owner, rule)
+		if check(at >= 0 and _synergy(owner, at).has(number), "(the shipped %s has the synergy %s with its \"%s\")" % [owner, rule, number]):
+			_synergy(owner, at).erase(number)
+			_expect("E_RULE", "items[%s].synergies[%d]" % [owner, at], "the synergy %s with no \"%s\"" % [rule, number])
+	for case: Array in [[0, "E_RANGE", "every no calls"], [-3, "E_RANGE", "every minus three calls"], [2.5, "E_TYPE", "every two and a half calls"], ["third", "E_TYPE", "a word for how often"]]:
+		_reset_fixture()
+		var at: int = _synergy_index("phone", "calls_in_a_row")
+		_synergy("phone", at)["every"] = case[0]
+		_expect(GameData.as_string(case[1]), "items[phone].synergies[%d].every" % at, "a bonus for calls in a row %s" % GameData.as_string(case[2]))
+
 	_reset_fixture()
 	_record("items", "cigarettes")["tags"] = ["smoke", "gadget"]
 	_expect("E_REF", "items[cigarettes].tags[1]", "a tag that is not in the tag list")
@@ -136,6 +157,20 @@ func _check_broken_item_rules() -> void:
 	_record("items", "cigarettes")["takes"] = [{"resource": "nerves"}]
 	_expect("E_RULE", "items[cigarettes].takes[0]", "a resource entry with no amount")
 
+	# By the second there are only Nerves: the simulation would take cash by
+	# the second, or a status with a rate, out of his Nerves.
+	_reset_fixture()
+	_record("items", "cigarettes")["takes"] = [{"resource": "cash", "per_s": 1}]
+	_expect("E_RULE", "items[cigarettes].takes[0]", "cash by the second")
+
+	_reset_fixture()
+	_record("items", "cigarettes")["gives"] = [{"effect": "lit", "per_s": 1}]
+	_expect("E_RULE", "items[cigarettes].gives[0]", "a status with a rate by the second")
+
+	_reset_fixture()
+	_record("items", "cigarettes")["takes"] = [{"resource": "nerves", "per_s": 1}]
+	check(_validate().is_empty(), "Nerves by the second are valid; first: %s" % _first(_validate()))
+
 	_reset_fixture()
 	_record("items", "cigarettes")["gives"] = [{"effect": "lit", "duration": "long"}]
 	_expect("E_TYPE", "items[cigarettes].gives[0].duration", "a duration that is not a number")
@@ -147,6 +182,17 @@ func _check_broken_item_rules() -> void:
 	_reset_fixture()
 	_record("items", "cigarettes")["gives"] = [{"resource": "nerves", "amount": -2, "synergy": "bead_calm"}]
 	_expect("E_REF", "items[cigarettes].gives[0].synergy", "an entry naming a synergy the item does not have")
+
+	# With its partner there the synergy's amount takes the entry's place:
+	# a synergy with none would make the entry nothing.
+	_reset_fixture()
+	_record("items", "cigarettes")["synergies"] = [{"with": "tea_glass", "rule": "no_smoke_haze"}]
+	_record("items", "cigarettes")["gives"] = [{"resource": "nerves", "amount": -2, "synergy": "no_smoke_haze"}]
+	_expect("E_RULE", "items[cigarettes].gives[0].synergy", "an entry naming a synergy that has no amount for it")
+
+	_reset_fixture()
+	_record("items", "cigarettes")["gives"] = [{"resource": "nerves", "amount": -2, "synergy": "sip_extends_burn"}]
+	check(_validate().is_empty(), "an entry naming a synergy that has an amount is valid; first: %s" % _first(_validate()))
 
 	_reset_fixture()
 	_record("items", "cigarettes")["gives"] = [{"passive": "moon_boots", "amount": 1}]
@@ -200,6 +246,22 @@ func _check_broken_item_rules() -> void:
 	carried["across_m"] = 0.4
 	check(_validate().is_empty(), "a carry across with no destination is valid; first: %s" % _first(_validate()))
 
+	# Carried back to where it was taken up, a thing must first be taken
+	# somewhere: with no distance the ritual is a press and a release.
+	_reset_fixture()
+	carried = _record("rituals", "tape_flip")
+	check_eq(GameData.as_string(carried.get("to")), "@slot", "(the tape goes out of the deck and in again)")
+	check(_validate().is_empty(), "with its distance that is valid; first: %s" % _first(_validate()))
+	carried.erase("out_m")
+	_expect("E_RULE", "rituals[tape_flip]", "a carry back to the slot with no distance to go first")
+
+	_reset_fixture()
+	carried = _record("rituals", "hand_banknotes")
+	carried["to"] = carried["anchor"]
+	_expect("E_RULE", "rituals[hand_banknotes]", "a carry from an anchor to the same anchor with no distance to go first")
+	carried["out_m"] = 0.3
+	check(_validate().is_empty(), "and with a distance it is valid; first: %s" % _first(_validate()))
+
 	# Statuses and anchors.
 	_reset_fixture()
 	_record("effects", "lit")["immune"] = ["sneeze"]
@@ -212,6 +274,11 @@ func _check_broken_item_rules() -> void:
 	_reset_fixture()
 	_record("anchors", "tape")["over"] = "moon"
 	_expect("E_REF", "anchors[tape].over", "an anchor standing over an unknown one")
+
+	# Over itself, an anchor would go out of use whenever something sat there.
+	_reset_fixture()
+	_record("anchors", "tape")["over"] = "tape"
+	_expect("E_RULE", "anchors[tape].over", "an anchor standing over itself")
 
 
 # --- 2. The GDD 14 examples ---------------------------------------------------
@@ -718,6 +785,24 @@ func _record(set_name: String, id: String) -> Dictionary:
 			return record
 	fail("fixture has no %s record '%s'" % [set_name, id])
 	return {}
+
+
+## Where in an item's "synergies" the one under a rule is (-1: nowhere).
+func _synergy_index(item_id: String, rule: String) -> int:
+	var synergies: Array = GameData.as_array(_record("items", item_id).get("synergies"))
+	for index: int in synergies.size():
+		if GameData.as_string(GameData.as_dict(synergies[index]).get("rule")) == rule:
+			return index
+	return -1
+
+
+## One synergy of an item in the fixture, to change.
+func _synergy(item_id: String, index: int) -> Dictionary:
+	var synergies: Array = GameData.as_array(_record("items", item_id).get("synergies"))
+	if index < 0 or index >= synergies.size():
+		fail("fixture item '%s' has no synergy %d" % [item_id, index])
+		return {}
+	return synergies[index]
 
 
 func items_root_for_test() -> Dictionary:

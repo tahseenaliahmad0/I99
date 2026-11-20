@@ -127,6 +127,12 @@ func _physics_process(_delta: float) -> void:
 			# The game saves at every stop and after every boss (GDD 11.1).
 			Game.write_save(sim.checkpoint)
 			print("[drive] stop %s, saved (frame %d, clock %s)" % [str(event.get("stop")), _frames, sim.clock.text()])
+		elif type == "wreck" and sim.run.active:
+			# After a Wreck there is no saved Telling to continue (GDD 11.4): the
+			# night is told again from Baghdad, and quitting during the cut must
+			# not bring the wrecked one back. (Outside a Telling a Wreck ends
+			# nothing that the file holds.)
+			Game.write_save({})
 		elif type == "arrived":
 			# Until the wedding room exists (M9) the night simply begins again.
 			Game.write_save({})
