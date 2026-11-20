@@ -211,6 +211,165 @@ func _check_where_hitchers_stand() -> void:
 	check(would_be_them > 100, "(the draw would have been the one he carries %d times in a thousand)" % would_be_them)
 
 
+## The first Telling seed whose stop at the end of `leg` of `act` (on the
+## right branches) would have `who` at its roadside by the draw. The stop
+## after a boss is leg LEGS_PER_ACT of its act, taken as the Hitcher stop he
+## may choose there. With `met_first`, also a night in which they stand at
+## its first stop, a Hitcher stop.
+func _seed_that_draws(who: String, act: int, leg: int, met_first: bool = false) -> int:
+	for candidate: int in range(1, 30000):
+		var stop_id: String = HITCHER_STOP
+		if leg < RunGenerator.LEGS_PER_ACT:
+			stop_id = GameData.as_string(RunGenerator.fork(data, candidate, act, leg)[RunState.RIGHT]["stop"])
+		if RunGenerator.hitcher(data, candidate, act, leg, stop_id, "") != who:
+			continue
+		if met_first and (GameData.as_string(RunGenerator.fork(data, candidate, 1, 0)[RunState.RIGHT]["stop"]) != HITCHER_STOP \
+				or RunGenerator.hitcher(data, candidate, 1, 0, HITCHER_STOP, "") != who):
+			continue
+		return candidate
+	fail("no seed under 30000 draws '%s' for act %d, leg %d" % [who, act, leg])
+	return 1
+
+
+## At the stop after a boss: he takes the first of the free picks and puts
+## it in its place, so that the five services are held out (D-037).
+func _take_the_boss_pick() -> void:
+	check_eq(_sim.run.stage, RunState.Stage.BOSS_STOP, "(the stop after a boss)")
+	var pick: Dictionary = _offers()[0]
+	var id: String = GameData.as_string(pick.get("id"))
+	_tap_at(GameData.as_string(pick.get("anchor")))
+	var mine: Dictionary = _offer(StopSim.ITEM, id)
+	if GameData.as_bool(mine.get("bought")):
+		_drag(GameData.as_string(mine.get("anchor")), _sim.stop.slot_anchors(id)[0])
+	var services: int = 0
+	for offer: Dictionary in _offers():
+		if offer["kind"] == StopSim.SERVICE:
+			services += 1
+	check_eq(services, data.records("stops").size() - 2, "(his free pick is in its place: the services are held out)")
+
+
+## A TAP on one of the services held out at the stop after a boss.
+func _choose_service(stop_id: String) -> void:
+	var service: Dictionary = _offer(StopSim.SERVICE, stop_id)
+	if check(not service.is_empty(), "(the service '%s' is held out)" % stop_id):
+		_tap_at(GameData.as_string(service.get("anchor")))
+
+
+func _door_can_be_unlocked() -> bool:
+	return _sim.hand.is_anchor_active(_sim.hand.anchor_index(StringName(DOOR)))
+
+
+## GDD 9.6: after each boss "one service of their choice", and a Hitcher stop
+## offers one passenger. Chosen there, the Hitcher's service puts somebody at
+## the roadside: drawn from the Telling's seed for the stop the boss stop has
+## become, like every hitcher; never the one he carries.
+func _check_hitcher_service_after_a_boss() -> void:
+	var legs: int = RunGenerator.LEGS_PER_ACT
+	for rider: String in ["", "drummer"]:
+		# (With somebody in the seat: a night whose draw there would be them.)
+		var telling_seed: int = _seed_that_draws("student" if rider.is_empty() else rider, 1, legs)
+		var drawn: String = RunGenerator.hitcher(data, telling_seed, 1, legs, HITCHER_STOP, "")
+		_to_first_leg(telling_seed)
+		if not rider.is_empty():
+			check(_sim.board(rider), "(the %s rides along)" % rider)
+		_drive_on_to_boss()
+		_drive_on_to_boss_stop()
+		check_eq(GameData.as_string(_shot("hitcher")), "", "(until he has chosen a service nobody stands at the stop after a boss)")
+		check(not _door_can_be_unlocked(), "(and there is no door to unlock)")
+		_take_the_boss_pick()
+		var clock: float = _sim.clock.minutes
+		_events = []
+		_choose_service(HITCHER_STOP)
+		var who: String = GameData.as_string(_shot("hitcher"))
+		check(ALL.has(who), "after a boss the Hitcher's service puts somebody at the roadside%s" % ("" if rider.is_empty() else ", with the seat taken too"))
+		check_near(_sim.clock.minutes, clock, 0.000001, "(at no Clock cost)")
+		if rider.is_empty():
+			check_eq(who, drawn, "the one the Telling's seed draws for a Hitcher stop at this place in the night")
+			check(_door_can_be_unlocked(), "the passenger door can be unlocked for them")
+			check_near(_reach_time(DOOR), GameData.as_float(data.record("anchors", DOOR).get("time_s")), 0.03, "(a Far reach)")
+			_events = []
+			_tap()
+			check_eq(GameData.as_string(_event("passenger_boarded").get("passenger")), who, "a TAP on the door and they get in")
+			check_eq(GameData.as_string(_shot("passenger")), who, "(they are in the seat)")
+			check_eq(GameData.as_string(_shot("hitcher")), "", "(nobody is left at the roadside)")
+			_leave_stop()
+			check_eq(_sim.run.act, 2, "(he drives on into Act 2)")
+			check_eq(GameData.as_string(_shot("passenger")), who, "and they ride into the next act with him")
+			# The same night again, loaded from the save made at that stop: the same one.
+			_to_first_leg(telling_seed)
+			_drive_on_to_boss()
+			_drive_on_to_boss_stop()
+			var read: Dictionary = Save.from_text(Save.to_text(Save.default_profile(), _sim.checkpoint))
+			_sim = DriveSim.new(fresh_data())
+			check(_sim.restore(GameData.as_dict(read.get("telling"))), "(the save made at the stop after the boss loads)")
+			_take_the_boss_pick()
+			_choose_service(HITCHER_STOP)
+			check_eq(GameData.as_string(_shot("hitcher")), who, "in a Telling loaded from the save made there, the same one stands at the roadside")
+		else:
+			check_eq(drawn, rider, "(by the draw it would be the one he carries)")
+			check(who != rider, "never the one he carries: another of the five stands there")
+			check(not _door_can_be_unlocked(), "(with the seat taken the door stays locked)")
+	# The stop after a boss is the stop he chose: at a tea stall a hitcher
+	# stands sometimes, at a fitter never (GDD 8.1).
+	var chance_seed: Array[int] = [0, 0]
+	for candidate: int in range(1, 400):
+		var sometimes: bool = not RunGenerator.hitcher(data, candidate, 1, legs, "tea_stall", "").is_empty()
+		if chance_seed[1 if sometimes else 0] == 0:
+			chance_seed[1 if sometimes else 0] = candidate
+	check(chance_seed[0] > 0 and chance_seed[1] > 0, "(a night whose tea stall after the boss has a hitcher, and one whose has none)")
+	for stands: int in 2:
+		for service: String in ["tea_stall", "fitter"]:
+			_to_first_leg(chance_seed[stands])
+			_drive_on_to_boss()
+			_drive_on_to_boss_stop()
+			_take_the_boss_pick()
+			_choose_service(service)
+			var expected: String = RunGenerator.hitcher(data, chance_seed[stands], 1, legs, service, "")
+			check_eq(GameData.as_string(_shot("hitcher")), expected, "the stop after a boss that became a %s has %s at its roadside, as any %s has" % [service, "nobody" if expected.is_empty() else "the " + expected, service])
+			check_eq(expected.is_empty(), service == "fitter" or stands == 0, "(%s)" % ("nobody" if expected.is_empty() else "somebody"))
+
+
+## Whoever has just got out does not stand at that same roadside asking for
+## a ride (D-051: "the next of the five stands there instead"), and the save
+## made there holds who got out, so that a Telling loaded from it has the
+## same roadside.
+func _check_nobody_stands_where_they_got_out() -> void:
+	# A night in which she is met at the first stop and, by the draw, would
+	# stand again at the stall where her three legs end: the first of Act 2.
+	var telling_seed: int = _seed_that_draws("hajjiya", 2, 0, true)
+	_to_first_leg(telling_seed)
+	_into_stall()
+	_tap_at(DOOR)
+	check_eq(GameData.as_string(_shot("passenger")), "hajjiya", "(she gets in at the first stop)")
+	for _leg: int in 2:
+		_on_to_next_leg()
+		_to_next_stop()
+	_drive_on_to_act(2)
+	_into_next_quiet_leg()
+	var last_stop: String = GameData.as_string(_sim.run.branch.get("stop"))
+	check_eq(RunGenerator.hitcher(data, telling_seed, 2, 0, last_stop, ""), "hajjiya", "(by the draw she would stand at the %s where her ride ends)" % last_stop)
+	_events = []
+	_to_next_stop()
+	check_eq(GameData.as_string(_event("passenger_left").get("passenger")), "hajjiya", "(she gets out there)")
+	var stands: String = GameData.as_string(_shot("hitcher"))
+	check(stands != "hajjiya", "she has just got out here: she does not stand at this roadside asking for a ride")
+	check(ALL.has(stands), "the next of the five stands there instead (the %s)" % stands)
+	check_eq(GameData.as_string(_sim.checkpoint.get("left_here")), "hajjiya", "the save made there holds who got out here")
+	var read: Dictionary = Save.from_text(Save.to_text(Save.default_profile(), _sim.checkpoint))
+	var loaded: DriveSim = DriveSim.new(fresh_data())
+	check(loaded.restore(GameData.as_dict(read.get("telling"))), "(that save loads)")
+	check_eq(GameData.as_string(loaded.snapshot()["hitcher"]), stands, "a Telling loaded from that save has the same one at the roadside")
+	loaded.tick = _sim.tick
+	check_eq(loaded.state_hash(), _sim.state_hash(), "(and is the same Telling to the bit)")
+	_events = []
+	_tap_at(DOOR)
+	check_eq(GameData.as_string(_event("passenger_boarded").get("passenger")), stands, "(the door lets the stranger in, not her again)")
+	check_eq(_count_events("passenger_left"), 0, "(food once)")
+	# It is about this roadside: once he has driven on, nobody "has just got out".
+	_leave_stop()
+	check_eq(GameData.as_string(_sim.capture().get("left_here")), "", "once he has driven on, the save names nobody as just got out")
+
+
 # --- T-PASS-HAJJIYA ----------------------------------------------------------
 
 ## T-PASS-HAJJIYA: The Hajjiya (8.2): on a tap she holds the wheel dead
@@ -235,6 +394,9 @@ func test_pass_hajjiya() -> void:
 	_check_hajjiya_forbids()
 	_check_hajjiya_prays()
 	_check_hajjiya_rides_and_leaves()
+	# What the review of M8 found (RULES-04, -05, -08).
+	_check_hitcher_service_after_a_boss()
+	_check_nobody_stands_where_they_got_out()
 
 
 func _check_hajjiya_holds_the_wheel() -> void:
@@ -649,6 +811,32 @@ func test_pass_conscript() -> void:
 
 	# What the review of M8 found (RULES-04, -05, -08, -09).
 	_check_a_snap_wakes_him()
+	_check_he_is_not_offered_where_he_got_out()
+
+
+## He gets out at the stop after the act's boss. Chosen there, the Hitcher's
+## service does not offer him back: the next of the five stands there.
+func _check_he_is_not_offered_where_he_got_out() -> void:
+	var legs: int = RunGenerator.LEGS_PER_ACT
+	var telling_seed: int = _seed_that_draws("conscript", 1, legs, true)
+	_to_first_leg(telling_seed)
+	_into_stall()
+	_tap_at(DOOR)
+	check_eq(GameData.as_string(_shot("passenger")), "conscript", "(he gets in at the first stop)")
+	_events = []
+	_drive_on_to_boss()
+	_drive_on_to_boss_stop()
+	check_eq(GameData.as_string(_event("passenger_left").get("passenger")), "conscript", "(at the stop after the boss he gets out)")
+	check_eq(GameData.as_string(_sim.checkpoint.get("left_here")), "conscript", "(the save made there holds that he got out here)")
+	check_eq(RunGenerator.hitcher(data, telling_seed, 1, legs, HITCHER_STOP, ""), "conscript", "(by the draw a Hitcher stop here would have him at its roadside)")
+	_take_the_boss_pick()
+	_choose_service(HITCHER_STOP)
+	var who: String = GameData.as_string(_shot("hitcher"))
+	check(who != "conscript", "the Hitcher's service at the stop where he has just got out does not offer him back")
+	check(ALL.has(who), "it offers the next of the five (the %s)" % who)
+	_events = []
+	_tap_at(DOOR)
+	check_eq(GameData.as_string(_event("passenger_boarded").get("passenger")), who, "and a TAP on the door lets them in")
 
 
 ## The number of a ritual's "nerves:<n>" op.

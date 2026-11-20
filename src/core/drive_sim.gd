@@ -228,6 +228,9 @@ var _let_go_at_stop: bool = false
 var _side: int = RunState.RIGHT
 ## The shady guy is at the stop he stands at.
 var _shady_here: bool = false
+## The passenger who got out at the stop he stands at ("" for nobody): they
+## do not stand at its roadside asking for a ride (GDD 8.1).
+var _left_here: String = ""
 ## Seconds until a wrecked Telling is told again.
 var _wreck_left: float = 0.0
 ## The angle the wheel had when his hand last let go of it with nothing to
@@ -341,6 +344,7 @@ func _build() -> void:
 	_let_go_at_stop = false
 	_side = RunState.RIGHT
 	_shady_here = false
+	_left_here = ""
 	_wreck_left = 0.0
 	_let_go_angle = 0.0
 	_catch_left = 0.0
@@ -835,6 +839,7 @@ func _enter_stop() -> void:
 func _let_passenger_out(after_boss: bool) -> void:
 	if not passengers.ride_over(after_boss):
 		return
+	_left_here = passengers.id
 	passengers.leave("ride_over")
 	cash = maxf(cash + passengers.cash_delta, 0.0)
 	for event: Dictionary in passengers.events:
@@ -872,9 +877,17 @@ func _announce_what_ends() -> void:
 func _open_stop(shady: bool) -> void:
 	if data.has_record("stops", run.stop):
 		stop.begin(run.stop, run.act, shady)
-		# Somebody may stand there, asking for a ride (GDD 8.1).
-		stop.hitcher = RunGenerator.hitcher(data, run.seed, run.act, run.legs_done, run.stop, passengers.id)
+		stop.hitcher = _hitcher_here()
 	_sync_anchors()
+
+
+## Who stands at the stop he is at, asking for a ride (GDD 8.1; "" for
+## nobody): drawn from the Telling's seed for the stop it is now (the stop
+## after a boss is the stop he chose there, GDD 9.6) and its place in the
+## night. Never the one he carries, and never the one who has just got out
+## here.
+func _hitcher_here() -> String:
+	return RunGenerator.hitcher(data, run.seed, run.act, run.legs_done, stop.id_now(), passengers.id, _left_here)
 
 
 ## The car stands; the road is gone until he leaves.
@@ -907,6 +920,7 @@ func _step_stop(button_down: bool) -> void:
 
 func _leave_stop() -> void:
 	_emit("stop_left", {"stop": run.stop})
+	_left_here = ""
 	if stop.tea_served:
 		# The next fork's sign also shows the modifier of the boss ahead (GDD 9.6).
 		run.boss_on_sign = true
@@ -1230,6 +1244,7 @@ func capture() -> Dictionary:
 		"leg_state": items.leg_state(),
 		"item_state": items.telling_state(),
 		"shady": _shady_here,
+		"left_here": _left_here,
 		"boss_sign": run.boss_on_sign,
 		"call_answered": run.call_answered,
 		# For people: rounded. What is loaded are the exact bits below.
@@ -1295,6 +1310,7 @@ func restore(telling: Dictionary) -> bool:
 
 	_side = GameData.as_int(telling.get("side"), RunState.RIGHT)
 	_shady_here = GameData.as_bool(telling.get("shady"))
+	_left_here = GameData.as_string(telling.get("left_here"))
 	run.resume(GameData.as_string(telling.get("table")), Save.seed_in(telling.get("seed")), GameData.as_int(telling.get("retellings")),
 			GameData.as_int(telling.get("act"), 1), GameData.as_int(telling.get("leg")), stage, _side)
 	run.boss_on_sign = GameData.as_bool(telling.get("boss_sign"))
@@ -2387,7 +2403,12 @@ func _complete_ritual() -> void:
 	if _active_anchor == _lever_anchor and sequential_shift:
 		gate.shift_sequential(1 if gesture.direction == Gesture.DIR_UP else -1)
 	elif ritual_id == StopSim.BUY:
+		var stop_was: String = stop.id_now()
 		cash = stop.buy(String(hand.anchor_id(_active_anchor)), cash)
+		if stop.id_now() != stop_was:
+			# The stop after a boss has become the stop he chose (GDD 9.6):
+			# whoever stands at such a stop stands here.
+			stop.hitcher = _hitcher_here()
 	elif ritual_id == StopSim.PLACE:
 		stop.place(String(hand.anchor_id(_active_anchor)), String(hand.anchor_id(hand.at_index)))
 	elif ritual_id == StopSim.BOARD:

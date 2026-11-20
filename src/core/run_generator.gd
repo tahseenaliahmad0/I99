@@ -117,9 +117,11 @@ static func boss_modifier(data: GameData, telling_seed: int, act: int) -> String
 
 ## The hitcher who stands at a stop (GDD 8.1), or "": always one at a Hitcher
 ## stop, and one at hitcher_chance of the fuel stations and tea stalls. Who
-## it is, is drawn by the Telling seed and where in the night the stop is;
-## never the passenger he already carries (`aboard`).
-static func hitcher(data: GameData, telling_seed: int, act: int, leg_index: int, stop_id: String, aboard: String) -> String:
+## it is, is drawn by the Telling seed and where in the night the stop is
+## (the stop after a boss is leg LEGS_PER_ACT of its act); never the
+## passenger he already carries (`aboard`), nor the one who has just got out
+## at this stop (`left_here`): the next of them stands there instead.
+static func hitcher(data: GameData, telling_seed: int, act: int, leg_index: int, stop_id: String, aboard: String, left_here: String = "") -> String:
 	var stands: String = GameData.as_string(data.record("stops", stop_id).get("hitcher")) if data.has_record("stops", stop_id) else ""
 	var random: RandomNumberGenerator = Rng.seeded(Rng.derive(Rng.derive(telling_seed, HITCHER_SALT + act), leg_index))
 	# Both draws are always made, so the one does not depend on the other.
@@ -130,9 +132,11 @@ static func hitcher(data: GameData, telling_seed: int, act: int, leg_index: int,
 		return ""
 	if stands != HITCHER_ALWAYS and (stands != HITCHER_SOMETIMES or roll >= data.tuning.f("hitcher_chance")):
 		return ""
-	if ids[which] == aboard:
+	for _next: int in ids.size():
+		if ids[which] != aboard and ids[which] != left_here:
+			return ids[which]
 		which = (which + 1) % ids.size()
-	return "" if ids[which] == aboard else ids[which]
+	return ""
 
 
 ## A stretch of road with nothing planned on it: the approach to a fork, the
