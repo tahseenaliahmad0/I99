@@ -183,9 +183,11 @@ var _bump_kmh: float = 0.0
 var _queue: Array[Array] = []
 var _served: PackedFloat64Array = PackedFloat64Array()
 var _waved_on: Array[TrafficSim.Vehicle] = []
-## How fast each of those is by now, km/h (TrafficSim sets a vehicle's own
-## speed to its cruise every tick, and theirs is 0 for it).
-var _waved_speed: PackedFloat64Array = PackedFloat64Array()
+## Everyone who was waved on and is still on the road, and how fast each is
+## by now, km/h (TrafficSim sets a vehicle's own speed to its cruise every
+## tick, and theirs is 0 for it). They drive to the road's end.
+var _leaving: Array[TrafficSim.Vehicle] = []
+var _leaving_speed: PackedFloat64Array = PackedFloat64Array()
 var _queue_plan: Array = []
 var _queue_gap: float = 0.0
 var _creep_ms: float = 0.0
@@ -478,7 +480,8 @@ func stop() -> void:
 	_queue = []
 	_served = PackedFloat64Array()
 	_waved_on = []
-	_waved_speed = PackedFloat64Array()
+	_leaving = []
+	_leaving_speed = PackedFloat64Array()
 	_documents = []
 	_delays = 0
 	_corridor_from = 0.0
@@ -577,12 +580,12 @@ func _begin_queue() -> void:
 		for waiting: Variant in line:
 			var vehicle: TrafficSim.Vehicle = waiting
 			_traffic.remove(vehicle)
-	for gone: TrafficSim.Vehicle in _waved_on:
-		if gone != null:
-			_traffic.remove(gone)
+	for gone: TrafficSim.Vehicle in _leaving:
+		_traffic.remove(gone)
 	_queue = []
 	_waved_on = []
-	_waved_speed = PackedFloat64Array()
+	_leaving = []
+	_leaving_speed = PackedFloat64Array()
 	_served = PackedFloat64Array()
 	for lane: int in _queue_plan.size():
 		var line: Array = []
@@ -602,7 +605,6 @@ func _begin_queue() -> void:
 		_queue.append(line)
 		_served.append(0.0)
 		_waved_on.append(null)
-		_waved_speed.append(0.0)
 	phase = QUEUE
 	released = false
 	stow_left = 0.0
@@ -619,21 +621,27 @@ func _begin_queue() -> void:
 ## never faster than creep_kmh. TrafficSim leaves them where they are (their
 ## cruise is 0): its follow gap would spread the queue out.
 func _step_queue(dt: float) -> void:
+	# Whoever was waved on drives off, and is taken off the road at its end.
+	for index: int in range(_leaving.size() - 1, -1, -1):
+		var leaver: TrafficSim.Vehicle = _leaving[index]
+		_leaving_speed[index] = minf(_leaving_speed[index] + _leave_accel * dt, _leave_kmh)
+		leaver.speed = _leaving_speed[index]
+		leaver.s += leaver.speed * KMH_TO_MS * dt
+		leaver.cruise = 0.0
+		if leaver.s - leaver.half_length > _length:
+			_traffic.remove(leaver)
+			_leaving.remove_at(index)
+			_leaving_speed.remove_at(index)
+			for lane: int in _waved_on.size():
+				if _waved_on[lane] == leaver:
+					_waved_on[lane] = null
 	for lane: int in _queue.size():
 		var line: Array = _queue[lane]
 		var nose: float = bar_at
 		var gone: TrafficSim.Vehicle = _waved_on[lane]
-		if gone != null:
-			_waved_speed[lane] = minf(_waved_speed[lane] + _leave_accel * dt, _leave_kmh)
-			gone.speed = _waved_speed[lane]
-			gone.s += gone.speed * KMH_TO_MS * dt
-			gone.cruise = 0.0
-			if gone.s - gone.half_length < bar_at + _queue_clear:
-				# Not yet clear of the bar: the next one waits behind it.
-				nose = minf(nose, gone.s - gone.half_length - _queue_gap)
-			elif gone.s - gone.half_length > _length:
-				_traffic.remove(gone)
-				_waved_on[lane] = null
+		if gone != null and gone.s - gone.half_length < bar_at + _queue_clear:
+			# Not yet clear of the bar: the next one waits behind it.
+			nose = minf(nose, gone.s - gone.half_length - _queue_gap)
 		for waiting: Variant in line:
 			var vehicle: TrafficSim.Vehicle = waiting
 			var room: float = nose - vehicle.half_length - vehicle.s
@@ -656,10 +664,9 @@ func _step_queue(dt: float) -> void:
 			_served[lane] = 0.0
 			line.remove_at(0)
 			first.role = WAVED_ON_ROLE
-			if _waved_on[lane] != null:
-				_traffic.remove(_waved_on[lane])
 			_waved_on[lane] = first
-			_waved_speed[lane] = 0.0
+			_leaving.append(first)
+			_leaving_speed.append(0.0)
 
 
 ## True while the Checkpoint has him under its eyes: from its start until

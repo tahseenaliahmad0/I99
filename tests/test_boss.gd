@@ -1144,6 +1144,54 @@ func _check_checkpoint_rows() -> void:
 		served += waiting[lane] - _sim.boss.queue_length(lane)
 	check_eq(served, GameData.as_int(plan.get("lanes")), "once he is between the barriers each lane's first vehicle is waved on after its %s s" % str(_checkpoint_number_of_queue("serve_s")))
 
+	# The Checkpoint's sign can be read: rolling in at par it is ahead of
+	# him for two seconds and more, and it stands before the barriers begin.
+	# (It stood 1 m into the road: in view for five ticks.)
+	_begin_checkpoint("", 1, false)
+	var par_ms: float = tuning.fi("gear_speeds", 2) * KMH_TO_MS
+	_tick()
+	var sign: Dictionary = _sign("checkpoint")
+	check(not sign.is_empty(), "as the Checkpoint begins its sign is in view")
+	var sign_ahead: float = GameData.as_float(sign.get("ahead"))
+	check(sign_ahead >= 2.0 * par_ms, "it is two seconds or more ahead of him at par (%.1f m, %.2f s)" % [sign_ahead, sign_ahead / par_ms])
+	check(_sim.car.s + sign_ahead < taper, "and it stands before the barriers begin (at %.1f m; they begin at %.1f m)" % [_sim.car.s + sign_ahead, taper])
+	check_near(GameData.as_float(sign.get("limit")), 0.0, 0.000001, "(a checkpoint to stop at: its sign names no speed)")
+	var seen_ticks: int = 0
+	guard = _ticks_in(10.0)
+	while not _sign("checkpoint").is_empty() and guard > 0:
+		guard -= 1
+		seen_ticks += 1
+		_tick()
+	check(float(seen_ticks) * DT >= 2.0, "driving up at par he has it in view for %.2f s" % (float(seen_ticks) * DT))
+
+	# Whoever is waved on drives off down the road and leaves it at its
+	# end: nobody vanishes in front of him. (Each lane kept one: the one
+	# before was taken off the road, 66 m past the bar, when the next left.)
+	plan = _begin_checkpoint("", 3)
+	var road_end: float = GameData.as_float(plan.get("length"))
+	_stand_short_of_the_queue()
+	var last_seen: Dictionary = {}
+	var vanished_at: Array[float] = []
+	guard = _ticks_in(150.0)
+	while (_sim.boss.queue_length(1) > 0 or not last_seen.is_empty()) and guard > 0:
+		guard -= 1
+		_tick()
+		var on_road: Dictionary = {}
+		for vehicle: TrafficSim.Vehicle in _sim.traffic.vehicles:
+			if vehicle.lane == 1 and vehicle.role == BossSim.WAVED_ON_ROLE:
+				on_road[vehicle.id] = vehicle.s - vehicle.half_length
+		for id: Variant in last_seen.keys():
+			if not on_road.has(id):
+				vanished_at.append(GameData.as_float(last_seen[id]))
+				last_seen.erase(id)
+		for id: Variant in on_road:
+			last_seen[id] = on_road[id]
+	check_eq(vanished_at.size(), GameData.as_int(GameData.as_dict(_checkpoint().get("queue")).get("cars")), "(every vehicle of the middle lane's queue was waved on and has left the road)")
+	var earliest: float = INF
+	for at: float in vanished_at:
+		earliest = minf(earliest, at)
+	check(earliest >= road_end - 1.0, "each drove to the road's end before it was gone (the first to go was last seen %.1f m along; the road ends at %.1f m)" % [earliest, road_end])
+
 
 ## A number of the Checkpoint's queue (data/legs.json).
 func _checkpoint_number_of_queue(key: String) -> float:

@@ -17,7 +17,7 @@
     {"id": "checkpoint", "act": 1, "length_m": 500, "par_s": 90, "lanes": 3, "divided": true,
      "modifiers": ["long_queue", "thorough"],
      "checkpoint": {
-       "corridor": {"at_m": 200, "length_m": 150, "taper_m": 60, "gap_m": 2.34, "sign_lead_s": 5},
+       "corridor": {"at_m": 200, "length_m": 150, "taper_m": 60, "gap_m": 2.34, "sign_lead_s": 2},
        "barrier_suspicion": 25,
        "queue": {"cars": 6, "gap_m": 2.5, "creep_kmh": 12, "pull_up_per_s": 2.0, "settle_m": 0.1, "serve_s": 4, "leave_kmh": 40, "clear_m": 4,
                  "vehicles": ["car", "taxi", "pickup", "minibus"]},
