@@ -14,7 +14,7 @@ extends Node
 ##     rumble strip, the heartbeat, the radio, the siren, the ringing phone
 ##     (the one on its mount, and the one in his pocket at Dawn), the
 ##     indicator's tick, the Phantom's hum, the horn of a Snap, the horn of
-##     what comes up behind his standing car.
+##     what comes up behind his standing car, the Rattle.
 ##
 ## What an entry says about how its sound is played, beside how it is made:
 ##
@@ -30,6 +30,10 @@ extends Node
 ##   every, per_minute, speed_kmh, speed_hz, idle_hz, per_gear, warble
 ##                        when and at what pitch the sounds of `apply` are
 ##                        heard; each is explained where it is read.
+##
+## A key on a sound it means nothing for (a hold on a sound that ends, what a
+## cue does on a sound that is no cue, "every" on a sound that does not
+## repeat) is an error at boot, like a key that nothing reads.
 ##
 ## This class reads the snapshot and changes nothing. Set the environment
 ## variable I99_AUDIO_LOG to have every sound that starts or ends printed.
@@ -49,6 +53,8 @@ const BUS_BED: StringName = &"Bed"
 
 const ENGINE: String = "engine"
 const ENGINE_HARMONIC: String = "engine_harmonic"
+## The Rattle fault (GDD 6.3): the one fault with nothing to show for itself.
+const RATTLE: String = "rattle"
 const RUMBLE: String = "rumble_strip"
 const HEARTBEAT: String = "heartbeat"
 const HORN: String = "horn"
@@ -65,6 +71,21 @@ const HECKLE: String = "heckle"
 const SQUEAL: String = "squeal_%d"
 ## radio_music, radio_static ...: one for each station, and for static.
 const RADIO: String = "radio_%s"
+## The music station's loop, which a tape in the deck plays too.
+const MUSIC: String = RADIO % String(ItemSim.MUSIC)
+## What only a functional cue says, what only a loop says, and what apply()
+## reads from the sounds named here and from no other.
+const CUE_KEYS: PackedStringArray = ["duck_db", "duck_attack", "duck_release"]
+const LOOP_KEYS: PackedStringArray = ["fade_in", "fade_out", "hold"]
+const KEYS_OF: Dictionary = {
+	"every": [TICK, RING, SIREN],
+	"per_minute": [HEARTBEAT],
+	"speed_kmh": [ENGINE],
+	"speed_hz": [ENGINE],
+	"idle_hz": [ENGINE],
+	"per_gear": [ENGINE_HARMONIC],
+	"warble": [MUSIC],
+}
 const TRACE_VARIABLE: String = "I99_AUDIO_LOG"
 const SECONDS_PER_MINUTE: float = 60.0
 ## Frames without a snapshot after which the drive scene is taken to be gone.
@@ -143,6 +164,7 @@ var _clock: float = 0.0
 var _elapsed: float = 0.0
 var _engine: Voice
 var _harmonic: Voice
+var _rattle: Voice
 var _rumble: Voice
 var _horn: Voice
 var _horn_behind: Voice
@@ -245,6 +267,10 @@ func stop(id: String) -> void:
 ## The state of the drive, once a frame: what should be sounding now. The
 ## sound moves on by the simulation's own clock, so what repeats (a heartbeat,
 ## a ring) keeps time with what it tells of.
+## A Wreck stops the Telling where it stands (GDD 3.2): while the Table
+## objects the snapshot stays what it was, and nothing that it says is going
+## on is heard to go on. What had been asked for by itself plays out (the
+## crash, a honk), and the radio plays over the cut.
 func apply(snapshot: Dictionary) -> void:
 	var time: float = snapshot["time"]
 	var delta: float = clampf(time - _clock, 0.0, MAX_STEP) if _live else 0.0
@@ -278,24 +304,30 @@ func apply(snapshot: Dictionary) -> void:
 		if harmonic > 0.0:
 			_set_pitch(_harmonic, harmonic * hz / _harmonic_hz)
 
+	# The Rattle (GDD 6.3) has nothing to show, so it is heard (GDD 16.3): for
+	# as long as its lamp is lit and the engine runs.
+	if _rattle != null:
+		var faults: Array[StringName] = snapshot["faults"]
+		_rattle.wanted = faults.has(DriveSim.FAULT_RATTLE) and not wrecked
+
 	# The rumble strip is heard while the car runs on it.
 	if _rumble != null:
 		_rumble.wanted = on_rumble and speed > 0.0 and not wrecked
 
 	# A Snap: he leans on the horn for as long as it lasts (GDD 6.1).
 	if _horn != null:
-		_horn.wanted = snapped
+		_horn.wanted = snapped and not wrecked
 
 	# What comes up behind his standing car in the Storm (GDD 10.3) leans on
 	# its horn until it has hit him or missed him: no longer than it comes.
 	if _horn_behind != null:
-		_horn_behind.wanted = rear_end_in > 0.0
+		_horn_behind.wanted = rear_end_in > 0.0 and not wrecked
 		if not _horn_behind.wanted:
 			_horn_behind.held = 0.0
 
 	# The Phantom's hum before a cramp (GDD 7.9): no longer than the hum.
 	if _hum != null:
-		_hum.wanted = cramp == DriveSim.HUM
+		_hum.wanted = cramp == DriveSim.HUM and not wrecked
 		if not _hum.wanted:
 			_hum.held = 0.0
 
@@ -306,24 +338,24 @@ func apply(snapshot: Dictionary) -> void:
 	if _beat != null:
 		var span: float = _snap_at - _pound_from
 		var share: float = clampf((nerves - _pound_from) / span, 0.0, 1.0) if span > 0.0 else 1.0
-		_set_pulse(_beat, pound, SECONDS_PER_MINUTE / lerpf(_beats_slow, _beats_fast, share))
+		_set_pulse(_beat, pound and not wrecked, SECONDS_PER_MINUTE / lerpf(_beats_slow, _beats_fast, share))
 
 	# A phone rings for as long as somebody calls: until the call is answered
 	# or lost. The snapshot names the caller of the phone on its mount and,
 	# while the Call rings in his pocket at Dawn (GDD 10.4), Noor.
 	if _ring != null:
-		_set_pulse(_ring, not caller.is_empty(), _ring.every)
+		_set_pulse(_ring, not caller.is_empty() and not wrecked, _ring.every)
 
 	# The siren chirps while the police are behind him, faster as Suspicion
 	# grows (GDD 16.3); not while the officer stands at the window.
 	if _siren != null:
-		_set_pulse(_siren, (watching or police_lights) and not pulled_over,
+		_set_pulse(_siren, (watching or police_lights) and not pulled_over and not wrecked,
 				lerpf(_siren_calm, _siren_hot, clampf(suspicion / _suspicion_max, 0.0, 1.0)))
 
 	# The indicator ticks for as long as it signals: that it has not yet
 	# gone out is what he needs to hear.
 	if _tick != null:
-		_set_pulse(_tick, indicator != 0, _tick.every)
+		_set_pulse(_tick, indicator != 0 and not wrecked, _tick.every)
 
 	_step(delta)
 
@@ -445,6 +477,7 @@ func _clear() -> void:
 	_squeals.clear()
 	_engine = null
 	_harmonic = null
+	_rattle = null
 	_rumble = null
 	_horn = null
 	_horn_behind = null
@@ -471,12 +504,35 @@ func _make_buses() -> void:
 	AudioServer.set_bus_volume_db(AudioServer.get_bus_index(BUS_BED), 0.0)
 
 
+## The keys of an entry that say how a sound is played and mean nothing for
+## the sound `id`: what a cue does to the rest on a sound that is no cue, a
+## loop's fades and hold on a sound that ends, and what apply() reads from one
+## sound on any other. Each is a mistake in the entry, as the keys that
+## SfxSynth finds idle are: a number that would silently do nothing.
+func idle_keys(id: String, spec: Dictionary) -> PackedStringArray:
+	var idle: PackedStringArray = []
+	if not GameData.as_bool(spec.get("functional")):
+		idle.append_array(CUE_KEYS)
+	if not GameData.as_bool(spec.get("loop")):
+		idle.append_array(LOOP_KEYS)
+	for key: Variant in KEYS_OF:
+		if not GameData.as_array(KEYS_OF[key]).has(id):
+			idle.append(str(key))
+	var found: PackedStringArray = []
+	for key: String in idle:
+		if spec.has(key):
+			found.append(key)
+	return found
+
+
 func _make_voice(id: String, entry: Dictionary) -> void:
 	var spec: Dictionary = GameData.as_dict(entry.get("synth"))
 	var problems: PackedStringArray = []
 	for key: Variant in spec:
 		if not SfxSynth.KEYS.has(str(key)) and not PLAY_KEYS.has(str(key)):
 			problems.append("unknown key \"%s\"" % str(key))
+	for key: String in idle_keys(id, spec):
+		problems.append("\"%s\" says nothing about how a sound like this one is played" % key)
 	var voice: Voice = Voice.new()
 	voice.id = id
 	voice.looped = GameData.as_bool(spec.get("loop"))
@@ -572,11 +628,12 @@ func _configure(tuning: Tuning) -> void:
 		if _speed_to <= _speed_from:
 			push_error("Audio: sfx '%s': \"speed_kmh\" must rise" % ENGINE)
 
+	_rattle = _voices.get(RATTLE)
 	_rumble = _voices.get(RUMBLE)
 	_horn = _voices.get(HORN)
 	_horn_behind = _voices.get(HORN_BEHIND)
 	_hum = _voices.get(HUM)
-	for id: String in [RUMBLE, HORN, HORN_BEHIND, HUM]:
+	for id: String in [RATTLE, RUMBLE, HORN, HORN_BEHIND, HUM]:
 		var voice: Voice = _voices.get(id)
 		if voice == null or not voice.looped:
 			push_error("Audio: sfx.json needs '%s', as a loop" % id)
@@ -615,7 +672,7 @@ func _configure(tuning: Tuning) -> void:
 		_radio[StringName(str(station))] = voice
 	_music = _radio.get(ItemSim.MUSIC)
 	if _music != null:
-		var warble: Dictionary = GameData.as_dict(_spec(RADIO % String(ItemSim.MUSIC)).get("warble"))
+		var warble: Dictionary = GameData.as_dict(_spec(MUSIC).get("warble"))
 		_warble_hz = _above_zero(_music.id, warble, "hz")
 		_warble_depth = _above_zero(_music.id, warble, "depth")
 
@@ -746,6 +803,9 @@ func _set_pitch(voice: Voice, pitch: float) -> void:
 
 func _set_pulse(pulse: Pulse, on: bool, every: float) -> void:
 	pulse.every = every
+	# A gap that has grown shorter (a jump in Suspicion, in Nerves) is not
+	# waited out at the length it had: the next sound is at most one new gap off.
+	pulse.left = minf(pulse.left, every)
 	if on == pulse.on:
 		return
 	pulse.on = on
