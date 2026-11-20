@@ -37,7 +37,7 @@
       "burst_hz": 30, "burst_decay": 0.02,
       "rate": 22050, "duration": 0.5, "peak": 0.9, "loop": true,
       "gain_db": -8, "fade_in": 0.01, "fade_out": 0.05,
-      "functional": true, "duck_db": -15, "duck_attack": 0.02, "duck_release": 0.25,
+      "functional": true, "duck_db": -16, "duck_attack": 0.02, "duck_release": 0.25,
       "note": "30 Hz noise bursts, while the car is on the strip"
     },
     "stream": null
@@ -47,7 +47,7 @@
       "wave": "sine", "freq": 1200, "decay": 0.02,
       "rate": 22050, "duration": 0.08, "peak": 0.9,
       "gain_db": -7, "every": 0.4,
-      "functional": true, "duck_db": -13.5, "duck_attack": 0, "duck_release": 1.2,
+      "functional": true, "duck_db": -14.5, "duck_attack": 0, "duck_release": 1.2,
       "note": "A short click, again every `every` seconds while the indicator signals. duck_release is longer than that, so the rest stays down between the ticks instead of pumping"
     },
     "stream": null
@@ -222,7 +222,7 @@
       "attack": 0.12, "release": 0.3,
       "rate": 11025, "duration": 0.8, "peak": 0.9,
       "gain_db": -13,
-      "functional": true, "duck_db": -13, "duck_attack": 0.03, "duck_release": 0.3,
+      "functional": true, "duck_db": -14, "duck_attack": 0.03, "duck_release": 0.3,
       "note": "A sine falling from 400 to 200 Hz, 0.8 s"
     },
     "stream": null
@@ -233,7 +233,7 @@
       "attack": 0.2, "release": 0.5,
       "rate": 11025, "duration": 1.3, "peak": 0.9,
       "gain_db": -13,
-      "functional": true, "duck_db": -13, "duck_attack": 0.03, "duck_release": 0.3,
+      "functional": true, "duck_db": -14, "duck_attack": 0.03, "duck_release": 0.3,
       "note": "A sine falling from 400 to 200 Hz, 1.3 s"
     },
     "stream": null
@@ -342,6 +342,44 @@
       "rate": 22050, "duration": 0.25, "peak": 0.9,
       "gain_db": -19,
       "note": "A soft ding before each heckle subtitle"
+    },
+    "stream": null
+  },
+  "gust": {
+    "synth": {
+      "wave": "noise", "seed": 35, "filter": "bandpass", "cutoff": 600, "q": 1.5,
+      "rate": 22050, "duration": 1.0, "peak": 0.9, "loop": true,
+      "gain_db": -21, "fade_in": 0.7, "fade_out": 0.5,
+      "note": "Not of GDD 16.5's table: the tell of a gust (GDD 5.4, 10.3) is heard as well as seen (GDD 17.2). Wind in a narrow band that swells for as long as the streaks blow and falls away as the gust pushes"
+    },
+    "stream": null
+  },
+  "dust": {
+    "synth": {
+      "wave": "noise", "seed": 36, "filter": "lowpass", "cutoff": 150, "q": 0.7,
+      "rate": 11025, "duration": 1.5, "peak": 0.9, "loop": true,
+      "gain_db": -24, "fade_in": 1.0, "fade_out": 1.0,
+      "note": "Not of GDD 16.5's table: the Storm's thick dust (GDD 10.3) is heard as well as seen (GDD 17.2). A low roar, under the band of the rumble strip, that comes in while the thick dust closes in (the Storm's dust_tell_s) and stays for as long as the dust is thick"
+    },
+    "stream": null
+  },
+  "soldier_whistle": {
+    "synth": {
+      "wave": "sine", "freq": 2300, "trill": { "hz": 30, "ratio": 1.07 },
+      "attack": 0.02, "release": 0.1,
+      "rate": 22050, "duration": 0.5, "peak": 0.9,
+      "gain_db": -20,
+      "note": "Not of GDD 16.5's table: the soldier whistles as he sets off toward the car (GDD 10.2: the Stow begins), so that his coming is heard as well as seen (GDD 17.2). A pea whistle, higher than the phone and the siren"
+    },
+    "stream": null
+  },
+  "soldier_knock": {
+    "synth": {
+      "wave": "noise", "seed": 62, "filter": "bandpass", "cutoff": 500, "q": 3,
+      "burst_hz": 6, "burst_decay": 0.02,
+      "rate": 22050, "duration": 0.5, "peak": 0.9,
+      "gain_db": -13,
+      "note": "Not of GDD 16.5's table: the soldier raps on the door with every sign he puts up (GDD 10.2: the Papers), so that the document he asks for is heard as well as seen (GDD 17.2). Three dull knocks"
     },
     "stream": null
   }

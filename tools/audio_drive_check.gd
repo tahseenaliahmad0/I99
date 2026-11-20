@@ -29,6 +29,10 @@ const BOSS_SEED: int = 1
 ## How many of the Storm's waits the check stands through for something to
 ## come up behind him: each wait brings it with the Storm's rear_end_chance.
 const STORM_WAITS: int = 30
+## Seconds of the Storm the check drives to hear its gusts announced.
+const STORM_GUST_WATCH: float = 30.0
+## Seconds within which the soldier must set off toward a car at the bar.
+const SOLDIER_SETS_OFF: float = 3.0
 ## How far short of where the Call begins the check sets the car down, m.
 const CALL_RUN_UP: float = 2.0
 ## What any sound may say about how it is played; every other key of
@@ -62,6 +66,9 @@ func run(data: GameData) -> PackedStringArray:
 		_check_engine()
 		_check_rumble()
 		_check_rattle()
+		_check_gust()
+		_check_dust()
+		_check_soldier()
 		_check_heartbeat()
 		_check_radio()
 		_check_tape()
@@ -295,6 +302,140 @@ func _check_rattle() -> void:
 	sim.faults.repair(DriveSim.FAULT_RATTLE)
 	_drive(sim, out)
 	_expect(not Audio.is_sounding(Audio.RATTLE), "rattle: still heard when the fault has been repaired")
+
+
+## A gust's tell (GDD 5.4, 10.3) is heard as well as seen (GDD 17.2): for as
+## long as its streaks blow, and no longer.
+func _check_gust() -> void:
+	var spec: Dictionary = _synth(Audio.GUST)
+	var tell: float = _tuning.f("gust_tell")
+	var out: float = GameData.as_float(spec.get("fade_out")) + STEP * 3.0
+	var cruise: float = _tuning.fi("gear_speeds", 2)
+	_rest()
+	_run(_snap({"speed": cruise}), 1.0)
+	_expect(not Audio.is_sounding(Audio.GUST), "gust: heard with no gust coming")
+	_run(_snap({"speed": cruise, "gust_tell": tell, "gust_dir": 1}), tell)
+	_expect(Audio.is_sounding(Audio.GUST), "gust: not heard while a gust's streaks blow")
+	_expect(is_equal_approx(Audio.volume_of(Audio.GUST), GameData.as_float(spec.get("gain_db"))), "gust: not all the way in by the end of the tell")
+	_expect(Audio.duck_db() == 0.0, "gust: it turns everything else down; it is no functional cue")
+	_run(_snap({"speed": cruise, "gust_tell": 0.0}), out)
+	_expect(not Audio.is_sounding(Audio.GUST), "gust: still heard when the tell is over")
+	_run(_snap({"speed": cruise, "gust_tell": tell, "gust_dir": -1, "wrecked": true}), 1.0)
+	_expect(not Audio.is_sounding(Audio.GUST), "gust: heard after a Wreck")
+	# The Storm itself: every tell of a gust is heard from its first frame to
+	# its last, and between them the wind is still.
+	var sim: DriveSim = _quiet_boss(BossSim.STORM)
+	_rest()
+	var told: int = 0
+	var unheard: int = 0
+	var gusts: int = 0
+	var blowing: bool = false
+	var quiet_for: float = INF
+	var heard_in_quiet: int = 0
+	for frame: int in roundi(STORM_GUST_WATCH * FPS):
+		_drive(sim, STEP)
+		var left: float = sim.leg.gust_tell_left
+		if left > 0.0:
+			told += 1
+			quiet_for = 0.0
+			if not blowing:
+				gusts += 1
+			if not Audio.is_sounding(Audio.GUST):
+				unheard += 1
+		else:
+			quiet_for += STEP
+			if quiet_for > out and Audio.is_sounding(Audio.GUST):
+				heard_in_quiet += 1
+		blowing = left > 0.0
+	if _expect(gusts >= 2, "the Storm: %d gust(s) in %.0f s; their sound was not checked" % [gusts, STORM_GUST_WATCH]):
+		_expect(unheard == 0, "gust: %d of the %d frames of the Storm's tells were silent" % [unheard, told])
+		_expect(heard_in_quiet == 0, "gust: heard in %d frames with no gust coming" % heard_in_quiet)
+
+
+## The Storm's thick dust (GDD 10.3) is heard as well as seen (GDD 17.2):
+## from when it begins to close in until it thins.
+func _check_dust() -> void:
+	var spec: Dictionary = _synth(Audio.DUST)
+	var out: float = GameData.as_float(spec.get("fade_out")) + STEP * 3.0
+	var into: float = GameData.as_float(spec.get("fade_in"))
+	var cruise: float = _tuning.fi("gear_speeds", 2)
+	_rest()
+	_run(_snap({"speed": cruise}), 1.0)
+	_expect(not Audio.is_sounding(Audio.DUST), "dust: heard on a clear road")
+	_run(_snap({"speed": cruise, "dust_thick": false, "dust_closing": 0.0, "dust_change_in": 5.0}), 1.0)
+	_expect(not Audio.is_sounding(Audio.DUST), "dust: heard in thin dust that is not yet closing in")
+	_run(_snap({"speed": cruise, "dust_thick": false, "dust_closing": 0.5}), STEP * 2.0)
+	_expect(Audio.is_sounding(Audio.DUST), "dust: not heard as the thick dust closes in")
+	_run(_snap({"speed": cruise, "dust_thick": true, "dust_closing": 0.0}), into + STEP)
+	_expect(Audio.is_sounding(Audio.DUST) and is_equal_approx(Audio.volume_of(Audio.DUST), GameData.as_float(spec.get("gain_db"))),
+			"dust: not all the way in once the dust is thick")
+	_expect(Audio.duck_db() == 0.0, "dust: it turns everything else down; it is no functional cue")
+	_run(_snap({"speed": cruise, "dust_thick": false, "dust_closing": 0.0}), out)
+	_expect(not Audio.is_sounding(Audio.DUST), "dust: still heard when the dust has thinned")
+	_run(_snap({"speed": cruise, "dust_thick": true, "wrecked": true}), 1.0)
+	_expect(not Audio.is_sounding(Audio.DUST), "dust: heard after a Wreck")
+	# The Storm itself, standing or driving (the dust goes by the clock): it
+	# is heard from the first frame of the closing to the last of thick dust.
+	var storm: Dictionary = _boss_numbers(BossSim.STORM)
+	var cycle: float = GameData.as_float(storm.get("thin_s")) + GameData.as_float(storm.get("thick_s"))
+	var tell: float = GameData.as_float(storm.get("dust_tell_s"))
+	var sim: DriveSim = _quiet_boss(BossSim.STORM)
+	_rest()
+	var unheard: int = 0
+	var early: int = 0
+	var closing: int = 0
+	var thick: int = 0
+	for frame: int in roundi(cycle * FPS):
+		_drive(sim, STEP)
+		var shot: Dictionary = sim.snapshot()
+		var wanted: bool = GameData.as_bool(shot["dust_thick"]) or GameData.as_float(shot["dust_closing"]) > 0.0
+		if GameData.as_bool(shot["dust_thick"]):
+			thick += 1
+		elif wanted:
+			closing += 1
+		if wanted and not Audio.is_sounding(Audio.DUST):
+			unheard += 1
+		if not wanted and GameData.as_float(shot["dust_change_in"]) > tell + out and GameData.as_float(shot["dust_change_in"]) < GameData.as_float(storm.get("thin_s")) - out and Audio.is_sounding(Audio.DUST):
+			early += 1
+	_expect(absi(closing - roundi(tell * FPS)) <= 1, "dust: the Storm's dust closes in for %d frames; its tell is %.1f s" % [closing, tell])
+	_expect(thick > 0 and unheard == 0, "dust: %d frames of the Storm's closing and thick dust were silent" % unheard)
+	_expect(early == 0, "dust: heard in %d frames of thin dust that was not closing in" % early)
+
+
+## The soldier (GDD 10.2) is heard as well as seen (GDD 17.2): a whistle as
+## he sets off toward the car, a knock with the sign he puts up.
+func _check_soldier() -> void:
+	var numbers: Dictionary = _boss_numbers(BossSim.CHECKPOINT)
+	var stow: float = GameData.as_float(numbers.get("stow_s"))
+	var sim: DriveSim = DriveSim.new(_data)
+	var plan: Dictionary = BossSim.plan(_data, BossSim.CHECKPOINT, "", BOSS_SEED)
+	var nobody: Array = []
+	for lane: int in GameData.as_int(plan.get("lanes")):
+		nobody.append([])
+	plan["queue"] = nobody
+	sim.gate.reset(1)
+	sim.begin_leg(plan)
+	sim.in_encounter = true
+	sim.drain_events()
+	sim.car.x = sim.car.lane_center(1)
+	sim.car.s = sim.boss.bar_at - sim.car.length() * 0.5
+	sim.car.speed = 0.0
+	_rest()
+	var whistles: int = Audio.starts_of(Audio.WHISTLE)
+	var knocks: int = Audio.starts_of(Audio.KNOCK)
+	var guard: int = roundi(SOLDIER_SETS_OFF * FPS)
+	while sim.boss.phase != BossSim.STOW and guard > 0:
+		guard -= 1
+		_drive(sim, STEP)
+	if not _expect(sim.boss.phase == BossSim.STOW, "the Checkpoint: the soldier did not set off toward a car at the bar; his sounds were not checked"):
+		return
+	_expect(Audio.starts_of(Audio.WHISTLE) == whistles + 1, "soldier_whistle: not heard as the soldier sets off toward the car")
+	_expect(Audio.starts_of(Audio.KNOCK) == knocks, "soldier_knock: heard before he has come")
+	_drive(sim, stow + 1.0)
+	_expect(sim.boss.phase == BossSim.PAPERS, "the Checkpoint: the soldier did not arrive in %.0f s" % (stow + 1.0))
+	_expect(Audio.starts_of(Audio.WHISTLE) == whistles + 1, "soldier_whistle: heard more than once on his way")
+	_expect(Audio.starts_of(Audio.KNOCK) == knocks + 1, "soldier_knock: not heard once as his sign goes up")
+	_expect(Audio.duck_db() == 0.0, "soldier: his sounds turn everything else down; they are no functional cues")
 
 
 ## The heartbeat is the tell of Pound: from the first of per_minute where

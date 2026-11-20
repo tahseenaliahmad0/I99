@@ -47,7 +47,7 @@ func apply(snapshot: Dictionary) -> void:
 			streak.visible = false
 		return
 	var car_x: float = snapshot["car_x"]
-	var sight: float = snapshot["visibility"]
+	var sight: float = snapshot["sight_shown"]
 	# In dust they blow where he can still see them.
 	var far: float = _far
 	if is_finite(sight):

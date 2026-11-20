@@ -1683,7 +1683,8 @@ built by the workflow `m6-fixes`; this entry is what that work is held to.
   table of GDD 16.5 has none, GDD 1.5 forbids resources the document does
   not name, and the mix has about 0.1 dB of room left under the 6 dB rule.
   GDD 17.2 ("every tell has both a sound and a visual") is therefore not
-  met for those: NEEDS OWNER.
+  met for those: NEEDS OWNER. (Superseded by D-058: the tells have their
+  sounds.)
 - **Tools.** `tools/audio_check.gd` (a step of `tools/check.sh` after the
   data validator; with `-- --wav=<folder>` it writes every buffer for
   listening) and `tools/audio_drive_check.gd`, which holds what needs the
@@ -2001,3 +2002,64 @@ check that failed before it.
   brake; after the Call the car moves off once he has the wheel.
 - Literals that stand beside a check pinning the data to the GDD's number
   stay: changing such a number is a recorded decision anyway.
+
+## D-058 (M7 and M8 reviews, 2026-11-20) A sound for every tell; a tell is read at once
+
+GDD 17.2: "Every tell has both a sound and a visual." D-052 left six kinds
+of tell without a sound, because the table of GDD 16.5 has no row for them
+and GDD 1.5 forbids "a system, resource or screen that this document does
+not name". Two reviews (the views lens of M7, V-03; the tests-and-views
+lens of M8, m8tv-04, verified) found the rule broken. They are right, and
+this is the later word:
+
+- **The reading.** "Resource" in GDD 1.5 is what section 6 is called: the
+  meters and the money of the game. A placeholder sound is none. The table
+  of GDD 16.5 lists the sounds the document names; GDD 17.2 binds every
+  tell. Where a tell has no row, GDD 1.5 rule 3 decides: pillar 4 is the
+  tell, and the simplest thing that serves it is one more record in
+  `data/sfx.json`, which the generator already turns into a sound. `rattle`
+  and `horn_behind` (D-052) were added by the same reasoning.
+- **What counts as a tell here:** what announces, a moment ahead, something
+  he must answer at the wheel or with the hand (pillar 4), and what the GDD
+  itself says is heard ("prays aloud", "his snoring").
+
+| Tell | Seen | Heard |
+|---|---|---|
+| A gust (GDD 5.4, 10.3), on any road | Streaks, 1 s ahead | `gust`: wind that swells for as long as the streaks blow |
+| The Storm's thick dust | The dust closes in over the last `dust_tell_s` (1 s) of thin dust | `dust`: a low roar from the closing until it thins |
+| The soldier sets off (the Stow) | His walk | `soldier_whistle`, once |
+| A sign goes up (each document) | The sign; his line if the window is shut | `soldier_knock`, once a sign |
+| What comes up behind him | Its lights in the mirror (D-057) | `horn_behind` (D-052) |
+| The Call | The lit phone, the ring written out (D-050) | `phone_ring` |
+| The end of the talk | Her last words (D-057) | The phone's two notes |
+
+- **The dust's tell.** D-046 called the dust's fixed rhythm its own tell;
+  nothing on screen or in the ear said that a change was a second away.
+  The rule does not move: he sees 40 m to the last tick of thin dust and
+  15 m from the next (T-BOSS-02 holds that to the tick). What the views
+  fade the road at is a number of its own, `sight_shown`, which falls from
+  the one to the other through the tell (`dust_closing`, 0 to 1); the sky's
+  fog and the gust's streaks follow it. When it thins he is shown the
+  whole 40 m at once: relief needs no tell. The validator holds
+  `dust_tell_s` to no longer than the dust is thin.
+- **Not given a sound**, and why: the low sun (the GDD's own tell is "the
+  light source is visible first"; nothing a sun does is heard), the bar (a
+  verdict, which is said in a line and seen), the bay and the key (nothing
+  is announced ahead), a hitcher at the roadside.
+- **The mix.** One soldier does one thing at a time: `soldier_` is a
+  family in the check, like the radio's loops. With the new sounds the
+  ducks are 1 dB deeper (rumble strip -16, indicator -14.5, the yawns -14)
+  and each cue stands 6.9 to 7.3 dB clear of everything else at once.
+- **A tell is read at once.** A line that announces something a moment
+  ahead must not wait its turn behind what is being said (the queue of
+  D-054 holds a line 1.5 s at least). `line_requested` may carry
+  `"tell": true`: the subtitle takes the screen in that frame, and what it
+  took the screen from is shown again after it, with its whole time. The
+  simulation marks the ring written out and Noor's last words. The
+  heckles of M9 ("the subtitle appears 2 s before anything changes. That
+  lead is the tell", GDD 11.3) are to be asked for the same way.
+- **Whose turn the rest is.** The tells of the earlier milestones were not
+  gone through for GDD 17.2 (a curve's sign has no sound; the yawns and
+  the Phantom's hum have no picture): that belongs to the rest of M10
+  (settings and accessibility, D-056).
+- **NEEDS OWNER:** nobody has heard these sounds either (D-052).

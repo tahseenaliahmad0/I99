@@ -960,6 +960,10 @@ func begin_arrival() -> void:
 ## soldiers, the phone in his pocket, the bay.
 func _step_set_piece() -> void:
 	boss.step_after_car(_car_s_then)
+	if boss.stow_began:
+		# First in line (GDD 10.2): the soldier whistles as he sets off toward
+		# the car, so that the Stow's tell is heard as well as seen (GDD 17.2).
+		_emit("sfx_requested", {"id": "soldier_whistle"})
 	if boss.call_began:
 		effects.hold(THE_CALL, SET_PIECE, true)
 		_emit("call_started", {"caller": NOOR})
@@ -967,7 +971,7 @@ func _step_set_piece() -> void:
 		# His pocket is out of his sight: the ring is written out as well
 		# (GDD 17.2: every tell has both a sound and a visual).
 		# (Until the Call is resolved: answered, the ring is over at once.)
-		_emit("line_requested", {"id": "call.noor.rings", "until": "call_resolved"})
+		_emit("line_requested", {"id": "call.noor.rings", "until": "call_resolved", "tell": true})
 		_sync_anchors()
 	if boss.searched:
 		_search_at_the_barriers()
@@ -986,7 +990,7 @@ func _report_call() -> void:
 	if boss.call_ending:
 		# The end of the talk has its tell (GDD 2.2, pillar 4; 17.2): her
 		# last words, and the phone's two notes.
-		_emit("line_requested", {"id": "noor.call.bye"})
+		_emit("line_requested", {"id": "noor.call.bye", "tell": true})
 		_emit("sfx_requested", {"id": "phone_ring"})
 
 
@@ -1059,9 +1063,12 @@ func _report_soldier() -> void:
 			boss.papers_passed()
 	if boss.delayed:
 		suspicion.add(_checkpoint_number("delay_suspicion"))
-	if boss.asked and not boss.papers_done and not items.flag(ItemSim.FLAG_WINDOW):
-		# He cannot be handed anything through the glass.
-		_emit("line_requested", {"id": "soldier.window"})
+	if boss.asked and not boss.papers_done:
+		# A sign goes up: he raps on the door for it (GDD 17.2).
+		_emit("sfx_requested", {"id": "soldier_knock"})
+		if not items.flag(ItemSim.FLAG_WINDOW):
+			# He cannot be handed anything through the glass.
+			_emit("line_requested", {"id": "soldier.window"})
 	_hold_at_window()
 	if boss.papers_done:
 		_give_the_verdict()
@@ -1573,9 +1580,24 @@ func heavy_floor() -> float:
 ## How far he can see along the road, in metres (GDD 9.1, 9.4): the
 ## headlight cone at night, the dust in a dust haze, else no limit (INF).
 func visibility() -> float:
+	return _sight_in(boss.visibility)
+
+
+## How far the views show him the road, m: what he sees, but through the
+## dust's tell the Storm's thick dust is already closing in (GDD 2.2 pillar
+## 4: an impairment has a tell). Nothing in the rules goes by this.
+func sight_shown() -> float:
+	var sight: float = visibility()
+	if boss.dust_closing > 0.0 and is_finite(sight):
+		sight = lerpf(sight, _sight_in(boss.thick_visibility()), boss.dust_closing)
+	return sight
+
+
+## How far he would see with the set piece's dust at `dust` metres.
+func _sight_in(dust: float) -> float:
 	if not leg.active:
 		return INF
-	var reach: float = minf(leg.dust_visibility, boss.visibility)
+	var reach: float = minf(leg.dust_visibility, dust)
 	if leg.night:
 		# What makes the night darker for him shortens what he sees of it
 		# (GDD 7.5, 7.7: cracked sunglasses, tinted glass).
@@ -1760,10 +1782,12 @@ func snapshot() -> Dictionary:
 		"boss_time": boss.time,
 		"dust_thick": boss.thick,
 		"dust_change_in": boss.dust_change_in,
+		"dust_closing": boss.dust_closing,
 		"rear_end_in": boss.rear_end_in,
 		"rear_end_lights_in": boss.rear_end_lights_in,
 		"pulled_over": pulled_over,
 		"visibility": visibility(),
+		"sight_shown": sight_shown(),
 		# Unlit things show only inside what he can see: at night they appear late.
 		"hazards": _hazards_in_view(),
 		"signs": _signs_in_view(),

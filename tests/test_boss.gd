@@ -30,6 +30,7 @@ func test_boss_01() -> void:
 	_check_checkpoint_stow()
 	_check_checkpoint_stowing_by_hand()
 	_check_checkpoint_papers()
+	_check_the_soldier_is_heard()
 	_check_checkpoint_delay()
 	_check_checkpoint_verdicts()
 	_check_checkpoint_bribe()
@@ -533,6 +534,82 @@ func _check_checkpoint_papers() -> void:
 	check_eq(_count_events("pulled_over"), 1, "and the ID goes out through it")
 
 
+## The last `line_requested` for the line `id` ({} when there was none).
+func _line_request(id: String) -> Dictionary:
+	for index: int in range(_events.size() - 1, -1, -1):
+		var event: Dictionary = _events[index]
+		if GameData.as_string(event.get("type")) == "line_requested" and GameData.as_string(event.get("id")) == id:
+			return event
+	return {}
+
+
+## The soldier is heard as well as seen (GDD 17.2): he whistles as he sets off
+## toward the car, and raps on the door with every sign he puts up.
+func _check_the_soldier_is_heard() -> void:
+	_begin_checkpoint("", _seed_asking_for("licence"), false)
+	_sim.items.flags[ItemSim.FLAG_WINDOW] = true
+	_cruise(1, 1)
+	_ticks(_ticks_in(1.0))
+	check_eq(_count_events("sfx_requested", "id", "soldier_whistle"), 0, "on the way to the bar nobody whistles")
+	check(_stand_at_the_bar(), "(first in line)")
+	check_eq(_count_events("sfx_requested", "id", "soldier_whistle"), 1, "the soldier whistles as he sets off toward the car")
+	check(_sim.boss.stow_left > _checkpoint_number("stow_s") - DT * 1.5, "at the very start of the Stow: all of it is still ahead of him (%.2f s)" % _sim.boss.stow_left)
+	check_eq(_count_events("sfx_requested", "id", "soldier_knock"), 0, "(he has put up no sign yet)")
+	_events = []
+	check(_until_checkpoint_phase(BossSim.PAPERS, _checkpoint_number("stow_s") + 1.0), "(the soldier arrives)")
+	check_eq(_count_events("sfx_requested", "id", "soldier_whistle"), 0, "he whistles once, not all the way")
+	check_eq(_count_events("sfx_requested", "id", "soldier_knock"), 1, "his sign goes up with a rap on the door")
+	check_eq(_count_events("line_requested", "id", "soldier.window"), 0, "(the window is open: the rap is not the tap on the glass)")
+	_events = []
+	_ticks(_ticks_in(_checkpoint_number("delay_every_s") * 2.0))
+	check_eq(_count_events("sfx_requested", "id", "soldier_knock"), 0, "one rap for a sign, however long it stays up")
+	_hand_out_document("licence")
+	check_eq(_count_events("pulled_over"), 1, "(the papers are done)")
+	check_eq(_count_events("sfx_requested", "id", "soldier_knock"), 0, "and none when there is nothing more he wants")
+
+	# With the window shut the rap and the tap on the glass come together.
+	_begin_checkpoint("", _seed_asking_for("licence"), false)
+	_stand_at_the_bar()
+	_until_checkpoint_phase(BossSim.PAPERS, _checkpoint_number("stow_s") + 1.0)
+	check_eq(_count_events("sfx_requested", "id", "soldier_knock"), 1, "the window shut: a rap")
+	check_eq(_count_events("line_requested", "id", "soldier.window"), 1, "(and his line about the glass)")
+
+	# Thorough: a rap for each of the two signs.
+	var thorough_seed: int = 0
+	for candidate: int in range(1, 400):
+		var asks: Array = GameData.as_array(BossSim.plan(data, CHECKPOINT, "thorough", candidate).get("documents"))
+		if asks.size() == 2 and GameData.as_string(asks[0]) == "licence" and GameData.as_string(asks[1]) == "id":
+			thorough_seed = candidate
+			break
+	if not check(thorough_seed > 0, "(a thorough check that asks for the licence and then the ID)"):
+		return
+	_begin_checkpoint("thorough", thorough_seed, false)
+	_sim.items.flags[ItemSim.FLAG_WINDOW] = true
+	_stand_at_the_bar()
+	_until_checkpoint_phase(BossSim.PAPERS, _checkpoint_number("stow_s") + 1.0)
+	check_eq(_count_events("sfx_requested", "id", "soldier_knock"), 1, "Thorough: a rap for the first sign")
+	_events = []
+	_hand_out_document("licence")
+	check_eq(_sim.boss.wanted, "id", "(the second sign goes up)")
+	check_eq(_count_events("sfx_requested", "id", "soldier_knock"), 1, "and a rap for the second")
+	_events = []
+	_hand_out_document("id")
+	check_eq(_count_events("pulled_over"), 1, "(then the verdict)")
+	check_eq(_count_events("sfx_requested", "id", "soldier_knock"), 0, "(and no third)")
+
+	# Turned back, the queue again: he whistles again when he sets off again.
+	_begin_checkpoint("", _seed_asking_for("licence"), false)
+	_sim.items.flags[ItemSim.FLAG_WINDOW] = true
+	_stand_at_the_bar()
+	_until_checkpoint_phase(BossSim.PAPERS, _checkpoint_number("stow_s") + 1.0)
+	_sim.suspicion.add(_checkpoint_number("turned_back_at"))
+	_hand_out_document("licence")
+	check_eq(GameData.as_string(_event("pulled_over").get("paid")), "turned_back", "(turned back)")
+	_events = []
+	check(_stand_at_the_bar(), "(at the bar again)")
+	check_eq(_count_events("sfx_requested", "id", "soldier_whistle"), 1, "turned back and first in line again: he whistles again")
+
+
 ## Each 5 s of delay is +10 Suspicion, counted from when the sign went up.
 func _check_checkpoint_delay() -> void:
 	var every: float = _checkpoint_number("delay_every_s")
@@ -704,6 +781,7 @@ func _check_checkpoint_forged_papers() -> void:
 	check_near(GameData.as_float(verdict.get("suspicion")), 0.0, 0.000001, "(stowed, they cost no Suspicion)")
 	check(_item("forged_papers") == null, "the papers are used up")
 	check_eq(_count_events("line_requested", "id", "soldier.window"), 0, "(no sign went up: nobody taps on the glass)")
+	check_eq(_count_events("sfx_requested", "id", "soldier_knock"), 0, "(nor raps on the door for a document)")
 	check_eq(_sim.boss.wanted, "", "(he is asked for nothing)")
 	# Left on the dash they are contraband like any other when the soldier arrives.
 	_begin_checkpoint("", 2, false)
@@ -1371,6 +1449,7 @@ func _queue_tail(lane: int) -> TrafficSim.Vehicle:
 func test_boss_02() -> void:
 	_check_storm_is_measured_by_distance()
 	_check_storm_dust_rhythm()
+	_check_storm_dust_closes_in()
 	_check_storm_gusts("")
 	_check_storm_haze()
 	_check_storm_standing()
@@ -1560,6 +1639,84 @@ func _check_storm_dust_rhythm() -> void:
 	_ticks(_ticks_in(1.0))
 	check(GameData.as_bool(_sim.snapshot()["dust_thick"]), "(8 s in it is thick)")
 	check_near(GameData.as_float(_sim.snapshot()["dust_change_in"]), thick_s, DT, "(for 12 s)")
+
+
+## The dust's tell (GDD 2.2 pillar 4, 17.2): through the last dust_tell_s of
+## thin dust the views are shown the thick dust closing in, and the sound has
+## the same share to swell by. What he sees by the rules does not move.
+func _check_storm_dust_closes_in() -> void:
+	var storm: Dictionary = _storm()
+	var thin_s: float = GameData.as_float(storm.get("thin_s"))
+	var thick_s: float = GameData.as_float(storm.get("thick_s"))
+	var thin_m: float = GameData.as_float(storm.get("thin_m"))
+	var thick_m: float = GameData.as_float(storm.get("thick_m"))
+	var tell: float = GameData.as_float(storm.get("dust_tell_s"))
+	check(tell >= 1.0 - 0.000001, "the thick dust is announced at least 1 s ahead (pillar 4): %.1f s" % tell)
+	check(tell <= thin_s, "(and no longer than the dust is thin)")
+	for standing: bool in [false, true]:
+		_begin_quiet_boss(STORM)
+		if standing:
+			_stand_on_the_shoulder(true)
+		var how: String = "standing" if standing else "driving"
+		# One tick's fall of what is shown, while the dust closes in.
+		var step: float = (thin_m - thick_m) * DT / tell
+		var told: int = 0
+		var differs: int = 0
+		var moved: int = 0
+		var not_falling: int = 0
+		var out_of_range: int = 0
+		var first: float = -1.0
+		var last: float = -1.0
+		var last_closing: float = -1.0
+		var before: float = INF
+		var was_closing: float = -1.0
+		var thick_ticks: int = 0
+		for _index: int in _ticks_in(thin_s + thick_s):
+			var shot: Dictionary = _sim.snapshot()
+			var seen: float = _sim.visibility()
+			var shown: float = GameData.as_float(shot.get("sight_shown", -1.0))
+			var closing: float = GameData.as_float(shot.get("dust_closing", -1.0))
+			if _sim.boss.thick or _sim.boss.dust_change_in > tell + DT * 0.5:
+				if shown != seen or closing != 0.0:
+					differs += 1
+				if _sim.boss.thick:
+					thick_ticks += 1
+			else:
+				told += 1
+				if seen != thin_m:
+					moved += 1
+				if told > 1 and (shown >= before or closing <= was_closing):
+					not_falling += 1
+				if shown < thick_m - 0.000001 or shown > thin_m + 0.000001 or closing < 0.0 or closing > 1.0:
+					out_of_range += 1
+				if first < 0.0:
+					first = shown
+				last = shown
+				last_closing = closing
+				before = shown
+				was_closing = closing
+			_tick()
+		check_eq(differs, 0, "%s: but for the tell he is shown what he sees, thin dust or thick, and nothing closes in" % how)
+		check_eq(thick_ticks, _ticks_in(thick_s), "(%s: the thick dust was watched to its end)" % how)
+		check(absi(told - _ticks_in(tell)) <= 1, "%s: the tell lasts dust_tell_s (%d ticks)" % [how, told])
+		check_eq(moved, 0, "%s: what he sees by the rules stays 40 m to the last tick of thin dust" % how)
+		check_eq(not_falling, 0, "%s: what he is shown falls with every tick of the tell, and the closing grows" % how)
+		check_eq(out_of_range, 0, "%s: never under the thick dust's 15 m nor over the thin dust's 40" % how)
+		check(first >= thin_m - step * 2.5 and first <= thin_m, "%s: it begins at the thin dust's distance (%.2f m)" % [how, first])
+		check(last <= thick_m + step * 2.5 and last >= thick_m, "%s: and has come down to the thick dust's as it turns thick (%.2f m)" % [how, last])
+		check(last_closing >= 1.0 - DT / tell * 2.5, "%s: (the closing is whole: %.3f)" % [how, last_closing])
+		# It opens in one tick, as the rule does: thinning needs no tell.
+		check(not _sim.boss.thick, "(%s: a whole turn of the dust on, it is thin again)" % how)
+		check_near(GameData.as_float(_sim.snapshot().get("sight_shown", -1.0)), thin_m, 0.000001, "%s: when it thins he is shown the whole 40 m at once" % how)
+	# At night his headlights may reach less far than thin dust: what he is
+	# shown never reaches further than what he sees.
+	_begin_quiet_boss(STORM, "night_storm")
+	var further: int = 0
+	for _index: int in _ticks_in(thin_s + 1.0):
+		if GameData.as_float(_sim.snapshot().get("sight_shown", INF)) > _sim.visibility() + 0.000001:
+			further += 1
+		_tick()
+	check_eq(further, 0, "Night storm: he is never shown further than he sees")
 
 
 ## Gusts push at 2 m/s (3 with Crosswind), each announced 1 s ahead.
@@ -2693,6 +2850,7 @@ func _check_call_rings() -> void:
 	check_eq(GameData.as_string(_event("call_started").get("caller")), "noor", "it is Noor")
 	check_eq(_count_events("sfx_requested", "id", "phone_ring"), 1, "(it is heard)")
 	check_eq(_count_events("line_requested", "id", "call.noor.rings"), 1, "(and written out: his pocket is out of his sight)")
+	check(GameData.as_bool(_line_request("call.noor.rings").get("tell")), "(as a tell: it does not wait behind what is being said)")
 	check(data.has_line("call.noor.rings"), "(a line that exists)")
 	var shot: Dictionary = _sim.snapshot()
 	check_eq(GameData.as_string(shot["caller"]), "noor", "(the snapshot says who)")
@@ -3161,6 +3319,7 @@ func _check_the_end_of_the_talk() -> void:
 	check(said_at > 0 and absi((ended_at - said_at) - _ticks_in(tell)) <= 1, "%s s before the talk ends she says goodbye: a line (%.2f s before)" % [str(tell), float(ended_at - said_at) * DT])
 	check(heard_at == said_at, "and a sound with it")
 	check_eq(_count_events("line_requested", "id", "noor.call.bye"), 1, "(once)")
+	check(GameData.as_bool(_line_request("noor.call.bye").get("tell")), "(as a tell: it is to be read before the talk ends)")
 	# The hand comes back to the wheel by itself: nothing is asked of the pointer.
 	_ticks(_ticks_in(1.5))
 	check(not GameData.as_bool(_sim.snapshot()["at_ear"]), "(the phone is put away)")

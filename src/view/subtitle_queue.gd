@@ -13,7 +13,10 @@ extends RefCounted
 ## other, and each part is held for the time its own length asks for. What
 ## is pushed while something is showing waits its turn. A line of the line
 ## table (begin_line) is not queued again while it is showing or waiting,
-## and only a few of them wait: for one more, the oldest gives way.
+## and only a few of them wait: for one more, the oldest gives way. A tell
+## (GDD 2.2 pillar 4: what announces something a moment ahead) does not wait
+## its turn: it takes the screen at once, and what it took the screen from
+## is shown again after it.
 ##
 ## Characters are counted as the text holds them and are never changed or put
 ## in another order, so right-to-left text goes through as it was written:
@@ -42,6 +45,9 @@ class Part:
 	## What ends it before its time: the name of an event (GDD 13.6) after
 	## which it is no longer true ("" when it simply runs its time).
 	var until: String = ""
+	## A tell that went in front of the queue: which saying it was put there
+	## by (-1 for what waited its turn).
+	var in_front: int = -1
 
 	## The lines as the one text they were cut from.
 	func joined() -> String:
@@ -65,6 +71,9 @@ var _fresh: bool = false
 ## The line of the line table being said (begin_line): what is cut into
 ## parts from now on is a part of it.
 var _line_id: String = ""
+## Counts the lines begun, so that the parts one line puts in front of the
+## queue (an exchange is pushed speaker by speaker) stay in their order.
+var _saying: int = 0
 
 
 func configure(tuning: Tuning) -> void:
@@ -141,12 +150,25 @@ func duration_of(characters: int) -> float:
 
 ## Something is said: it is shown at once if nothing is showing, and after
 ## what is showing and waiting otherwise. `until` names what ends it early.
-func push(speaker: String, text: String, until: String = "") -> void:
+## A tell (`first`) is shown at once whatever is showing: it goes in front of
+## the queue (after what the same line has put there already: an exchange is
+## pushed speaker by speaker), and the part it took the screen from comes
+## after it again, with all of its time before it.
+func push(speaker: String, text: String, until: String = "", first: bool = false) -> void:
 	var was_empty: bool = _parts.is_empty()
+	var at: int = _parts.size()
+	if first:
+		at = 0
+		while at < _parts.size() and _parts[at].in_front == _saying:
+			at += 1
+	var takes_the_screen: bool = at == 0
 	for part: Part in parts_of(speaker, text):
 		part.until = until
-		_parts.append(part)
-	if was_empty and not _parts.is_empty():
+		if first:
+			part.in_front = _saying
+		_parts.insert(at, part)
+		at += 1
+	if takes_the_screen and not _parts.is_empty():
 		_elapsed = 0.0
 		_fresh = true
 
@@ -223,6 +245,7 @@ func begin_line(line_id: String) -> bool:
 	if holds(line_id):
 		return false
 	_line_id = line_id
+	_saying += 1
 	while not line_id.is_empty() and lines_waiting() >= maxi(1, max_waiting):
 		_drop_line(_waiting_longest())
 	return true

@@ -117,6 +117,14 @@ func _check_broken_boss_rules() -> void:
 	_expect("E_RANGE", "storm.rear_end_tell_s", "a horn behind him that leaves no time to drive off")
 
 	_reset_fixture()
+	_boss_numbers("storm")["dust_tell_s"] = GameData.as_float(_boss_numbers("storm")["thin_s"]) + 1.0
+	_expect("E_RANGE", "storm.dust_tell_s", "thick dust that closes in for longer than the dust is thin")
+
+	_reset_fixture()
+	_boss_numbers("storm").erase("dust_tell_s")
+	_expect("E_MISSING", "storm.dust_tell_s", "a Storm that does not say how long its thick dust is announced")
+
+	_reset_fixture()
 	GameData.as_dict(_boss_numbers("storm")["tail_lights"])["gap_m"] = [220, 140]
 	_expect("E_RANGE", "storm.tail_lights.gap_m", "tail lights whose gaps are not least, most")
 

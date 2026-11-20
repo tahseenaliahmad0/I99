@@ -32,7 +32,7 @@
     {"id": "storm", "act": 2, "length_m": 2000, "par_s": 100, "lanes": 3, "divided": true,
      "modifiers": ["crosswind", "night_storm"],
      "storm": {
-       "thin_s": 8, "thin_m": 40, "thick_s": 12, "thick_m": 15,
+       "thin_s": 8, "thin_m": 40, "thick_s": 12, "thick_m": 15, "dust_tell_s": 1,
        "gust_push": 2.0, "gust_every_s": 9,
        "wipe_haze": 0.10, "window_haze_per_s": 0.05,
        "stopped_kmh": 1, "moved_off_kmh": 15, "rear_end_every_s": 10, "rear_end_tell_s": 2, "rear_end_chance": 0.5,

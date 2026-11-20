@@ -64,6 +64,11 @@ var visibility: float = INF
 var thick: bool = false
 ## Seconds until the dust thins or thickens.
 var dust_change_in: float = 0.0
+## The dust's tell (GDD 2.2 pillar 4): through the last dust_tell_s of thin
+## dust the thick dust closes in, from 0 to 1 as it turns thick. It is for
+## the views and the sound only: what he sees by the rules changes in one
+## tick (GDD 10.3).
+var dust_closing: float = 0.0
 ## Seconds until what is coming up behind his standing car reaches it, from
 ## the moment its horn sounds (0: nothing is coming, or not yet heard).
 var rear_end_in: float = 0.0
@@ -140,6 +145,8 @@ var searched: bool = false
 var wall_speed: float = 0.0
 ## He ran into the lowered bar at this speed, km/h (0: he did not).
 var bar_speed: float = 0.0
+## The soldier has set off toward his window: the Stow begins.
+var stow_began: bool = false
 ## The soldier has reached his window: what he sees is counted now.
 var stow_ended: bool = false
 ## A sign went up (the first, or the next document of a thorough check).
@@ -157,6 +164,7 @@ var _thin_s: float = 0.0
 var _thin_m: float = 0.0
 var _thick_s: float = 0.0
 var _thick_m: float = 0.0
+var _dust_tell: float = 0.0
 var _stopped_kmh: float = 0.0
 var _rear_end_every: float = 0.0
 var _rear_end_tell: float = 0.0
@@ -469,6 +477,7 @@ func begin(plan_of_road: Dictionary) -> void:
 		_thin_m = GameData.as_float(storm.get("thin_m"))
 		_thick_s = GameData.as_float(storm.get("thick_s"))
 		_thick_m = GameData.as_float(storm.get("thick_m"))
+		_dust_tell = GameData.as_float(storm.get("dust_tell_s"))
 		_stopped_kmh = GameData.as_float(storm.get("stopped_kmh"))
 		_moved_off_kmh = GameData.as_float(storm.get("moved_off_kmh"))
 		_rear_end_every = GameData.as_float(storm.get("rear_end_every_s"))
@@ -486,6 +495,7 @@ func stop() -> void:
 	visibility = INF
 	thick = false
 	dust_change_in = 0.0
+	dust_closing = 0.0
 	rear_end_in = 0.0
 	rear_end_lights_in = 0.0
 	_stood = 0.0
@@ -539,6 +549,7 @@ func begin_tick() -> void:
 	searched = false
 	wall_speed = 0.0
 	bar_speed = 0.0
+	stow_began = false
 	stow_ended = false
 	asked = false
 	delayed = false
@@ -601,6 +612,7 @@ func step_after_car(s_then: float) -> void:
 		if phase == QUEUE and _first_in_line():
 			phase = STOW
 			stow_left = _stow_s
+			stow_began = true
 	elif kind == ARRIVAL:
 		var half_length: float = _car.length() * 0.5
 		if _car.s + half_length >= _length:
@@ -938,6 +950,12 @@ func _step_dust(dt: float) -> void:
 	thick = at >= _thin_s
 	visibility = _thick_m if thick else _thin_m
 	dust_change_in = maxf((cycle if thick else _thin_s) - at + dt * 0.5, 0.0)
+	dust_closing = clampf(1.0 - dust_change_in / _dust_tell, 0.0, 1.0) if not thick and _dust_tell > 0.0 else 0.0
+
+
+## How far he sees in the Storm's thick dust, m (INF outside the Storm).
+func thick_visibility() -> float:
+	return _thick_m if kind == STORM and active else INF
 
 
 ## A car that stands in the Storm (GDD 10.3) is safe wholly off the lanes

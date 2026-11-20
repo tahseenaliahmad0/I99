@@ -54,6 +54,9 @@ const WRITTEN_NAME: String = "Noor, the bride"
 ## The Call of Dawn (GDD 10.4): what Noor says when he answers (GDD 3.6), the
 ## rituals that take it (data/rituals.json), and where his hand goes for it.
 const CALL_LINE: String = SHORT_LINE
+## Lines that announce something a moment ahead (GDD 2.2 pillar 4): the ring
+## of the Call written out, and Noor's last words before the talk ends.
+const TELL_LINES: PackedStringArray = ["call.noor.rings", "noor.call.bye"]
 ## The ring of that phone, written out for as long as it rings (D-050).
 const RING_LINE: String = "call.noor.rings"
 ## What ends the ring's line: the payload's "until" names this event.
@@ -120,6 +123,7 @@ func run(tree: SceneTree) -> int:
 	_numbers()
 	_view()
 	_few_wait()
+	_tells_first()
 	_written()
 	_the_call()
 	_scene()
@@ -941,6 +945,152 @@ func _say(queue: SubtitleQueue, line_id: String, text: String) -> bool:
 		return false
 	queue.push("", text)
 	return true
+
+
+## A tell is said (GDD 2.2 pillar 4: it announces something a moment ahead).
+func _tell(queue: SubtitleQueue, line_id: String, text: String, until: String = "") -> bool:
+	if not queue.begin_line(line_id):
+		return false
+	queue.push("", text, until, true)
+	return true
+
+
+## The lines a queue shows from now until it is empty, in order, and the
+## frames each is on screen (counted as _until_it_is_over counts them).
+func _play_out(queue: SubtitleQueue) -> Array:
+	var order: PackedStringArray = []
+	var frames: Dictionary = {}
+	for _frame: int in MOST_FRAMES:
+		queue.advance(FRAME)
+		var part: SubtitleQueue.Part = queue.current()
+		if part == null:
+			break
+		if order.is_empty() or order[order.size() - 1] != part.line_id:
+			order.append(part.line_id)
+		frames[part.line_id] = GameData.as_int(frames.get(part.line_id)) + 1
+	return [order, frames]
+
+
+## A tell does not wait its turn: what announces something 1 or 2 s ahead
+## would otherwise be read when it has happened.
+func _tells_first() -> void:
+	_heading("a tell is shown at once, and what it took the screen from is shown again after it")
+	var texts: PackedStringArray = [_text_of(50), _text_of(40), _text_of(30), _text_of(35)]
+	var queue: SubtitleQueue = _new_queue()
+	_say(queue, "line.a", texts[0])
+	_say(queue, "line.b", texts[1])
+	queue.advance(FRAME)
+	for _frame: int in 20:
+		queue.advance(FRAME)
+	_check(queue.current() != null and queue.current().line_id == "line.a" and queue.size() == 2, "(a line is showing and another waits)")
+	_check(_tell(queue, "line.tell", texts[2]) and queue.current().line_id == "line.tell", "a tell takes the screen in the frame it is asked for")
+	_check(queue.size() == 3 and queue.holds("line.a") and queue.holds("line.b"), "nothing that was showing or waiting is lost for it")
+	_check(not _tell(queue, "line.tell", texts[2]) and queue.size() == 3, "asked for again while it shows, it is not said twice over")
+	var played: Array = _play_out(queue)
+	var order: PackedStringArray = played[0]
+	var frames: Dictionary = played[1]
+	_check(order == PackedStringArray(["line.tell", "line.a", "line.b"]), "the tell, then the line it took the screen from, then what waited: %s" % ", ".join(order))
+	_check(_held_for(GameData.as_int(frames.get("line.tell")), queue.duration_of(texts[2].length())), "the tell is held its whole time (%d frames)" % GameData.as_int(frames.get("line.tell")))
+	_check(_held_for(GameData.as_int(frames.get("line.a")), queue.duration_of(texts[0].length())), "the line it interrupted is shown again for its whole time (%d frames)" % GameData.as_int(frames.get("line.a")))
+	_check(_held_for(GameData.as_int(frames.get("line.b")), queue.duration_of(texts[1].length())), "and what waited has its whole time (%d frames)" % GameData.as_int(frames.get("line.b")))
+
+	# With nothing showing a tell is a line like any other.
+	queue = _new_queue()
+	_tell(queue, "line.tell", texts[2])
+	played = _play_out(queue)
+	order = played[0]
+	frames = played[1]
+	_check(order == PackedStringArray(["line.tell"]) and _held_for(GameData.as_int(frames.get("line.tell")), queue.duration_of(texts[2].length())), "said into the silence, a tell is shown for its time like any line")
+
+	# An exchange that is a tell keeps its order, and a later tell goes before an earlier one.
+	queue = _new_queue()
+	_say(queue, "line.a", texts[0])
+	queue.advance(FRAME)
+	queue.begin_line("line.two")
+	queue.push("One", texts[1], "", true)
+	queue.push("Other", texts[2], "", true)
+	_check(queue.current().speaker == "One" and queue.size() == 3, "a tell of two speakers: the first of them takes the screen")
+	_tell(queue, "line.late", texts[3])
+	_check(queue.current().line_id == "line.late", "a tell asked for while another shows goes before it")
+	var speakers: PackedStringArray = []
+	for _frame: int in MOST_FRAMES:
+		queue.advance(FRAME)
+		var part: SubtitleQueue.Part = queue.current()
+		if part == null:
+			break
+		var who: String = "%s/%s" % [part.line_id, part.speaker]
+		if speakers.is_empty() or speakers[speakers.size() - 1] != who:
+			speakers.append(who)
+	_check(speakers == PackedStringArray(["line.late/", "line.two/One", "line.two/Other", "line.a/"]), "then the earlier tell, its speakers in their order, then the line: %s" % ", ".join(speakers))
+
+	# A tell that lasts until something happens: over, what it interrupted is back at once.
+	queue = _new_queue()
+	_say(queue, "line.a", texts[0])
+	queue.advance(FRAME)
+	for _frame: int in 20:
+		queue.advance(FRAME)
+	_tell(queue, "line.ring", texts[2], "over")
+	_check(queue.current().line_id == "line.ring", "(a tell that lasts until something is over)")
+	queue.advance(FRAME)
+	queue.advance(FRAME)
+	queue.drop("over")
+	_check(queue.current() != null and queue.current().line_id == "line.a" and queue.size() == 1, "when it is over the line it interrupted is back")
+	played = _play_out(queue)
+	frames = played[1]
+	_check(_held_for(GameData.as_int(frames.get("line.a")), queue.duration_of(texts[0].length())), "with its whole time before it (%d frames)" % GameData.as_int(frames.get("line.a")))
+
+	# No more lines wait for a tell than may wait.
+	var most: int = _tuning.i("subtitle_max_waiting")
+	queue = _new_queue()
+	_say(queue, "line.0", texts[0])
+	queue.advance(FRAME)
+	for index: int in most:
+		_say(queue, "line.w%d" % index, texts[1])
+	_check(queue.lines_waiting() == most, "(as many wait as may: %d)" % most)
+	_tell(queue, "line.tell", texts[2])
+	_check(queue.current().line_id == "line.tell" and queue.lines_waiting() == most and queue.holds("line.0") and not queue.holds("line.w0"),
+			"a tell with the queue full: the one that waited longest gives way, the one on screen comes after the tell")
+
+	# Through the view: asked for on the bus with "tell".
+	Settings.reset_to_defaults()
+	var view: SubtitlesView = SubtitlesView.new()
+	view.name = "Subtitles"
+	_root.add_child(view)
+	view.setup(_data)
+	Events.emit_event("line_requested", {"id": TWO_LINE_LINE})
+	view._process(FRAME)
+	view._process(FRAME)
+	_check(view.is_showing() and " ".join(view.shown_lines()) == Lines.get_text(TWO_LINE_LINE), "(the view shows a line)")
+	Events.emit_event("line_requested", {"id": SHORT_LINE, "tell": true})
+	view._process(FRAME)
+	_check(view.shown_lines() == PackedStringArray([Lines.get_text(SHORT_LINE)]), "a line asked for on the bus as a tell is on screen in the next frame: %s" % " | ".join(view.shown_lines()))
+	var tell_frames: int = _frames_until_change(view)
+	_check(_held_for(tell_frames, view_duration(SHORT_LINE)) and " ".join(view.shown_lines()) == Lines.get_text(TWO_LINE_LINE), "after its time the line it interrupted is shown again")
+	Events.emit_event("line_requested", {"id": SHORT_LINE})
+	view._process(FRAME)
+	_check(" ".join(view.shown_lines()) == Lines.get_text(TWO_LINE_LINE), "(asked for without \"tell\", the same line waits its turn)")
+	view.clear()
+	_root.remove_child(view)
+	view.free()
+	# The simulation's tells: what it writes out a moment ahead is asked for as one.
+	var marked: PackedStringArray = []
+	var tell: RegEx = RegEx.new()
+	tell.compile("line_requested.*\"id\":\\s*\"([a-z0-9_.]+)\".*\"tell\":\\s*true")
+	for path: String in ProjectFiles.find("res://src/core", PackedStringArray(["gd"])):
+		for line: String in FileAccess.get_file_as_string(path).split("\n"):
+			var hit: RegExMatch = tell.search(line)
+			if hit != null:
+				marked.append(hit.get_string(1))
+	marked.sort()
+	print("tells: the simulation asks for %s as tells" % ", ".join(marked))
+	for id: String in TELL_LINES:
+		_check(marked.has(id), "%s announces something a moment ahead: the simulation must ask for it as a tell" % id)
+
+
+## Seconds the view holds a line of one part.
+func view_duration(line_id: String) -> float:
+	var queue: SubtitleQueue = _new_queue()
+	return queue.duration_of(Lines.get_text(line_id).length())
 
 
 func _new_queue() -> SubtitleQueue:

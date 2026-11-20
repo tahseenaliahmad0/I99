@@ -14,7 +14,8 @@ extends Node
 ##     rumble strip, the heartbeat, the radio, the siren, the ringing phone
 ##     (the one on its mount, and the one in his pocket at Dawn), the
 ##     indicator's tick, the Phantom's hum, the horn of a Snap, the horn of
-##     what comes up behind his standing car, the Rattle.
+##     what comes up behind his standing car, the Rattle, a gust's tell
+##     and the Storm's thick dust.
 ##
 ## What an entry says about how its sound is played, beside how it is made:
 ##
@@ -56,6 +57,14 @@ const ENGINE_HARMONIC: String = "engine_harmonic"
 ## The Rattle fault (GDD 6.3): the one fault with nothing to show for itself.
 const RATTLE: String = "rattle"
 const RUMBLE: String = "rumble_strip"
+## What a gust's streaks and the Storm's closing dust show (GDD 5.4, 10.3) is
+## heard as well (GDD 17.2).
+const GUST: String = "gust"
+const DUST: String = "dust"
+## The soldier of the Checkpoint (GDD 10.2), whom the simulation asks for:
+## he whistles as he sets off toward the car and knocks with each sign.
+const WHISTLE: String = "soldier_whistle"
+const KNOCK: String = "soldier_knock"
 const HEARTBEAT: String = "heartbeat"
 const HORN: String = "horn"
 ## The horn of another: of what comes up behind his standing car (GDD 10.3).
@@ -165,6 +174,8 @@ var _elapsed: float = 0.0
 var _engine: Voice
 var _harmonic: Voice
 var _rattle: Voice
+var _gust: Voice
+var _dust: Voice
 var _rumble: Voice
 var _horn: Voice
 var _horn_behind: Voice
@@ -295,6 +306,9 @@ func apply(snapshot: Dictionary) -> void:
 	var pulled_over: bool = snapshot["pulled_over"]
 	var indicator: int = snapshot["indicator"]
 	var rear_end_in: float = snapshot["rear_end_in"]
+	var gust_tell: float = snapshot["gust_tell"]
+	var dust_thick: bool = snapshot["dust_thick"]
+	var dust_closing: float = snapshot["dust_closing"]
 
 	# The engine (GDD 16.5): its pitch is the speed, its added harmonic the
 	# gear. A wrecked engine is a dead one (GDD 6.3).
@@ -312,6 +326,14 @@ func apply(snapshot: Dictionary) -> void:
 	if _rattle != null:
 		var faults: Array[StringName] = snapshot["faults"]
 		_rattle.wanted = faults.has(DriveSim.FAULT_RATTLE) and not wrecked and engine_on
+
+	# A gust is heard coming for as long as its streaks blow (GDD 5.4), and
+	# the Storm's thick dust from when it begins to close in until it thins
+	# (GDD 10.3): each tell is heard as well as seen (GDD 17.2).
+	if _gust != null:
+		_gust.wanted = gust_tell > 0.0 and not wrecked
+	if _dust != null:
+		_dust.wanted = (dust_thick or dust_closing > 0.0) and not wrecked
 
 	# The rumble strip is heard while the car runs on it.
 	if _rumble != null:
@@ -481,6 +503,8 @@ func _clear() -> void:
 	_engine = null
 	_harmonic = null
 	_rattle = null
+	_gust = null
+	_dust = null
 	_rumble = null
 	_horn = null
 	_horn_behind = null
@@ -632,11 +656,13 @@ func _configure(tuning: Tuning) -> void:
 			push_error("Audio: sfx '%s': \"speed_kmh\" must rise" % ENGINE)
 
 	_rattle = _voices.get(RATTLE)
+	_gust = _voices.get(GUST)
+	_dust = _voices.get(DUST)
 	_rumble = _voices.get(RUMBLE)
 	_horn = _voices.get(HORN)
 	_horn_behind = _voices.get(HORN_BEHIND)
 	_hum = _voices.get(HUM)
-	for id: String in [RATTLE, RUMBLE, HORN, HORN_BEHIND, HUM]:
+	for id: String in [RATTLE, GUST, DUST, RUMBLE, HORN, HORN_BEHIND, HUM]:
 		var voice: Voice = _voices.get(id)
 		if voice == null or not voice.looped:
 			push_error("Audio: sfx.json needs '%s', as a loop" % id)

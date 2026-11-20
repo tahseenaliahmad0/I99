@@ -187,14 +187,15 @@ Things a human must judge or supply. Nothing here blocks the build.
   duck depth and pitch in `data/sfx.json` comes from measurement (D-052).
   `godot --headless --path . --script res://tools/audio_check.gd -- --wav=<folder>`
   writes each sound for listening.
-- **Tells without a sound** (GDD 17.2 wants both; the table of GDD 16.5 has
-  no sound for them, and GDD 1.5 forbids inventing resources): a gust's
-  tell, the dust thickening, the low sun, a checkpoint's sign, the key of
-  the Arrival, and everything a passenger does (the drum, the snore, the
-  prayer, the Apprentice's warning are a subtitle and a figure only).
-- **The mix has no room left** under the rule that a functional cue stands
-  6 dB over everything else: a further sound heard at once needs deeper
-  ducks or a weaker rule (D-052).
+- **Sounds beyond the table of GDD 16.5** (D-052, D-058): `horn_behind`,
+  `rattle`, and the tells that had only a picture: `gust`, `dust`,
+  `soldier_whistle`, `soldier_knock`. Each is one record of
+  `data/sfx.json`; rename, replace or strike them there. Still silent on
+  purpose: the low sun, the bar, the bay and the key, a hitcher at the
+  roadside.
+- **The mix** has about 0.9 dB of room under the rule that a functional cue
+  stands 6 dB over everything else at once (D-058 deepened the ducks by
+  1 dB); a further sound heard at once will want deeper ducks again.
 - **Subtitles lie over the wheel hub** and the key of the Arrival (bottom
   centre, GDD 16.6); `subtitle_bottom_margin` moves them (D-054).
 - **Renderers.** Only the Compatibility renderer under Mesa was ever run:

@@ -385,6 +385,7 @@ func _storm_schema() -> Dictionary:
 		"thin_m": _above(0.0),
 		"thick_s": _above(0.0),
 		"thick_m": _above(0.0),
+		"dust_tell_s": _num(0.0),
 		"gust_push": _num(0.0),
 		"gust_every_s": _above(0.0),
 		"wipe_haze": _num(0.0, 1.0),
@@ -542,6 +543,9 @@ func _check_bosses() -> void:
 		if id == "checkpoint" and not boss.has("checkpoint"):
 			_err("E_MISSING", "legs.json", "%s.checkpoint" % label, "the Checkpoint needs its numbers")
 		var storm: Dictionary = GameData.as_dict(boss.get("storm"))
+		if GameData.is_number(storm.get("dust_tell_s")) and GameData.is_number(storm.get("thin_s")):
+			if GameData.as_float(storm.get("dust_tell_s")) > GameData.as_float(storm.get("thin_s")):
+				_err("E_RANGE", "legs.json", "%s.storm.dust_tell_s" % label, "must not be longer than thin_s: the thick dust closes in while the dust is thin")
 		if GameData.is_number(storm.get("moved_off_kmh")) and GameData.is_number(storm.get("stopped_kmh")):
 			if GameData.as_float(storm.get("moved_off_kmh")) <= GameData.as_float(storm.get("stopped_kmh")):
 				_err("E_RANGE", "legs.json", "%s.storm.moved_off_kmh" % label, "must be above stopped_kmh: driving off is more than rolling")

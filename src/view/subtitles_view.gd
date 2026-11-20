@@ -104,8 +104,10 @@ func setup(data: GameData) -> void:
 ## Shows a line of the line table by its id, after whatever is showing and
 ## waiting: what a `line_requested` on the Events bus does. `until` names an
 ## event of the bus that ends the line before its time (the payload's
-## "until": a ring written out is over when the call is).
-func say(line_id: String, until: String = "") -> void:
+## "until": a ring written out is over when the call is). A tell (the
+## payload's "tell": what announces something a moment ahead, GDD 2.2 pillar
+## 4) is shown at once, in front of whatever is showing and waiting.
+func say(line_id: String, until: String = "", tell: bool = false) -> void:
 	if _tuning == null:
 		return
 	if not _begin(line_id):
@@ -113,7 +115,7 @@ func say(line_id: String, until: String = "") -> void:
 	if not until.is_empty() and not _listen_for(until):
 		until = ""
 	for said: PackedStringArray in SubtitleQueue.exchange(Lines.get_speaker(line_id), Lines.get_text(line_id)):
-		_queue.push(Lines.get_speaker_name(said[0]), said[1], until)
+		_queue.push(Lines.get_speaker_name(said[0]), said[1], until, tell)
 
 
 ## Listens for an event that ends lines early; false if the bus has none of
@@ -297,7 +299,7 @@ func _background(shown: bool) -> StyleBox:
 
 
 func _on_line_requested(data: Dictionary) -> void:
-	say(GameData.as_string(data.get("id")), GameData.as_string(data.get("until")))
+	say(GameData.as_string(data.get("id")), GameData.as_string(data.get("until")), GameData.as_bool(data.get("tell")))
 
 
 ## What was to last until this event is over now.

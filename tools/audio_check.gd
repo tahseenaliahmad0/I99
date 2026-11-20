@@ -49,9 +49,15 @@ const ENGINE: String = "engine"
 const ENGINE_HARMONIC: String = "engine_harmonic"
 const RATTLE: String = "rattle"
 const RUMBLE: String = "rumble_strip"
+## The sounds of tells that GDD 16.5's table has no sound for (GDD 17.2).
+const GUST: String = "gust"
+const DUST: String = "dust"
+const WHISTLE: String = "soldier_whistle"
+const KNOCK: String = "soldier_knock"
 ## Sounds of which only one is heard at a time: the radio's loops, the
-## squeals, the two yawns (GDD 5.8: he blinks or he nods).
-const FAMILIES: PackedStringArray = ["radio_", "squeal_", "yawn"]
+## squeals, the two yawns (GDD 5.8: he blinks or he nods), what the one
+## soldier does (he whistles as he sets off, he knocks when he has come).
+const FAMILIES: PackedStringArray = ["radio_", "squeal_", "yawn", "soldier_"]
 ## The events of GDD 16.5's table.
 const TABLE_IDS: PackedStringArray = [
 	"engine", "rumble_strip", "indicator_tick", "lighter_click", "bead_click", "horn", "wiper",
@@ -336,6 +342,53 @@ func _check_table() -> void:
 				"%s: its %s bursts a second are not slower than the rumble strip's %s" % [RATTLE, str(rattle.get("burst_hz")), str(rumble.get("burst_hz"))])
 		_expect(GameData.as_float(rattle.get("cutoff")) > GameData.as_float(rumble.get("cutoff")),
 				"%s: its noise at %s Hz does not lie higher than the rumble strip's at %s" % [RATTLE, str(rattle.get("cutoff")), str(rumble.get("cutoff"))])
+	_check_tells()
+
+
+## Not of the table: the sounds of the tells that had only a picture (GDD
+## 17.2: "every tell has both a sound and a visual"). Each must be what its
+## tell needs and must not be taken for another sound.
+func _check_tells() -> void:
+	var registry: Dictionary = _data.root("sfx")
+	var strip: Dictionary = _synth(RUMBLE)
+	# A gust's tell and the Storm's dust last: loops of steady noise (no
+	# bursts, which are the rumble strip's and the Rattle's), the gust above
+	# the strip's band and the dust below it.
+	for id: String in [GUST, DUST]:
+		if not _expect(registry.has(id), "sfx.json has no '%s' (GDD 17.2)" % id):
+			continue
+		var spec: Dictionary = _synth(id)
+		_expect(GameData.as_bool(spec.get("loop")) and _same(spec.get("wave"), "noise"), "%s: it must be a loop of noise, heard for as long as its tell lasts" % id)
+		_expect(not spec.has("burst_hz"), "%s: noise in bursts is the rumble strip's and the Rattle's" % id)
+		_expect(GameData.as_float(spec.get("fade_in")) > 0.0 and GameData.as_float(spec.get("fade_out")) > 0.0, "%s: it must come in and go out, not switch" % id)
+	if registry.has(GUST):
+		_expect(GameData.as_float(_synth(GUST).get("cutoff")) >= 2.0 * GameData.as_float(strip.get("cutoff")),
+				"%s: its noise at %s Hz must lie an octave over the rumble strip's at %s" % [GUST, str(_synth(GUST).get("cutoff")), str(strip.get("cutoff"))])
+		# It has come in before the gust pushes.
+		_expect(GameData.as_float(_synth(GUST).get("fade_in")) <= _data.tuning.f("gust_tell"),
+				"%s: it takes %s s to come in; a gust's tell is %s s" % [GUST, str(_synth(GUST).get("fade_in")), str(_data.tuning.f("gust_tell"))])
+	if registry.has(DUST):
+		_expect(_same(_synth(DUST).get("filter"), "lowpass") and GameData.as_float(_synth(DUST).get("cutoff")) < GameData.as_float(strip.get("cutoff")),
+				"%s: its noise must lie under the rumble strip's band (%s Hz)" % [DUST, str(strip.get("cutoff"))])
+		var storm: Dictionary = GameData.as_dict(_data.record("bosses", "storm").get("storm"))
+		_expect(GameData.as_float(_synth(DUST).get("fade_in")) <= GameData.as_float(storm.get("dust_tell_s")),
+				"%s: it takes %s s to come in; the dust closes in over %s s" % [DUST, str(_synth(DUST).get("fade_in")), str(storm.get("dust_tell_s"))])
+	# The soldier's whistle: a tone over every note of the phone and of the
+	# siren, so that it is taken for neither.
+	if _expect(registry.has(WHISTLE), "sfx.json has no '%s' (GDD 17.2)" % WHISTLE):
+		var whistle: float = GameData.as_float(_synth(WHISTLE).get("freq"))
+		for other: String in ["phone_ring", "siren_chirp"]:
+			for note: Variant in GameData.as_array(_synth(other).get("notes")):
+				var pitch: float = GameData.as_float(GameData.as_array(note)[0])
+				_expect(whistle > pitch, "%s: its %s Hz is not over the %s Hz of %s" % [WHISTLE, str(whistle), str(pitch), other])
+		_expect(not GameData.as_bool(_synth(WHISTLE).get("loop")), "%s: he whistles once" % WHISTLE)
+	# His knock: more than one dull rap, lower than a clap.
+	if _expect(registry.has(KNOCK), "sfx.json has no '%s' (GDD 17.2)" % KNOCK):
+		var knock: Dictionary = _synth(KNOCK)
+		_expect(_same(knock.get("wave"), "noise") and not GameData.as_bool(knock.get("loop")), "%s: a knock is a burst of noise that ends" % KNOCK)
+		_expect(GameData.as_float(knock.get("burst_hz")) * GameData.as_float(knock.get("duration")) >= 2.0, "%s: he raps more than once" % KNOCK)
+		_expect(GameData.as_float(knock.get("cutoff")) < GameData.as_float(_synth("clap").get("cutoff")),
+				"%s: its noise at %s Hz does not lie lower than a clap's at %s" % [KNOCK, str(knock.get("cutoff")), str(_synth("clap").get("cutoff"))])
 
 
 ## "A different added harmonic per gear." The engine's loop and the
