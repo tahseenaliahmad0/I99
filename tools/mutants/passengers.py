@@ -3,6 +3,12 @@
 
 The last block (the validator's rules for passengers.json) is for T-DATA-01:
     MUT_ONLY=<its numbers> python3 tools/mutants.py T-DATA-01 tools/mutants/passengers.py
+
+After the fixes of the M8 review (RULES-01 to RULES-12): #105 to #152 and
+the thirteen entries rewritten to the changed code (#10, #11, #44, #55, #68,
+#86, #87, #88, #93, #94, #95, #100, #103) are killed by the T-PASS tests,
+#153 to #165 by T-DATA-01. (#142 lived until T-PASS-HAJJIYA said which of
+the five "the next" is.)
 """
 P = 'src/core/passenger_sim.gd'
 D = 'src/core/drive_sim.gd'
