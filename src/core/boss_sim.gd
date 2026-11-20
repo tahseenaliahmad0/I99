@@ -309,6 +309,8 @@ static func _plan_dawn(data: GameData, out: Dictionary, dawn: Dictionary, modifi
 	road["par_s"] = GameData.as_float(out.get("par_s"))
 	road["length_m"] = GameData.as_float(out.get("length"))
 	road["density_mult"] = GameData.as_float(modifier.get("traffic_mult"), 1.0)
+	# Everything on this road passes between the last checkpoint's barriers.
+	road["max_vehicle_width"] = GameData.as_float(check.get("gap_m"))
 	var taper: float = GameData.as_float(check.get("taper_m"))
 	var zone: Dictionary = {
 		"kind": CORRIDOR,

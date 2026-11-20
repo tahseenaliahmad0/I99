@@ -2143,6 +2143,7 @@ func test_boss_03() -> void:
 	_check_where_the_sun_stands()
 	_check_last_checkpoint()
 	_check_nobody_leaves_a_corridor()
+	_check_dawn_traffic_fits_the_barriers()
 	_check_call_rings()
 	_check_dawn_modifiers()
 	_check_arrival()
@@ -2296,6 +2297,29 @@ func _met_at(spawn: Dictionary) -> float:
 	if met >= 0.0:
 		return met
 	return GameData.as_float(spawn.get("trigger_s")) + GameData.as_float(spawn.get("ahead"))
+
+
+## Whatever drives on Dawn's road passes its last checkpoint, between
+## barriers 2.34 m apart: nothing wider than that is on it (the review of
+## M7: trucks and tankers 2.5 m wide drove through them).
+func _check_dawn_traffic_fits_the_barriers() -> void:
+	var gap: float = GameData.as_float(GameData.as_dict(_dawn().get("checkpoint")).get("gap_m"))
+	var too_wide: Array[String] = []
+	for type: Dictionary in data.records("vehicles"):
+		if GameData.as_float(type.get("width")) > gap and GameData.as_array(type.get("acts")).has(3.0) and GameData.as_bool(type.get("traffic"), true):
+			too_wide.append(GameData.as_string(type.get("id")))
+	check(not too_wide.is_empty(), "(Act 3's traffic has vehicles wider than the barriers' %.2f m: %s)" % [gap, ", ".join(too_wide)])
+	var wide: int = 0
+	var vehicles: int = 0
+	for seed_value: int in range(1, 31):
+		for modifier: String in ["", "market_day"]:
+			var plan: Dictionary = BossSim.plan(data, DAWN, modifier, seed_value)
+			for entry: Variant in GameData.as_array(plan.get("spawns")):
+				vehicles += 1
+				if GameData.as_float(data.record("vehicles", GameData.as_string(GameData.as_dict(entry).get("vehicle"))).get("width")) > gap:
+					wide += 1
+	check(vehicles > 1000, "(thirty Dawns and thirty market days: %d vehicles)" % vehicles)
+	check_eq(wide, 0, "none of them is wider than the gap between the barriers")
 
 
 ## Between Dawn's barriers a honk moves nobody into the next corridor: the
