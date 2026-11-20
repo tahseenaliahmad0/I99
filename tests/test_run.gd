@@ -413,6 +413,39 @@ func test_run_02() -> void:
 	for _tick: int in int((cut + 1.0) / DT):
 		_sim.step(_input)
 	check(_sim.wrecked and _sim.faults.lamps == capacity, "and stays one: there is no Telling to tell again")
+	_check_seeds_kept_apart()
+
+
+## What is drawn from the Telling's seed is kept apart by salts (GDD 13.3):
+## forks, legs, bosses, hitchers, and the Telling told again. (The review of
+## M7: the seed of a Telling told again was the seed of a boss of the
+## Telling before it.)
+func _check_seeds_kept_apart() -> void:
+	var slots: int = RunGenerator.ACTS * RunGenerator.LEGS_PER_ACT * RunGenerator.BRANCHES
+	var ranges: Array[Vector2i] = [
+		Vector2i(RunGenerator.FORK_SALT, RunGenerator.FORK_SALT + slots),
+		Vector2i(RunGenerator.LEG_SALT, RunGenerator.LEG_SALT + slots),
+		Vector2i(RunGenerator.BOSS_SALT, RunGenerator.BOSS_SALT + RunGenerator.ACTS),
+		Vector2i(RunGenerator.HITCHER_SALT, RunGenerator.HITCHER_SALT + RunGenerator.ACTS),
+		# A Telling can be told again any number of times: nothing lies above.
+		Vector2i(RunState.RETELLING_SALT, 0x7FFFFFFF),
+	]
+	var apart: bool = true
+	for first: int in ranges.size():
+		for second: int in range(first + 1, ranges.size()):
+			if ranges[first].x <= ranges[second].y and ranges[second].x <= ranges[first].y:
+				apart = false
+	check(apart, "the salts of forks, legs, bosses, hitchers and retellings do not meet")
+	for telling_seed: int in [1, 4242, 987654321]:
+		var again: int = telling_seed
+		var before: int = telling_seed
+		for retelling: int in range(1, 4):
+			before = again
+			again = Rng.derive(before, RunState.RETELLING_SALT + retelling)
+			var met: bool = false
+			for act: int in range(1, RunGenerator.ACTS + 1):
+				met = met or again == RunGenerator.boss_seed(before, act)
+			check(not met, "seed %d: told again %d times, its seed is no boss's of the Telling before" % [telling_seed, retelling])
 
 
 # --- T-RUN-01, in parts ------------------------------------------------------

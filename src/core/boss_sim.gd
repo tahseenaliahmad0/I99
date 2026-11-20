@@ -64,9 +64,15 @@ var visibility: float = INF
 var thick: bool = false
 ## Seconds until the dust thins or thickens.
 var dust_change_in: float = 0.0
-## Seconds until what is coming up behind his standing car reaches it
-## (0: nothing is coming). Its lights in the mirror and its horn are the tell.
+## Seconds until what is coming up behind his standing car reaches it, from
+## the moment its horn sounds (0: nothing is coming, or not yet heard).
 var rear_end_in: float = 0.0
+## The same seconds from the moment its lights show in his mirror: a mirror
+## tell (GDD 7.6, 6.3), earlier in a wide mirror and later in a cracked one.
+var rear_end_lights_in: float = 0.0
+## Seconds by which the mirror shows things earlier (a wide mirror) or, below
+## zero, later (a cracked one). DriveSim sets it.
+var mirror_shift: float = 0.0
 
 # --- Dawn (GDD 10.4) ---------------------------------------------------------
 ## FALSE_DAWN, SUNRISE or THE_CALL (0 on any other road).
@@ -158,9 +164,10 @@ var _moved_off_kmh: float = 0.0
 ## Seconds he has stood where he is not safe, since the last time something
 ## could have come.
 var _stood: float = 0.0
-## The draw for this wait has been made; and it came up a hit.
+## The draw for this wait has been made; it came up a hit; its horn has sounded.
 var _drawn: bool = false
 var _coming: bool = false
+var _horned: bool = false
 var _length: float = 0.0
 ## A checkpoint's corridor (GDD 10.2, 10.4): where its barriers begin to
 ## close in, where they are corridor_gap apart, and where they end.
@@ -459,9 +466,11 @@ func stop() -> void:
 	thick = false
 	dust_change_in = 0.0
 	rear_end_in = 0.0
+	rear_end_lights_in = 0.0
 	_stood = 0.0
 	_drawn = false
 	_coming = false
+	_horned = false
 	phase = 0
 	glare = 0.0
 	sun_side = 0.0
@@ -903,20 +912,33 @@ func _step_standing(dt: float, hazards_on: bool) -> void:
 	var waiting: bool = _stood > 0.0
 	var driving: bool = _car.speed >= _moved_off_kmh if waiting else _car.speed > _stopped_kmh
 	if driving or (hazards_on and off_the_lanes):
-		_stood = 0.0
-		_drawn = false
-		_coming = false
-		rear_end_in = 0.0
+		_end_the_wait()
 		return
 	_stood += dt
-	if not _drawn and _stood >= _rear_end_every - _rear_end_tell - dt * 0.5:
+	# Its lights in his mirror are a mirror tell: as long before the hit as
+	# its horn, shifted by what the mirror is. The draw is made when the
+	# first of the two is due.
+	var lights_lead: float = maxf(_rear_end_tell + mirror_shift, 0.0)
+	var left: float = maxf(_rear_end_every - _stood, 0.0)
+	if not _drawn and _stood >= _rear_end_every - maxf(_rear_end_tell, lights_lead) - dt * 0.5:
 		_drawn = true
 		_coming = _rng.chance(Rng.ROAD, _rear_end_chance)
-		rear_end_tell = _coming
-	rear_end_in = maxf(_rear_end_every - _stood, 0.0) if _coming else 0.0
+	if _coming and not _horned and _stood >= _rear_end_every - _rear_end_tell - dt * 0.5:
+		_horned = true
+		rear_end_tell = true
+	rear_end_in = left if _horned else 0.0
+	rear_end_lights_in = left if _coming and lights_lead > 0.0 and _stood >= _rear_end_every - lights_lead - dt * 0.5 else 0.0
 	if _stood >= _rear_end_every - dt * 0.5:
 		rear_end = _coming
-		_stood = 0.0
-		_drawn = false
-		_coming = false
-		rear_end_in = 0.0
+		_end_the_wait()
+
+
+## Nothing is coming any more: he has driven off, made himself safe, or it
+## has come.
+func _end_the_wait() -> void:
+	_stood = 0.0
+	_drawn = false
+	_coming = false
+	_horned = false
+	rear_end_in = 0.0
+	rear_end_lights_in = 0.0

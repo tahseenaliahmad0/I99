@@ -335,8 +335,11 @@ func _show_mirror(snapshot: Dictionary) -> void:
 	if _markers.has(MIRROR_ANCHOR):
 		var marker: Node3D = _markers[MIRROR_ANCHOR]
 		marker.scale = Vector3(mirror_scale, 1.0, 1.0)
-	var rear_end_in: float = snapshot["rear_end_in"]
-	var near: float = clampf(1.0 - rear_end_in / maxf(_rear_end_tell, 0.001), 0.0, 1.0)
+	# The lights of what comes up behind him: a mirror tell, shown as long
+	# before it hits as this mirror shows it (wide: earlier; cracked: later).
+	var rear_end_in: float = snapshot["rear_end_lights_in"]
+	var mirror_shift: float = snapshot["mirror_shift"]
+	var near: float = clampf(1.0 - rear_end_in / maxf(_rear_end_tell + mirror_shift, 0.001), 0.0, 1.0)
 	for index: int in _mirror_lights.size():
 		var light: Node3D = _mirror_lights[index]
 		light.visible = rear_end_in > 0.0

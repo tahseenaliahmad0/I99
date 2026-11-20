@@ -697,9 +697,11 @@ func _step_leg_road() -> void:
 	curve_k = leg.curve_k
 	if leg.gust_started != 0:
 		_blow(leg.gust_started, leg.gust_push)
+	boss.mirror_shift = items.passive("mirror_lead_s") - faults.param(FAULT_MIRROR, "mirror_tell_delay_s", 0.0)
 	boss.step_road(_road_dt, DT, items.flag(FLAG_HAZARDS))
 	if boss.rear_end_tell:
-		# Its horn, and its lights in the mirror: the tell (GDD 2.2, pillar 4).
+		# Its horn: the tell (GDD 2.2, pillar 4). Its lights in the mirror
+		# come with it, or earlier or later as the mirror shows them.
 		_emit("sfx_requested", {"id": "horn", "behind": true})
 	_report_call()
 	_report_soldier()
@@ -1733,6 +1735,7 @@ func snapshot() -> Dictionary:
 		"dust_thick": boss.thick,
 		"dust_change_in": boss.dust_change_in,
 		"rear_end_in": boss.rear_end_in,
+		"rear_end_lights_in": boss.rear_end_lights_in,
 		"pulled_over": pulled_over,
 		"visibility": visibility(),
 		# Unlit things show only inside what he can see: at night they appear late.

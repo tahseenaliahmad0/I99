@@ -1808,6 +1808,56 @@ func _check_storm_standing_is_not_dodged() -> void:
 			rolled += DT
 	check_near(_sim.nerves.value - 40.0, shoulder_rate * rolled, 0.05, "(driving along it still does: +%.1f in %.1f s of rolling)" % [_sim.nerves.value - 40.0, rolled])
 
+	# What comes up behind him shows its lights in the mirror: a mirror
+	# tell (GDD 7.6: with the Wide mirror they "arrive 5 s earlier"; 6.3: in
+	# a cracked mirror "2 s later"). Its horn keeps its own time.
+	var lead: float = _sim.items.passive("mirror_lead_s")
+	var wide: float = 0.0
+	for entry: Variant in GameData.as_array(data.record("items", "wide_mirror").get("gives")):
+		if GameData.as_string(GameData.as_dict(entry).get("passive")) == "mirror_lead_s":
+			wide = GameData.as_float(GameData.as_dict(entry).get("amount"))
+	var cracked: float = GameData.as_float(GameData.as_dict(data.record("faults", "cracked_mirror").get("params")).get("mirror_tell_delay_s"))
+	check_near(lead, 0.0, 0.000001, "(no mirror item yet)")
+	check_near(wide, 5.0, 0.000001, "(GDD 7.6: the Wide mirror, 5 s earlier)")
+	check_near(cracked, 2.0, 0.000001, "(GDD 6.3: the cracked mirror, 2 s later)")
+	for mirror: int in 3:
+		_begin_quiet_boss(STORM, "", 1)
+		_sim.rng.reseed(11)
+		var shift: float = 0.0
+		if mirror == 1:
+			_give("wide_mirror")
+			shift = wide
+		elif mirror == 2:
+			# (The mirror cracked: its lamp lit, out of the deck.)
+			_sim.faults.active.append(&"cracked_mirror")
+			_sim.faults.deck.erase(&"cracked_mirror")
+			shift = -cracked
+		_stand_in_lane(false)
+		_events = []
+		var stood_from: int = _sim.tick
+		var lights_at: int = -1
+		var horn_at: int = -1
+		var hit_at: int = -1
+		guard = _ticks_in(every * float(waits))
+		while hit_at < 0 and guard > 0:
+			guard -= 1
+			_tick()
+			if lights_at < 0 and GameData.as_float(_sim.snapshot()["rear_end_lights_in"]) > 0.0:
+				lights_at = _sim.tick
+			if horn_at < 0 and _horns_behind() > 0:
+				horn_at = _sim.tick
+			if _count_events("hit") > 0:
+				hit_at = _sim.tick
+		var name: String = ["a plain mirror", "the Wide mirror", "a cracked mirror"][mirror]
+		check(hit_at > 0 and horn_at > 0, "(%s: something comes out of the dust and hits him)" % name)
+		check(absi((hit_at - horn_at) - _ticks_in(tell)) <= 1, "%s: its horn sounds %.1f s before it hits, whatever the mirror" % [name, tell])
+		var lights_lead: float = maxf(tell + shift, 0.0)
+		if lights_lead > 0.0:
+			check(lights_at > 0 and absi((hit_at - lights_at) - _ticks_in(lights_lead)) <= 1, "%s: its lights are in the mirror %.1f s before it hits (%.2f s)" % [name, lights_lead, float(hit_at - lights_at) * DT])
+		else:
+			check_eq(lights_at, -1, "%s: its lights are not seen before it hits" % name)
+		check_eq((hit_at - stood_from) % _ticks_in(every), 0, "(%s: the hit comes at a whole 10 s of standing all the same)" % name)
+
 
 ## The weather cramp fires once (GDD 7.9).
 func _check_storm_cramp() -> void:
