@@ -1914,8 +1914,8 @@ func _check_he_takes_the_wheel_back() -> void:
 	# from the let-go, to the tick.
 	var crown: float = 0.0
 	for late: bool in [false, true]:
+		# (In the middle lane: there is road on both sides of what follows.)
 		_on_the_road("apprentice")
-		_cruise(3, 0)
 		crown = _sim.car.steady_drift(0.0)
 		_steer_to(-30.0)
 		var let_go_at: float = _sim.wheel.angle
@@ -1930,7 +1930,9 @@ func _check_he_takes_the_wheel_back() -> void:
 			check(_sim.car.x - from_x > crown * hold * 0.8, "and the car goes where an unheld wheel lets it (%.2f m down the crown), not back to the old turn" % (_sim.car.x - from_x))
 		else:
 			check_near(_sim.wheel.angle, let_go_at, 0.000001, "asked one tick short of %.1f s after the let-go he still takes the wheel back to %.1f degrees" % [catch_s, let_go_at])
-			check(_sim.car.x - from_x < -1.0, "(and the car turns with it: %.2f m)" % (_sim.car.x - from_x))
+			var turning: float = let_go_at / _sim.wheel.max_angle() * _sim.car.lat_authority() + crown
+			check(turning < 0.0 and _sim.car.x - from_x < turning * hold * 0.8, "(and the car turns with it: %.2f m to the left)" % (from_x - _sim.car.x))
+		check_eq(_count_events("hit"), 0, "(the car has touched nothing)")
 
 	# The slowest hand still catches it: a wheel at full left lock (its grip
 	# point has ridden round to the far side of the hub), Nerves at Pound,
@@ -1981,10 +1983,11 @@ func _check_he_takes_the_wheel_back() -> void:
 	check(_sim.effects.has_own(ItemSim.HOOK_ARMED), "(the hook hangs in its ring)")
 	_steer_to(20.0)
 	check(_sim.wheel.angle > 19.0, "(he turns the wheel to %.1f degrees)" % _sim.wheel.angle)
+	var left_at: float = _sim.wheel.angle
 	var asked_after: int = _let_go_and_ask()
 	check(_sim.effects.has_own(ItemSim.HOOK_SET) and asked_after < catch_ticks, "(the hook takes the wheel as he lets go, and he asks the boy at once)")
 	var hooked: float = _sim.wheel.angle
-	check(absf(hooked) < 15.0, "(the hook has brought the wheel to %.1f degrees to keep the lane)" % hooked)
+	check(absf(hooked) < absf(left_at) * 0.5, "(the hook has brought the wheel from %.1f to %.1f degrees to keep the lane)" % [left_at, hooked])
 	_ticks(_ticks_in(1.0))
 	check_eq(GameData.as_int(_shot("wheel_held")), PassengerSim.HOLD_ANGLE, "(the boy holds it)")
 	check_near(_sim.wheel.angle, hooked, 0.000001, "from the hook he takes the wheel where the hook has it")
