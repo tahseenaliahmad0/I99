@@ -16,6 +16,18 @@
   "bosses": [
     {"id": "checkpoint", "act": 1, "length_m": 500, "par_s": 90, "lanes": 3, "divided": true,
      "modifiers": ["long_queue", "thorough"],
+     "checkpoint": {
+       "corridor": {"at_m": 200, "length_m": 150, "taper_m": 60, "gap_m": 2.34, "sign_lead_s": 5},
+       "barrier_suspicion": 25,
+       "queue": {"cars": 6, "gap_m": 2.5, "creep_kmh": 12, "pull_up_per_s": 2.0, "settle_m": 0.1, "serve_s": 4, "leave_kmh": 40, "clear_m": 4,
+                 "vehicles": ["car", "taxi", "pickup", "minibus"]},
+       "stop_zone_m": 8, "stopped_kmh": 1, "bump_kmh": 5,
+       "stow_s": 10, "contraband_suspicion": 40, "courage_suspicion": 15,
+       "documents": ["licence", "id", "registration"],
+       "delay_every_s": 5, "delay_suspicion": 10,
+       "pass_under": 50, "turned_back_at": 100,
+       "search_minutes": 15, "turned_back_minutes": 30
+     },
      "line_ids": {"name": "boss.checkpoint.name"}},
     {"id": "storm", "act": 2, "length_m": 2000, "par_s": 100, "lanes": 3, "divided": true,
      "modifiers": ["crosswind", "night_storm"],

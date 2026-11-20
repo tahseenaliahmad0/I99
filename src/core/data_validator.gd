@@ -28,14 +28,19 @@ const SLOT_ANCHOR: String = "@slot"
 const RITUAL_OPS: PackedStringArray = [
 	"nerves", "cash", "add_effect", "remove_effect", "consume_supply", "give", "toggle",
 	"horn", "wipe", "photo", "indicate", "window", "ash", "radio_step", "sfx", "line", "pay",
-	"clear_haze", "flip", "answer", "refill", "hook", "call", "key",
+	"clear_haze", "flip", "answer", "refill", "hook", "call", "key", "hand", "stow", "unstow",
 ]
+## What can be handed out of the driver's window (GDD 10.2).
+const DOCUMENTS: PackedStringArray = ["licence", "id", "registration"]
+const BANKNOTES: String = "banknotes"
+## A DRAG_TO's destination: any free slot the thing carried fits in.
+const HOME_ANCHOR: String = "@home"
 ## How the Call is taken at the pocket (GDD 10.4).
 const CALL_WAYS: PackedStringArray = ["alone", "passenger"]
 ## Cabin switches a "toggle:" op may flip and a "flag:" condition may read.
-const CABIN_FLAGS: PackedStringArray = ["hazards", "high_beam", "window_open", "glovebox_open", "passenger"]
+const CABIN_FLAGS: PackedStringArray = ["hazards", "high_beam", "window_open", "glovebox_open", "passenger", "letter_aside"]
 ## Conditions that are not effect ids.
-const CONDITION_WORDS: PackedStringArray = ["supply>0", "hot", "playing", "warbling", "ringing"]
+const CONDITION_WORDS: PackedStringArray = ["supply>0", "hot", "playing", "warbling", "ringing", "glovebox_room", "stowed"]
 ## Sources of Nerves a status can make him immune to (GDD 7.4, the seeds).
 const NERVE_SOURCES: PackedStringArray = ["honk", "tailgater", "doubt"]
 const REACHES: PackedStringArray = ["near", "mid", "far", "none"]
@@ -233,6 +238,9 @@ func _ritual_schema() -> Dictionary:
 		"id": _str(),
 		"anchor": _str(),
 		"item": _opt(_ref("items")),
+		# A ritual at "@slot" that several items list (stowing): it has no
+		# item of its own.
+		"shared": _opt(_bool()),
 		"gesture": _enum(GESTURES),
 		"hold_s": _opt(_num(0.0)),
 		"flick_dirs": _opt(_list(_enum(FLICK_DIRS), 1)),
@@ -349,6 +357,7 @@ func _boss_schema() -> Dictionary:
 		"lanes": _int(1.0, 3.0),
 		"divided": _bool(),
 		"modifiers": _list(_ref("boss_modifiers")),
+		"checkpoint": _opt(_checkpoint_schema()),
 		"storm": _opt(_storm_schema()),
 		"dawn": _opt(_dawn_schema()),
 		"line_ids": _opt(_map(_ref("lines"))),
@@ -376,6 +385,38 @@ func _storm_schema() -> Dictionary:
 			"speed_kmh": _list_n(_above(0.0), 2),
 			"vehicles": _list(_ref("vehicles"), 1),
 		}),
+	})
+
+
+## The Checkpoint's numbers (GDD 10.2).
+func _checkpoint_schema() -> Dictionary:
+	return _obj({
+		"corridor": _corridor_schema({"sign_lead_s": _num(0.0)}),
+		"barrier_suspicion": _num(0.0),
+		"queue": _obj({
+			"cars": _int(0.0),
+			"gap_m": _above(0.0),
+			"creep_kmh": _above(0.0),
+			"pull_up_per_s": _above(0.0),
+			"settle_m": _above(0.0),
+			"serve_s": _above(0.0),
+			"leave_kmh": _above(0.0),
+			"clear_m": _num(0.0),
+			"vehicles": _list(_ref("vehicles"), 1),
+		}),
+		"stop_zone_m": _above(0.0),
+		"stopped_kmh": _num(0.0),
+		"bump_kmh": _num(0.0),
+		"stow_s": _above(0.0),
+		"contraband_suspicion": _num(0.0),
+		"courage_suspicion": _num(0.0),
+		"documents": _list(_enum(DOCUMENTS), 1),
+		"delay_every_s": _above(0.0),
+		"delay_suspicion": _num(0.0),
+		"pass_under": _num(0.0),
+		"turned_back_at": _num(0.0),
+		"search_minutes": _num(0.0),
+		"turned_back_minutes": _num(0.0),
 	})
 
 
@@ -482,6 +523,38 @@ func _check_bosses() -> void:
 			_err("E_MISSING", "legs.json", "%s.storm" % label, "the Storm needs its numbers")
 		if id == "dawn" and not boss.has("dawn"):
 			_err("E_MISSING", "legs.json", "%s.dawn" % label, "Dawn needs its numbers")
+		if id == "checkpoint" and not boss.has("checkpoint"):
+			_err("E_MISSING", "legs.json", "%s.checkpoint" % label, "the Checkpoint needs its numbers")
+		var checkpoint: Dictionary = GameData.as_dict(boss.get("checkpoint"))
+		if not checkpoint.is_empty():
+			var corridor: Dictionary = GameData.as_dict(checkpoint.get("corridor"))
+			var queue: Dictionary = GameData.as_dict(checkpoint.get("queue"))
+			if GameData.is_number(corridor.get("at_m")) and GameData.is_number(corridor.get("length_m")):
+				# The taper begins on the road and the bar stands short of its end.
+				if GameData.as_float(corridor.get("at_m")) - GameData.as_float(corridor.get("taper_m")) < 0.0 \
+						or GameData.as_float(corridor.get("at_m")) + GameData.as_float(corridor.get("length_m")) >= GameData.as_float(boss.get("length_m")):
+					_err("E_RANGE", "legs.json", "%s.checkpoint.corridor" % label, "the corridor and its taper must lie on the Checkpoint's road, with road left after the bar")
+				if GameData.as_float(corridor.get("gap_m")) <= _tuning_number("car_width", 0.0) or GameData.as_float(corridor.get("gap_m")) > _tuning_number("lane_width", INF):
+					_err("E_RANGE", "legs.json", "%s.checkpoint.corridor.gap_m" % label, "must be wider than the car and no wider than a lane")
+				# The longest queue of the longest vehicles must fit in the corridor.
+				var longest: float = 0.0
+				for type: Variant in GameData.as_array(queue.get("vehicles")):
+					if _data.has_record("vehicles", GameData.as_string(type)):
+						longest = maxf(longest, GameData.as_float(_data.record("vehicles", GameData.as_string(type)).get("length")))
+				var most: float = GameData.as_float(queue.get("cars"))
+				for listed: Variant in GameData.as_array(boss.get("modifiers")):
+					if _data.has_record("boss_modifiers", GameData.as_string(listed)):
+						most = maxf(most, GameData.as_float(queue.get("cars")) * GameData.as_float(_data.record("boss_modifiers", GameData.as_string(listed)).get("queue_mult"), 1.0))
+				if roundf(most) * (longest + GameData.as_float(queue.get("gap_m"))) > GameData.as_float(corridor.get("length_m")):
+					_err("E_RANGE", "legs.json", "%s.checkpoint.queue.cars" % label, "the queue at its longest does not fit between the barriers")
+			if GameData.is_number(checkpoint.get("pass_under")) and GameData.is_number(checkpoint.get("turned_back_at")) \
+					and GameData.as_float(checkpoint.get("pass_under")) > GameData.as_float(checkpoint.get("turned_back_at")):
+				_err("E_RANGE", "legs.json", "%s.checkpoint.pass_under" % label, "must not be above turned_back_at")
+			var seen: Dictionary = {}
+			for document: Variant in GameData.as_array(checkpoint.get("documents")):
+				if seen.has(document):
+					_err("E_DUP_ID", "legs.json", "%s.checkpoint.documents" % label, "'%s' is listed twice" % GameData.as_string(document))
+				seen[document] = true
 		var dawn: Dictionary = GameData.as_dict(boss.get("dawn"))
 		var length: float = GameData.as_float(boss.get("length_m"))
 		var check: Dictionary = GameData.as_dict(dawn.get("checkpoint"))
@@ -882,8 +955,10 @@ func _check_cross_rules() -> void:
 		var ritual_label: String = "rituals[%s]" % GameData.as_string(ritual.get("id"), "?")
 		var anchor: String = GameData.as_string(ritual.get("anchor"))
 		if anchor == SLOT_ANCHOR:
-			if not ritual.has("item"):
+			if not ritual.has("item") and not GameData.as_bool(ritual.get("shared")):
 				_err("E_RULE", "rituals.json", ritual_label, "a ritual at \"@slot\" needs the \"item\" it belongs to")
+			if ritual.has("item") and GameData.as_bool(ritual.get("shared")):
+				_err("E_RULE", "rituals.json", ritual_label, "a shared ritual belongs to every item that lists it: it names no \"item\"")
 		elif ritual.has("anchor") and ritual["anchor"] is String and not _data.has_record("anchors", anchor):
 			_err("E_REF", "rituals.json", ritual_label + ".anchor", "unknown anchors id '%s'" % anchor)
 		for key: String in ["on_complete", "on_step"]:
@@ -905,7 +980,7 @@ func _check_cross_rules() -> void:
 				if not ritual.has("across_m"):
 					needs = "to"
 		var to: String = GameData.as_string(ritual.get("to"))
-		if ritual.has("to") and ritual["to"] is String and to != SLOT_ANCHOR and not _data.has_record("anchors", to):
+		if ritual.has("to") and ritual["to"] is String and to != SLOT_ANCHOR and to != HOME_ANCHOR and not _data.has_record("anchors", to):
 			_err("E_REF", "rituals.json", ritual_label + ".to", "unknown anchors id '%s'" % to)
 		if to == SLOT_ANCHOR and anchor != SLOT_ANCHOR:
 			_err("E_RULE", "rituals.json", ritual_label + ".to", "\"@slot\" is where an item's own ritual began: the ritual must be at \"@slot\" too")
@@ -1100,6 +1175,9 @@ func _check_op(op: String, file_label: String, where: String) -> void:
 		"call":
 			if not CALL_WAYS.has(argument):
 				_err("E_ENUM", file_label, where, "'call' takes %s, not '%s'" % [" or ".join(CALL_WAYS), argument])
+		"hand":
+			if not DOCUMENTS.has(argument) and argument != BANKNOTES:
+				_err("E_ENUM", file_label, where, "'hand' takes %s or %s, not '%s'" % [", ".join(DOCUMENTS), BANKNOTES, argument])
 		"refill":
 			if not _item_tags().has(argument):
 				_err("E_REF", file_label, where, "'refill' takes an item tag; '%s' is not a tag of items.json" % argument)

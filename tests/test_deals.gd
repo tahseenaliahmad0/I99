@@ -42,6 +42,23 @@ func test_item_forged_papers() -> void:
 	_drag("dash_1", "driver_window")
 	check(GameData.as_array(_event("pulled_over").get("taken")).is_empty(), "once used they are no contraband: there is nothing to take")
 
+	# At the Checkpoint itself (GDD 10.2): the Papers phase passes for him the
+	# moment the soldier is at his window, and the next Checkpoint he is on his own.
+	_begin_checkpoint("", 1, false)
+	_give("forged_papers", "glovebox_a")
+	check(_stand_at_the_bar(), "(first in line at the Checkpoint, forged papers in the glovebox)")
+	_events = []
+	check(_until_checkpoint_phase(BossSim.THROUGH, 11.0), "at the Checkpoint the Papers phase passes by itself")
+	check_eq(GameData.as_string(_event("pulled_over").get("paid")), "pass", "(he is let through)")
+	check_eq(_sim.boss.wanted, "", "(no document was asked for)")
+	check(_item("forged_papers") == null, "and the forged papers are used up")
+	_begin_checkpoint("", 1, false)
+	_stand_at_the_bar()
+	check(_until_checkpoint_phase(BossSim.PAPERS, 11.0), "(the Checkpoint after that)")
+	_ticks(_ticks_in(2.0))
+	check_eq(_sim.boss.phase, BossSim.PAPERS, "without them he must hand over what the sign asks for")
+	check(not _sim.boss.wanted.is_empty(), "(the soldier waits for the %s)" % _sim.boss.wanted)
+
 	# 60 cash, from the shady guy.
 	_buy_from_the_shady_guy("forged_papers", 60.0, "dash_2")
 

@@ -17,6 +17,8 @@ var reached_max: bool = false
 var jumped: float = 0.0
 ## Scales everything that raises Suspicion (tinted glass, GDD 7.7). Set by DriveSim.
 var gain_mult: float = 1.0
+## False at a checkpoint (GDD 10.2): there nothing wears off by driving clean.
+var decays: bool = true
 
 var _max: float = 100.0
 var _decay: float = 0.0
@@ -75,7 +77,7 @@ func step(dt: float) -> void:
 		return
 	if _rate > 0.0:
 		value = minf(value + _rate * dt, _max)
-	else:
+	elif decays:
 		value = maxf(value - _decay * dt, 0.0)
 	if value >= _max:
 		reached_max = true

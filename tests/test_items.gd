@@ -1482,6 +1482,28 @@ func test_item_breath_mints() -> void:
 	check(_sim.courage() > 0, "(he still has Courage)")
 	check_eq(_sim.courage_noticed(), _sim.courage(), "after 60 s they notice it again")
 
+	# At the Checkpoint itself (GDD 10.2): the soldier who comes to his window
+	# counts each stack of Courage, unless a mint hides it.
+	var per_stack: float = GameData.as_float(GameData.as_dict(data.record("bosses", BossSim.CHECKPOINT).get("checkpoint")).get("courage_suspicion"))
+	for minted: bool in [false, true]:
+		_begin_checkpoint("", 1, false)
+		_give("breath_mints")
+		var flask: ItemSim.Item = _give("arak_flask")
+		_hold_at(_anchor_of("arak_flask"), sip_s)
+		_hold(sip_s)
+		check_eq(_sim.courage(), 2, "(two sips before the Checkpoint)")
+		# The flask itself is put out of sight: only his breath is left to tell.
+		flask.slot = &"glovebox_a"
+		check(_stand_at_the_bar(), "(first in line at the Checkpoint)")
+		if minted:
+			_tap_at(_anchor_of("breath_mints"))
+			check(_sim.effects.has(&"minty"), "(a mint, while the soldier walks up)")
+		check(_until_checkpoint_phase(BossSim.PAPERS, 11.0), "(the soldier is at the window)")
+		if minted:
+			check_near(_sim.suspicion.value, 0.0, 0.000001, "at the Checkpoint, with a mint, the soldier does not count his Courage")
+		else:
+			check_near(_sim.suspicion.value, per_stack * 2.0, 0.000001, "at the Checkpoint, without one, each stack is +15 Suspicion")
+
 	# 5 mints.
 	_new_sim()
 	mints = _give("breath_mints")

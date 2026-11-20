@@ -150,3 +150,12 @@ call.noor,,,true
 sign.checkpoint,,,true
 hud.the_call,,,true
 hud.bay,,,true
+sign.document.licence,,,true
+sign.document.id,,,true
+sign.document.registration,,,true
+soldier.window,,,true
+soldier.wrong,,,true
+hud.checkpoint.queue,,,true
+hud.checkpoint.stow,,,true
+hud.checkpoint.papers,,,true
+hud.checkpoint.passed,,,true

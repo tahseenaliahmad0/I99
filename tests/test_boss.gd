@@ -2,6 +2,7 @@ extends CabinSuite
 ## The set pieces that end the acts (GDD 10.2 to 10.5).
 
 const KMH_TO_MS: float = 1.0 / 3.6
+const CHECKPOINT: String = "checkpoint"
 const STORM: String = "storm"
 const DAWN: String = "dawn"
 const POCKET: String = "pocket"
@@ -10,6 +11,857 @@ const KEY: String = "key"
 
 func _storm() -> Dictionary:
 	return GameData.as_dict(data.record("bosses", STORM).get("storm"))
+
+
+# --- T-BOSS-01: the Checkpoint (GDD 10.2) -------------------------------------
+
+func _checkpoint() -> Dictionary:
+	return GameData.as_dict(data.record("bosses", CHECKPOINT).get("checkpoint"))
+
+
+func _checkpoint_number(key: String) -> float:
+	return GameData.as_float(_checkpoint().get(key))
+
+
+func test_boss_01() -> void:
+	_check_checkpoint_road()
+	_check_checkpoint_queue()
+	_check_checkpoint_barriers()
+	_check_checkpoint_stow()
+	_check_checkpoint_stowing_by_hand()
+	_check_checkpoint_papers()
+	_check_checkpoint_delay()
+	_check_checkpoint_verdicts()
+	_check_checkpoint_bribe()
+	_check_checkpoint_forged_papers()
+	_check_checkpoint_modifiers()
+	_check_checkpoint_in_a_telling()
+
+
+## The road, its numbers, and who is watching.
+func _check_checkpoint_road() -> void:
+	var record: Dictionary = data.record("bosses", CHECKPOINT)
+	var corridor: Dictionary = GameData.as_dict(_checkpoint().get("corridor"))
+	check_eq(GameData.as_int(record.get("act")), 1, "GDD 10.2: the Checkpoint ends Act 1")
+	check_near(GameData.as_float(record.get("par_s")), 90.0, 0.000001, "about 90 s")
+	check_near(GameData.as_float(corridor.get("gap_m")), 2.34, 0.000001, "its barriers are 2.34 m apart")
+	check_near(GameData.as_float(corridor.get("gap_m")), tuning.f("car_width") * 1.3, 0.000001, "(1.3 car widths)")
+	check_near(_checkpoint_number("barrier_suspicion"), 25.0, 0.000001, "touching a barrier is +25 Suspicion")
+	check_near(_checkpoint_number("stow_s"), 10.0, 0.000001, "the soldier takes 10 s to reach the window")
+	check_near(_checkpoint_number("contraband_suspicion"), 40.0, 0.000001, "each contraband item left out is +40")
+	check_near(_checkpoint_number("courage_suspicion"), 15.0, 0.000001, "each Courage stack +15")
+	check_near(_checkpoint_number("delay_every_s"), 5.0, 0.000001, "each 5 s of delay")
+	check_near(_checkpoint_number("delay_suspicion"), 10.0, 0.000001, "is +10")
+	check_near(_checkpoint_number("pass_under"), 50.0, 0.000001, "under 50 he passes")
+	check_near(_checkpoint_number("turned_back_at"), 100.0, 0.000001, "at 100 he is turned back")
+	check_near(_checkpoint_number("search_minutes"), 15.0, 0.000001, "a search is 15 game minutes")
+	check_near(_checkpoint_number("turned_back_minutes"), 30.0, 0.000001, "being turned back 30")
+	check_near(tuning.f("checkpoint_bribe"), 60.0, 0.000001, "GDD 15: the Checkpoint's bribe is 60 cash")
+	var documents: Array = GameData.as_array(_checkpoint().get("documents"))
+	check(documents.size() == 3 and documents.has("licence") and documents.has("id") and documents.has("registration"), "three documents: licence, ID, registration")
+
+	var plan: Dictionary = _begin_checkpoint()
+	check_eq(_sim.boss.kind, CHECKPOINT, "he is at the Checkpoint")
+	check_near(GameData.as_float(plan.get("length")), GameData.as_float(record.get("length_m")), 0.000001, "(its road is as long as its record says)")
+	check_near(_sim.heavy_floor(), 0.0, 0.000001, "GDD 6.1: at the Checkpoint he is never Heavy")
+	_tick()
+	var shot: Dictionary = _sim.snapshot()
+	check_eq(GameData.as_int(shot["checkpoint_phase"]), BossSim.QUEUE, "it begins with the queue")
+	check(GameData.as_bool(shot["suspicion_watching"]), "GDD 6.5: Suspicion exists at a checkpoint")
+	check_eq(GameData.as_string(shot["suspicion_by"]), "checkpoint", "(the snapshot says who watches)")
+	check_near(GameData.as_float(shot["suspicion"]), 0.0, 0.000001, "from 0")
+	check_near(GameData.as_float(shot["bar_at"]), GameData.as_float(corridor.get("at_m")) + GameData.as_float(corridor.get("length_m")), 0.000001, "the bar stands where the barriers end")
+	check(not GameData.as_bool(shot["bar_up"]), "and is down")
+	var sign: Dictionary = _sign("checkpoint")
+	check(not sign.is_empty(), "the Checkpoint is signed ahead")
+	check_near(GameData.as_float(sign.get("limit")), 0.0, 0.000001, "(a checkpoint to stop at: its sign names no speed)")
+	# Nothing wears off here, and the Patrol's rows do not count.
+	_sim.suspicion.add(30.0)
+	_run(4.0)
+	check_near(_sim.suspicion.value, 30.0, 0.000001, "Suspicion does not wear off at the Checkpoint")
+	_sim.gate.reset(4)
+	_run(2.0)
+	check_near(_sim.suspicion.value, 30.0, 0.000001, "the Patrol's rows are not the Checkpoint's: fourth gear adds nothing")
+	_sim.gate.reset(1)
+	_tap_at("horn")
+	check_near(_sim.suspicion.value, 30.0, 0.000001, "nor does the horn")
+	# At the top nobody pulls him over: the verdict comes at the window.
+	_sim.suspicion.add(100.0)
+	_run(1.0)
+	check_near(_sim.suspicion.value, _sim.suspicion.maximum(), 0.000001, "(Suspicion at the top)")
+	check(not _sim.pulled_over, "at 100 in the queue he is not pulled over: the verdict comes at the window")
+	check_eq(_count_events("pulled_over"), 0, "(nothing is announced yet)")
+
+
+## Stop and go, in every lane's corridor, at less than first gear's speed.
+func _check_checkpoint_queue() -> void:
+	var queue: Dictionary = GameData.as_dict(_checkpoint().get("queue"))
+	var corridor: Dictionary = GameData.as_dict(_checkpoint().get("corridor"))
+	var cars: int = GameData.as_int(queue.get("cars"))
+	var gap: float = GameData.as_float(queue.get("gap_m"))
+	var serve: float = GameData.as_float(queue.get("serve_s"))
+	var plan: Dictionary = _begin_checkpoint("", 3)
+	var lines: Array = GameData.as_array(plan.get("queue"))
+	check_eq(lines.size(), 3, "every lane has its queue")
+	var bar: float = _sim.boss.bar_at
+	for lane: int in lines.size():
+		var line: Array = GameData.as_array(lines[lane])
+		check_eq(line.size(), cars, "lane %d: %d vehicles wait" % [lane, cars])
+		check_eq(_sim.boss.queue_length(lane), cars, "(they are on the road)")
+		# Nose to tail from the bar, in the lane's corridor.
+		var standing: Array[TrafficSim.Vehicle] = []
+		for vehicle: TrafficSim.Vehicle in _sim.traffic.vehicles:
+			if vehicle.lane == lane and vehicle.role == BossSim.QUEUE_ROLE:
+				standing.append(vehicle)
+		standing.sort_custom(func(a: TrafficSim.Vehicle, b: TrafficSim.Vehicle) -> bool: return a.s > b.s)
+		check_eq(standing.size(), cars, "(lane %d: all of them)" % lane)
+		var nose: float = bar
+		for index: int in standing.size():
+			var vehicle: TrafficSim.Vehicle = standing[index]
+			check_eq(String(vehicle.type_id), GameData.as_string(line[index]), "lane %d: vehicle %d is the plan's" % [lane, index + 1])
+			check(GameData.as_array(queue.get("vehicles")).has(String(vehicle.type_id)), "(of the queue's kinds)")
+			check_near(vehicle.s + vehicle.half_length, nose, 0.000001, "lane %d: vehicle %d stands %s" % [lane, index + 1, "at the bar" if index == 0 else "%.1f m behind the one ahead" % gap])
+			check_near(vehicle.x, _sim.car.lane_center(lane), 0.000001, "(in the middle of its corridor)")
+			check(vehicle.s - vehicle.half_length > GameData.as_float(corridor.get("at_m")), "(between the barriers)")
+			check_near(vehicle.speed, 0.0, 0.000001, "(standing)")
+			nose = vehicle.s - vehicle.half_length - gap
+
+	# Watching the last vehicle of the middle lane: it goes and stops, once for
+	# every vehicle that is waved on ahead of it, and never fast.
+	var last: TrafficSim.Vehicle = null
+	for vehicle: TrafficSim.Vehicle in _sim.traffic.vehicles:
+		if vehicle.lane == 1 and vehicle.role == BossSim.QUEUE_ROLE and (last == null or vehicle.s < last.s):
+			last = vehicle
+	_stand_short_of_the_queue()
+	var goes: int = 0
+	var moving: bool = false
+	var fastest: float = 0.0
+	var left_at: Array[int] = []
+	var waiting: int = _sim.boss.queue_length(1)
+	var guard: int = _ticks_in(120.0)
+	while _sim.boss.queue_length(1) > 0 and guard > 0:
+		guard -= 1
+		_tick()
+		if last.role == BossSim.QUEUE_ROLE:
+			fastest = maxf(fastest, last.speed)
+			if last.speed > 2.0 and not moving:
+				moving = true
+				goes += 1
+			elif last.speed < 0.5:
+				moving = false
+		if _sim.boss.queue_length(1) != waiting:
+			waiting = _sim.boss.queue_length(1)
+			left_at.append(_sim.tick)
+	check_eq(left_at.size(), cars, "one by one the vehicles are waved on")
+	check_eq(goes, cars - 1, "the last of them goes and stops %d times: stop and go" % (cars - 1))
+	check(fastest > 5.0 and fastest <= GameData.as_float(queue.get("creep_kmh")) + 0.000001, "at a crawl: never more than %d km/h (%.1f)" % [roundi(GameData.as_float(queue.get("creep_kmh"))), fastest])
+	check(GameData.as_float(queue.get("creep_kmh")) < tuning.fi("gear_speeds", 0), "which is less than first gear gives: he must use the brake")
+	for index: int in range(1, left_at.size()):
+		var apart: float = float(left_at[index] - left_at[index - 1]) * DT
+		check(apart >= serve and apart <= serve + 6.0, "vehicle %d is waved on %.1f s after the one before: served %d s at the bar" % [index + 1, apart, roundi(serve)])
+	check(_sim.boss.phase == BossSim.QUEUE, "(standing far back he is not yet first in line)")
+	# While any of them waits ahead of him he is not first in line, however near he stands.
+	_begin_checkpoint("", 3)
+	var tail: TrafficSim.Vehicle = null
+	for vehicle: TrafficSim.Vehicle in _sim.traffic.vehicles:
+		if vehicle.lane == 1 and (tail == null or vehicle.s < tail.s):
+			tail = vehicle
+	_cruise(1, 1)
+	_sim.car.s = tail.s - tail.half_length - _sim.car.length() * 0.5 - 1.0
+	_sim.car.speed = 0.0
+	_input.rmb = true
+	_ticks(_ticks_in(1.0))
+	check_eq(_sim.boss.phase, BossSim.QUEUE, "behind the queue he queues")
+	check_eq(_count_events("hit"), 0, "(touching nobody)")
+
+	# Through the queue behind them, braking: no touch, and then he is first.
+	_begin_checkpoint("", 3)
+	_events = []
+	_follow_the_queue(1)
+	check_eq(_sim.boss.phase, BossSim.STOW, "when the last one ahead is waved on and he stands at the bar, the soldier comes")
+	check_eq(_count_events("hit"), 0, "driving the queue with the brake, he touches nothing")
+	check_eq(_sim.faults.lamps, 0, "(no lamp)")
+	check_near(_sim.suspicion.value, 0.0, 0.000001, "(and no Suspicion)")
+	check_eq(_sim.boss.queue_length(1), 0, "(his lane's queue is gone)")
+	check(_sim.boss.queue_length(0) <= 1 and _sim.boss.queue_length(2) <= 1, "(the other lanes' queues went as fast)")
+	check(_sim.boss.bar_at - (_sim.car.s + _sim.car.length() * 0.5) <= _checkpoint_number("stop_zone_m"), "(he stands within stop_zone_m of the bar)")
+
+	# The horn moves nobody over between barriers.
+	_begin_checkpoint("", 3)
+	_cruise(1, 1)
+	_sim.car.s = tail.s - 30.0
+	_sim.car.speed = 0.0
+	_input.rmb = true
+	_tick()
+	_tap_at("horn")
+	_input.rmb = true
+	_ticks(_ticks_in(2.0))
+	var moved_over: int = 0
+	for vehicle: TrafficSim.Vehicle in _sim.traffic.vehicles:
+		if vehicle.signalling != 0 or vehicle.changing or absf(vehicle.x - _sim.car.lane_center(vehicle.lane)) > 0.001:
+			moved_over += 1
+	check_eq(moved_over, 0, "a honk moves nobody out of the queue")
+
+
+## Touching a barrier is a scrape and +25 Suspicion; the bar is one too.
+func _check_checkpoint_barriers() -> void:
+	var corridor: Dictionary = GameData.as_dict(_checkpoint().get("corridor"))
+	var at: float = GameData.as_float(corridor.get("at_m"))
+	var gap: float = GameData.as_float(corridor.get("gap_m"))
+	var half_width: float = tuning.f("car_width") * 0.5
+	var each: float = _checkpoint_number("barrier_suspicion")
+	_begin_checkpoint("", 1, false)
+	_cruise(1, 1)
+	_sim.car.s = at + 10.0
+	_tick()
+	var middle: float = _sim.car.lane_center(1)
+	check_near(_sim.car.wall_left, middle - gap * 0.5, 0.000001, "in the queue a barrier stands 1.17 m to his left")
+	check_near(_sim.car.wall_right, middle + gap * 0.5, 0.000001, "and one 1.17 m to his right")
+	_keep_lane = false
+	_events = []
+	_sim.car.x = middle + gap * 0.5 - half_width + 0.05
+	_tick()
+	check_eq(GameData.as_int(_event("hit").get("kind")), Collision.Hit.SCRAPE, "touching a barrier is a scrape")
+	check_eq(_sim.faults.lamps, int(tuning.fi("hit_lamps", 0)), "(a lamp)")
+	check_near(_sim.suspicion.value, each, 0.000001, "and +25 Suspicion")
+	check_eq(GameData.as_string(_event("suspicion_changed").get("type")), "suspicion_changed", "(announced)")
+	check(absf(_sim.car.x - middle) <= gap * 0.5 - half_width + 0.000001, "(he is put back between the barriers)")
+	# While the scrape's immunity lasts another touch is no scrape and no Suspicion.
+	_sim.car.x = middle - gap * 0.5 + half_width - 0.05
+	_tick()
+	check_eq(_count_events("hit"), 1, "a touch while he cannot be hit is not a scrape")
+	check_near(_sim.suspicion.value, each, 0.000001, "and adds no Suspicion")
+	_keep_lane = true
+	_ticks(_ticks_in(tuning.f("hit_immunity") + 0.1))
+	_keep_lane = false
+	_sim.car.x = middle - gap * 0.5 + half_width - 0.05
+	_tick()
+	check_eq(_count_events("hit"), 2, "after it, the other barrier scrapes too")
+	check_near(_sim.suspicion.value, each * 2.0, 0.000001, "+25 again: 50")
+
+	# The lowered bar holds him; met at speed it is a barrier like the others.
+	_begin_checkpoint("", 1, false)
+	_cruise(1, 1)
+	var bar: float = _sim.boss.bar_at
+	_sim.car.s = bar - 12.0
+	_events = []
+	_ticks(_ticks_in(3.0))
+	check_near(_sim.car.s + _sim.car.length() * 0.5, bar, 0.000001, "the bar is down: it holds him")
+	check_near(_sim.car.speed, 0.0, 0.2, "(stopped against it)")
+	check_eq(_count_events("hit"), 1, "run into in first gear it is a touch of a barrier: a scrape")
+	check_eq(GameData.as_int(_event("hit").get("kind")), Collision.Hit.SCRAPE, "(a scrape)")
+	check_near(_sim.suspicion.value, each, 0.000001, "and +25 Suspicion")
+	_ticks(_ticks_in(3.0))
+	check_near(_sim.car.s + _sim.car.length() * 0.5, bar, 0.000001, "(it keeps holding him)")
+	check_eq(_count_events("hit"), 1, "(held against it, he is not scraped again)")
+	# Rolled up to at a crawl, it only stops him.
+	_begin_checkpoint("", 1, false)
+	_cruise(1, 1)
+	_sim.car.s = bar - _sim.car.length() * 0.5 - 0.5
+	_events = []
+	for _index: int in _ticks_in(2.0):
+		_sim.car.speed = minf(_sim.car.speed, _checkpoint_number("bump_kmh") - 1.0)
+		_tick()
+	check_near(_sim.car.s + _sim.car.length() * 0.5, bar, 0.01, "rolled up to at a crawl, the bar only stops him")
+	check_eq(_count_events("hit"), 0, "(no scrape)")
+	check_near(_sim.suspicion.value, 0.0, 0.000001, "(no Suspicion)")
+
+	# Running into the back of the queue: he is put behind it, between the barriers.
+	_begin_checkpoint("", 3)
+	var tail: TrafficSim.Vehicle = null
+	for vehicle: TrafficSim.Vehicle in _sim.traffic.vehicles:
+		if vehicle.lane == 1 and (tail == null or vehicle.s < tail.s):
+			tail = vehicle
+	_cruise(1, 1)
+	_sim.car.s = tail.s - tail.half_length - _sim.car.length() * 0.5 - 6.0
+	_events = []
+	var guard: int = _ticks_in(5.0)
+	while _event("hit").is_empty() and guard > 0:
+		guard -= 1
+		_tick()
+	check_eq(GameData.as_int(_event("hit").get("vehicle")), tail.id, "into the back of the queue: he hits the last vehicle")
+	check(_sim.car.s + _sim.car.length() * 0.5 <= tail.s - tail.half_length + 0.000001, "and is left behind it")
+	check_near(_sim.car.x, _sim.car.lane_center(1), 0.3, "between the barriers, not pushed through one")
+	check_near(_sim.suspicion.value, 0.0, 0.000001, "(a vehicle is no barrier: no Suspicion)")
+
+
+## Stow: 10 s; each contraband item left out +40, each Courage stack +15.
+func _check_checkpoint_stow() -> void:
+	var stow_s: float = _checkpoint_number("stow_s")
+	var per_item: float = _checkpoint_number("contraband_suspicion")
+	var per_stack: float = _checkpoint_number("courage_suspicion")
+	# Standing far from the bar, or rolling at it, the soldier does not come.
+	_begin_checkpoint("", 1, false)
+	_cruise(1, 1)
+	_sim.car.s = _sim.boss.bar_at - _checkpoint_number("stop_zone_m") - _sim.car.length() * 0.5 - 3.0
+	_sim.car.speed = 0.0
+	_input.rmb = true
+	_ticks(_ticks_in(2.0))
+	check_eq(_sim.boss.phase, BossSim.QUEUE, "standing short of stop_zone_m from the bar, he is waved forward, not checked")
+	_input.rmb = false
+	for _index: int in 40:
+		_sim.car.speed = 6.0
+		_tick()
+		if _sim.car.s + _sim.car.length() * 0.5 > _sim.boss.bar_at - 1.0:
+			break
+		check_eq(_sim.boss.phase, BossSim.QUEUE, "nor is a car that still rolls")
+
+	# From the moment the soldier starts toward him the car stands, whatever
+	# his foot does, until he is let through.
+	_begin_checkpoint("", _seed_asking_for("licence"), false)
+	_sim.items.flags[ItemSim.FLAG_WINDOW] = true
+	_cruise(1, 1)
+	_sim.car.s = _sim.boss.bar_at - _sim.car.length() * 0.5 - 5.0
+	_sim.car.speed = 0.0
+	_input.rmb = true
+	check(_until_checkpoint_phase(BossSim.STOW, 2.0), "standing 5 m short of the bar, first in line, the soldier starts toward him")
+	var stood_at: float = _sim.car.s
+	_input.clear()
+	check_eq(_sim.gate.gear, 1, "(first gear is engaged, and his foot is off the brake)")
+	check(_until_checkpoint_phase(BossSim.PAPERS, stow_s + 1.0), "(the soldier arrives)")
+	_ticks(_ticks_in(2.0))
+	check_near(_sim.car.s, stood_at, 0.000001, "the car stands where it stopped through the Stow and the Papers, brake or no brake")
+	check_near(_sim.car.speed, 0.0, 0.000001, "(at rest)")
+	_hand_out_document("licence")
+	check_eq(_sim.boss.phase, BossSim.THROUGH, "(let through)")
+	_ticks(_ticks_in(2.0))
+	check(_sim.car.s > stood_at + 1.0, "let through, it rolls on in gear")
+	check_eq(_count_events("hit"), 0, "(under the raised bar, touching nothing)")
+
+	# What the soldier sees when he arrives, case by case.
+	var cases: Array[String] = ["nothing", "flask out", "papers out", "both out", "flask stowed", "two stacks", "three stacks and the flask", "two stacks and mints"]
+	for case: String in cases:
+		_begin_checkpoint("", 1, false)
+		var expected: float = 0.0
+		match case:
+			"flask out":
+				_give("arak_flask", "cup_b")
+				expected = per_item
+			"papers out":
+				_give("forged_papers", "dash_2")
+				expected = per_item
+			"both out":
+				_give("arak_flask", "cup_b")
+				_give("forged_papers", "dash_2")
+				expected = per_item * 2.0
+			"flask stowed":
+				var flask: ItemSim.Item = _give("arak_flask", "cup_b")
+				flask.slot = &"glovebox_a"
+			"two stacks":
+				_sim.effects.add(DriveSim.COURAGE, 60.0)
+				_sim.effects.add(DriveSim.COURAGE, 60.0)
+				expected = per_stack * 2.0
+			"three stacks and the flask":
+				_give("arak_flask", "cup_b")
+				for _stack: int in 3:
+					_sim.effects.add(DriveSim.COURAGE, 60.0)
+				expected = per_item + per_stack * 3.0
+			"two stacks and mints":
+				_sim.effects.add(DriveSim.COURAGE, 60.0)
+				_sim.effects.add(DriveSim.COURAGE, 60.0)
+				_sim.effects.add(&"minty", 120.0)
+		check(_stand_at_the_bar(), "%s: standing at the bar, first in line, the soldier starts toward him" % case)
+		var began: int = _sim.tick
+		check_near(GameData.as_float(_sim.snapshot()["stow_left"]), stow_s, 0.000001, "(10 s away)")
+		check_near(_sim.suspicion.value, 0.0, 0.000001, "(nothing is counted while he walks)")
+		_ticks(_ticks_in(stow_s) - 1)
+		check_eq(_sim.boss.phase, BossSim.STOW, "%s: a tick short of 10 s he is still on his way" % case)
+		check_near(_sim.suspicion.value, 0.0, 0.000001, "(and nothing is counted yet)")
+		_events = []
+		_tick()
+		check(_sim.boss.phase != BossSim.STOW, "%s: he is at the window after 10 s" % case)
+		check_eq(_sim.tick - began, _ticks_in(stow_s), "(to the tick)")
+		if case == "papers out" or case == "both out":
+			# Forged papers pass the Papers at once: what was counted is in the verdict.
+			check_near(GameData.as_float(_event("pulled_over").get("suspicion")), expected, 0.000001, "%s: +%d Suspicion" % [case, roundi(expected)])
+		else:
+			check_near(_sim.suspicion.value, expected, 0.000001, "%s: +%d Suspicion" % [case, roundi(expected)])
+		if case == "two stacks":
+			check_eq(_sim.courage(), 2, "(two stacks of Courage)")
+		if case == "two stacks and mints":
+			check_eq(_sim.courage(), 2, "(two stacks, but his breath does not tell)")
+
+
+## Stowing is done with the hand, in the 10 s: glovebox open, DRAG the item in.
+func _check_checkpoint_stowing_by_hand() -> void:
+	_begin_checkpoint("", 1, false)
+	_give("arak_flask", "cup_b")
+	check(_stand_at_the_bar(), "(the soldier is on his way)")
+	var began: int = _sim.tick
+	# With the glovebox shut a press on the flask is a sip, as ever.
+	_events = []
+	_hold_at("cup_b", GameData.as_float(_ritual("flask_sip").get("hold_s")))
+	check_eq(_count_events("ritual_completed", "ritual", "flask_sip"), 1, "with the glovebox shut, a press on the flask is a sip")
+	check(not _sim.items.is_stowed(_item("arak_flask")), "(it is still in the cup holder)")
+	_tap_at("glovebox")
+	check(_sim.items.flag(ItemSim.FLAG_GLOVEBOX), "a TAP opens the glovebox")
+	_events = []
+	_drag("cup_b", "glovebox")
+	check_eq(_count_events("ritual_completed", "ritual", "stow"), 1, "with it open, the flask is dragged to the glovebox")
+	check(_sim.items.is_stowed(_item("arak_flask")), "and is stowed in one of its cells")
+	check_eq(_sim.items.contraband_in_view(), 0, "nothing contraband is left out")
+	check(float(_sim.tick - began) * DT < _checkpoint_number("stow_s"), "all within the 10 s (%.1f s)" % (float(_sim.tick - began) * DT))
+	# Stowed, it is out of use.
+	_events = []
+	_hold_at("glovebox", GameData.as_float(_ritual("flask_sip").get("hold_s")))
+	check_eq(_count_events("ritual_completed", "ritual", "flask_sip"), 0, "what is stowed cannot be used")
+	check(_until_checkpoint_phase(BossSim.PAPERS, _checkpoint_number("stow_s") + 1.0), "(the soldier arrives)")
+	check_near(_sim.suspicion.value, _checkpoint_number("courage_suspicion"), 0.000001, "the stowed flask is not counted: only the sip he took (+15)")
+
+	# Out again: from the open glovebox to a place it fits; a short press still shuts the glovebox.
+	_begin_checkpoint("", 1, false)
+	var flask: ItemSim.Item = _give("arak_flask", "cup_b")
+	flask.slot = &"glovebox_a"
+	_sim.items.flags[ItemSim.FLAG_GLOVEBOX] = true
+	_events = []
+	_drag("glovebox", "cup_b")
+	check_eq(_count_events("ritual_completed", "ritual", "unstow"), 1, "it is taken out by dragging it from the open glovebox to a free place of its own")
+	check_eq(String(_item("arak_flask").slot), "cup_b", "(the cup holder)")
+	_hold_at("cup_b", 0.1)
+	_tap_at("glovebox")
+	check(not _sim.items.flag(ItemSim.FLAG_GLOVEBOX), "(a TAP shuts the glovebox)")
+	flask = _item("arak_flask")
+	flask.slot = &"glovebox_b"
+	_tap_at("glovebox")
+	check(_sim.items.flag(ItemSim.FLAG_GLOVEBOX), "(open again, with the flask in it)")
+	_tap_at("glovebox")
+	check(not _sim.items.flag(ItemSim.FLAG_GLOVEBOX), "with something stowed in it, a short press still shuts the glovebox")
+	check(_sim.items.is_stowed(_item("arak_flask")), "(and the flask stays in)")
+	# Both cells taken: there is no room for a third thing.
+	_begin_checkpoint("", 1, false)
+	var first: ItemSim.Item = _give("arak_flask", "cup_b")
+	first.slot = &"glovebox_a"
+	_give("forged_papers", "glovebox_b")
+	check_eq(_sim.items.free_cell(), "", "the glovebox has two cells")
+
+
+## Papers: the signed document is found, the window cranked open, and the
+## document dragged to the driver's window.
+func _check_checkpoint_papers() -> void:
+	for document: String in ["licence", "id", "registration"]:
+		var boss_seed: int = _seed_asking_for(document)
+		_begin_checkpoint("", boss_seed, false)
+		check(_stand_at_the_bar(), "(first in line)")
+		# Before the soldier is there, the papers are nobody's business.
+		check(not _sim.effects.has(DriveSim.AT_WINDOW), "while he walks there is nobody to hand anything to")
+		check(_until_checkpoint_phase(BossSim.PAPERS, _checkpoint_number("stow_s") + 1.0), "(the soldier arrives)")
+		var shot: Dictionary = _sim.snapshot()
+		check_eq(GameData.as_string(shot["wanted"]), document, "his sign shows one of the three documents: %s" % document)
+		check(_sim.effects.has(DriveSim.AT_WINDOW), "(he waits at the window)")
+		check_eq(_count_events("line_requested", "id", "soldier.window"), 1, "the window is shut: he taps on the glass")
+		# Through the glass nothing can be handed out.
+		_events = []
+		_hand_out_document(document)
+		check_eq(_count_events("pulled_over"), 0, "%s: with the window shut the document cannot be handed out" % document)
+		check_eq(_sim.boss.wanted, document, "(he still waits for it)")
+		# The window: a cross-reach and three turns of the crank.
+		check(_reach("window_crank"), "he reaches across for the window crank")
+		_crank(GameData.as_float(_ritual("window_crank").get("turns")))
+		check(_sim.items.flag(ItemSim.FLAG_WINDOW), "three turns open the window")
+		# The wrong document is refused.
+		var wrong: String = "id" if document == "licence" else "licence"
+		_events = []
+		_hand_out_document(wrong)
+		check_eq(_count_events("line_requested", "id", "soldier.wrong"), 1, "%s wanted, %s handed out: refused" % [document, wrong])
+		check_eq(_count_events("pulled_over"), 0, "(no verdict)")
+		check_eq(_sim.boss.wanted, document, "(the sign stays up)")
+		# The right one, from where it is kept.
+		if document == "registration":
+			_events = []
+			_tap_at("glovebox")
+			check(_sim.items.flag(ItemSim.FLAG_GLOVEBOX), "(the glovebox is open)")
+			_drag("glovebox", "driver_window")
+			check_eq(_count_events("pulled_over"), 0, "the registration lies under the letter: it cannot be taken yet")
+			_hold_at("glovebox", GameData.as_float(_ritual("letter_aside").get("hold_s")))
+			check(_sim.items.flag(&"letter_aside"), "the letter is moved aside (0.4 s)")
+			check_near(GameData.as_float(_ritual("letter_aside").get("hold_s")), 0.4, 0.000001, "(GDD 7.3)")
+			_events = []
+			_drag("glovebox", "driver_window")
+		else:
+			_events = []
+			_hand_out_document(document)
+		var verdict: Dictionary = _event("pulled_over")
+		check(not verdict.is_empty(), "%s: found, and dragged to the driver's window: the papers are done" % document)
+		check(GameData.as_bool(verdict.get("released")), "(he is let through)")
+		check_eq(_count_events("ritual_completed", "ritual", "papers_" + document), 1, "(through the hand)")
+		check_eq(_sim.boss.phase, BossSim.THROUGH, "(the bar goes up)")
+		check(not _sim.effects.has(DriveSim.AT_WINDOW), "(the soldier steps back)")
+		check(GameData.as_bool(_ritual("papers_" + document).get("eyes_down")), "(GDD 4.7: papers pull the eyes down)")
+
+	# The licence is clipped where an item may sit: during the Papers it comes first.
+	_begin_checkpoint("", _seed_asking_for("licence"), false)
+	_give("tissue_box", "dash_1")
+	_sim.items.flags[ItemSim.FLAG_WINDOW] = true
+	_stand_at_the_bar()
+	_until_checkpoint_phase(BossSim.PAPERS, _checkpoint_number("stow_s") + 1.0)
+	_events = []
+	_drag("dash_1", "driver_window")
+	check_eq(_count_events("ritual_completed", "ritual", "papers_licence"), 1, "with something on the dash where the licence is clipped, the licence is still what he takes")
+	check_eq(_count_events("line_requested", "id", "soldier.window"), 0, "(the window was open already: no tap on the glass)")
+	# The window switch opens the window as well as the crank.
+	_begin_checkpoint("", _seed_asking_for("id"), false)
+	_give("window_switch")
+	_stand_at_the_bar()
+	_until_checkpoint_phase(BossSim.PAPERS, _checkpoint_number("stow_s") + 1.0)
+	_hold_at("window_switch", GameData.as_float(_ritual("window_switch_hold").get("hold_s")))
+	check(_sim.items.flag(ItemSim.FLAG_WINDOW), "(the window switch opens the window too)")
+	_events = []
+	_hand_out_document("id")
+	check_eq(_count_events("pulled_over"), 1, "and the ID goes out through it")
+
+
+## Each 5 s of delay is +10 Suspicion, counted from when the sign went up.
+func _check_checkpoint_delay() -> void:
+	var every: float = _checkpoint_number("delay_every_s")
+	var each: float = _checkpoint_number("delay_suspicion")
+	_begin_checkpoint("", _seed_asking_for("licence"), false)
+	_sim.items.flags[ItemSim.FLAG_WINDOW] = true
+	_stand_at_the_bar()
+	_until_checkpoint_phase(BossSim.PAPERS, _checkpoint_number("stow_s") + 1.0)
+	check_near(_sim.suspicion.value, 0.0, 0.000001, "(the sign goes up at 0)")
+	_ticks(_ticks_in(every) - 1)
+	check_near(_sim.suspicion.value, 0.0, 0.000001, "a tick short of 5 s of delay costs nothing")
+	check_near(GameData.as_float(_sim.snapshot()["papers_delay"]), every - DT, 0.000001, "(the snapshot counts the delay)")
+	_tick()
+	check_near(_sim.suspicion.value, each, 0.000001, "5 s of delay: +10")
+	_ticks(_ticks_in(every) - 1)
+	check_near(_sim.suspicion.value, each, 0.000001, "(nothing more until the next 5 s are full)")
+	_tick()
+	check_near(_sim.suspicion.value, each * 2.0, 0.000001, "10 s: +20")
+	_ticks(_ticks_in(every * 2.0))
+	check_near(_sim.suspicion.value, each * 4.0, 0.000001, "20 s: +40")
+	# Handing the document over stops the count.
+	_events = []
+	_hand_out_document("licence")
+	var level: float = GameData.as_float(_event("pulled_over").get("suspicion"))
+	check(level >= each * 4.0 and level < each * 6.0, "(he hands it over at last, with %d Suspicion)" % roundi(level))
+	_ticks(_ticks_in(every * 2.0))
+	check_near(_sim.suspicion.value, 0.0, 0.000001, "after the verdict nothing is counted any more")
+
+
+## Under 50 he passes; from 50 to 99 he is searched; at 100 he is turned back.
+func _check_checkpoint_verdicts() -> void:
+	var search_minutes: float = _checkpoint_number("search_minutes")
+	var back_minutes: float = _checkpoint_number("turned_back_minutes")
+	var levels: Array[float] = [0.0, 49.0, 50.0, 99.0, 100.0]
+	for level: float in levels:
+		# (The one who will be turned back meets the real queue, both times.)
+		_begin_checkpoint("", _seed_asking_for("licence"), level >= 100.0)
+		var flask: ItemSim.Item = _give("arak_flask", "cup_b")
+		flask.slot = &"glovebox_a"
+		_give("cigarettes", "ashtray")
+		_sim.items.flags[ItemSim.FLAG_WINDOW] = true
+		if level >= 100.0:
+			_follow_the_queue(1)
+		else:
+			_stand_at_the_bar()
+		_until_checkpoint_phase(BossSim.PAPERS, _checkpoint_number("stow_s") + 1.0)
+		check_near(_sim.suspicion.value, 0.0, 0.000001, "(nothing against him yet)")
+		_sim.suspicion.add(level)
+		var clock_before: float = _sim.clock.minutes
+		var tick_before: int = _sim.tick
+		_events = []
+		_hand_out_document("licence")
+		var verdict: Dictionary = _event("pulled_over")
+		var driven: float = float(_sim.tick - tick_before) * DT * tuning.f("clock_scale") / 60.0
+		# The delay that ran while the hand worked is his too.
+		var counted: float = GameData.as_float(verdict.get("suspicion"))
+		check(counted >= level and counted <= minf(level + _checkpoint_number("delay_suspicion"), 100.0), "(the verdict is given at %d Suspicion)" % roundi(counted))
+		if counted < _checkpoint_number("pass_under"):
+			check_eq(GameData.as_string(verdict.get("paid")), "pass", "at %d Suspicion he passes" % roundi(level))
+			check(GameData.as_bool(verdict.get("released")), "(let through)")
+			check_near(_sim.clock.minutes - clock_before, driven, 0.000001, "at no cost in time")
+			check(_item("arak_flask") != null, "and keeps what he stowed")
+		elif counted < _checkpoint_number("turned_back_at"):
+			check_eq(GameData.as_string(verdict.get("paid")), "search", "at %d Suspicion he is searched" % roundi(level))
+			check(GameData.as_bool(verdict.get("released")), "(and then let through)")
+			check_near(GameData.as_float(verdict.get("minutes")), search_minutes, 0.000001, "which takes 15 game minutes")
+			check_near(_sim.clock.minutes - clock_before, search_minutes + driven, 0.000001, "on the Clock at once")
+			check(_item("arak_flask") == null, "contraband is taken, stowed or not")
+			check(GameData.as_array(verdict.get("taken")).has("arak_flask"), "(the event names it)")
+			check(_item("cigarettes") != null, "(what is no contraband he keeps)")
+		else:
+			check_eq(GameData.as_string(verdict.get("paid")), "turned_back", "at 100 Suspicion he is turned back")
+			check(not GameData.as_bool(verdict.get("released")), "(not let through)")
+			check_near(GameData.as_float(verdict.get("minutes")), back_minutes, 0.000001, "which takes 30 game minutes")
+			check_near(_sim.clock.minutes - clock_before, back_minutes + driven, 0.000001, "on the Clock at once")
+			check(_item("arak_flask") != null, "(he keeps what he has: nobody searched)")
+		if counted < _checkpoint_number("turned_back_at"):
+			check_eq(_sim.boss.phase, BossSim.THROUGH, "(the bar is up)")
+			check(not _sim.suspicion.watching, "Suspicion is gone with the checkpoint")
+			check_near(_sim.suspicion.value, 0.0, 0.000001, "(0)")
+			# He drives through, to the end of the Checkpoint's road.
+			_events = []
+			var guard: int = _ticks_in(40.0)
+			while _event("boss_ended").is_empty() and guard > 0:
+				guard -= 1
+				_tick()
+			check(not _event("boss_ended").is_empty(), "and he drives on, out of the Checkpoint")
+			check_eq(_count_events("hit"), 0, "(the bar does not touch him)")
+			continue
+		# Turned back: the queue again, from its end.
+		check_eq(_sim.boss.phase, BossSim.QUEUE, "and the queue again")
+		check(_sim.car.s < 10.0, "from its end (he is %.1f m into the Checkpoint's road)" % _sim.car.s)
+		check_eq(_sim.gate.gear, tuning.i("start_gear"), "(in first gear)")
+		check_eq(_sim.boss.queue_length(1), GameData.as_int(GameData.as_dict(_checkpoint().get("queue")).get("cars")), "with a whole queue ahead of him once more")
+		check(_sim.suspicion.watching, "(he is watched again)")
+		check_near(_sim.suspicion.value, 0.0, 0.000001, "with Suspicion begun anew")
+		check(not GameData.as_bool(_sim.snapshot()["bar_up"]), "(the bar is down)")
+		# And this time, clean, he gets through.
+		_events = []
+		_follow_the_queue(1)
+		check_eq(_sim.boss.phase, BossSim.STOW, "(through the queue a second time)")
+		_until_checkpoint_phase(BossSim.PAPERS, _checkpoint_number("stow_s") + 1.0)
+		check_eq(_sim.boss.wanted, "licence", "(the same soldier wants the same document)")
+		_hand_out_document("licence")
+		check_eq(GameData.as_string(_event("pulled_over").get("paid")), "pass", "the second time, with nothing against him, he passes")
+		check_eq(_count_events("hit"), 0, "(having touched nothing)")
+
+
+## 60 cash through the window passes at any level.
+func _check_checkpoint_bribe() -> void:
+	var price: float = tuning.f("checkpoint_bribe")
+	for level: float in [0.0, 70.0, 100.0]:
+		_begin_checkpoint("", _seed_asking_for("registration"), false)
+		var flask: ItemSim.Item = _give("arak_flask", "cup_b")
+		flask.slot = &"glovebox_a"
+		_sim.items.flags[ItemSim.FLAG_WINDOW] = true
+		_sim.cash = price + 15.0
+		_stand_at_the_bar()
+		# Before the soldier is at the window there is nobody to pay.
+		_events = []
+		_drag("cash", "driver_window")
+		check_eq(_count_events("pulled_over"), 0, "banknotes cannot be handed out before the soldier is there")
+		_until_checkpoint_phase(BossSim.PAPERS, _checkpoint_number("stow_s") + 1.0)
+		_sim.suspicion.add(level)
+		var clock_before: float = _sim.clock.minutes
+		var tick_before: int = _sim.tick
+		_events = []
+		_drag("cash", "driver_window")
+		var verdict: Dictionary = _event("pulled_over")
+		check_eq(GameData.as_string(verdict.get("paid")), "bribe", "at %d Suspicion, banknotes through the window: he passes" % roundi(level))
+		check(GameData.as_bool(verdict.get("released")), "(let through)")
+		check_near(GameData.as_float(verdict.get("cost")), price, 0.000001, "for 60 cash")
+		check_near(_sim.cash, 15.0, 0.000001, "which he has paid")
+		check_near(_sim.clock.minutes - clock_before, float(_sim.tick - tick_before) * DT * tuning.f("clock_scale") / 60.0, 0.000001, "at no cost in time")
+		check(_item("arak_flask") != null, "and nothing is taken")
+		check_eq(_count_events("ritual_completed", "ritual", "checkpoint_bribe"), 1, "(through the hand)")
+		check_eq(_sim.boss.phase, BossSim.THROUGH, "(the bar is up)")
+	# Without 60 he is not taken.
+	_begin_checkpoint("", _seed_asking_for("registration"), false)
+	_sim.items.flags[ItemSim.FLAG_WINDOW] = true
+	_sim.cash = price - 1.0
+	_stand_at_the_bar()
+	_until_checkpoint_phase(BossSim.PAPERS, _checkpoint_number("stow_s") + 1.0)
+	_events = []
+	_drag("cash", "driver_window")
+	var refused: Dictionary = _event("pulled_over")
+	check(GameData.as_bool(refused.get("refused")) and not GameData.as_bool(refused.get("released")), "with less than 60 the banknotes are refused")
+	check_near(_sim.cash, price - 1.0, 0.000001, "(he keeps them)")
+	check_eq(_sim.boss.phase, BossSim.PAPERS, "(and the soldier still waits for the document)")
+	# With the window shut they cannot be handed out either.
+	_begin_checkpoint("", _seed_asking_for("registration"), false)
+	_sim.cash = price
+	_stand_at_the_bar()
+	_until_checkpoint_phase(BossSim.PAPERS, _checkpoint_number("stow_s") + 1.0)
+	_events = []
+	_drag("cash", "driver_window")
+	check_eq(_count_events("pulled_over"), 0, "nor through a shut window")
+
+
+## Forged papers pass the Papers phase by themselves, once (GDD 7.7).
+func _check_checkpoint_forged_papers() -> void:
+	_begin_checkpoint("", 2, false)
+	_give("forged_papers", "glovebox_a")
+	check(_stand_at_the_bar(), "(with forged papers in the glovebox)")
+	_events = []
+	check(_until_checkpoint_phase(BossSim.THROUGH, _checkpoint_number("stow_s") + 1.0), "with forged papers the Papers phase passes by itself")
+	var verdict: Dictionary = _event("pulled_over")
+	check_eq(GameData.as_string(verdict.get("paid")), "pass", "and he passes")
+	check_near(GameData.as_float(verdict.get("suspicion")), 0.0, 0.000001, "(stowed, they cost no Suspicion)")
+	check(_item("forged_papers") == null, "the papers are used up")
+	check_eq(_count_events("line_requested", "id", "soldier.window"), 0, "(no sign went up: nobody taps on the glass)")
+	check_eq(_sim.boss.wanted, "", "(he is asked for nothing)")
+	# Left on the dash they are contraband like any other when the soldier arrives.
+	_begin_checkpoint("", 2, false)
+	_give("forged_papers", "dash_2")
+	_stand_at_the_bar()
+	_events = []
+	_until_checkpoint_phase(BossSim.THROUGH, _checkpoint_number("stow_s") + 1.0)
+	check_near(GameData.as_float(_event("pulled_over").get("suspicion")), _checkpoint_number("contraband_suspicion"), 0.000001, "left on the dash they are contraband: +40")
+	check_eq(GameData.as_string(_event("pulled_over").get("paid")), "pass", "(under 50 he still passes)")
+	# They do not make the verdict: with Suspicion he is searched all the same.
+	_begin_checkpoint("", 2, false)
+	_give("forged_papers", "glovebox_a")
+	_stand_at_the_bar()
+	_sim.suspicion.add(60.0)
+	_events = []
+	_until_checkpoint_phase(BossSim.THROUGH, _checkpoint_number("stow_s") + 1.0)
+	check_eq(GameData.as_string(_event("pulled_over").get("paid")), "search", "they pass the Papers, not the verdict: at 60 Suspicion he is searched")
+
+
+## Long queue: phase 1 is 50% longer. Thorough: two documents.
+func _check_checkpoint_modifiers() -> void:
+	var listed: Array = GameData.as_array(data.record("bosses", CHECKPOINT).get("modifiers"))
+	check(listed.size() == 2 and listed.has("long_queue") and listed.has("thorough"), "GDD 10.2: the Checkpoint's modifiers are Long queue and Thorough")
+	check_near(GameData.as_float(data.record("boss_modifiers", "long_queue").get("queue_mult")), 1.5, 0.000001, "Long queue: 50% longer")
+	check_eq(GameData.as_int(data.record("boss_modifiers", "thorough").get("documents")), 2, "Thorough: two documents")
+	var cars: int = GameData.as_int(GameData.as_dict(_checkpoint().get("queue")).get("cars"))
+
+	# How long the queue takes: from the start until the last vehicle of the middle lane is waved on.
+	var took: Dictionary = {}
+	for modifier: String in ["", "long_queue"]:
+		var plan: Dictionary = _begin_checkpoint(modifier, 3)
+		var wanted_cars: int = roundi(float(cars) * (1.5 if modifier == "long_queue" else 1.0))
+		for lane: int in 3:
+			check_eq(GameData.as_array(GameData.as_array(plan.get("queue"))[lane]).size(), wanted_cars, "%s: %d vehicles in lane %d" % ["Long queue" if modifier != "" else "the plain Checkpoint", wanted_cars, lane])
+		_stand_short_of_the_queue()
+		var guard: int = _ticks_in(200.0)
+		while _sim.boss.queue_length(1) > 0 and guard > 0:
+			guard -= 1
+			_tick()
+		took[modifier] = _sim.seconds()
+		check_eq(GameData.as_array(plan.get("documents")).size(), 1, "(one document)")
+	var plain: float = GameData.as_float(took[""])
+	var long: float = GameData.as_float(took["long_queue"])
+	check(long / plain > 1.4 and long / plain < 1.65, "a Long queue takes half as long again: %.1f s against %.1f s" % [long, plain])
+
+	# Thorough: two different documents, one after the other; the verdict after both.
+	for boss_seed: int in [1, 2, 3, 4]:
+		var plan: Dictionary = BossSim.plan(data, CHECKPOINT, "thorough", boss_seed)
+		var asks: Array = GameData.as_array(plan.get("documents"))
+		check_eq(asks.size(), 2, "Thorough (seed %d): two documents" % boss_seed)
+		check(asks.size() == 2 and GameData.as_string(asks[0]) != GameData.as_string(asks[1]), "(not the same one twice)")
+		check_eq(GameData.as_array(GameData.as_array(plan.get("queue"))[0]).size(), cars, "(and a queue of the usual length)")
+	var thorough_seed: int = 0
+	for candidate: int in range(1, 200):
+		var asks: Array = GameData.as_array(BossSim.plan(data, CHECKPOINT, "thorough", candidate).get("documents"))
+		if asks.size() == 2 and GameData.as_string(asks[0]) == "licence" and GameData.as_string(asks[1]) == "id":
+			thorough_seed = candidate
+			break
+	check(thorough_seed > 0, "(a Thorough soldier who wants the licence, then the ID)")
+	_begin_checkpoint("thorough", thorough_seed, false)
+	_sim.items.flags[ItemSim.FLAG_WINDOW] = true
+	_stand_at_the_bar()
+	_until_checkpoint_phase(BossSim.PAPERS, _checkpoint_number("stow_s") + 1.0)
+	check_eq(_sim.boss.wanted, "licence", "first the licence")
+	_ticks(_ticks_in(_checkpoint_number("delay_every_s")))
+	check_near(_sim.suspicion.value, _checkpoint_number("delay_suspicion"), 0.000001, "(5 s of delay: +10)")
+	_events = []
+	_hand_out_document("licence")
+	check_eq(_count_events("pulled_over"), 0, "after the first document there is no verdict yet")
+	check_eq(_sim.boss.wanted, "id", "then the ID")
+	check(GameData.as_float(_sim.snapshot()["papers_delay"]) < 0.5, "(the delay is counted afresh for the second sign)")
+	var before_second: float = _sim.suspicion.value
+	_ticks(_ticks_in(_checkpoint_number("delay_every_s") - 1.0))
+	check_near(_sim.suspicion.value, before_second, 0.000001, "(four seconds into the second sign: nothing more)")
+	_hand_out_document("id")
+	check_eq(_count_events("pulled_over"), 1, "after the second, the verdict")
+
+	# Which Telling has which.
+	var share: float = tuning.fi("boss_modifier_chance", 0)
+	var counts: Dictionary = {"": 0, "long_queue": 0, "thorough": 0}
+	var tellings: int = 600
+	for seed_value: int in range(1, tellings + 1):
+		var drawn: String = RunGenerator.boss_modifier(data, seed_value, 1)
+		check(counts.has(drawn), "a Checkpoint has one of its own modifiers or none (seed %d: '%s')" % [seed_value, drawn])
+		counts[drawn] = GameData.as_int(counts.get(drawn)) + 1
+	var modified: int = GameData.as_int(counts["long_queue"]) + GameData.as_int(counts["thorough"])
+	check(absf(float(modified) - float(tellings) * share) <= 4.0 * sqrt(float(tellings) * share * (1.0 - share)),
+			"the Checkpoint has a modifier in boss_modifier_chance of Tellings (%d of %d)" % [modified, tellings])
+	check(GameData.as_int(counts["long_queue"]) > 0 and GameData.as_int(counts["thorough"]) > 0, "(both come up)")
+
+
+## The Checkpoint ends Act 1 of a Telling.
+func _check_checkpoint_in_a_telling() -> void:
+	_sim = DriveSim.new(fresh_data())
+	_events = []
+	_keep_lane = true
+	_input.clear()
+	_sim.begin_telling(TABLE, 5)
+	_drive_to_the_boss()
+	var started: Dictionary = _event("boss_started")
+	check_eq(GameData.as_string(started.get("boss")), CHECKPOINT, "the third leg of Act 1 leads into the Checkpoint")
+	check_eq(GameData.as_string(started.get("modifier")), RunGenerator.boss_modifier(data, 5, 1), "with the modifier its seed draws")
+	check(_sim.suspicion.watching, "(where he is watched)")
+	check_eq(_sim.boss.phase, BossSim.QUEUE, "(and queues)")
+	# Driven for real: the queue, the window, the document, and on to the boss stop.
+	_sim.items.flags[ItemSim.FLAG_WINDOW] = true
+	_events = []
+	_follow_the_queue(1)
+	check(_until_checkpoint_phase(BossSim.PAPERS, _checkpoint_number("stow_s") + 1.0), "(the soldier comes to the window)")
+	while _sim.boss.phase == BossSim.PAPERS:
+		var wanted: String = _sim.boss.wanted
+		if wanted == "registration":
+			if not _sim.items.flag(ItemSim.FLAG_GLOVEBOX):
+				_tap_at("glovebox")
+			if not _sim.items.flag(&"letter_aside"):
+				_hold_at("glovebox", GameData.as_float(_ritual("letter_aside").get("hold_s")))
+		_hand_out_document(wanted)
+		check(_sim.boss.wanted != wanted or _sim.boss.phase != BossSim.PAPERS, "(the %s is taken)" % wanted)
+	check_eq(GameData.as_string(_event("pulled_over").get("paid")), "pass", "driven cleanly, he passes")
+	var saves: int = _sim.checkpoints
+	var guard: int = _ticks_in(60.0)
+	while not _sim.stopped and guard > 0:
+		guard -= 1
+		_tick()
+	check_eq(GameData.as_string(_event("boss_ended").get("boss")), CHECKPOINT, "the Checkpoint ends")
+	check_eq(_sim.run.stage, RunState.Stage.BOSS_STOP, "at its boss stop")
+	check_eq(_sim.checkpoints, saves + 1, "where the game saves")
+	check_eq(_count_events("hit"), 0, "(having touched nothing)")
+	check(not _sim.suspicion.watching, "(and nobody watches him any more)")
+
+
+## The first boss seed whose soldier asks for `document`.
+func _seed_asking_for(document: String) -> int:
+	for candidate: int in range(1, 200):
+		if GameData.as_string(GameData.as_array(BossSim.plan(data, CHECKPOINT, "", candidate).get("documents"))[0]) == document:
+			return candidate
+	fail("no seed under 200 asks for the %s" % document)
+	return 1
+
+
+## A document handed out of the driver's window from where it is kept. (The
+## registration needs the glovebox open and the letter aside first.)
+func _hand_out_document(document: String) -> void:
+	var from: String = "dash_1"
+	if document == "id":
+		from = "pocket"
+	elif document == "registration":
+		from = "glovebox"
+	_drag(from, "driver_window")
+
+
+## The car stands in the middle lane far short of the queue, the brake held:
+## the queue is only watched.
+func _stand_short_of_the_queue() -> void:
+	_cruise(1, 1)
+	_sim.car.s = 5.0
+	_sim.car.speed = 0.0
+	_input.clear()
+	_input.rmb = true
+
+
+## He drives the queue of `lane` the way it must be driven: first gear, the
+## brake behind whatever is ahead and at the bar, until the soldier starts
+## toward him.
+func _follow_the_queue(lane: int) -> void:
+	var guard: int = _ticks_in(240.0)
+	_sim.gate.reset(1)
+	while _sim.boss.phase == BossSim.QUEUE and guard > 0:
+		guard -= 1
+		_input.clear()
+		var car: CarSim = _sim.car
+		var room: float = _sim.boss.bar_at - (car.s + car.length() * 0.5)
+		for vehicle: TrafficSim.Vehicle in _sim.traffic.vehicles:
+			if absf(vehicle.x - car.lane_center(lane)) < car.lane_width() * 0.5 and vehicle.s > car.s:
+				room = minf(room, vehicle.s - vehicle.half_length - car.s - car.length() * 0.5)
+		var speed_ms: float = car.speed * KMH_TO_MS
+		if room < 1.5 + speed_ms * speed_ms / (2.0 * tuning.f("brake_decel") * KMH_TO_MS) + speed_ms * 0.15:
+			_input.rmb = true
+		car.x = car.lane_center(lane)
+		_tick()
+	_input.clear()
 
 
 # --- T-BOSS-02: the Storm (GDD 10.3) -----------------------------------------
@@ -885,7 +1737,7 @@ func _check_last_checkpoint() -> void:
 		check_near(_sim.car.speed, 0.0, 0.000001, "the car is stopped")
 		check(_item("arak_flask") == null, "contraband in view is taken")
 		check(GameData.as_array(verdict.get("taken")).has("arak_flask"), "(the event names it)")
-		check(_item("forged_papers") != null, "what is stowed in the glovebox is not")
+		check(_item("forged_papers") == null, "and so is what is stowed: a search finds everything (GDD 10.2, D-048)")
 		# Once: he drives on, and nothing more happens to him there.
 		_events = []
 		_run(3.0)

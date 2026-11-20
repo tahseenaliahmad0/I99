@@ -27,8 +27,8 @@ Useful commands:
 
 ## Current state
 
-- **Milestone:** M7 (bosses): the framework, the Storm, Dawn with the Call and the Arrival are in (three of its four tests pass); the Checkpoint is designed (D-048) and is next, then the views of the bosses. M6's review findings (listed below) remain to be applied.
-- **Tests:** 91 of 114 passing (M0: 2, M1: 8, M2: 10, M3: 7, M4: 13, M5: 6, M6: 42, M7: 3).
+- **Milestone:** M7 (bosses): all four tests pass (the Checkpoint, the Storm, Dawn and the Arrival, the Call). Left of M7: the views of the bosses and `--boss=`, its review. M6's review findings (listed below) remain to be applied; the three M10 pieces are being taken in by the workflow `m10-take-in`.
+- **Tests:** 92 of 114 passing (M0: 2, M1: 8, M2: 10, M3: 7, M4: 13, M5: 6, M6: 42, M7: 4).
 - **Reviews:** `m1-review` and `m2-review` reported on every lens (run ids wf_53ae3899-d40 and wf_d8c835c4-884; findings saved as JSON under the scratchpad `fixes/` folder, which does not survive the container: the lists below are what is left). Applied: M1 hand, wheel and gate; M2 car (D-028), traffic and collisions (D-029); M1 gesture pipeline code (D-030); M1 rules and the M2 view findings on indicators, vehicle ids, dashes, bend (D-035). **Still open:** (a) M2 views: pointer ring drawn at the hand's clamped target; the hand does not follow the gear knob; forearm stretches beyond 0.30 m for five far anchors (decision not recorded); `scene` in placeholders ignored for road strips, arm and pointer. (b) M1 test honesty (18): no test moves the pointer with relative motion; T-WHEEL-01 never releases a turned wheel; grip and ride on an off-centre wheel; gate engage radius and grind band probed from one side; FLICK time and direction limits; CRANK angle-not-distance; gate channel width; camera pitch and glance following the hand; pointer pixels to screen; steering sensitivity wiring; loose brackets on timing limits; literals standing in for tuning values. (c) M1 gesture: rituals.json is not checked against the table of GDD 4.6. (d) M2 test honesty leftovers (see D-028 and D-029 for what was done). M3, M4 and M5 have not been reviewed. Workflows work again (the usage limit of 2026-11-17 has lifted): use them for reviews and for independent parts.
 - **Next step (the session paused here on 2026-11-17, with everything committed and pushed):**
   1. **M7c, the Checkpoint (T-BOSS-01).** Its design is settled and written down with its data records in DECISIONS D-048: build it as written there. Order: the checkpoint's numbers and rituals into the data and the validator (schema `checkpoint`, ops `hand`/`stow`/`unstow`, conditions `glovebox_room`/`stowed`, switch `letter_aside`, `"shared"` rituals, `"to": "@home"`); `ItemSim` (stowing, `take_all_contraband`, `handed`); `BossSim` (queue vehicles, bar, Stow, Papers) and `DriveSim` (Suspicion without decay, +25 on a barrier, the verdicts); T-BOSS-01; the owed checks of T-ITEM-BREATH-MINTS and T-ITEM-FORGED-PAPERS; the scripted driver of T-RUN-01 through the queue and the papers.
@@ -136,8 +136,8 @@ Do not start a milestone until every test of the previous one passes (GDD 18).
 - [x] Boss framework (D-046): `BossSim` and its plans, boss numbers and `boss_modifiers` in legs.json, the modifier drawn by seed (`boss_modifier_chance`), `DriveSim.begin_boss`, the tea stall's sign
 - [x] The Storm (T-BOSS-02): dust rhythm, gusts, wiper smear and window dust, standing on the shoulder, the weather cramp, Crosswind and Night storm, tail lights
 - [x] Dawn, the Call and the Arrival (T-BOSS-03, T-CALL-01; D-047): generated rush traffic that builds, Glare and the visor, the last checkpoint's corridors (`CarSim` walls), the Call's four responses, the street, the bay and the key
-- [ ] The Checkpoint (T-BOSS-01); the owed checks of T-ITEM-BREATH-MINTS and T-ITEM-FORGED-PAPERS at the real Checkpoint, T-PHANTOM-01 in the Storm
-- [ ] The scripted driver of T-RUN-01 drives each boss for real (done: the Storm, Dawn, the Arrival; the Checkpoint remains)
+- [x] The Checkpoint (T-BOSS-01; D-048): queues in every lane's corridor, the bar, Stow (stowing and taking out by hand), Papers (three documents, the window, the letter), the verdicts, the bribe, Long queue and Thorough; the owed checks of T-ITEM-BREATH-MINTS and T-ITEM-FORGED-PAPERS at the real Checkpoint and of T-PHANTOM-01 in the Storm
+- [x] The scripted driver of T-RUN-01 drives every boss for real: the Checkpoint's queue, window and papers, the Storm, Dawn, the Arrival (it parks at 06:02 with seven stops: a third-gear night with every stop is two minutes late)
 - [ ] Views of the bosses; `--boss=`; screenshots
 - [ ] Adversarial review of M7 (workflow)
 
@@ -215,3 +215,5 @@ Two lines per slice, newest last.
   The Storm (T-BOSS-02): 8 s thin and 12 s thick dust by the clock, gusts at 2 m/s, wipers that smear, a truck out of the dust behind a car that stands unsafely. 89 of 114.
 - 2026-11-17 M7: Dawn (T-BOSS-03), the Call (T-CALL-01) and the Arrival, D-047. The leg generator lays out Dawn's road; the car knows barriers; the hand can hold a phone to his ear.
   The whole-Telling test drives the Storm, Dawn and the Arrival for real and parks at 05:43. All 38 mutants of the Storm are killed. 91 of 114.
+- 2026-11-20 M7: the Checkpoint (T-BOSS-01), built as D-048 has it: stop-and-go queues between barriers, the bar, Stow with stowing by hand, Papers, the verdicts and the bribe.
+  The owed checks at the real set pieces are in; the whole-Telling test drives all three bosses for real. All four tests of M7 pass: 92 of 114.

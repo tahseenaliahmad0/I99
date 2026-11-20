@@ -218,6 +218,47 @@ func _begin_quiet_boss(boss_id: String, modifier: String = "", boss_seed: int = 
 	return plan
 
 
+## The Checkpoint by itself (GDD 10.2), rolling in from its start in third
+## gear in the middle lane; without its queue when `with_queue` is false.
+## Returns the plan.
+func _begin_checkpoint(modifier: String = "", boss_seed: int = 1, with_queue: bool = true) -> Dictionary:
+	_sim = DriveSim.new(fresh_data())
+	_events = []
+	_keep_lane = true
+	_input.clear()
+	var plan: Dictionary = BossSim.plan(data, BossSim.CHECKPOINT, modifier, boss_seed)
+	if not with_queue:
+		var empty: Array = []
+		for _lane: int in GameData.as_int(plan.get("lanes")):
+			empty.append([])
+		plan["queue"] = empty
+	_sim.gate.reset(3)
+	_sim.begin_leg(plan)
+	_sim.in_encounter = true
+	_sim.drain_events()
+	return plan
+
+
+## The car is set down standing with its nose at the Checkpoint's bar in
+## `lane`, in first gear (the bar holds it), and waits there until the
+## soldier starts toward it (the Stow phase). False when he never does.
+func _stand_at_the_bar(lane: int = 1) -> bool:
+	_cruise(1, lane)
+	_sim.car.s = _sim.boss.bar_at - _sim.car.length() * 0.5
+	_sim.car.speed = 0.0
+	_input.clear()
+	return _until_checkpoint_phase(BossSim.STOW, 3.0)
+
+
+## Ticks until the Checkpoint is in `phase` (at most `seconds`). False when it never is.
+func _until_checkpoint_phase(phase: int, seconds: float) -> bool:
+	var guard: int = _ticks_in(seconds)
+	while _sim.boss.phase != phase and guard > 0:
+		guard -= 1
+		_tick()
+	return _sim.boss.phase == phase
+
+
 ## One sweep of the wipers, through the hand: a FLICK up on the stalk.
 func _wipe() -> void:
 	_reach("wiper_stalk")

@@ -39,6 +39,9 @@ const LAW: StringName = &"law"
 ## stands in the bay (GDD 10.5).
 const THE_CALL: StringName = &"the_call"
 const IN_BAY: StringName = &"in_bay"
+## The soldier is at his window with his sign up (GDD 10.2).
+const AT_WINDOW: StringName = &"at_window"
+const BANKNOTES: StringName = &"banknotes"
 const SET_PIECE: StringName = &"set_piece"
 const NOOR: String = "noor"
 ## Sources of Nerves a status can make him immune to (GDD 7.4).
@@ -181,6 +184,7 @@ var _floor_of_road: float = -1.0
 ## His wrist is on the wheel (the Call taken alone).
 var _wrist_on_wheel: bool = false
 var _in_bay: bool = false
+var _at_window: bool = false
 ## The weather cramp (GDD 7.9): "" (none), "hum" (it is coming) or "cramp",
 ## and the seconds left of that.
 var cramp: String = ""
@@ -278,7 +282,7 @@ func _build() -> void:
 	items.configure(data, effects, nerves, traffic, car, faults, rng)
 	leg.configure(data, car, traffic)
 	encounter.configure(data, car, traffic, leg)
-	boss.configure(data, car, rng)
+	boss.configure(data, car, rng, traffic)
 	suspicion.configure(tuning)
 	clock.configure(tuning)
 	run.configure(data)
@@ -308,6 +312,7 @@ func _build() -> void:
 	_floor_of_road = -1.0
 	_wrist_on_wheel = false
 	_in_bay = false
+	_at_window = false
 	cramp = ""
 	_cramp_left = 0.0
 	_anchor_home = PackedVector3Array()
@@ -434,7 +439,8 @@ func step(input: DriveInput) -> void:
 	car.wall_left = walls.x
 	car.wall_right = walls.y
 	if boss.holds_car():
-		# Pulled over for the Call: the car stands until he hangs up (GDD 10.4).
+		# Pulled over for the Call, the car stands until he hangs up (GDD
+		# 10.4); first in line at the Checkpoint, until he is let through.
 		car.speed = 0.0
 		car.v_lat = 0.0
 	elif not _standing():
@@ -457,6 +463,7 @@ func step(input: DriveInput) -> void:
 	if not stopped:
 		leg.step_traffic(_road_dt)
 		traffic.step(_road_dt, car.s, car.x, car.speed)
+		boss.step_traffic(_road_dt)
 		_step_oncoming()
 
 	# 7. Collisions and close calls.
@@ -469,6 +476,13 @@ func step(input: DriveInput) -> void:
 		if boss.wall_speed > 0.0:
 			# The end of the street (GDD 10.5), at the speed he met it.
 			collision.strike(collision.classify(boss.wall_speed, false))
+		# At the Checkpoint touching a barrier is a scrape and Suspicion
+		# (GDD 10.2); its lowered bar is a barrier too.
+		var barrier: bool = car.wall_touched and collision.hit == Collision.Hit.SCRAPE and collision.hit_vehicle_id == 0
+		if boss.bar_speed > 0.0 and collision.strike(Collision.Hit.SCRAPE):
+			barrier = true
+		if barrier and boss.kind == BossSim.CHECKPOINT:
+			suspicion.add(_checkpoint_number("barrier_suspicion"))
 		_apply_collisions()
 		_step_leg_hazards()
 	_leg_lamps_lit += maxi(faults.lamps - lamps_before, 0)
@@ -564,6 +578,13 @@ func _set_stretch(plan: Dictionary) -> void:
 	boss.begin(plan)
 	suspicion.end_watch()
 	_release_from_pull_over()
+	# At the Checkpoint he is watched from its start to the verdict, and
+	# nothing wears off there (GDD 6.5, 10.2).
+	suspicion.decays = boss.kind != BossSim.CHECKPOINT
+	if boss.kind == BossSim.CHECKPOINT:
+		suspicion.begin_watch()
+		_emit("suspicion_changed", {"value": 0.0, "watching": true})
+	_hold_at_window()
 	items.raining = leg.raining
 	items.dust_rate = leg.dust_rate
 	items.wipe_haze = leg.wipe_haze
@@ -631,6 +652,7 @@ func _step_leg_road() -> void:
 		# Its horn, and its lights in the mirror: the tell (GDD 2.2, pillar 4).
 		_emit("sfx_requested", {"id": "horn", "behind": true})
 	_report_call()
+	_report_soldier()
 
 
 # --- A Telling (GDD 9.5, 11.1) -----------------------------------------------
@@ -819,6 +841,9 @@ func _end_boss() -> void:
 	# Whoever is on the phone hangs up as he pulls in.
 	boss.hang_up()
 	_report_call()
+	if suspicion.watching:
+		suspicion.end_watch()
+		_emit("suspicion_changed", {"value": 0.0, "watching": false})
 	_emit("boss_ended", {"boss": run.boss, "act": run.act, "modifier": boss.modifier, "time": leg.time})
 	boss.stop()
 	_clear_weather()
@@ -882,11 +907,128 @@ func _search_at_the_barriers() -> void:
 	car.v_lat = 0.0
 	clock_minutes_owed += minutes
 	clock.add_minutes(minutes)
+	# A search finds everything, stowed or not, as at the Checkpoint.
 	var taken_ids: Array[String] = []
-	for id: StringName in items.take_visible_contraband():
+	for id: StringName in items.take_all_contraband():
 		taken_ids.append(String(id))
 	_fit_cabin()
 	_emit("pulled_over", {"released": true, "paid": "search", "cost": 0.0, "minutes": minutes, "taken": taken_ids})
+
+
+# --- The Checkpoint (GDD 10.2) -----------------------------------------------
+
+## A number of the Checkpoint's record.
+func _checkpoint_number(key: String) -> float:
+	return GameData.as_float(GameData.as_dict(data.record("bosses", BossSim.CHECKPOINT).get("checkpoint")).get(key))
+
+
+## The status the papers' rituals ask for is on while the soldier stands at
+## his window with a sign up.
+func _hold_at_window() -> void:
+	var waiting: bool = boss.kind == BossSim.CHECKPOINT and boss.phase == BossSim.PAPERS and not boss.wanted.is_empty()
+	if waiting == _at_window:
+		return
+	_at_window = waiting
+	effects.hold(AT_WINDOW, SET_PIECE, waiting)
+	_sync_anchors()
+
+
+## What the soldier did this tick: he reached the window, put up a sign,
+## counted another delay.
+func _report_soldier() -> void:
+	if boss.kind != BossSim.CHECKPOINT:
+		return
+	if boss.stow_ended:
+		# What he sees as he comes up: each contraband item left out, and
+		# each stack of Courage he can smell.
+		suspicion.add(_checkpoint_number("contraband_suspicion") * float(items.contraband_in_view()))
+		suspicion.add(_checkpoint_number("courage_suspicion") * float(courage_noticed()))
+		# Forged papers pass the Papers phase by themselves, once (GDD 7.7).
+		if use_forged_papers():
+			boss.papers_passed()
+	if boss.delayed:
+		suspicion.add(_checkpoint_number("delay_suspicion"))
+	if boss.asked and not boss.papers_done and not items.flag(ItemSim.FLAG_WINDOW):
+		# He cannot be handed anything through the glass.
+		_emit("line_requested", {"id": "soldier.window"})
+	_hold_at_window()
+	if boss.papers_done:
+		_give_the_verdict()
+
+
+## He handed something out of the driver's window while the soldier waits.
+func _hand_out(what: StringName) -> void:
+	if boss.kind != BossSim.CHECKPOINT or boss.phase != BossSim.PAPERS:
+		return
+	if what == BANKNOTES:
+		# Banknotes pass at any level (GDD 10.2), if he has them.
+		var price: float = tuning.f("checkpoint_bribe")
+		if cash < price:
+			_emit("pulled_over", {"released": false, "refused": true, "paid": "bribe", "cost": price})
+			return
+		cash -= price
+		_let_through("bribe", price, 0.0, [])
+		return
+	if not boss.hand_over(String(what)):
+		_emit("line_requested", {"id": "soldier.wrong"})
+		return
+	_hold_at_window()
+	if boss.papers_done:
+		_give_the_verdict()
+
+
+## The papers are done: by his Suspicion he passes, is searched, or is
+## turned back (GDD 10.2).
+func _give_the_verdict() -> void:
+	if boss.phase != BossSim.PAPERS:
+		# Given already (this tick's report comes after the hand's).
+		return
+	var level: float = suspicion.value
+	if level >= _checkpoint_number("turned_back_at"):
+		_turn_back(level)
+	elif level >= _checkpoint_number("pass_under"):
+		# A search finds everything, stowed or not.
+		var taken: Array[String] = []
+		for id: StringName in items.take_all_contraband():
+			taken.append(String(id))
+		_fit_cabin()
+		_let_through("search", 0.0, _checkpoint_number("search_minutes"), taken)
+	else:
+		_let_through("pass", 0.0, 0.0, [])
+
+
+## The bar goes up.
+func _let_through(how: String, cost: float, minutes: float, taken: Array[String]) -> void:
+	var level: float = suspicion.value
+	clock_minutes_owed += minutes
+	clock.add_minutes(minutes)
+	boss.release()
+	suspicion.end_watch()
+	_hold_at_window()
+	_emit("pulled_over", {"released": true, "paid": how, "cost": cost, "minutes": minutes, "taken": taken, "suspicion": level})
+	_emit("suspicion_changed", {"value": 0.0, "watching": false})
+
+
+## Turned back: the time it costs, and the queue again from its end, in
+## first gear, with Suspicion begun anew.
+func _turn_back(level: float) -> void:
+	var minutes: float = _checkpoint_number("turned_back_minutes")
+	clock_minutes_owed += minutes
+	clock.add_minutes(minutes)
+	boss.turn_back()
+	var start_gear: int = tuning.i("start_gear")
+	gate.reset(start_gear)
+	if _lever_in_hand:
+		_lever_in_hand = false
+		hand.unpin()
+	car.reset(car.lanes / 2, start_gear)
+	_lane = car.lane_of(car.x)
+	_car_s_then = car.s
+	collision.reset()
+	suspicion.begin_watch()
+	_hold_at_window()
+	_emit("pulled_over", {"released": false, "paid": "turned_back", "cost": 0.0, "minutes": minutes, "taken": [], "suspicion": level})
+	_emit("suspicion_changed", {"value": 0.0, "watching": true})
 
 
 ## The key is turned in the bay (GDD 10.5): the Clock is read at that moment.
@@ -1110,6 +1252,14 @@ func _step_encounter() -> void:
 func _step_suspicion() -> void:
 	if not suspicion.watching or pulled_over:
 		_snapped = false
+		return
+	if boss.kind == BossSim.CHECKPOINT:
+		# At the Checkpoint only its own rows count (GDD 10.2: added where
+		# they happen); nothing wears off, and nobody is pulled over.
+		_snapped = false
+		suspicion.step(DT)
+		if suspicion.jumped != 0.0:
+			_emit("suspicion_changed", {"value": suspicion.value, "watching": true})
 		return
 	var before: float = suspicion.value
 	if gate.gear != GearGate.NEUTRAL and not _legal_gears.has(gate.gear):
@@ -1345,7 +1495,14 @@ func snapshot() -> Dictionary:
 		"call_left": boss.call_left,
 		"call_taken": boss.call_taken,
 		"at_ear": hand.at_ear,
-		"dawn_phase": boss.phase,
+		"dawn_phase": boss.phase if boss.kind == BossSim.DAWN else 0,
+		"checkpoint_phase": boss.phase if boss.kind == BossSim.CHECKPOINT else 0,
+		"stow_left": boss.stow_left,
+		"wanted": boss.wanted,
+		"papers_delay": boss.delay,
+		"bar_at": boss.bar_at,
+		"bar_up": boss.released,
+		"suspicion_by": "checkpoint" if boss.kind == BossSim.CHECKPOINT else ("patrol" if suspicion.watching else ""),
 		"sun": boss.glare,
 		"sun_side": boss.sun_side,
 		"glow": boss.glow,
@@ -1460,6 +1617,9 @@ func _carried() -> String:
 		return offer.id if offer != null else ""
 	if _active_ritual.has("item"):
 		return GameData.as_string(_active_ritual.get("item"))
+	if GameData.as_string(_active_ritual.get("id")) == ItemSim.UNSTOW:
+		var stowed: ItemSim.Item = items.stowed_with_a_home()
+		return String(stowed.id) if stowed != null else ""
 	return GameData.as_string(_active_ritual.get("id"))
 
 
@@ -1913,6 +2073,10 @@ func _begin_at(anchor: int, button_down: bool) -> void:
 		if GameData.as_string(ritual.get("to")) == ItemSim.SLOT_ANCHOR:
 			# Out and back in: it goes back where it was taken from.
 			_drag_destinations.append(anchor)
+		elif GameData.as_string(ritual.get("to")) == ItemSim.HOME_ANCHOR:
+			# Out of the glovebox: to any free place it fits.
+			for home: String in items.unstow_destinations():
+				_drag_destinations.append(hand.anchor_index(StringName(home)))
 		elif ritual.has("to"):
 			_drag_destinations.append(hand.anchor_index(StringName(GameData.as_string(ritual.get("to")))))
 		for to: Variant in GameData.as_array(ritual.get("to_any")):
@@ -1994,6 +2158,10 @@ func _complete_ritual() -> void:
 			_take_the_call(items.call_taken)
 		if items.key_turned:
 			_turn_the_key()
+		if items.handed != &"":
+			_hand_out(items.handed)
+		if ritual_id == ItemSim.UNSTOW:
+			items.unstow_to(String(hand.anchor_id(hand.at_index)))
 	_emit("ritual_completed", {
 		"ritual": ritual_id,
 		"anchor": String(hand.anchor_id(_active_anchor)),
