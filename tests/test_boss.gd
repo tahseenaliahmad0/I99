@@ -37,6 +37,7 @@ func test_boss_01() -> void:
 	_check_checkpoint_modifiers()
 	_check_checkpoint_in_a_telling()
 	_check_checkpoint_fine_print()
+	_check_checkpoint_rows()
 
 
 ## The road, its numbers, and who is watching.
@@ -999,6 +1000,54 @@ func _check_checkpoint_fine_print() -> void:
 	check_eq(_count_events("ritual_completed", "ritual", "stow"), 0, "with no cell free, nothing more can be stowed")
 	check_eq(String(_item("forged_papers").slot), "dash_1", "(the papers stay where they are)")
 	check_eq(_sim.items.contraband_in_view(), 1, "(and in view)")
+
+
+## Which rows of Suspicion are the Checkpoint's (found by the review of M7):
+## choosing a queue is free, a Snap is not, and a car that stands touches
+## nothing.
+func _check_checkpoint_rows() -> void:
+	# Before the barriers he may choose his queue: crossing a lane line with
+	# no indicator is a row of the Patrol's (GDD 6.5), not of the Checkpoint.
+	_begin_checkpoint("", 1, false)
+	var taper_from: float = GameData.as_float(GameData.as_dict(_checkpoint().get("corridor")).get("at_m")) - GameData.as_float(GameData.as_dict(_checkpoint().get("corridor")).get("taper_m"))
+	_tick()
+	check(_sim.suspicion.watching and _sim.car.s < taper_from, "(he is watched from the Checkpoint's start, and the barriers are still ahead)")
+	check_eq(_sim.items.indicator, 0, "(no indicator)")
+	_keep_lane = false
+	for lane: int in [0, 1, 2, 1]:
+		_sim.car.x = _sim.car.lane_center(lane)
+		_tick()
+	_keep_lane = true
+	check(_sim.car.s < taper_from, "(four lane lines crossed before the taper)")
+	check_near(_sim.suspicion.value, 0.0, 0.000001, "changing lane before the barriers costs no Suspicion: which queue he joins is his to choose")
+
+	# A Snap is charged wherever the law is watching (GDD 6.1: "Suspicion
+	# +30"; 6.5: Suspicion exists "at a checkpoint" too).
+	_begin_checkpoint("", 1, false)
+	check(_stand_at_the_bar(), "(first in line: the soldier sets out)")
+	check_near(_sim.suspicion.value, 0.0, 0.000001, "(a clean cabin: no Suspicion yet)")
+	_events = []
+	_sim.nerves.set_value(tuning.f("snap_at") - 1.0)
+	_tap_at("face")
+	check_eq(_count_events("snap"), 1, "(a slap with his Nerves at the top: a Snap, with the soldier on his way)")
+	check_near(_sim.suspicion.value, tuning.f("suspicion_snap"), 0.000001, "a Snap at the Checkpoint is +30 Suspicion")
+	_ticks(_ticks_in(tuning.f("snap_duration") + 0.5))
+	check_near(_sim.suspicion.value, tuning.f("suspicion_snap"), 0.000001, "(once: the two seconds of horn add nothing more)")
+
+	# The car stands from the Stow to the verdict: a car that stands touches
+	# nothing. (A barrier brushed in the last tick it moved left its touch
+	# on the car; held, the car counted that one touch again every 0.8 s.)
+	_begin_checkpoint("", 1, false)
+	check(_stand_at_the_bar(), "(first in line)")
+	check(_sim.boss.holds_car(), "(the car is held)")
+	_sim.car.edge_touched = CarSim.EDGE_RIGHT
+	_sim.car.wall_touched = true
+	var lamps: int = _sim.faults.lamps
+	_events = []
+	_ticks(_ticks_in(tuning.f("hit_immunity") * 4.0 + 0.5))
+	check_eq(_count_events("hit"), 0, "a barrier brushed as he came to the bar is not hit again while the car stands")
+	check_eq(_sim.faults.lamps, lamps, "(no lamp)")
+	check_near(_sim.suspicion.value, 0.0, 0.000001, "(and no Suspicion)")
 
 
 ## The Checkpoint's plan for `boss_seed` with a queue in the middle lane only.

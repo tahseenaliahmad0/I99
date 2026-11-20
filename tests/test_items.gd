@@ -1445,6 +1445,38 @@ func test_item_arak_flask() -> void:
 		bought = true
 		break
 	check(bought, "in a dozen clean first legs the shady guy has a flask at least once")
+	_check_flask_hidden_from_a_patrol(cup, hold_s)
+
+
+## Hiding contraband is not using it (GDD 6.5: "Using contraband in view",
+## 7.1: the glovebox "hides contraband"): with a Patrol watching, the flask
+## put away in the glovebox, and taken out again, costs no Suspicion; a sip
+## does. (Found by the review of M7: the stow was charged as a use.)
+func _check_flask_hidden_from_a_patrol(cup: String, hold_s: float) -> void:
+	_begin_quiet_leg("patrol", 2, 71)
+	_give("arak_flask")
+	var guard: int = _ticks_in(60.0)
+	while not _sim.suspicion.watching and guard > 0:
+		guard -= 1
+		_tick()
+	_run(2.0)
+	check(_sim.suspicion.watching and _sim.suspicion.value < 1.0, "(a patrol is watching and has nothing on him)")
+	_sim.items.flags[ItemSim.FLAG_GLOVEBOX] = true
+	_events = []
+	_drag(cup, "glovebox")
+	check(_sim.items.is_stowed(_item("arak_flask")), "(the flask is put away in the open glovebox)")
+	check_eq(_count_events("ritual_completed", "ritual", "stow"), 1, "(by the hand: a stow)")
+	check(_sim.suspicion.value < 1.0, "hiding the flask from a patrol is not using it: no Suspicion (%.1f)" % _sim.suspicion.value)
+	_events = []
+	_drag("glovebox", cup)
+	check(not _sim.items.is_stowed(_item("arak_flask")) and _anchor_of("arak_flask") == cup, "(and taken out again, back to its cup holder)")
+	check(_sim.suspicion.value < 1.0, "taking it out is not using it either (%.1f)" % _sim.suspicion.value)
+	# (With the glovebox open the hand at the flask carries it; shut, it drinks.)
+	_sim.items.flags[ItemSim.FLAG_GLOVEBOX] = false
+	_tick()
+	check(_sim.suspicion.watching, "(the patrol is still watching)")
+	_hold_at(cup, hold_s)
+	check_between(_sim.suspicion.value, tuning.f("suspicion_contraband") - 1.0, tuning.f("suspicion_contraband"), "(a sip still is: +40)")
 
 
 # --- T-ITEM-PHONE ------------------------------------------------------------

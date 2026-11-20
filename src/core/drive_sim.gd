@@ -461,8 +461,12 @@ func step(input: DriveInput) -> void:
 	if boss.holds_car():
 		# Pulled over for the Call, the car stands until he hangs up (GDD
 		# 10.4); first in line at the Checkpoint, until he is let through.
+		# A car that stands touches nothing: what it brushed in the last
+		# tick it moved is not brushed again.
 		car.speed = 0.0
 		car.v_lat = 0.0
+		car.edge_touched = CarSim.EDGE_NONE
+		car.wall_touched = false
 	elif not _standing():
 		car.step(_road_dt, wheel.steer(), gate.gear, _braking, _extra_drift())
 	_step_set_piece()
@@ -471,8 +475,9 @@ func step(input: DriveInput) -> void:
 	_step_cramp()
 	var lane: int = car.lane_of(car.x)
 	if lane != _lane:
-		# Crossing a lane line without indicating that way (GDD 6.5).
-		if items.indicator != signi(lane - _lane):
+		# Crossing a lane line without indicating that way (GDD 6.5): a row
+		# of the Patrol's. At the Checkpoint he may choose his queue.
+		if items.indicator != signi(lane - _lane) and boss.kind != BossSim.CHECKPOINT:
 			suspicion.add(tuning.f("suspicion_lane_cross"))
 		_lane = lane
 		items.on_lane_line_crossed()
@@ -1352,7 +1357,10 @@ func _step_suspicion() -> void:
 		return
 	if boss.kind == BossSim.CHECKPOINT:
 		# At the Checkpoint only its own rows count (GDD 10.2: added where
-		# they happen); nothing wears off, and nobody is pulled over.
+		# they happen), and a Snap, which is charged wherever the law is
+		# watching (GDD 6.1); nothing wears off, and nobody is pulled over.
+		if _snapped:
+			suspicion.add(tuning.f("suspicion_snap"))
 		_snapped = false
 		suspicion.step(DT)
 		if suspicion.jumped != 0.0:

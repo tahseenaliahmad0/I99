@@ -790,16 +790,19 @@ func complete(ritual: Dictionary, direction: int) -> bool:
 	var owner: Item = owner_of(ritual)
 	if not _requirements_hold(ritual, owner):
 		return false
+	# A use is what gives the item's effect. Putting a thing away in the
+	# glovebox, or taking it out, is none.
+	var used: bool = owner != null and GameData.as_array(ritual.get("on_complete")).has("give")
 	if owner != null:
 		# Using contraband, or the phone, is something a police car sees (GDD 6.5).
-		if GameData.as_bool(owner.record.get("contraband")):
+		if used and GameData.as_bool(owner.record.get("contraband")):
 			contraband_used = true
 		# One use for a call, however many TAPs answer it.
 		if GameData.as_array(owner.record.get("tags")).has(TAG_PHONE) and not dialling():
 			phone_used = true
 	for op: Variant in GameData.as_array(ritual.get("on_complete")):
 		_run(GameData.as_string(op), owner, direction)
-	if owner != null and GameData.as_array(ritual.get("on_complete")).has("give"):
+	if used:
 		# What he has just used, by its tags.
 		for tag: Variant in GameData.as_array(owner.record.get("tags")):
 			if not used_tags.has(GameData.as_string(tag)):

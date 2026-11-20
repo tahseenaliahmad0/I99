@@ -797,7 +797,7 @@
     "suspicion_lane_cross": "points",
     "suspicion_contraband": "points",
     "suspicion_phone": "points",
-    "suspicion_snap": "points for a Snap during a Patrol",
+    "suspicion_snap": "points for a Snap while the law is watching: a Patrol, the Checkpoint",
     "suspicion_honk": "points for honking during a Patrol",
     "patrol_catch_up": "km/h the police car drops when the Patrol is over, to fall back",
     "patrol_spawn_behind": "m behind him at which the police car appears",
