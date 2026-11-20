@@ -813,7 +813,11 @@ func _check_checkpoint_in_a_telling() -> void:
 	_events = []
 	_follow_the_queue(1)
 	check(_until_checkpoint_phase(BossSim.PAPERS, _checkpoint_number("stow_s") + 1.0), "(the soldier comes to the window)")
-	while _sim.boss.phase == BossSim.PAPERS:
+	# (A build in which a document cannot be handed over fails here instead
+	# of never ending.)
+	var handed: int = 0
+	while _sim.boss.phase == BossSim.PAPERS and handed < 8:
+		handed += 1
 		var wanted: String = _sim.boss.wanted
 		if wanted == "registration":
 			if not _sim.items.flag(ItemSim.FLAG_GLOVEBOX):
@@ -1413,8 +1417,11 @@ func _check_storm_is_measured_by_distance() -> void:
 	# The same road with a long halt on the shoulder, hazard lights on.
 	_begin_quiet_boss(STORM)
 	var halt_at: float = 500.0
-	while _sim.car.s < halt_at:
+	var halt_guard: int = _ticks_in(120.0)
+	while _sim.car.s < halt_at and halt_guard > 0:
+		halt_guard -= 1
 		_tick()
+	check(halt_guard > 0, "(he drives to the place of the halt)")
 	_stand_on_the_shoulder(true)
 	var stood_at: float = _sim.car.s
 	_ticks(_ticks_in(through * 2.0))
@@ -2779,8 +2786,11 @@ func _check_arrival() -> void:
 	var speed_ms: float = _sim.car.speed * KMH_TO_MS
 	var stopping: float = speed_ms * speed_ms / (2.0 * tuning.f("brake_decel") * KMH_TO_MS)
 	var brake_at: float = length - bay + half_length + 1.0 - stopping
-	while _sim.car.s < brake_at:
+	var street_guard: int = _ticks_in(120.0)
+	while _sim.car.s < brake_at and street_guard > 0:
+		street_guard -= 1
 		_tick()
+	check(street_guard > 0, "(he drives down the street to where he must brake)")
 	check(not GameData.as_bool(_sim.snapshot()["in_bay"]), "(not yet in the bay)")
 	_input.rmb = true
 	var guard: int = _ticks_in(10.0)
@@ -2822,8 +2832,11 @@ func _check_arrival() -> void:
 	# Stopped short of the bay, the key does nothing.
 	_arrive_at_the_street()
 	check(GameData.as_bool(_sim.snapshot()["engine_on"]), "(on a road begun anew the engine runs)")
-	while _sim.car.s < length - bay - 20.0:
+	street_guard = _ticks_in(120.0)
+	while _sim.car.s < length - bay - 20.0 and street_guard > 0:
+		street_guard -= 1
 		_tick()
+	check(street_guard > 0, "(he drives to 20 m short of the bay)")
 	_input.rmb = true
 	guard = _ticks_in(10.0)
 	while _sim.car.speed > 0.0 and guard > 0:
