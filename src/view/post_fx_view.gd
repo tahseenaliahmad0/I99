@@ -243,7 +243,7 @@ func _configure() -> void:
 	_smoke = Color.html(tuning.s("postfx_haze_color"))
 	_dust = Color.html(tuning.s("sky_color_dust"))
 	_glare_from = _pair(tuning, "postfx_glare_position")
-	_sun_position = _pair(tuning, "postfx_sun_position")
+	_sun_position = _pair(tuning, "sun_position")
 
 	# The glass: three panes in the cabin frame.
 	_set_pane(tuning, "postfx_windscreen", &"windscreen_rect", &"windscreen_z")

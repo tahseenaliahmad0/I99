@@ -38,6 +38,10 @@ const DIRECTION_MARKS: String = "\u200E\u200F\u061C\u202A\u202B\u202C\u202D\u202
 ## The Call of Dawn (GDD 10.4): what Noor says when he answers (GDD 3.6), the
 ## rituals that take it (data/rituals.json), and where his hand goes for it.
 const CALL_LINE: String = SHORT_LINE
+## The ring of that phone, written out for as long as it rings (D-050).
+const RING_LINE: String = "call.noor.rings"
+## What ends the ring's line: the payload's "until" names this event.
+const RING_UNTIL: String = "call_resolved"
 const POCKET: StringName = &"pocket"
 const SHOULDER: StringName = &"passenger_shoulder"
 const KEY: StringName = &"key"
@@ -92,6 +96,7 @@ func run(tree: SceneTree) -> int:
 	_two_lines(queue)
 	_durations(queue)
 	_three_in_order()
+	_until_it_is_over()
 	_right_to_left(queue)
 	_exchanges()
 	_speakers()
@@ -441,6 +446,63 @@ func _three_in_order() -> void:
 	_check(cleared.current() != null and cleared.current().joined() == texts[1], "and what is asked for afterwards is shown")
 
 
+## A line may be said "until" something has happened: then it is over,
+## showing or waiting, and what waited behind it has all of its own time.
+func _until_it_is_over() -> void:
+	_heading("a line that lasts until something happens is over when it does")
+	var texts: PackedStringArray = [_text_of(60), _text_of(30), _text_of(20)]
+	# Showing: what waited behind it takes its place at once, with its whole time.
+	var queue: SubtitleQueue = SubtitleQueue.new()
+	queue.configure(_tuning)
+	queue.push("", texts[0], "over")
+	queue.push("", texts[1])
+	queue.advance(FRAME)
+	for _frame: int in 30:
+		queue.advance(FRAME)
+	_check(queue.current() != null and queue.current().joined() == texts[0], "a line said until something is over is shown like any other while it is not")
+	queue.drop("other")
+	_check(queue.current().joined() == texts[0] and queue.size() == 2, "what another event ends leaves it alone")
+	queue.drop("over")
+	_check(queue.current() != null and queue.current().joined() == texts[1] and queue.size() == 1, "when it is over the line is gone and what waited behind it is up")
+	var frames: int = 0
+	for _frame: int in MOST_FRAMES:
+		queue.advance(FRAME)
+		if queue.current() == null:
+			break
+		frames += 1
+	_check(_held_for(frames, queue.duration_of(texts[1].length())), "and that one is held its whole time (%d frames)" % frames)
+
+	# Waiting: it never comes up, and what shows keeps the time it has had.
+	queue = SubtitleQueue.new()
+	queue.configure(_tuning)
+	queue.push("", texts[0])
+	queue.push("", texts[1], "over")
+	queue.push("", texts[2])
+	queue.advance(FRAME)
+	var before: int = 30
+	for _frame: int in before:
+		queue.advance(FRAME)
+	queue.drop("over")
+	_check(queue.current().joined() == texts[0] and queue.size() == 2, "over while it waited, a line is taken out of the queue and what shows stays")
+	var shown: PackedStringArray = []
+	frames = before
+	var first_frames: int = 0
+	for _frame: int in MOST_FRAMES:
+		queue.advance(FRAME)
+		var part: SubtitleQueue.Part = queue.current()
+		if part == null:
+			break
+		if part.joined() == texts[0]:
+			frames += 1
+			first_frames = frames
+		if shown.is_empty() or shown[shown.size() - 1] != part.joined():
+			shown.append(part.joined())
+	_check(_held_for(first_frames + 1, queue.duration_of(texts[0].length())), "what was showing is held its own time, no longer (%d frames)" % (first_frames + 1))
+	_check(shown == PackedStringArray([texts[0], texts[2]]), "and the line that is over never comes up (%d shown after)" % shown.size())
+	queue.drop("")
+	_check(queue.is_empty(), "nothing is dropped for no name")
+
+
 func _right_to_left(queue: SubtitleQueue) -> void:
 	_heading("right-to-left text passed through unchanged")
 	var chars: int = queue.line_chars
@@ -748,6 +810,34 @@ func _the_call() -> void:
 	_check(unspoken and GameData.as_bool(_last("call_resolved").get("answered")) and GameData.as_string(_last("call_resolved").get("taken")) == BossSim.TAKEN_WITH_PASSENGER,
 			"dragged to a passenger's shoulder and let go there, it is answered with them; she does not speak while it is carried")
 	_check_said(view, said, hold)
+
+	# The ring is written out for as long as it rings (D-050) and no longer:
+	# answered at once, its line is gone and she is heard in that frame.
+	var ring: String = ": %s" % Lines.get_text(RING_LINE)
+	var ring_hold: float = queue.duration_of(Lines.get_text(RING_LINE).length())
+	_to_the_ring(view, false)
+	_drive(view, 2)
+	var asked_until: bool = false
+	for event: Dictionary in _announced:
+		if GameData.as_string(event.get("type")) == "line_requested" and GameData.as_string(event.get("id")) == RING_LINE:
+			asked_until = GameData.as_string(event.get("until")) == RING_UNTIL
+	_check(asked_until and _showing == ring, "as it rings the simulation writes the ring out, until `%s` (%s)" % [RING_UNTIL, _showing])
+	_reach(view, POCKET)
+	_input.lmb = true
+	_drive(view, TAP_FRAMES)
+	_input.lmb = false
+	_until_answered(view)
+	var answered_after: float = float(_seen_frames[_seen.find(ring)]) * FRAME if _seen.has(ring) else -1.0
+	_check(GameData.as_bool(_last("call_resolved").get("answered")) and answered_after >= 0.0 and answered_after < ring_hold - FRAME,
+			"(answered %s s into the ring's %s s)" % [str(snappedf(answered_after, 0.01)), str(snappedf(ring_hold, 0.01))])
+	_check(_showing == said, "answered, the ring's line is gone and she is on screen in that frame: %s" % _showing)
+	_check_said(view, said, hold)
+	_check(_seen.count(ring) == 1, "and the ring's line does not come back")
+	# Left to ring, the line has its own time: it is not held for all the ringing.
+	_to_the_ring(view, false)
+	_drive(view, _frames_in(ring_s + 1.0))
+	var ring_frames: int = _seen_frames[_seen.find(ring)] if _seen.has(ring) else 0
+	_check(_held_for(ring_frames, ring_hold) and _seen.count(ring) == 1, "left to ring, the line has its own %s s (%d frames), once" % [str(snappedf(ring_hold, 0.01)), ring_frames])
 
 	Settings.reset_to_defaults()
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(Game.user_dir.path_join(Settings.FILE_NAME)))

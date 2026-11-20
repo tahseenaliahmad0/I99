@@ -1624,6 +1624,7 @@ func test_boss_03() -> void:
 	_check_dawn_phases()
 	_check_dawn_traffic_builds()
 	_check_dawn_glare()
+	_check_where_the_sun_stands()
 	_check_last_checkpoint()
 	_check_call_rings()
 	_check_dawn_modifiers()
@@ -1778,6 +1779,47 @@ func _met_at(spawn: Dictionary) -> float:
 	if met >= 0.0:
 		return met
 	return GameData.as_float(spawn.get("trigger_s")) + GameData.as_float(spawn.get("ahead"))
+
+
+## The sun has one place, said by the simulation, for the disc in the sky
+## and for the light on the glass: ahead and to the left, climbing as its
+## Glare comes on to where the lowered visor covers it (D-053).
+func _check_where_the_sun_stands() -> void:
+	var dawn: Dictionary = _dawn()
+	var sunrise: float = GameData.as_float(dawn.get("sunrise_at_m"))
+	var ramp: float = GameData.as_float(dawn.get("glare_ramp_m"))
+	var side: float = GameData.as_float(dawn.get("sun_side")) * tuning.fi("sun_position", 0)
+	var low: float = tuning.f("sun_rise_from")
+	var high: float = tuning.fi("sun_position", 1)
+	check(side < 0.0 and high > low, "(the data put the sun to the left, and higher risen than rising)")
+
+	_begin_quiet_boss(DAWN)
+	_sim.car.s = sunrise - 2.0
+	_tick()
+	check(_sim.snapshot()["glare_position"] == null, "before the sunrise the snapshot names no place for a sun")
+	_sim.car.s = sunrise + ramp * 0.5
+	_tick()
+	var at: Variant = _sim.snapshot()["glare_position"]
+	check(at is Vector2, "as it rises the snapshot says where it stands")
+	if at is Vector2:
+		var half: Vector2 = at
+		check_near(half.x, side, 0.000001, "to the left, as far as its record and tuning say (%.1f degrees)" % half.x)
+		check(half.y > low and half.y < high, "half way up its Glare it is between the horizon and its place (%.1f degrees)" % half.y)
+		check_near(half.y, lerpf(low, high, _sim.boss.glare / GameData.as_float(dawn.get("glare"))), 0.000001, "(as high as its Glare has come on)")
+	_sim.car.s = sunrise + ramp + 1.0
+	_tick()
+	at = _sim.snapshot()["glare_position"]
+	check(at is Vector2 and (at as Vector2).is_equal_approx(Vector2(side, high)), "risen, it stands at its place: %s" % str(at))
+	# The visor takes the Glare, not the sun: it is still where it was.
+	_reach("visor")
+	_flick(Vector2(0.0, tuning.f("flick_min_distance") * 1.5))
+	check_near(_sim.glare(), 0.0, 0.000001, "(the visor is down: no Glare)")
+	at = _sim.snapshot()["glare_position"]
+	check(at is Vector2 and (at as Vector2).is_equal_approx(Vector2(side, high)), "behind the lowered visor the sun stands where it stood")
+	# No sun on another road.
+	_begin_quiet_boss(STORM)
+	_tick()
+	check(_sim.snapshot()["glare_position"] == null, "and no road but Dawn's has one")
 
 
 ## Glare 60%, blocked for 3 s by flipping the visor.

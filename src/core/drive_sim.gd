@@ -918,7 +918,8 @@ func _step_set_piece() -> void:
 		_emit("sfx_requested", {"id": "phone_ring"})
 		# His pocket is out of his sight: the ring is written out as well
 		# (GDD 17.2: every tell has both a sound and a visual).
-		_emit("line_requested", {"id": "call.noor.rings"})
+		# (Until the Call is resolved: answered, the ring is over at once.)
+		_emit("line_requested", {"id": "call.noor.rings", "until": "call_resolved"})
 		_sync_anchors()
 	if boss.searched:
 		_search_at_the_barriers()
@@ -1575,6 +1576,9 @@ func snapshot() -> Dictionary:
 		"suspicion_by": "checkpoint" if boss.kind == BossSim.CHECKPOINT else ("patrol" if suspicion.watching else ""),
 		"sun": boss.glare,
 		"sun_side": boss.sun_side,
+		# Where the light behind the Glare is, while the sun is up (degrees
+		# right of dead ahead, degrees above the horizon); null otherwise.
+		"glare_position": boss.sun_position(tuning.fi("sun_position", 0), tuning.f("sun_rise_from"), tuning.fi("sun_position", 1)) if boss.glare > 0.0 else null,
 		"glow": boss.glow,
 		"glow_side": boss.glow_side,
 		"corridor": boss.corridor(),

@@ -21,7 +21,7 @@ extends RefCounted
 ## The line table writes an exchange as one row (GDD 3.6): its speaker column
 ## names who speaks, in order ("Guest, then Abu Noor"), and its text holds
 ## what each of them says, divided by " / ".
-const SPEAKERS_THEN: String = ", then "
+const SPEAKERS_THEN: String = GameData.SPEAKERS_THEN
 const SAID_THEN: String = " / "
 
 
@@ -32,6 +32,9 @@ class Part:
 	var lines: PackedStringArray = []
 	## Seconds it is held on screen.
 	var duration: float = 0.0
+	## What ends it before its time: the name of an event (GDD 13.6) after
+	## which it is no longer true ("" when it simply runs its time).
+	var until: String = ""
 
 	## The lines as the one text they were cut from.
 	func joined() -> String:
@@ -120,13 +123,32 @@ func duration_of(characters: int) -> float:
 # --- The queue ---------------------------------------------------------------
 
 ## Something is said: it is shown at once if nothing is showing, and after
-## what is showing and waiting otherwise.
-func push(speaker: String, text: String) -> void:
+## what is showing and waiting otherwise. `until` names what ends it early.
+func push(speaker: String, text: String, until: String = "") -> void:
 	var was_empty: bool = _parts.is_empty()
-	_parts.append_array(parts_of(speaker, text))
+	for part: Part in parts_of(speaker, text):
+		part.until = until
+		_parts.append(part)
 	if was_empty and not _parts.is_empty():
 		_elapsed = 0.0
 		_fresh = true
+
+
+## What was said "until" this has happened is over, showing or waiting (a
+## phone that was ringing has been answered). What waited behind the part
+## on screen takes its place with all of its own time before it.
+func drop(until: String) -> void:
+	if until.is_empty() or _parts.is_empty():
+		return
+	var head_gone: bool = _parts[0].until == until
+	var kept: Array[Part] = []
+	for part: Part in _parts:
+		if part.until != until:
+			kept.append(part)
+	_parts = kept
+	if head_gone:
+		_elapsed = 0.0
+		_fresh = not _parts.is_empty()
 
 
 ## Called once for every frame that is drawn, with the seconds since the

@@ -1,6 +1,6 @@
 """Mutants of Dawn, the Call and the Arrival (GDD 10.4, 10.5) for T-BOSS-03 and T-CALL-01.
     python3 tools/mutants.py T-BOSS-03,T-CALL-01 tools/mutants/dawn.py
-All 68 have been run. Those that live make no difference to play: the
+All 73 have been run. Those that live make no difference to play: the
 once-only flag of the speed check (the car crosses the barriers once); no
 hanging up at the road's end (nobody is still ringing there, and the stop
 that follows builds everything anew); the held car's speed (it is held only
@@ -87,5 +87,11 @@ MUTANTS = [
  (D, '\t\t\t_set_stretch(BossSim.arrival_plan(data, run.act))', '\t\t\t_set_stretch(RunGenerator.blank_plan(run.act, RunGenerator.ROAD_LANES, true, 300.0))', 'no street after Dawn'),
  # D-050: his eyes during the Call; the ring written out
  (H, '\tif at_ear:\n\t\t# A phone held to his ear is no reach: his eyes stay on the road.\n\t\twant = Vector2.ZERO\n', '', 'his eyes follow the phone to his ear'),
- (D, '\t\t_emit("line_requested", {"id": "call.noor.rings"})\n', '', 'the ring is not written out'),
+ (D, '\t\t_emit("line_requested", {"id": "call.noor.rings", "until": "call_resolved"})\n', '', 'the ring is not written out'),
+ # D-053: the sun's one place
+ (B, 'return Vector2(sun_side * side_deg, lerpf(rise_from, rise_to, risen))', 'return Vector2(-sun_side * side_deg, lerpf(rise_from, rise_to, risen))', 'the light is on the other side'),
+ (B, 'return Vector2(sun_side * side_deg, lerpf(rise_from, rise_to, risen))', 'return Vector2(sun_side * side_deg, rise_to)', 'the sun does not climb'),
+ (B, 'return Vector2(sun_side * side_deg, lerpf(rise_from, rise_to, risen))', 'return Vector2(sun_side * side_deg, lerpf(rise_to, rise_from, risen))', 'the sun sets as it comes on'),
+ (D, 'tuning.fi("sun_position", 1)) if boss.glare > 0.0 else null,', 'tuning.fi("sun_position", 1)),', 'a sun on every road'),
+ (D, 'tuning.fi("sun_position", 1)) if boss.glare > 0.0 else null,', 'tuning.fi("sun_position", 1)) if glare() > 0.0 else null,', 'the visor takes the sun away'),
 ]

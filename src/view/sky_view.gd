@@ -21,10 +21,7 @@ var _glow: Node3D
 var _eye: Vector3 = Vector3.ZERO
 var _distance: float = 0.0
 var _side_deg: float = 0.0
-var _sun_rise: Vector2 = Vector2.ZERO
 var _glow_deg: float = 0.0
-## The Glare of the risen sun (GDD 10.4).
-var _sun_full: float = 1.0
 
 
 func setup(data: GameData, factory: PlaceholderFactory) -> void:
@@ -39,10 +36,8 @@ func setup(data: GameData, factory: PlaceholderFactory) -> void:
 	_boss_dawn = Vector2(tuning.fi("sky_boss_dawn", 0), tuning.fi("sky_boss_dawn", 1))
 	_distance = tuning.f("sky_distance")
 	_side_deg = tuning.f("sky_side_deg")
-	_sun_rise = Vector2(tuning.fi("sky_sun_rise_deg", 0), tuning.fi("sky_sun_rise_deg", 1))
 	_glow_deg = tuning.f("sky_glow_deg")
 	_eye = GameData.as_vec3(GameData.as_dict(data.root("anchors").get("points")).get("eye"))
-	_sun_full = GameData.as_float(GameData.as_dict(data.record("bosses", BossSim.DAWN).get("dawn")).get("glare"), 1.0)
 	_glow = factory.make("sky_glow")
 	_glow.visible = false
 	add_child(_glow)
@@ -95,11 +90,13 @@ func apply(snapshot: Dictionary) -> void:
 	if _glow.visible:
 		var glow_side: float = snapshot["glow_side"]
 		_place(_glow, glow_side * _side_deg, _glow_deg)
-	var sun: float = snapshot["sun"]
-	_sun.visible = sun > 0.0
-	if _sun.visible:
-		var sun_side: float = snapshot["sun_side"]
-		_place(_sun, sun_side * _side_deg, lerpf(_sun_rise.x, _sun_rise.y, clampf(sun / maxf(_sun_full, 0.001), 0.0, 1.0)))
+	# The sun stands where the simulation says the light is: the place the
+	# post effects wash the glass from, and his lowered visor covers.
+	var sun_at: Variant = snapshot.get("glare_position")
+	_sun.visible = sun_at is Vector2
+	if sun_at is Vector2:
+		var at: Vector2 = sun_at
+		_place(_sun, at.x, at.y)
 
 
 ## Puts something in the sky: `yaw` degrees to the right of dead ahead and

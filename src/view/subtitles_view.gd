@@ -39,6 +39,8 @@ const DEFAULT_SIZE: String = "medium"
 var _tuning: Tuning
 var _serial: int = -1
 var _queue: SubtitleQueue = SubtitleQueue.new()
+## The events this view listens for because a line was to last until them.
+var _until_heard: Dictionary = {}
 var _shown: SubtitleQueue.Part
 var _box: PanelContainer
 var _rows: VBoxContainer
@@ -80,15 +82,32 @@ func setup(data: GameData) -> void:
 
 
 ## Shows a line of the line table by its id, after whatever is showing and
-## waiting: what a `line_requested` on the Events bus does.
-func say(line_id: String) -> void:
+## waiting: what a `line_requested` on the Events bus does. `until` names an
+## event of the bus that ends the line before its time (the payload's
+## "until": a ring written out is over when the call is).
+func say(line_id: String, until: String = "") -> void:
 	if _tuning == null:
 		return
 	if not Lines.has_line(line_id):
 		push_error("Subtitles: a line was asked for that the line table does not have: '%s'" % line_id)
 		return
+	if not until.is_empty() and not _listen_for(until):
+		until = ""
 	for said: PackedStringArray in SubtitleQueue.exchange(Lines.get_speaker(line_id), Lines.get_text(line_id)):
-		_queue.push(Lines.get_speaker_name(said[0]), said[1])
+		_queue.push(Lines.get_speaker_name(said[0]), said[1], until)
+
+
+## Listens for an event that ends lines early; false if the bus has none of
+## that name (the line then simply runs its time).
+func _listen_for(event_name: String) -> bool:
+	if _until_heard.has(event_name):
+		return true
+	if not Events.NAMES.has(event_name):
+		push_error("Subtitles: a line is to last until '%s', which is not a signal on the bus (GDD 13.6)" % event_name)
+		return false
+	Events.connect(event_name, _on_until.bind(event_name))
+	_until_heard[event_name] = true
+	return true
 
 
 ## Nothing is showing and nothing waits: a Telling begins again.
@@ -212,7 +231,13 @@ func _background(shown: bool) -> StyleBox:
 
 
 func _on_line_requested(data: Dictionary) -> void:
-	say(GameData.as_string(data.get("id")))
+	say(GameData.as_string(data.get("id")), GameData.as_string(data.get("until")))
+
+
+## What was to last until this event is over now.
+func _on_until(_data: Dictionary, event_name: String) -> void:
+	_queue.drop(event_name)
+	_show(_queue.current())
 
 
 func _on_wreck(_data: Dictionary) -> void:

@@ -11,7 +11,7 @@ const FALLBACK_LOCALE: String = "en"
 ## A speaker's name is a line of its own, so that it is written, and
 ## translated, once: this prefix and the name as a speaker column writes it,
 ## in lower case with underscores ("Old woman" is `speaker.old_woman`).
-const SPEAKER_PREFIX: String = "speaker."
+const SPEAKER_PREFIX: String = GameData.SPEAKER_PREFIX
 
 var locale: String = FALLBACK_LOCALE
 
@@ -61,17 +61,8 @@ func get_speaker_name(speaker: String) -> String:
 ## The id of the line that holds a speaker's name: "Old woman" gives
 ## "speaker.old_woman". "" for a name with no Latin letter or digit in it.
 func speaker_line_id(speaker: String) -> String:
-	var key: String = ""
-	var gap: bool = false
-	for character: String in speaker.to_lower():
-		if (character >= "a" and character <= "z") or (character >= "0" and character <= "9"):
-			if gap and not key.is_empty():
-				key += "_"
-			key += character
-			gap = false
-		else:
-			gap = true
-	return "" if key.is_empty() else SPEAKER_PREFIX + key
+	# One rule, the data validator's too (every speaker has such a line).
+	return GameData.speaker_line_id(speaker)
 
 
 ## get_text with printf-style values, e.g. format("stop.price", [15]).

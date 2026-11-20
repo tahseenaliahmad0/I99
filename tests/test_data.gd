@@ -737,6 +737,22 @@ func _check_broken_tuning_anchors_lines() -> void:
 	_add_line("Bad Id", "text")
 	_expect("E_ID", "Bad Id", "a line id that is not dotted lower case")
 
+	# Whoever speaks needs a line for their name (the subtitles' speaker tag).
+	_reset_fixture()
+	english = _lines["en"]
+	english["narrator.start"] = {"speaker": "Tea Seller", "text": "Tea?", "needs_writer": true}
+	_expect("E_REF", "speaker.tea_seller", "a speaker with no line for the name")
+	_reset_fixture()
+	english = _lines["en"]
+	english["narrator.start"] = {"speaker": "Abu Noor, then Tea Seller", "text": "Tea. / Tea?", "needs_writer": true}
+	_expect("E_REF", "speaker.tea_seller", "the second speaker of an exchange with no line for the name")
+	_reset_fixture()
+	english = _lines["en"]
+	english["narrator.start"] = {"speaker": "Abu Noor, then Noor", "text": "So. / Baba.", "needs_writer": true}
+	check(_validate().is_empty(), "an exchange between speakers who have their lines validates: %s" % _first(_validate()))
+	check_eq(GameData.speaker_line_id("Old woman"), "speaker.old_woman", "a speaker's line is `speaker.` and the name in lower case with underscores")
+	check_eq(GameData.speaker_line_id("أبو نور"), "", "a name with no Latin letter has no such line (it is shown as written)")
+
 	# A whole file gone.
 	_reset_fixture()
 	_roots.erase("legs")

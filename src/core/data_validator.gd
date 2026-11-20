@@ -907,6 +907,12 @@ func _check_lines() -> void:
 		var entry: Dictionary = _data.line(id, "en")
 		if GameData.as_string(entry.get("text")).strip_edges().is_empty():
 			_err("E_LINES", "lines_en.csv", id, "English text is empty")
+		# Whoever speaks has a name the subtitles can show, and a writer can
+		# translate, once: a line of its own (GDD 16.6, 17.3).
+		for speaker: String in GameData.speakers_of(GameData.as_string(entry.get("speaker"))):
+			var name_id: String = GameData.speaker_line_id(speaker)
+			if not name_id.is_empty() and not _data.has_line(name_id, "en"):
+				_err("E_REF", "lines_en.csv", id, "speaker '%s' has no line '%s' for the name" % [speaker, name_id])
 	for id: String in en_ids:
 		if not _data.has_line(id, "ar"):
 			_err("E_LINES", "lines_ar.csv", id, "line id is missing (both files carry the same ids)")

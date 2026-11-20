@@ -426,8 +426,8 @@ func _veil(by_hand: Dictionary) -> Variant:
 func _sun_is_behind_the_visor() -> void:
 	var tuning: Tuning = _data.tuning
 	var dawn: Dictionary = GameData.as_dict(_data.record("bosses", BossSim.DAWN).get(BossSim.DAWN))
-	var yaw: float = deg_to_rad(GameData.as_float(dawn.get("sun_side")) * tuning.fi("postfx_sun_position", 0))
-	var pitch: float = deg_to_rad(tuning.fi("postfx_sun_position", 1))
+	var yaw: float = deg_to_rad(GameData.as_float(dawn.get("sun_side")) * tuning.fi("sun_position", 0))
+	var pitch: float = deg_to_rad(tuning.fi("sun_position", 1))
 	var toward: Vector3 = Vector3(sin(yaw) * cos(pitch), sin(pitch), -cos(yaw) * cos(pitch))
 	var eye: Vector3 = DriveSim.new(_data).space.eye
 	var visor: Vector3 = Vector3(tuning.fi("visor_down_pos", 0), tuning.fi("visor_down_pos", 1), tuning.fi("visor_down_pos", 2))

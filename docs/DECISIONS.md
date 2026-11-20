@@ -1642,3 +1642,139 @@ built by the workflow `m6-fixes`; this entry is what that work is held to.
   door, the seat, where hitchers stand), -CONSCRIPT, -DRUMMER, -STUDENT,
   -APPRENTICE; T-DATA-01 gains the failure cases of the new rules; the
   mutation list is `tools/mutants/passengers.py`.
+
+## D-052 (M10, 2026-11-20) The sound of the game
+
+- **Context.** GDD 16.5 names 31 sounds and says how each is made; it does
+  not say how they are played, mixed or kept apart. Built ahead of its
+  milestone by a workflow under the rule "nothing under `src/core`" (see
+  D-055), then taken in over the set pieces of M7.
+- **How a sound is described.** Each entry of `data/sfx.json` says what the
+  sound is in a small vocabulary (wave; pitch as `freq`, `freq_to`, `trill`,
+  `freqs` or `notes`; partials; a filter; an envelope; `rate`, `duration`,
+  `peak`, `seed`) and how it is played (`gain_db`, `loop`, fades, `hold`,
+  `functional` with `duck_*`, `every`, `per_minute`, `speed_*`, `per_gear`,
+  `warble`). A key nothing reads is an error at boot. Buffers are 16-bit
+  mono, normalised to a peak of 0.9; loudness is `gain_db` at playback.
+  `SfxSynth` (src/game) makes them; `Audio` plays them from the snapshot
+  and from `sfx_requested`. All 33 are made in about 75 ms.
+- **The engine** is one saw loop whose pitch follows the speed (60 Hz at 40
+  km/h to 180 Hz at 160, held at 30 Hz below). "A different added harmonic
+  per gear" is a second entry, `engine_harmonic`: a sine at a harmonic of
+  the engine's pitch that drops as he shifts up, silent in neutral.
+- **Functional cues** (the rumble strip, the indicator's tick, both yawns)
+  play on a bus of their own, and while one sounds everything else is turned
+  down by that cue's `duck_db`, so that each stands at least 6 dB above all
+  else at once: the check's reading of "audible over everything else".
+  There is no limiter (the engine's leaves its bus quieter afterwards).
+- **What repeats keeps the simulation's time.** `Audio` steps by the
+  snapshot's `time`. The indicator ticks every 0.4 s while it signals; a
+  phone rings every 1.4 s while the snapshot names a caller, Noor's too (six
+  rings in her 8 s); the siren chirps every 3.0 s at no Suspicion down to
+  every 0.8 s at full, wherever he is watched; the heartbeat is heard only
+  during Pound, 60 a minute rising to 120 at the Snap. Hazard lights tick
+  only when toggled (a steady tick would hold everything else down).
+- **A 33rd sound, `horn_behind`**: what comes up behind his standing car in
+  the Storm is two square waves lower than his own horn, for the whole
+  second of its tell, because the tell of a crash must not be taken for the
+  honk he makes himself. It is not a functional cue (GDD 16.5 names four).
+- **Not invented:** sounds for a gust's tell, the dust thickening, the low
+  sun, a checkpoint's sign, the key of the Arrival, the passengers. The
+  table of GDD 16.5 has none, GDD 1.5 forbids resources the document does
+  not name, and the mix has about 0.1 dB of room left under the 6 dB rule.
+  GDD 17.2 ("every tell has both a sound and a visual") is therefore not
+  met for those: NEEDS OWNER.
+- **Tools.** `tools/audio_check.gd` (a step of `tools/check.sh` after the
+  data validator; with `-- --wav=<folder>` it writes every buffer for
+  listening) and `tools/audio_drive_check.gd`, which holds what needs the
+  autoloads. `I99_AUDIO_LOG` in the environment prints every sound that
+  starts or ends.
+- **Nobody has heard it.** There are no speakers here: levels and character
+  come from measurements and an offline recording. NEEDS OWNER.
+
+## D-053 (M10, 2026-11-20) The post effects
+
+- **Context.** GDD 16.4 lists the effects and their strengths; a canvas
+  shader cannot read depth, so "on the glass" had to be given a meaning.
+- **Files.** `shaders/post_fx.gdshader` and `src/view/post_fx_view.gd`
+  (`PostFxView`, the CanvasLayer `PostFX` between `Sky` and the pointer's
+  layer), rather than the `postfx.*` of GDD 13.2. `setup(data, camera,
+  cabin)`, `apply(snapshot, delta)`. With nothing to show the rectangle is
+  hidden: no screen copy, no shader.
+- **Where the glass is.** Each pixel's ray is met with three panes given in
+  tuning (`postfx_windscreen`, `postfx_window_left`, `_right`); what is
+  drawn under the cabin's Mirror and Visor nodes is taken out again.
+  Haze, rain blur and cracks are on the windscreen only; the night, the
+  glare and the falling rain are outside every window. The cabin takes 40%
+  of the darkness and 15% of the glare. The lowest 5 cm of windscreen stay
+  clear, so the clock and the nearest 12 m of road stay readable.
+- **Each effect.** Haze is a drifting veil never thicker than the
+  snapshot's, dust-coloured in the Storm and by day where the view ends,
+  smoke-coloured otherwise. "Cracks cover 20% of the view" is that share of
+  the windscreen: a web round a point of impact, fixed to the glass. Glare
+  is a wash at the light with a small blaze; the light is where the
+  snapshot's `glare_position` says (degrees right of dead ahead, degrees
+  up), else straight ahead (the motorcade's spotlight). The simulation
+  gives that key while Dawn's sun is up: `sun_side` times `sun_position`
+  to the side, climbing from `sun_rise_from` to 14 degrees as its Glare
+  comes on, which is inside what the lowered visor covers. The sky draws
+  its disc at the same place (at the merge the sky of D-050 and the post
+  effects each had a sun of their own, 10 degrees apart).
+  The view never reads `visor_down`: a blocked sun is a Glare of 0. At
+  night what the headlights do not reach loses 80% of its light; the pool
+  is as wide as the headlights let him see. Tunnel is an ellipse that
+  shrinks to `tunnel_min_view`; Lids are soft bars; a Blink sweeps them
+  shut and open in 0.06 s.
+- **No more than three flashes a second** is kept in the view: every amount
+  is eased and one that has turned may not turn again for 0.17 s.
+- **Left to others.** The dust in the air, the false dawn's glow and the
+  streaks of a gust are the world's (sky and road views, D-050); the
+  Wreck's cut to black and the prologue's white-out are M9's.
+- **Tools.** `tools/post_fx_check.gd` (the last step of `tools/check.sh`)
+  and `tools/post_fx_shots.gd` (pictures of states over the drive scene;
+  fifteen are in `artifacts/m10_postfx_*.png`).
+- **Not run:** Forward+ and Mobile (no Vulkan here), and no frame time on a
+  GPU. NEEDS OWNER.
+
+## D-054 (M10, 2026-11-20) Subtitles
+
+- **Context.** GDD 16.6 gives the place, the size of a subtitle and how
+  long it stays. It does not say what happens to a longer text, to two
+  lines asked for at once, or where the speaker's name comes from.
+- **Files.** `src/view/subtitles_view.gd` (`SubtitlesView`, the CanvasLayer
+  `Subtitles`: over the post effects, under the pointer) and the pure class
+  `SubtitleQueue` (wrapping, timing, the queue).
+- **Wrapping.** A character is one code point of the text, the speaker tag
+  not counted. A text is cut only at spaces; two lines are balanced. A text
+  that needs more than two lines is shown in parts of two lines, each held
+  for the larger of 1.5 s and 0.06 s a character of its own.
+- **The queue.** Lines asked for while one is showing wait in order;
+  nothing is dropped or cut short except by a clear. A `wreck` clears what
+  is showing and waiting (the Wreck cuts off what was being said), so the
+  Table's objection must be asked for after it. A subtitle's time is the
+  view's own frame time.
+- **Speakers.** The tag is a row of its own above the text. A speaker's
+  name is a line: `speaker.` and the name in lower case with underscores
+  (`speaker.old_woman`); a speaker with no such line is shown as the column
+  has it. A row that holds an exchange ("X, then Y", "a / b") is one
+  subtitle per speaker.
+- **Settings** (GDD 17.1, Subtitles): `subtitle_size` is "small", "medium"
+  or "large" (28, 36, 48 px at 1080p; default medium) and
+  `subtitle_background` a boolean (default on: a dark box at 60%; off, the
+  letters keep their outline). The keys, the defaults and their live effect
+  exist; the screen that changes them is the menus' (D-055).
+- **Noor's line** on the Call is asked for by data: the two rituals that
+  take the Call carry the op `line:noor.call.1`. A Call left to ring says
+  nothing.
+- **`--say=<line id>[,...]`** asks for lines when the drive scene starts
+  (not in GDD 13.9). `subtitle.test.long` is a test line of 143 characters.
+- **Tools.** `tools/subtitles_check.gd` with `subtitles_check_body.gd` (a
+  step of `tools/check.sh` between the tests and the smoke runs);
+  `tools/subtitles_shots.sh`; pictures in `artifacts/m10_subtitles_*.png`.
+  Right-to-left was tried with an Arabic table built in memory.
+- **At the merge with M8** the four speakers the passengers brought got
+  their lines (`speaker.soldier`, `.drummer`, `.student`, `.boy`).
+- **Open.** Bottom-centre subtitles lie over the wheel hub and the key of
+  the Arrival (NEEDS OWNER: `subtitle_bottom_margin`). No font slot per
+  language yet (GDD 17.3; with the settings). For M9: a heckle's subtitle
+  is its 2 s tell, and a line that waits behind another shortens it.
