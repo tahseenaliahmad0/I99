@@ -211,6 +211,96 @@ func _check_where_hitchers_stand() -> void:
 	check(would_be_them > 100, "(the draw would have been the one he carries %d times in a thousand)" % would_be_them)
 
 
+## An empty road under a Patrol's eyes with `who` beside him and, at once,
+## the top of Suspicion: he stands on the shoulder with an officer at his
+## window (GDD 6.5).
+func _pulled_over_with(who: String, gear: int = 3) -> void:
+	_on_the_road(who, gear)
+	_sim.suspicion.begin_watch()
+	# (A uniform halves what is added: the top over the multiplier is the top.)
+	_sim.suspicion.add(tuning.f("suspicion_max") / _sim.suspicion.gain_mult)
+	_tick()
+	check(GameData.as_bool(_shot("pulled_over")), "(he is pulled over: an officer waits at his window)")
+	_events = []
+
+
+## Pulled over, the night waits as at a stop (D-049, D-055), for passengers
+## too (D-051: "no Hand, no Weight, no timers"): with the officer at the
+## window nothing of `who` runs, however long he waits.
+func _check_nothing_runs_with_the_officer(who: String) -> void:
+	var record: Dictionary = _passenger(who)
+	var wait: float = 10.0
+	match who:
+		"hajjiya":
+			# The lever is still in fourth, where she prays (+3 Nerves a second).
+			_pulled_over_with(who, 4)
+			_sim.nerves.set_value(40.0)
+			var clock: float = _sim.clock.minutes
+			check_near(_nerves_over(wait), 0.0, 0.000001, "with the officer at the window she does not pray him frayed: in %.0f s in fourth gear his Nerves keep still" % wait)
+			check_eq(_count_events("line_requested", "id", "passenger.hajjiya.prayer"), 0, "(not a word of prayer)")
+			check_near(_sim.clock.minutes, clock, 0.000001, "(the Clock stands)")
+			check(not _reach(SHOULDER), "her shoulder cannot be reached there: the hand is for the officer")
+			_tap()
+			check_eq(GameData.as_int(_shot("wheel_held")), PassengerSim.HOLD_NONE, "and she takes no wheel")
+		"conscript":
+			var snore: float = GameData.as_float(GameData.as_dict(GameData.as_array(record.get("weights"))[0]).get("per_s"))
+			_pulled_over_with(who)
+			_sim.nerves.set_value(60.0)
+			check(GameData.as_bool(_shot("passenger_asleep")), "(he sleeps through it)")
+			check_near(_nerves_over(wait), 0.0, 0.000001, "with the officer at the window his snoring calms nobody: in %.0f s his Nerves keep still" % wait)
+			check(not _reach(SHOULDER) and not _reach("horn"), "neither his shoulder nor the horn can be reached there")
+			# He hands over his licence and drives on: the night runs again.
+			_drag("dash_1", "driver_window")
+			check(not GameData.as_bool(_shot("pulled_over")), "(his licence handed over, he is let go)")
+			_sim.nerves.set_value(60.0)
+			check_near(_nerves_over(4.0), snore * 4.0, 0.05, "let go, the snoring calms again (%.1f Nerves in 4 s)" % (snore * 4.0))
+		"drummer":
+			_pulled_over_with(who)
+			check(GameData.as_bool(_shot("passenger_drumming")), "(he drums on)")
+			_sim.nerves.set_value(60.0)
+			check_near(_nerves_over(wait), 0.0, 0.000001, "with the officer at the window his drum calms nobody: in %.0f s his Nerves keep still" % wait)
+			check(not _reach(SHOULDER), "and his shoulder cannot be reached to stop it")
+		"student":
+			var phone: Dictionary = _params("phone")
+			var gap: Array = GameData.as_array(phone.get("call_gap_s"))
+			wait = GameData.as_float(gap[1]) * 2.0
+			_on_the_road(who)
+			_give("phone")
+			_sim.suspicion.begin_watch()
+			_sim.suspicion.add(tuning.f("suspicion_max") / _sim.suspicion.gain_mult)
+			_tick()
+			check(GameData.as_bool(_shot("pulled_over")), "(he is pulled over, a phone in its mount and her beside him)")
+			_events = []
+			var cash: float = _sim.cash
+			_ticks(_ticks_in(wait))
+			check_eq(_count_events("call_started"), 0, "with the officer at the window no call rings in %.0f s, twice the longest wait between calls" % wait)
+			check_near(_sim.cash, cash, 0.000001, "and she earns him nothing while the Clock stands")
+			# Let go, the calls come again and she takes them.
+			_drag("dash_1", "driver_window")
+			check(not GameData.as_bool(_shot("pulled_over")), "(his licence handed over, he is let go)")
+			_events = []
+			_ticks(_ticks_in(GameData.as_float(gap[1]) + 1.0))
+			check(GameData.as_bool(_event("call_resolved").get("for_him")), "let go, the next call comes and she takes it")
+		"apprentice":
+			var repairs: Dictionary = GameData.as_dict(record.get("repairs"))
+			wait = GameData.as_float(repairs.get("announce_s")) + GameData.as_float(repairs.get("lean_s")) + 3.0
+			_pulled_over_with(who)
+			_sim.faults.light(1)
+			var due: float = _sim.passengers.retune_in
+			_ticks(_ticks_in(wait))
+			check_eq(_sim.faults.lamps, 1, "with the officer at the window he mends nothing: after %.0f s the lamp is still lit" % wait)
+			check_eq(_count_events("line_requested", "id", "passenger.apprentice.repair"), 0, "(and announces nothing)")
+			check_eq(GameData.as_int(_shot("passenger_repair")), PassengerSim.REPAIR_IDLE, "(he has not begun)")
+			check_eq(_sim.passengers.retune_in, due, "and the 30 s to his next turn of the dial stand still")
+			check(not _reach(SHOULDER), "his shoulder cannot be reached there")
+			# Let go, he sees the lamp.
+			_drag("dash_1", "driver_window")
+			check(not GameData.as_bool(_shot("pulled_over")), "(his licence handed over, he is let go)")
+			_ticks(2)
+			check_eq(GameData.as_int(_shot("passenger_repair")), PassengerSim.REPAIR_ANNOUNCED, "let go, he announces the repair")
+			check(_sim.passengers.retune_in < due, "(and his 30 s run again)")
+
+
 ## The first Telling seed whose stop at the end of `leg` of `act` (on the
 ## right branches) would have `who` at its roadside by the draw. The stop
 ## after a boss is leg LEGS_PER_ACT of its act, taken as the Hitcher stop he
@@ -397,6 +487,7 @@ func test_pass_hajjiya() -> void:
 	# What the review of M8 found (RULES-04, -05, -08).
 	_check_hitcher_service_after_a_boss()
 	_check_nobody_stands_where_they_got_out()
+	_check_nothing_runs_with_the_officer("hajjiya")
 
 
 func _check_hajjiya_holds_the_wheel() -> void:
@@ -812,6 +903,7 @@ func test_pass_conscript() -> void:
 	# What the review of M8 found (RULES-04, -05, -08, -09).
 	_check_a_snap_wakes_him()
 	_check_he_is_not_offered_where_he_got_out()
+	_check_nothing_runs_with_the_officer("conscript")
 
 
 ## He gets out at the stop after the act's boss. Chosen there, the Hitcher's
@@ -1007,6 +1099,7 @@ func test_pass_drummer() -> void:
 	# What the review of M8 found (RULES-05, -10, -11).
 	_check_one_music()
 	_check_tea_only_where_there_is_tea()
+	_check_nothing_runs_with_the_officer("drummer")
 
 
 ## He passes the tea, and says so, only when a tea glass stands in a cup
@@ -1254,6 +1347,7 @@ func test_pass_student() -> void:
 	# What the review of M8 found (RULES-05, -06, -10).
 	_check_her_word_for_the_call()
 	_check_the_sign_is_ahead_of_him()
+	_check_nothing_runs_with_the_officer("student")
 
 
 ## The fork's sign as the snapshot has it ({} when none is ahead).
@@ -1606,6 +1700,8 @@ func test_pass_apprentice() -> void:
 	_check_radio_line_only_when_playing()
 	_check_tape_and_apprentice()
 	_check_he_takes_the_wheel_back()
+	_check_one_repair_through_a_stop()
+	_check_nothing_runs_with_the_officer("apprentice")
 
 
 ## The dial dragged `steps` stations to the right, through the hand.
@@ -1619,6 +1715,50 @@ func _tune(steps: int) -> void:
 	_input.lmb = false
 	_ticks(SETTLE)
 	_input.clear()
+
+
+## "He repairs one fault per leg" holds through a stop at that leg's stall:
+## what is once per leg renews when a leg or a boss begins and nowhere else,
+## and every save keeps it (D-049, D-055). The save and the simulation that
+## goes on from it agree.
+func _check_one_repair_through_a_stop() -> void:
+	var repairs: Dictionary = GameData.as_dict(_passenger("apprentice").get("repairs"))
+	var his: float = GameData.as_float(repairs.get("announce_s")) + GameData.as_float(repairs.get("lean_s"))
+	var say: String = "passenger.apprentice.repair"
+	_to_quiet_leg("fuel_station")
+	check(_sim.board("apprentice"), "(he rides along)")
+	_sim.faults.light(2)
+	_ticks(_ticks_in(his) + 2)
+	check_eq(_sim.faults.lamps, 1, "(two lamps lit on a leg: he mends one)")
+	var second: StringName = _sim.faults.active[0]
+	_ticks(_ticks_in(his) + 2)
+	check_eq(_sim.faults.lamps, 1, "(and leaves the other: one fault per leg)")
+	# He stops at that leg's stall.
+	_into_stall()
+	check_eq(GameData.as_int(GameData.as_dict(_sim.checkpoint.get("passenger")).get("repaired")), 1, "the save made at the leg's stall holds that he has repaired on this leg")
+	check_eq(_sim.passengers.repaired, 1, "and the simulation that goes on from that save says the same")
+	var loaded: DriveSim = DriveSim.new(fresh_data())
+	check(loaded.restore(_sim.checkpoint), "(that save loads)")
+	check_eq(loaded.passengers.repaired, 1, "(as does a Telling loaded from it)")
+	# Back on the road: the leg's last metres, from rest in first gear, are
+	# longer than his 5 s. He does not start on the second fault.
+	_leave_stop()
+	_events = []
+	var from_tick: int = _sim.tick
+	var guard: int = _ticks_in(60.0)
+	while _sim.car.s < _sim.leg.length - 2.0 and guard > 0:
+		guard -= 1
+		_tick()
+	check(float(_sim.tick - from_tick) * DT > his + 1.0, "(from the stall to the gore he drives %.1f s)" % (float(_sim.tick - from_tick) * DT))
+	check_eq(_sim.run.legs_done, 0, "(still the same leg)")
+	check_eq(_count_events("line_requested", "id", say), 0, "after a stop at its stall the leg is the same leg: he announces no second repair")
+	check(_sim.faults.has(second) and _sim.faults.lamps == 1, "and the second fault is still lit at the gore")
+	# The next leg renews it.
+	_into_next_quiet_leg()
+	_events = []
+	_ticks(_ticks_in(his) + 2)
+	check_eq(_sim.faults.lamps, 0, "on the next leg he mends it")
+	check_eq(GameData.as_string(_event("fault_repaired").get("by")), "apprentice", "(by him)")
 
 
 ## Grips the wheel, turns it to `angle` and holds it there until it has settled.
