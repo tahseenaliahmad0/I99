@@ -83,6 +83,9 @@ func test_item_cigarettes() -> void:
 	_run(0.1)
 	check(not _sim.effects.has(&"lit"), "after 25 s it is out")
 	check_near(_sim.nerves.value, nerves_0 + calm, 0.01, "having calmed him by 10 in all")
+	# The calm is counted in whole ticks, like the burn: a quarter of one tick
+	# of it is the tolerance, so a tick too many or too few is caught.
+	check_near(_sim.nerves.value, nerves_0 + calm, absf(calm) / burn * DT * 0.25, "by 10 and not a tick of calm more: it ends with the burn")
 	check(_sim.nerves.tremor_amplitude > 0.0, "and the Tremor is back")
 	var haze_top: float = _sim.items.haze
 	check_near(haze_top, haze_rate * burn, 0.003, "the Haze reached 2% x 25 s")

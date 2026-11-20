@@ -255,8 +255,11 @@ var _radio_time: float = 0.0
 ## The station the radio is holding on as a status, or static.
 var _radio_held: StringName = STATIC
 var _horn_cooldown: float = 0.0
-## Nerves drips: [rate per second, seconds left].
-var _drips: Array[Vector2] = []
+## Nerves that come spread over a time (a cigarette's calm): for each drip its
+## rate per second and the seconds it has left. (64-bit: in a Vector2's 32
+## bits a countdown of a minute is a tick out by its end.)
+var _drip_rates: PackedFloat64Array = PackedFloat64Array()
+var _drip_left: PackedFloat64Array = PackedFloat64Array()
 
 var _haze_cap: float = 0.0
 var _haze_clear: float = 0.0
@@ -347,7 +350,8 @@ func reset_cabin() -> void:
 	horn_blown = false
 	cash_delta = 0.0
 	_horn_cooldown = 0.0
-	_drips.clear()
+	_drip_rates.clear()
+	_drip_left.clear()
 	_leg_holds.clear()
 	events.clear()
 	_hang_up()
@@ -947,7 +951,8 @@ func _give_entry(owner: Item, entry: Dictionary) -> void:
 	if GameData.as_string(entry.get("resource")) == "nerves":
 		var over: float = GameData.as_float(entry.get("over"))
 		if over > 0.0:
-			_drips.append(Vector2(amount / over, over))
+			_drip_rates.append(amount / over)
+			_drip_left.append(over)
 		else:
 			_nerves.add(amount)
 	elif GameData.as_string(entry.get("resource")) == "cash":
@@ -1350,15 +1355,16 @@ func step(dt: float) -> void:
 		if indicator_left <= 0.0:
 			indicator = 0
 
+	# A drip is counted in whole ticks like every other countdown: it is over
+	# when less than half a tick of it is left.
 	var index: int = 0
-	while index < _drips.size():
-		var drip: Vector2 = _drips[index]
-		_nerves.add_rate(drip.x)
-		drip.y -= dt
-		if drip.y <= 0.0:
-			_drips.remove_at(index)
+	while index < _drip_left.size():
+		_nerves.add_rate(_drip_rates[index])
+		_drip_left[index] -= dt
+		if _drip_left[index] < dt * 0.5:
+			_drip_rates.remove_at(index)
+			_drip_left.remove_at(index)
 		else:
-			_drips[index] = drip
 			index += 1
 
 	var haze_rate: float = 0.0
