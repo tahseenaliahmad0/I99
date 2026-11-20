@@ -31,6 +31,12 @@ const HOME_ANCHOR: String = "@home"
 const GLOVEBOX: String = "glovebox"
 const FLAG_GLOVEBOX: StringName = &"glovebox_open"
 const UNSTOW: String = "unstow"
+## The seat, and where what lies on it goes while a passenger sits there
+## (GDD 8.1): the back seat, out of reach and out of use.
+const SEAT: StringName = &"seat"
+const BACK_SEAT: StringName = &"back_seat"
+## What a smoke is tagged, and where one handed to him burns (GDD 8.2).
+const TAG_SMOKE: String = "smoke"
 const STATIC: StringName = &"static"
 const AWAKE: StringName = &"awake"
 const VISOR_DOWN: StringName = &"visor_down"
@@ -200,6 +206,15 @@ var handed: StringName = &""
 ## True for the tick in which contraband, or the phone, was used.
 var contraband_used: bool = false
 var phone_used: bool = false
+## He tapped his passenger's shoulder this tick (GDD 8.1).
+var asked: bool = false
+## The tags of the things he used this tick (a cigarette lit, a sip taken):
+## for whoever in the seat minds (GDD 8.2).
+var used_tags: PackedStringArray = PackedStringArray()
+## Somebody sits in the seat: nothing else can lie there.
+var seat_occupied: bool = false
+## His passenger answers every call for him (GDD 8.2, the Student).
+var answered_for_him: bool = false
 ## sfx and line requests, drained by DriveSim.
 var events: Array[Dictionary] = []
 
@@ -433,6 +448,8 @@ func begin_tick() -> void:
 	handed = &""
 	contraband_used = false
 	phone_used = false
+	asked = false
+	used_tags.clear()
 
 
 # --- Items and slots ---------------------------------------------------------
@@ -446,7 +463,8 @@ func add_item(id: StringName, slot: StringName, supply: int = -1) -> Item:
 	var item: Item = Item.new()
 	item.id = id
 	item.record = record
-	item.slot = slot
+	# With somebody in the seat, what belongs on it goes behind it.
+	item.slot = BACK_SEAT if slot == SEAT and seat_occupied else slot
 	var supply_spec: Dictionary = GameData.as_dict(record.get("supply"))
 	if supply_spec.has("uses"):
 		item.supply = supply if supply >= 0 else GameData.as_int(supply_spec.get("uses"))
@@ -522,6 +540,36 @@ func item_in_slot(slot: StringName) -> Item:
 
 func flag(flag_name: StringName) -> bool:
 	return GameData.as_bool(flags.get(flag_name))
+
+
+## A passenger takes the seat, or leaves it (GDD 8.1): what lay on it lies on
+## the back seat while they ride, out of reach, and comes back after.
+func seat_taken(on: bool) -> void:
+	seat_occupied = on
+	var from: StringName = SEAT if on else BACK_SEAT
+	var to: StringName = BACK_SEAT if on else SEAT
+	for candidate: Item in items:
+		if candidate.slot == from and (on or item_in_slot(SEAT) == null):
+			_put_out(candidate)
+			candidate.slot = to
+	_refresh_passives()
+
+
+## His passenger lights a cigarette and hands it over (GDD 8.2): it burns
+## where his own would, with nothing of his used and no ritual. False when
+## one is burning already or there is nowhere for it.
+func light_handed() -> bool:
+	var smoke: Item = null
+	for candidate: Item in tagged(TAG_SMOKE):
+		if not is_stowed(candidate) and not anchor_of(candidate).is_empty():
+			smoke = candidate
+			break
+	if smoke == null:
+		return false
+	if smoke.burning or (smoke.use_effect != &"" and _effects.has_own(smoke.use_effect)):
+		return false
+	_give(smoke)
+	return true
 
 
 ## The anchor an item's rituals are performed at: its slot's anchor.
@@ -718,6 +766,11 @@ func complete(ritual: Dictionary, direction: int) -> void:
 			phone_used = true
 	for op: Variant in GameData.as_array(ritual.get("on_complete")):
 		_run(GameData.as_string(op), owner, direction)
+	if owner != null and GameData.as_array(ritual.get("on_complete")).has("give"):
+		# What he has just used, by its tags.
+		for tag: Variant in GameData.as_array(owner.record.get("tags")):
+			if not used_tags.has(GameData.as_string(tag)):
+				used_tags.append(GameData.as_string(tag))
 	var sfx: String = GameData.as_string(ritual.get("sfx"))
 	if not sfx.is_empty():
 		events.append({"type": "sfx_requested", "id": sfx})
@@ -861,6 +914,8 @@ func _run(op: String, owner: Item, direction: int) -> void:
 				owner.side_time = 0.0
 		"answer":
 			_answer_tap(owner)
+		"ask":
+			asked = true
 		"refill":
 			# A full supply again for everything of a kind (the Thermos: the tea, hot).
 			for refilled: Item in tagged(parts[1]):
@@ -1099,6 +1154,9 @@ func _ring(handset: Item) -> void:
 	call_taps = 0
 	events.append({"type": "call_started", "caller": String(caller), "ring_s": ring_left})
 	events.append({"type": "sfx_requested", "id": "phone_ring"})
+	if answered_for_him:
+		# His passenger picks it up: what the call gives, without his hand.
+		_answer(handset, true)
 
 
 ## One of the TAPs that answer a call; the last answers. (The first has shown
@@ -1109,6 +1167,11 @@ func _answer_tap(handset: Item) -> void:
 	call_taps += 1
 	if call_taps < int(_param(handset, "answer_taps", 1.0)):
 		return
+	_answer(handset, false)
+
+
+## The call is answered: the dispatcher's fare, or his family's voice.
+func _answer(handset: Item, for_him: bool) -> void:
 	var paid: float = 0.0
 	var calmed: float = 0.0
 	if caller == CALLER_FAMILY:
@@ -1123,7 +1186,7 @@ func _answer_tap(handset: Item) -> void:
 	if every > 0 and answered_run % every == 0:
 		paid += GameData.as_float(in_a_row.get("amount"))
 	cash_delta += paid
-	events.append({"type": "call_resolved", "caller": String(caller), "answered": true, "cash": paid, "nerves": calmed, "in_a_row": answered_run})
+	events.append({"type": "call_resolved", "caller": String(caller), "answered": true, "cash": paid, "nerves": calmed, "in_a_row": answered_run, "for_him": for_him})
 	_hang_up()
 
 

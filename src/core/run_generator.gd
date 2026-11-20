@@ -14,6 +14,10 @@ const ROAD_LANES: int = 3
 const FORK_SALT: int = 1000
 const LEG_SALT: int = 2000
 const BOSS_SALT: int = 3000
+const HITCHER_SALT: int = 4000
+## A stop's "hitcher": one stands there always, or at hitcher_chance of them.
+const HITCHER_ALWAYS: String = "always"
+const HITCHER_SOMETIMES: String = "sometimes"
 
 
 ## The leg types an act may draw (GDD 12.3): those whose data lists the act.
@@ -109,6 +113,26 @@ static func boss_modifier(data: GameData, telling_seed: int, act: int) -> String
 	if allowed.is_empty() or roll >= data.tuning.fi("boss_modifier_chance", clampi(act, 1, ACTS) - 1):
 		return ""
 	return GameData.as_string(allowed[which])
+
+
+## The hitcher who stands at a stop (GDD 8.1), or "": always one at a Hitcher
+## stop, and one at hitcher_chance of the fuel stations and tea stalls. Who
+## it is, is drawn by the Telling seed and where in the night the stop is;
+## never the passenger he already carries (`aboard`).
+static func hitcher(data: GameData, telling_seed: int, act: int, leg_index: int, stop_id: String, aboard: String) -> String:
+	var stands: String = GameData.as_string(data.record("stops", stop_id).get("hitcher")) if data.has_record("stops", stop_id) else ""
+	var random: RandomNumberGenerator = Rng.seeded(Rng.derive(Rng.derive(telling_seed, HITCHER_SALT + act), leg_index))
+	# Both draws are always made, so the one does not depend on the other.
+	var roll: float = random.randf()
+	var ids: PackedStringArray = data.record_ids("passengers")
+	var which: int = random.randi_range(0, maxi(ids.size() - 1, 0))
+	if ids.is_empty():
+		return ""
+	if stands != HITCHER_ALWAYS and (stands != HITCHER_SOMETIMES or roll >= data.tuning.f("hitcher_chance")):
+		return ""
+	if ids[which] == aboard:
+		which = (which + 1) % ids.size()
+	return "" if ids[which] == aboard else ids[which]
 
 
 ## A stretch of road with nothing planned on it: the approach to a fork, the

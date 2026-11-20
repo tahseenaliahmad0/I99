@@ -46,7 +46,8 @@
     { "id": "offer_10",           "pos": [1.02, 0.30, 0.50],    "time_s": 0.69 },
     { "id": "window_switch",      "pos": [0.20, -0.13, 0.12],   "time_s": 0.20 },
     { "id": "hook",               "pos": [0.09, -0.09, 0.00],   "time_s": 0.16, "marker_offset": [0.0, 0.0, 0.05] },
-    { "id": "key",                "pos": [0.16, -0.08, 0.05],   "time_s": 0.15 }
+    { "id": "key",                "pos": [0.16, -0.08, 0.05],   "time_s": 0.15 },
+    { "id": "passenger_door",     "pos": [0.96, -0.04, 0.10],   "time_s": 0.57 }
   ],
 
   "slots": [
@@ -59,6 +60,7 @@
     { "id": "dash_2",      "anchor": "dash_2",      "reach": "mid",  "holds": ["small"] },
     { "id": "tape",        "anchor": "tape",        "reach": "near", "holds": ["tape"] },
     { "id": "seat",        "anchor": "seat",        "reach": "far",  "holds": ["large", "passenger"] },
+    { "id": "back_seat",   "anchor": null,          "reach": "none", "holds": ["large"] },
     { "id": "glovebox_a",  "anchor": "glovebox",    "reach": "far",  "holds": ["stowed"] },
     { "id": "glovebox_b",  "anchor": "glovebox",    "reach": "far",  "holds": ["stowed"] },
     { "id": "roof",        "anchor": null,          "reach": "none", "holds": ["roof"] },

@@ -22,13 +22,14 @@
     { "id": "hook_cooldown" },
     { "id": "the_call" },
     { "id": "in_bay" },
-    { "id": "at_window" }
+    { "id": "at_window" },
+    { "id": "blessing" }
   ],
 
   "synergy_tokens": ["music", "photo"],
 
   "tags": ["smoke", "drink", "tea", "hanging", "small", "phone", "tape", "music", "large", "roof", "papers",
-           "stowed", "adaptation", "passenger"],
+           "stowed", "adaptation", "passenger", "flask"],
 
   "starting_cabin": [
     { "item": "cigarettes", "slot": "ashtray", "supply": 5 },
@@ -124,7 +125,7 @@
       "gives": [ { "effect": "minty", "duration": 60 } ],
       "takes": [],
       "line_ids": { "name": "item.breath_mints.name" } },
-    { "id": "arak_flask", "kind": "deal", "slots": ["cup_a", "cup_b"], "tags": ["drink"],
+    { "id": "arak_flask", "kind": "deal", "slots": ["cup_a", "cup_b"], "tags": ["drink", "flask"],
       "rarity": "uncommon", "price": 45, "contraband": true,
       "supply": { "uses": 6, "restock": 20 },
       "rituals": ["stow", "flask_sip"],

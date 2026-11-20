@@ -17,7 +17,7 @@
     { "id": "slap",            "anchor": "face",               "gesture": "TAP",
       "eyes_down": false, "requires": [], "on_complete": ["nerves:12", "add_effect:awake:20"] },
     { "id": "passenger_ask",   "anchor": "passenger_shoulder", "gesture": "TAP",
-      "eyes_down": false, "requires": ["flag:passenger"], "on_complete": [] },
+      "eyes_down": false, "requires": ["flag:passenger"], "on_complete": ["ask"] },
     { "id": "glovebox_toggle", "anchor": "glovebox",           "gesture": "TAP",
       "eyes_down": false, "requires": [], "on_complete": ["toggle:glovebox_open"] },
     { "id": "indicator",       "anchor": "indicator_stalk",    "gesture": "FLICK", "flick_dirs": ["up", "down"],

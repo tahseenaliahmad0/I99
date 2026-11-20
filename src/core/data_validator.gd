@@ -28,8 +28,18 @@ const SLOT_ANCHOR: String = "@slot"
 const RITUAL_OPS: PackedStringArray = [
 	"nerves", "cash", "add_effect", "remove_effect", "consume_supply", "give", "toggle",
 	"horn", "wipe", "photo", "indicate", "window", "ash", "radio_step", "sfx", "line", "pay",
-	"clear_haze", "flip", "answer", "refill", "hook", "call", "key", "hand", "stow", "unstow",
+	"clear_haze", "flip", "answer", "refill", "hook", "call", "key", "hand", "stow", "unstow", "ask",
 ]
+## The five passengers of GDD 8.2, what a passenger's Hand can be, and what
+## a Weight can weigh on.
+const PASSENGER_IDS: PackedStringArray = ["hajjiya", "conscript", "drummer", "student", "apprentice"]
+const PASSENGER_HANDS: PackedStringArray = ["hold_wheel_straight", "hold_wheel", "cigarette", "pass_tea", "always"]
+const WEIGHT_RESOURCES: PackedStringArray = ["nerves", "suspicion"]
+## When a Weight bites. "ritual_tag:<tag>" (he uses a thing so tagged) and
+## "gear>=<n>" (alone, or with "&rain") are checked apart from these.
+const WEIGHT_WHENS: PackedStringArray = ["asleep", "scrape", "drumming&patrol"]
+## The lines every passenger has (GDD 3.6).
+const PASSENGER_LINES: PackedStringArray = ["name", "board", "leave"]
 ## What can be handed out of the driver's window (GDD 10.2).
 const DOCUMENTS: PackedStringArray = ["licence", "id", "registration"]
 const BANKNOTES: String = "banknotes"
@@ -341,6 +351,8 @@ func _stop_schema() -> Dictionary:
 		"service": _enum(STOP_SERVICES),
 		"stock": _opt(_nullable(_obj({"count": _int(0.0), "pools": _list(_enum(ITEM_KINDS)), "free": _opt(_int(0.0))}))),
 		"restocks": _opt(_bool()),
+		# A hitcher stands there: always, or at hitcher_chance of such stops (GDD 8.1).
+		"hitcher": _opt(_enum(PackedStringArray(["always", "sometimes"]))),
 		"nerves_to": _opt(_num(0.0, 100.0)),
 		"clock_min": _num(0.0),
 		"weight": _num(0.0),
@@ -606,16 +618,41 @@ func _check_stops() -> void:
 
 
 func _passenger_schema() -> Dictionary:
+	var effects: Dictionary = _opt(_list(_ref("effects")))
 	return _obj({
 		"id": _str(),
 		"rides_legs": _opt(_int(1.0)),
 		"rides_until": _opt(_enum(PackedStringArray(["act_end", "basra"]))),
 		"fare": _num(0.0),
-		"hand": _obj({"kind": _str()}, true),
-		"weights": _list(_obj({}, true)),
+		# What they do when asked with a TAP on the shoulder (GDD 8.1).
+		"hand": _obj({
+			"kind": _enum(PASSENGER_HANDS),
+			"on": _opt(_enum(PackedStringArray(["tap", "always"]))),
+			"duration_s": _opt(_num(0.0)),
+			# Where a thing that is passed to him is held, in the cabin frame.
+			"at": _opt(_t("vec3")),
+		}),
+		# What they do all the time they ride.
+		"always": _opt(_obj({
+			"suspicion_gain_mult": _opt(_num(0.0, 1.0)),
+			"fork_sign_lead_s": _opt(_num(0.0)),
+			"answers_calls": _opt(_bool()),
+			"effects": effects,
+		})),
+		"sleeps": _opt(_obj({"awake_s": _num(0.0), "horn_wakes": _bool()})),
+		"drums": _opt(_obj({"effects": effects})),
+		"repairs": _opt(_obj({"per_leg": _int(1.0), "announce_s": _num(0.0), "lean_s": _num(0.0)})),
+		"retunes": _opt(_obj({"every_s": _num(0.0), "to": _str()})),
+		"view_block_right": _opt(_num(0.0, 1.0)),
+		"weights": _list(_obj({
+			"when": _str(),
+			"resource": _enum(WEIGHT_RESOURCES),
+			"amount": _opt(_num()),
+			"per_s": _opt(_num()),
+		})),
 		"on_leave": _opt(_list(_str())),
 		"line_prefix": _ref("line_prefix"),
-	}, true)
+	})
 
 
 func _table_schema() -> Dictionary:
@@ -959,9 +996,13 @@ func _check_cross_rules() -> void:
 	for passenger: Dictionary in _data.records("passengers"):
 		var has_legs: bool = passenger.has("rides_legs")
 		var has_until: bool = passenger.has("rides_until")
+		var label: String = "passengers[%s]" % GameData.as_string(passenger.get("id"), "?")
 		if has_legs == has_until:
-			_err("E_RULE", "passengers.json", "passengers[%s]" % GameData.as_string(passenger.get("id"), "?"),
-					"needs exactly one of rides_legs and rides_until")
+			_err("E_RULE", "passengers.json", label, "needs exactly one of rides_legs and rides_until")
+		_check_passenger(passenger, label)
+	for required: String in PASSENGER_IDS:
+		if _data.roots.has("passengers") and not _data.has_record("passengers", required):
+			_err("E_MISSING", "passengers.json", "passengers[%s]" % required, "required record is missing (GDD 8.2)")
 	for ritual: Dictionary in _data.records("rituals"):
 		var ritual_label: String = "rituals[%s]" % GameData.as_string(ritual.get("id"), "?")
 		var anchor: String = GameData.as_string(ritual.get("anchor"))
@@ -1201,6 +1242,59 @@ func _check_op(op: String, file_label: String, where: String) -> void:
 		"line":
 			if not _data.has_line(argument, "en"):
 				_err("E_REF", file_label, where, "unknown lines id '%s'" % argument)
+
+
+## What the schema cannot say of a passenger: a Hand that lasts needs its
+## time, a passed thing its place, each Weight a moment it bites and either
+## an amount or a rate, and the passenger the lines every passenger has.
+func _check_passenger(passenger: Dictionary, label: String) -> void:
+	var hand: Dictionary = GameData.as_dict(passenger.get("hand"))
+	var kind: String = GameData.as_string(hand.get("kind"))
+	if (kind == "hold_wheel_straight" or kind == "hold_wheel") and GameData.as_float(hand.get("duration_s")) <= 0.0:
+		_err("E_RULE", "passengers.json", label + ".hand", "a hand that holds the wheel needs a \"duration_s\" above 0")
+	if kind == "pass_tea" and not hand.has("at"):
+		_err("E_RULE", "passengers.json", label + ".hand", "a hand that passes something needs \"at\": where it is held")
+	if kind == "pass_tea" and not passenger.has("drums"):
+		_err("E_RULE", "passengers.json", label + ".hand", "passing the tea is what a drummer does between drumming: it needs \"drums\"")
+	if kind == "cigarette" and not passenger.has("sleeps"):
+		_err("E_RULE", "passengers.json", label + ".hand", "the cigarette is handed over by one who has been woken: it needs \"sleeps\"")
+	var weights: Array = GameData.as_array(passenger.get("weights"))
+	for index: int in weights.size():
+		var weight: Dictionary = GameData.as_dict(weights[index])
+		var where: String = "%s.weights[%d]" % [label, index]
+		var when: String = GameData.as_string(weight.get("when"))
+		var by_the_second: bool = true
+		if when.begins_with("ritual_tag:"):
+			by_the_second = false
+			if not _item_tags().has(when.substr(11)):
+				_err("E_REF", "passengers.json", where + ".when", "'%s' is not a tag of items.json" % when.substr(11))
+		elif when.begins_with("gear>="):
+			var rest: String = when.substr(6)
+			if not rest.trim_suffix("&rain").is_valid_int():
+				_err("E_ENUM", "passengers.json", where + ".when", "\"gear>=<n>\" or \"gear>=<n>&rain\", not '%s'" % when)
+		elif when == "scrape":
+			by_the_second = false
+		elif not WEIGHT_WHENS.has(when):
+			_err("E_ENUM", "passengers.json", where + ".when", "'%s' is not a moment a Weight bites (ritual_tag:<tag>, gear>=<n>, gear>=<n>&rain, %s)" % [when, ", ".join(WEIGHT_WHENS)])
+		if weight.has("amount") == weight.has("per_s"):
+			_err("E_RULE", "passengers.json", where, "needs exactly one of \"amount\" and \"per_s\"")
+		elif weight.has("per_s") != by_the_second:
+			_err("E_RULE", "passengers.json", where, "'%s' weighs %s" % [when, "by the second: it needs \"per_s\"" if by_the_second else "once each time: it needs \"amount\""])
+		if when == "drumming&patrol" and not passenger.has("drums"):
+			_err("E_RULE", "passengers.json", where + ".when", "only a passenger with \"drums\" drums")
+		if when == "asleep" and not passenger.has("sleeps"):
+			_err("E_RULE", "passengers.json", where + ".when", "only a passenger with \"sleeps\" sleeps")
+	var retunes: Dictionary = GameData.as_dict(passenger.get("retunes"))
+	if passenger.has("retunes"):
+		var station: String = GameData.as_string(retunes.get("to"))
+		if station != "static" and not GameData.as_array(_data.tuning.a("radio_stations") if _data.tuning.has("radio_stations") else []).has(station):
+			_err("E_REF", "passengers.json", label + ".retunes.to", "'%s' is neither static nor a station of radio_stations" % station)
+		if GameData.as_float(retunes.get("every_s")) <= 0.0:
+			_err("E_RULE", "passengers.json", label + ".retunes.every_s", "must be above 0")
+	var prefix: String = GameData.as_string(passenger.get("line_prefix"))
+	for line: String in PASSENGER_LINES:
+		if not prefix.is_empty() and not _data.has_line("%s.%s" % [prefix, line], "en"):
+			_err("E_REF", "passengers.json", label + ".line_prefix", "the line '%s.%s' is missing" % [prefix, line])
 
 
 ## One ritual condition: an effect id, "supply>0", "hot" or "flag:<switch>",

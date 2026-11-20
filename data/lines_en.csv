@@ -8,6 +8,33 @@ heckle.drivers.dare.gear4,Driver,Fourth gear! Tell them about fourth gear!,true
 heckle.uncles.doubt.1,Uncle,All night? At your age? In that car?,true
 heckle.aunts.order.tea,Aunt,Drink your tea before it goes cold.,true
 passenger.hajjiya.board,Old woman,"God keep you, my son. Not so fast.",true
+passenger.hajjiya.name,,THE HAJJIYA,true
+passenger.hajjiya.leave,Old woman,"Eat, my son. A thin man should not drive at night.",true
+passenger.hajjiya.hand,Old woman,Give it here. Straight. Like this.,true
+passenger.hajjiya.weight,Old woman,Not in front of me.,true
+passenger.hajjiya.prayer,Old woman,O Protector. O Protector. O Protector.,true
+passenger.conscript.name,,THE CONSCRIPT,true
+passenger.conscript.board,Soldier,Wake me at the checkpoint. Not before.,true
+passenger.conscript.leave,Soldier,Here. For the petrol.,true
+passenger.conscript.hand,Soldier,Take one. They are the army's.,true
+passenger.conscript.wake,Soldier,What? I am awake. I was awake.,true
+passenger.drummer.name,,THE DRUMMER,true
+passenger.drummer.board,Drummer,Mind the drum. It is worth more than the car.,true
+passenger.drummer.leave,Drummer,Here? Then here I play.,true
+passenger.drummer.hand,Drummer,"Your tea, driver.",true
+passenger.drummer.drum,Drummer,(he drums),true
+passenger.student.name,,THE STUDENT,true
+passenger.student.board,Student,Basra? I can pay. A little.,true
+passenger.student.leave,Student,"Thank you, uncle. Slowly, yes?",true
+passenger.student.hand,Student,"I have it. He says ten, for the airport.",true
+passenger.student.weight,Student,"The lane, uncle. The lane!",true
+passenger.apprentice.name,,THE APPRENTICE,true
+passenger.apprentice.board,Boy,My master says a car like this should not still be running.,true
+passenger.apprentice.leave,Boy,It will hold. Probably.,true
+passenger.apprentice.hand,Boy,I have the wheel. Three seconds.,true
+passenger.apprentice.repair,Boy,Don't touch the lever. I am in there.,true
+passenger.apprentice.radio,Boy,(he turns the dial),true
+sign.hitcher,,[%s],false
 radio.news.patrol,Newsreader,Traffic police are out on the southern road tonight.,true
 noor.call.1,Noor,Baba? Are you awake?,true
 finale.proverb,"Noor, then Abu Noor",They say one hand doesn't clap. / No. But it drives.,true
