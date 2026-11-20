@@ -56,12 +56,18 @@ func test_save_01() -> void:
 			_drag(GameData.as_string(offer["anchor"]), _sim.items.anchor_of_slot(GameData.as_string(slots[0])))
 			break
 	check(not bought.is_empty() and _sim.items.item(StringName(bought)) != null, "(he buys %s at the first stop and puts it in its place)" % bought)
+	check(_sim.give_item(&"phone") != null and _sim.give_item(&"painkillers") != null, "(and has a phone and pills from there on)")
 	_sim.items.add_item(&"fifth_gear", &"bay_2")
 	_sim.items.flags[&"hazards"] = true
 	_leave()
 	_step_to_the_gore()
 	check_eq(_sim.run.legs_done, 1, "(he is on the second leg)")
 	_quiet_this_leg()
+	# What this leg and the night will still owe him at its stop: a phone
+	# whose next call is on its way, a look at the photo that is spent, a
+	# pill that lasts to the leg's end.
+	_sim.items.complete(data.record("rituals", "visor_photo"), Gesture.DIR_DOWN)
+	_sim.items.complete(data.record("rituals", "painkillers_take"), 0)
 	var saves_before_leg: int = _sim.checkpoints
 	var saved_before_leg: Dictionary = _sim.checkpoint
 	for _tick: int in int(20.0 / DT):
@@ -73,13 +79,29 @@ func test_save_01() -> void:
 	_sim.items.item(&"cigarettes").supply = 3
 	_sim.items.set_radio(&"music")
 	_sim.cash += 0.625
+	# (A cigarette burnt out a while ago: its Craving is some seconds away.)
+	_sim.items.item(&"cigarettes").lapse_left = 100.0 / 7.0
 	var cabin_before: Array[String] = _cabin(_sim)
 	var cash_before: float = _sim.cash
 	var lit_before: Array[StringName] = _sim.faults.active.duplicate()
 	var deck_before: Array[StringName] = _sim.faults.deck.duplicate()
+	var craving_before: float = _sim.items.item(&"cigarettes").lapse_left
+	var call_before: float = _call_wait(_sim)
+	check(call_before > 0.0, "(the next call is %s s away)" % str(snappedf(call_before, 0.01)))
+	var tick_before: int = _sim.tick
 	_into_stall()
+	var into_stall: float = float(_sim.tick - tick_before) * DT
 	var here: Dictionary = data.record("stops", _sim.run.stop)
 	check_eq(_sim.checkpoints, 2, "the second stop saves again")
+	# What is owed him is still owed: the stop cancels nothing, and nothing
+	# of it runs while he stands there.
+	check_near(_sim.items.item(&"cigarettes").lapse_left, craving_before - into_stall, 0.000000001, "the seconds until the Craving he drove in with")
+	check_near(_call_wait(_sim), call_before - into_stall, 0.000000001, "the seconds until the next call")
+	check(_sim.items.photo_used, "that he has had this leg's look at the photo")
+	check(_sim.phantom_muted() and _sim.effects.has(&"drowsy"), "and what the pill does for the rest of the leg")
+	check(not _sim.effects.has(&"painkillers") and not _sim.effects.has(&"visor_down"), "(what runs by the clock ends at the stop)")
+	var craving_at_stop: float = _sim.items.item(&"cigarettes").lapse_left
+	var call_at_stop: float = _call_wait(_sim)
 	if GameData.as_string(here.get("service")) != "tea":
 		check_eq(_cabin(_sim), cabin_before, "at the stop he has what he drove in with: every item, its place, its supply")
 	check_eq(_sim.items.item(&"cigarettes").supply, 3, "the three cigarettes he had left")
@@ -117,6 +139,17 @@ func test_save_01() -> void:
 			check(kept.has("slot") and kept.has("supply"), "an item is saved with its slot and its supply")
 	check(has_bought, "his items, with the one he bought")
 	check_eq(GameData.as_array(saved.get("adaptations")), [{"id": "fifth_gear", "slot": "bay_2"}], "his adaptations, each in its bay")
+	# And what the stop does not cancel: what is owed him, and what he has
+	# done once this leg.
+	var kept_pack: Dictionary = {}
+	for entry: Variant in GameData.as_array(saved.get("items")):
+		if GameData.as_string(GameData.as_dict(entry).get("id")) == "cigarettes":
+			kept_pack = GameData.as_dict(entry)
+	check_eq(Save.from_exact(kept_pack.get("lapse"), -1.0), craving_at_stop, "the seconds until the Craving, to the bit")
+	check_eq(Save.from_exact(GameData.as_dict(saved.get("item_state")).get("call_wait"), -1.0), call_at_stop, "the seconds until the next call, to the bit")
+	var kept_leg: Dictionary = GameData.as_dict(saved.get("leg_state"))
+	check(GameData.as_bool(kept_leg.get("photo")), "that the photo was looked at this leg")
+	check(GameData.as_array(kept_leg.get("held")).has("drowsy") and GameData.as_array(kept_leg.get("held")).has("phantom_mute"), "and the statuses that last to the leg's end")
 
 	# Through the file and back.
 	var text: String = Save.to_text(profile, saved)
@@ -151,19 +184,30 @@ func test_save_01() -> void:
 	check_eq(_cabin(loaded), _cabin(_sim), "every item and adaptation in its place with its supply")
 	check_eq(loaded.rng.get_state(), _sim.rng.get_state(), "the state of the seeded streams")
 	check(loaded.items.flag(&"hazards"), "the switch he threw")
+	check_eq(loaded.items.item(&"cigarettes").lapse_left, craving_at_stop, "the seconds until the Craving, exactly")
+	check_eq(_call_wait(loaded), call_at_stop, "the seconds until the next call, exactly")
+	check(loaded.items.photo_used, "the look at the photo he has had this leg")
+	check(loaded.phantom_muted() and loaded.heavy_floor() == _sim.heavy_floor(), "and the pill that lasts to its end")
 	check_eq(_offer_ids(loaded), _offer_ids(_sim), "the vendor holds out the same things")
 	check_eq(loaded.state_hash(), _sim.state_hash(), "the two simulations are the same to the bit")
 
 	# The Telling continued from the save is the uninterrupted one.
 	var script: Array[DriveInput] = _what_he_does_next(_sim)
 	var differed_at: int = -1
+	_collect()
+	_events = []
+	var loaded_rang: bool = false
 	for index: int in script.size():
 		_sim.step(script[index])
 		loaded.step(script[index])
+		loaded_rang = loaded_rang or loaded.items.caller != &""
 		if index % 120 == 119 and differed_at < 0 and loaded.state_hash() != _sim.state_hash():
 			differed_at = index
 	check_eq(differed_at, -1, "given the same inputs for %d s they stay the same, second for second" % roundi(float(script.size()) * DT))
 	check_eq(loaded.state_hash(), _sim.state_hash(), "and end the same")
+	_collect()
+	check(_has_event("call_started") and loaded_rang, "(in those seconds the call that was on its way came, in both)")
+	check(_sim.items.item(&"cigarettes").lapse_left < 0.0 and loaded.items.item(&"cigarettes").lapse_left < 0.0, "(and so did the Craving)")
 	check(not _sim.stopped and _sim.run.legs_done == 2, "(by then he has left the stop and is on the third leg)")
 	check(_sim.car.s > 100.0, "(and well into it)")
 
@@ -183,6 +227,16 @@ func test_save_01() -> void:
 	other.restore(by_hand)
 	check_near(other.cash, again.cash + 1.0, 0.001, "one cash more in the save is one cash more in his hand")
 	check(other.state_hash() != again.state_hash(), "and another state")
+	# A save that says nothing of what is owed him owes him nothing.
+	var silent: Dictionary = GameData.as_dict(read.get("telling")).duplicate(true)
+	for entry: Variant in GameData.as_array(silent.get("items")):
+		GameData.as_dict(entry).erase("lapse")
+	GameData.as_dict(silent.get("item_state")).erase("call_wait")
+	var unowed: DriveSim = DriveSim.new(fresh_data())
+	check(unowed.restore(silent), "a save with no word of a Craving or of the next call still loads")
+	check(unowed.items.item(&"cigarettes").lapse_left < 0.0, "with no Craving on its way")
+	check(_call_wait(unowed) < 0.0, "and the wait for the next call still to be drawn")
+	check(unowed.state_hash() != again.state_hash(), "(which is another state)")
 	for exact_value: float in [0.0, -0.0, 1.0 / 3.0, 44.816666666666556, 0.15277777777777773, 1.0e-300, 123456789.12345679]:
 		check_eq(Save.from_exact(Save.exact(exact_value), -1.0), exact_value, "%s survives as its bits" % str(exact_value))
 		var through: Variant = JSON.parse_string(JSON.stringify({"v": Save.exact(exact_value)}))
@@ -195,11 +249,18 @@ func test_save_01() -> void:
 	var boss_saved: Dictionary = _sim.checkpoint
 	check_eq(GameData.as_string(boss_saved.get("stage")), "boss_stop", "after a boss the game saves too")
 	check_eq(GameData.as_int(boss_saved.get("leg")), RunGenerator.LEGS_PER_ACT, "with the act's three legs behind him")
+	# What he did once in the boss, and what lasts until the next leg begins,
+	# the stop after it does not forget.
+	var boss_leg: Dictionary = GameData.as_dict(boss_saved.get("leg_state"))
+	check(GameData.as_bool(boss_leg.get("photo")), "that save holds the look at the photo he had in the boss")
+	check(GameData.as_array(boss_leg.get("held")).has("drowsy") and GameData.as_array(boss_leg.get("held")).has("phantom_mute"), "and the pill he took there")
+	check(_sim.items.photo_used and _sim.phantom_muted() and _sim.effects.has(&"drowsy"), "and so it is at the boss stop")
 	var boss_read: Dictionary = Save.from_text(Save.to_text(profile, boss_saved))
 	loaded = DriveSim.new(fresh_data())
 	check(loaded.restore(GameData.as_dict(boss_read.get("telling"))), "that save loads")
 	loaded.tick = _sim.tick
 	check_eq(loaded.run.stage, RunState.Stage.BOSS_STOP, "at the boss stop")
+	check(loaded.items.photo_used and loaded.phantom_muted() and loaded.heavy_floor() == _sim.heavy_floor(), "with the look spent and the pill at work")
 	check_eq(_offer_ids(loaded), _offer_ids(_sim), "with the same three things held out")
 	check_eq(loaded.state_hash(), _sim.state_hash(), "the same to the bit")
 	script = _what_he_does_next(_sim)
@@ -382,6 +443,25 @@ func test_replay_01() -> void:
 		replay.step(input)
 	check(replay.state_hash() != final_hash, "and one tick short is another hash")
 
+	# The hash is of everything the night still holds for him: what a stop
+	# keeps for the road is part of it, to the second.
+	var one: DriveSim = DriveSim.new(fresh_data())
+	var other: DriveSim = DriveSim.new(fresh_data())
+	one.items.item(&"cigarettes").lapse_left = 10.0
+	other.items.item(&"cigarettes").lapse_left = 10.0
+	check_eq(other.state_hash(), one.state_hash(), "(two simulations with the same Craving on its way have one hash)")
+	other.items.item(&"cigarettes").lapse_left += DT
+	check(other.state_hash() != one.state_hash(), "a Craving one tick further off is another hash")
+	other = DriveSim.new(fresh_data())
+	one = DriveSim.new(fresh_data())
+	var waits: Dictionary = other.items.telling_state()
+	waits["call_wait"] = Save.exact(10.0)
+	other.items.set_telling_state(waits)
+	check(other.state_hash() != one.state_hash(), "and so is a call that is on its way")
+	other = DriveSim.new(fresh_data())
+	other.items.photo_used = true
+	check(other.state_hash() != one.state_hash(), "and a look at the photo that is spent")
+
 
 # --- Getting there -----------------------------------------------------------
 
@@ -460,11 +540,18 @@ func _to_boss_stop() -> void:
 	_input.clear()
 	_sim.begin_telling(TABLE, 31)
 	var guard: int = 4000
+	var in_boss: bool = false
 	while not (_sim.stopped and _sim.run.stage == RunState.Stage.BOSS_STOP) and guard > 0:
 		guard -= 1
 		if _sim.stopped:
 			_leave()
 			continue
+		if _sim.run.stage == RunState.Stage.BOSS and not in_boss:
+			# In the boss: a look at the photo, and a pill for the rest of it.
+			in_boss = true
+			_sim.give_item(&"painkillers")
+			_sim.items.complete(data.record("rituals", "visor_photo"), Gesture.DIR_DOWN)
+			_sim.items.complete(data.record("rituals", "painkillers_take"), 0)
 		_sim.car.x = _sim.car.lane_center(1 if _sim.car.lanes > 1 else 0)
 		if _sim.leg.active and _sim.car.s < _sim.leg.length - 2.0:
 			_sim.car.s = _sim.leg.length - 1.0
@@ -584,6 +671,12 @@ func _offer_ids(sim: DriveSim) -> Array[String]:
 	for offer: Dictionary in offers:
 		ids.append("%s %s at %s" % [str(offer["kind"]), str(offer["id"]), str(offer["anchor"])])
 	return ids
+
+
+## The seconds until the phone rings next, as a save of this moment would
+## hold them (negative while the wait is not drawn).
+func _call_wait(sim: DriveSim) -> float:
+	return Save.from_exact(GameData.as_dict(sim.capture().get("item_state")).get("call_wait"), -1.0)
 
 
 ## Everything in the cabin, as text, in order.

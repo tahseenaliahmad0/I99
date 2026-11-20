@@ -71,6 +71,48 @@ func test_item_charm() -> void:
 	hit = _scrape_rail()
 	check_eq(GameData.as_int(hit.get("lamps")), 0, "and the charm still has its scrape")
 
+	# The leg's first scrape is its first whether or not the charm hung there:
+	# hung up after it, the charm has none to turn aside in that leg.
+	_to_quiet_leg("fuel_station")
+	hit = _scrape_rail()
+	check_eq(_sim.faults.lamps, 1, "(no charm yet: the leg's first scrape lights its lamp)")
+	_give("charm")
+	hit = _scrape_rail()
+	check(not GameData.as_bool(hit.get("spared")), "a charm hung up after the leg's first scrape does not take the next one for the first")
+	check_eq(_sim.faults.lamps, 2, "that scrape lights its lamp")
+	_into_stall()
+	_leave_stop()
+	hit = _scrape_rail()
+	check_eq(_sim.faults.lamps, 3, "nor does the leg's stop give it one: it is the same leg")
+	_into_next_quiet_leg()
+	hit = _scrape_rail()
+	check(GameData.as_bool(hit.get("spared")) and _sim.faults.lamps == 3, "on the next leg it turns the first scrape aside")
+
+	# A boss begins as a leg does: its first scrape is turned aside. The boss
+	# stop and the road to the next fork are no leg: they renew nothing.
+	_to_quiet_leg("fuel_station")
+	_give("charm")
+	_into_next_quiet_leg()
+	_into_next_quiet_leg()
+	check_eq(_sim.run.legs_done, RunGenerator.LEGS_PER_ACT - 1, "(the act's last leg)")
+	hit = _scrape_rail()
+	check(GameData.as_bool(hit.get("spared")), "(its first scrape is turned aside: the charm is spent for that leg)")
+	_drive_on_to_boss()
+	hit = _scrape_rail()
+	check(GameData.as_bool(hit.get("spared")), "in the boss that follows the first scrape is turned aside again")
+	hit = _scrape_rail()
+	check_eq(_sim.faults.lamps, 1, "and the second lights its lamp")
+	_drive_on_to_boss_stop()
+	_leave_stop()
+	check_eq(_sim.run.stage, RunState.Stage.APPROACH, "(after the boss stop: the road to the next act's first fork)")
+	hit = _scrape_rail()
+	check(not GameData.as_bool(hit.get("spared")), "the boss stop and the road to the fork do not renew the charm")
+	check_eq(_sim.faults.lamps, 2, "a scrape there lights its lamp")
+	_into_next_quiet_leg()
+	check_eq(_sim.run.act, 2, "(past the gore, on the first leg of Act 2)")
+	hit = _scrape_rail()
+	check(GameData.as_bool(hit.get("spared")) and _sim.faults.lamps == 2, "the leg that begins there does")
+
 
 # --- T-ITEM-AIR-FRESHENER ----------------------------------------------------
 
@@ -252,9 +294,49 @@ func test_item_duct_tape() -> void:
 	_give("duct_tape")
 	_scrape_rail()
 	check_eq(_sim.faults.lamps, 1, "(a scrape just before the Exit)")
+	var held: StringName = _sim.faults.active[0]
+	_events = []
 	_into_stall()
 	check_eq(_sim.faults.lamps, 0, "a fault the tape is holding is repaired by the time he stands at a stop")
 	check(not GameData.as_bool(_event("stop_entered").get("shady")), "(the leg was not a clean one all the same)")
+	# What the stop mends it says, as a mend on the road is said.
+	check_eq(_count_events("fault_repaired", "fault", String(held)), 1, "the mend the stop brings is announced, once")
+	mended = _event("fault_repaired")
+	check_eq(GameData.as_string(mended.get("by")), "duct_tape", "as the tape's")
+	check_near(GameData.as_float(mended.get("price")), 0.0, 0.000001, "for nothing")
+	check_eq(GameData.as_int(mended.get("lamps")), 0, "with the lamps it leaves lit")
+	check(_events.find(mended) < _events.find(_event("stop_entered")), "before the stop itself is")
+
+	# The same at the stop that follows a boss.
+	_to_quiet_leg("fuel_station")
+	_give("duct_tape")
+	_drive_on_to_boss()
+	_scrape_rail()
+	check_eq(_sim.faults.lamps, 1, "(a scrape in the boss, the act's first fault)")
+	held = _sim.faults.active[0]
+	_events = []
+	_drive_on_to_boss_stop()
+	check_eq(_sim.faults.lamps, 0, "the fault the tape holds is mended at the boss stop too")
+	check_eq(_count_events("fault_repaired", "fault", String(held)), 1, "and that is announced")
+
+	# The act's first fault is its first whether or not the tape was aboard:
+	# put on the dash after it, the tape holds none of that act's faults.
+	_to_quiet_leg("fuel_station")
+	_scrape_rail()
+	check_eq(_sim.faults.lamps, 1, "(no tape yet: the act's first fault is lit and stays)")
+	_give("duct_tape")
+	_scrape_rail()
+	check_eq(_sim.faults.lamps, 2, "(a second fault, with the tape aboard)")
+	_run(after + 0.5)
+	check_eq(_sim.faults.lamps, 2, "tape put aboard after the act's first fault does not take the next one for the first")
+	_into_stall()
+	check_eq(_sim.faults.lamps, 2, "nor does a stop mend what the tape never held")
+	_drive_on_to_act(2)
+	_into_next_quiet_leg()
+	_scrape_rail()
+	check_eq(_sim.faults.lamps, 3, "(a scrape in Act 2)")
+	_run(after + 0.5)
+	check_eq(_sim.faults.lamps, 2, "the next act's first fault it does hold: that one repairs itself")
 
 
 # --- T-ITEM-LUCKY-NOTE -------------------------------------------------------

@@ -38,6 +38,8 @@ func test_stop_01() -> void:
 	_check_hitcher()
 	_check_shady_guy()
 	_check_boss_stop()
+	_check_only_the_shopping()
+	_check_snap_at_a_stop()
 	_check_rarity()
 
 
@@ -432,6 +434,206 @@ func _check_boss_stop() -> void:
 		_leave()
 		check_eq(_sim.run.stage, RunState.Stage.APPROACH, "gripping the wheel leaves for the next act's first fork")
 		check_eq(_sim.run.act, 2, "in Act 2")
+
+
+# --- Only the shopping -------------------------------------------------------
+
+## The cabin's own rituals, in the order _work_the_cabin tries them.
+const CABIN_RITUALS: Array = ["horn", "slap", "beads_count", "cig_light", "tea_sip", "visor_photo", "radio_tune"]
+
+
+## At a stop the hand does the shopping and nothing else (GDD 9.6). The
+## cabin's own rituals are the road's: done at the stall they would be calm
+## and power for no time off the wheel (GDD 2.2, 12.4). They are not offered
+## there, and their anchors are not in use.
+func _check_only_the_shopping() -> void:
+	_to_quiet_leg("fuel_station")
+	_scrape()
+	_sim.items.add_item(&"beads", &"mirror")
+	_sim.items.add_item(&"thumb_keypad", &"bay_1")
+	# On the road the cabin is his: the hand does every one of these.
+	_sim.nerves.set_value(40.0)
+	var road: Dictionary = _work_the_cabin()
+	check_eq(GameData.as_array(road["rituals"]), CABIN_RITUALS, "(on the road the hand does all of it: the horn, a slap, a bead, a cigarette, a sip, the photo, the dial)")
+	check(GameData.as_bool(road["lever"]), "(takes the gear lever)")
+	check(GameData.as_bool(road["keypad"]), "(and honks with the thumb of the hand that grips)")
+	check(_sim.effects.has(&"lit") and _sim.items.radio != ItemSim.STATIC, "(so that a cigarette burns and the radio plays)")
+
+	_into_stall()
+	var tray: Array[String] = []
+	for offer: Dictionary in _offers():
+		tray.append(GameData.as_string(offer["anchor"]))
+	var in_use: Array[String] = []
+	for anchor: Variant in GameData.as_array(_sim.snapshot()["anchors_in_use"]):
+		in_use.append(str(anchor))
+	tray.sort()
+	in_use.sort()
+	check(not tray.is_empty(), "(the vendor's tray is laid out)")
+	check_eq(in_use, tray, "at a stop the hand has the vendor's tray to go to, and nothing of the cabin's")
+	_sim.nerves.set_value(60.0)
+	var before: Array = _cabin_state()
+	var stall: Dictionary = _work_the_cabin()
+	check_eq(GameData.as_array(stall["rituals"]), [], "at a stop none of the cabin's rituals is offered: not the horn, a slap, a bead, a cigarette, a sip, the photo or the dial")
+	check(not GameData.as_bool(stall["lever"]), "the gear lever is not taken")
+	check(not GameData.as_bool(stall["keypad"]), "and the thumb keypad does not honk")
+	check_eq(_cabin_state(), before, "nothing in the cabin has changed: his Nerves, the pack, the glass, the radio, his statuses, the gear")
+	check(_sim.stopped, "(he is still at the stop)")
+	# The shopping itself is his as ever.
+	var restock: Dictionary = _of_kind(_offers(), StopSim.RESTOCK)[0]
+	_sim.cash = 50.0
+	_tap(GameData.as_string(restock["anchor"]))
+	check_near(_sim.cash, 50.0 - GameData.as_float(restock["price"]), 0.000001, "the tray is: a TAP still buys")
+	# And on the road again, so is the cabin.
+	_leave()
+	check(not _sim.stopped, "(he leaves)")
+	check(GameData.as_array(_sim.snapshot()["anchors_in_use"]).has(&"horn"), "back on the road the cabin is his again")
+	_events = []
+	_press_at("horn", tuning.f("tap_max_time") * 0.3)
+	_press_at("mirror", tuning.f("tap_max_time") * 0.3)
+	check_eq(_rituals_completed(), ["horn", "beads_count"], "and the hand does there what it could not at the stall")
+
+
+## A Snap's two seconds are the hand's own, not the night's (GDD 6.1): at a
+## stop, where nothing else of him moves on, they still run down, and then
+## the tray is his to reach.
+func _check_snap_at_a_stop() -> void:
+	var snap_ticks: int = roundi(tuning.f("snap_duration") / DT)
+	# On the road.
+	_to_quiet_leg("fuel_station")
+	_scrape()
+	_sim.nerves.add(tuning.f("snap_at"))
+	check(_sim.nerves.snap_left > 0.0, "(Nerves at the top: a Snap)")
+	check_eq(_ticks_until_snap_ends(), snap_ticks, "(on the road a Snap lasts snap_duration)")
+	# At a stop.
+	_into_stall()
+	var offer: Dictionary = _of_kind(_offers(), StopSim.ITEM)[0]
+	var price: float = offer["price"]
+	_sim.cash = price + 5.0
+	_sim.nerves.add(tuning.f("snap_at"))
+	check(_sim.nerves.snap_left > 0.0, "(a Snap at the stop)")
+	# While it lasts he cannot reach the tray.
+	_input.clear()
+	_input.pointer_is_absolute = true
+	_input.pointer = _sim.hand.anchor_pointer(_sim.hand.anchor_index(StringName(GameData.as_string(offer["anchor"]))))
+	var tried: int = snap_ticks - roundi(0.5 / DT)
+	for tick: int in tried:
+		_input.lmb = tick % 30 < 4
+		_sim.step(_input)
+	_input.lmb = false
+	check(GameData.as_bool(_sim.snapshot()["snap"]), "(half a second short of snap_duration the Snap is still on)")
+	check_eq(_sim.hand.snap_index, HandSim.NO_ANCHOR, "in a Snap at a stop the pointer snaps to nothing")
+	check_near(_sim.cash, price + 5.0, 0.000001, "and his clicks at the tray buy nothing")
+	check_eq(tried + _ticks_until_snap_ends(), snap_ticks, "the Snap runs down at a stop as on the road: after snap_duration it is over")
+	check(_sim.stopped, "(he is still at the stop)")
+	_tap(GameData.as_string(offer["anchor"]))
+	check_near(_sim.cash, 5.0, 0.000001, "and the tray is his again: a TAP buys")
+
+
+## Everything the cabin offers him on the road, tried once by the hand: the
+## horn, a slap, a bead, a cigarette lit, a sip of tea, the photo, the
+## radio's dial; then the gear lever, and the horn under the thumb of the
+## hand that grips (the thumb keypad). Returns the rituals that were
+## completed ("rituals"), whether the lever was in his hand ("lever") and
+## whether the keypad honked ("keypad").
+func _work_the_cabin() -> Dictionary:
+	_collect()
+	_events = []
+	var tap: float = tuning.f("tap_max_time") * 0.3
+	var flick: float = tuning.f("flick_max_time") * 0.4
+	var flick_ticks: float = float(roundi(flick / DT))
+	_press_at("horn", tap)
+	_press_at("face", tap)
+	_press_at("mirror", tap)
+	_press_at("ashtray", GameData.as_float(data.record("rituals", "cig_light").get("hold_s")) + 0.1)
+	_press_at("cup_a", GameData.as_float(data.record("rituals", "tea_sip").get("hold_s")) + 0.1)
+	_press_at("visor", flick, Vector2(0.0, tuning.f("flick_min_distance") * 1.5 / flick_ticks))
+	_press_at("radio", flick, Vector2(tuning.f("radio_step_px") * 1.5 / flick_ticks, 0.0))
+	var rituals: Array = _rituals_completed()
+	# The gear lever: taken in hand, and let go where it is.
+	_input.clear()
+	_input.pointer_is_absolute = true
+	_input.pointer = _sim.hand.anchor_pointer(_sim.hand.anchor_index(DriveSim.GEAR_LEVER))
+	_steps(1.0)
+	_input.lmb = true
+	_steps(0.1)
+	var lever: bool = GameData.as_bool(_sim.snapshot()["lever_held"])
+	_input.clear()
+	_steps(0.3)
+	# The thumb keypad: the wheel taken (for less than it takes to leave a
+	# stop) and the horn pressed under the thumb.
+	_events = []
+	_input.pointer_is_absolute = true
+	_input.pointer = _sim.space.point_to_pointer(_sim.space.grip_reference)
+	_input.lmb = true
+	var guard: int = int(2.0 / DT)
+	while not _sim.hand.gripping and guard > 0:
+		guard -= 1
+		_steps(DT)
+	_input.pad_horn = true
+	_steps(3.0 * DT)
+	_input.clear()
+	_steps(0.3)
+	var keypad: bool = false
+	for event: Dictionary in _events:
+		if GameData.as_string(event.get("type")) == "ritual_completed" and GameData.as_bool(event.get("keypad")):
+			keypad = true
+	return {"rituals": rituals, "lever": lever, "keypad": keypad}
+
+
+## The rituals announced as completed since _events was last emptied, in order.
+func _rituals_completed() -> Array:
+	var rituals: Array = []
+	for event: Dictionary in _events:
+		if GameData.as_string(event.get("type")) == "ritual_completed":
+			rituals.append(GameData.as_string(event.get("ritual")))
+	return rituals
+
+
+## What the cabin's rituals would change, read off the simulation.
+func _cabin_state() -> Array:
+	return [
+		_sim.nerves.value, _sim.items.item(&"cigarettes").supply, _sim.items.item(&"tea_glass").supply,
+		String(_sim.items.radio), _sim.effects.active_ids().size(), _sim.items.photo_used, _sim.gate.gear,
+		_sim.items.haze, _sim.clock.minutes, _sim.cash,
+	]
+
+
+## The hand goes to an anchor, if it may, and the button is held there for
+## `seconds` while the pointer moves `motion` a tick; then it is let go.
+func _press_at(anchor: String, seconds: float, motion: Vector2 = Vector2.ZERO) -> void:
+	_input.clear()
+	_input.pointer_is_absolute = true
+	_input.pointer = _sim.hand.anchor_pointer(_sim.hand.anchor_index(StringName(anchor)))
+	_steps(1.0)
+	_input.lmb = true
+	if motion != Vector2.ZERO:
+		_input.pointer_is_absolute = false
+		_input.pointer_delta = motion
+	_steps(seconds)
+	_input.clear()
+	_steps(0.3)
+
+
+## Steps for `seconds`; on the road the car is kept in the middle of its lane.
+func _steps(seconds: float) -> void:
+	for _tick: int in roundi(seconds / DT):
+		if not _sim.stopped:
+			_sim.car.x = _sim.car.lane_center(clampi(_sim.car.lane_of(_sim.car.x), 0, _sim.car.lanes - 1))
+		_sim.step(_input)
+	_collect()
+
+
+## Ticks until the Snap he is in is over (the snapshot says so).
+func _ticks_until_snap_ends() -> int:
+	var ticks: int = 0
+	_input.clear()
+	while GameData.as_bool(_sim.snapshot()["snap"]) and ticks < int(10.0 / DT):
+		ticks += 1
+		if not _sim.stopped:
+			_sim.car.x = _sim.car.lane_center(clampi(_sim.car.lane_of(_sim.car.x), 0, _sim.car.lanes - 1))
+		_sim.step(_input)
+	_collect()
+	return ticks
 
 
 # --- Rarity ------------------------------------------------------------------
