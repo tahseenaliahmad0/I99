@@ -57,6 +57,21 @@ func test_syn_tea_cigarettes() -> void:
 	_run(burn + longer + 1.0)
 	check_near(_sim.nerves.value, 90.0 + _give_amount("cigarettes", "nerves") + _give_amount("tea_glass", "nerves", "hot"), 0.01, "the longer burn calms no more than a cigarette does")
 
+	# It is the tea that does it: a bead counted or a sip from a can while one
+	# burns lengthens nothing.
+	_new_sim()
+	_give("beads")
+	_give("energy_drink")
+	_hold_at("ashtray", light_s)
+	_flick(Vector2(0.0, tuning.f("flick_min_distance") * 1.5))
+	before = _sim.effects.time_left(&"lit")
+	var from_tick: int = _sim.tick
+	_tap_at("mirror")
+	_hold_at(_anchor_of("energy_drink"), GameData.as_float(_ritual("energy_drink_sip").get("hold_s")))
+	check(_count_events("ritual_completed", "ritual", "beads_count") == 1 and _count_events("ritual_completed", "ritual", "energy_drink_sip") == 1,
+			"(a bead counted and a can drunk while the cigarette burns)")
+	check_near(_sim.effects.time_left(&"lit"), before - float(_sim.tick - from_tick) * DT, 0.000001, "neither adds a second to the burn: only a sip of tea does")
+
 
 ## T-SYN-CIGARETTES-FRESHENER: Cigarettes + Air freshener (7.8): no Haze
 ## from smoke.
@@ -259,6 +274,27 @@ func test_syn_flask_painkillers() -> void:
 	check_eq(_sim.courage(), 3, "(three stacks and a pill)")
 	check_near(_sim.wheel.lag, tuning.f("lag_cap") * 0.001, 0.000001, "the Lag stops at its cap: 200 ms")
 
+	# The doubled Lag is the car's, not only the wheel's read-out (GDD 5.3: the
+	# wheel angle that moves the car is delayed by Lag). To one pull of the
+	# wheel the car answers 40 ms late with one stack, 80 ms late when a pill
+	# works as well, never later than the cap, and at once on the pills alone.
+	_new_sim()
+	var plain: PackedFloat64Array = _answer_to_a_pull(100.0, 60)
+	check(absf(plain[0]) > 0.001, "(sober and without a pill, the car answers a pull of the wheel in the same tick)")
+	var sips: PackedInt32Array = [1, 1, 3, 0]
+	var pills: PackedInt32Array = [0, 1, 1, 1]
+	var late: PackedFloat64Array = [lag, lag * double, tuning.f("lag_cap") * 0.001, 0.0]
+	for index: int in sips.size():
+		_new_sim()
+		_give("arak_flask")
+		_give("painkillers")
+		for _sip: int in sips[index]:
+			_hold_at(cup, sip_s)
+		for _pill: int in pills[index]:
+			_hold_at("face", pill_s)
+		check(_sim.courage() == sips[index] and _sim.effects.has(&"painkillers") == (pills[index] > 0), "(%d stack(s), %d pill(s) working)" % [sips[index], pills[index]])
+		_check_answer_lags(_answer_to_a_pull(100.0, 60), plain, late[index], "with %d stack(s) and %d pill(s)" % [sips[index], pills[index]])
+
 
 ## T-SYN-PHONE-TAXI-SIGN: Phone + Taxi sign (7.8): three calls answered in a
 ## row pay a 20 cash bonus.
@@ -323,6 +359,50 @@ func test_syn_phone_taxi_sign() -> void:
 		for _index: int in taps:
 			_tap()
 		check_near(_sim.cash - cash, pay, 0.000001, "without the sign call %d pays 10 and no more" % (call + 1))
+
+	# Every third call answered in a row pays the bonus, not only the first
+	# third: six in a row pay it twice, Um Noor's call (which pays no cash)
+	# counting as one of the row.
+	var family_every: int = GameData.as_int(params.get("family_every"))
+	check(family_every > every and family_every < 2 * every, "(her call comes between the third and the sixth)")
+	_new_sim()
+	_give("phone")
+	_give("taxi_sign")
+	_reach(_anchor_of("phone"))
+	for call: int in 2 * every:
+		if not check(_await_ring(), "(call %d)" % (call + 1)):
+			break
+		var cash: float = _sim.cash
+		for _index: int in taps:
+			_tap()
+		var hers: bool = (call + 1) % family_every == 0
+		var due: float = (0.0 if hers else pay + sign_pay) + (bonus if (call + 1) % every == 0 else 0.0)
+		check_near(_sim.cash - cash, due, 0.000001, "of six calls answered in a row, call %d pays %s" % [call + 1, str(due)])
+	check_eq(_sim.items.answered_run, 2 * every, "(six in a row)")
+
+	# The row passes through a stop (D-042): two answered on a leg, its stop,
+	# and the next one answered after it is the third in a row.
+	_to_quiet_leg("fuel_station")
+	_give("phone")
+	_give("taxi_sign")
+	_reach(_anchor_of("phone"))
+	# (His foot on the brake: he stands on the road, where the night goes on.)
+	_input.rmb = true
+	for call: int in every - 1:
+		if check(_await_ring(), "(call %d, on the leg)" % (call + 1)):
+			var cash: float = _sim.cash
+			for _index: int in taps:
+				_tap()
+			check_near(_sim.cash - cash, pay + sign_pay, 0.000001, "(answered: its pay)")
+	_into_stall()
+	_leave_stop()
+	_reach(_anchor_of("phone"))
+	_input.rmb = true
+	if check(_await_ring(), "(a call after the stop)"):
+		var cash: float = _sim.cash
+		for _index: int in taps:
+			_tap()
+		check_near(_sim.cash - cash, pay + sign_pay + bonus, 0.000001, "the third answered in a row pays the bonus though a stop lies between it and the second")
 
 
 ## T-SYN-SEEDS-TEA: Seeds + Tea (7.8): the tea does not go cold while he

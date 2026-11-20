@@ -113,6 +113,84 @@ func test_item_charm() -> void:
 	hit = _scrape_rail()
 	check(GameData.as_bool(hit.get("spared")) and _sim.faults.lamps == 2, "the leg that begins there does")
 
+	# A scrape is a scrape whatever he touches (GDD 5.6): a vehicle at 30 km/h
+	# closing or less, the tailgater's ram, the median barrier. The charm
+	# turns the first one aside as it does the guardrail's.
+	for hung: bool in [false, true]:
+		var with: String = "with the charm" if hung else "without the charm"
+		# A car in his lane, half of scrape_max_closing slower than he is.
+		_new_sim()
+		if hung:
+			_give("charm")
+		_cruise(3, 1)
+		var slow: TrafficSim.Vehicle = _sim.traffic.spawn(&"car", 1, _sim.car.s + 15.0, tuning.fi("gear_speeds", 2) - tuning.f("scrape_max_closing") * 0.5)
+		_events = []
+		guard = _ticks_in(20.0)
+		while _event("hit").is_empty() and guard > 0:
+			guard -= 1
+			_tick()
+		hit = _event("hit")
+		check_eq(GameData.as_int(hit.get("kind")), Collision.Hit.SCRAPE, "(a slower car in his lane, touched at less than scrape_max_closing: a scrape)")
+		check_eq(GameData.as_int(hit.get("vehicle")), slow.id, "(against that car, not the rail)")
+		check_eq(GameData.as_bool(hit.get("spared")), hung, "%s the first scrape, against a vehicle, is %s" % [with, "turned aside" if hung else "not turned aside"])
+		check_eq(_sim.faults.lamps, 0 if hung else 1, "%s it lights %s" % [with, "no lamp" if hung else "its lamp"])
+		# The tailgater's ram: he brakes with a driver on his bumper.
+		_begin_quiet_leg("tailgater", 2, 71)
+		if hung:
+			_give("charm")
+		guard = _ticks_in(60.0)
+		while _sim.encounter.tail_phase != EncounterSim.TAIL_ON_BUMPER and guard > 0:
+			guard -= 1
+			_tick()
+		_run(1.0)
+		_events = []
+		_input.rmb = true
+		guard = _ticks_in(2.0)
+		while _event("hit").is_empty() and guard > 0:
+			guard -= 1
+			_tick()
+		_input.clear()
+		hit = _event("hit")
+		check_eq(GameData.as_int(hit.get("kind")), Collision.Hit.SCRAPE, "(he brakes with a tailgater on his bumper: rammed, a scrape)")
+		check(GameData.as_int(hit.get("vehicle")) != 0, "(by a vehicle)")
+		check_eq(GameData.as_bool(hit.get("spared")), hung, "%s the tailgater's ram is %s" % [with, "turned aside" if hung else "not turned aside"])
+		check_eq(_sim.faults.lamps, 0 if hung else 1, "%s it lights %s" % [with, "no lamp" if hung else "its lamp"])
+		# The median barrier.
+		_new_sim()
+		if hung:
+			_give("charm")
+		_cruise(3, 0)
+		_events = []
+		_keep_lane = false
+		guard = _ticks_in(5.0)
+		while _event("hit").is_empty() and guard > 0:
+			guard -= 1
+			_sim.car.x = _sim.car.left_limit_x()
+			_tick()
+		_keep_lane = true
+		hit = _event("hit")
+		check(GameData.as_int(hit.get("kind")) == Collision.Hit.SCRAPE and GameData.as_int(hit.get("vehicle")) == 0, "(the median barrier: a scrape)")
+		check_eq(GameData.as_bool(hit.get("spared")), hung, "%s a scrape along the median barrier is %s" % [with, "turned aside" if hung else "not turned aside"])
+		check_eq(_sim.faults.lamps, 0 if hung else 1, "%s it lights %s" % [with, "no lamp" if hung else "its lamp"])
+
+	# One thing hangs at the mirror (GDD 7.1). Hung where the beads hung, the
+	# charm takes their place; and when the air freshener is hung in its
+	# place the charm is gone, with what it did.
+	_new_sim()
+	_give("beads")
+	_give("charm")
+	check(_item("beads") == null and _anchor_of("charm") == "mirror", "hung at the mirror, the charm takes the place of the beads that hung there")
+	_sim.nerves.set_value(60.0)
+	_tap_at("mirror")
+	check_eq(_count_events("ritual_completed", "ritual", "beads_count"), 0, "there are no beads there to count any more")
+	check_near(_sim.nerves.value, 60.0, 0.000001, "(a tap at the mirror calms nothing)")
+	_cruise(3, 1)
+	_give("air_freshener")
+	check(_item("charm") == null and _anchor_of("air_freshener") == "mirror", "the air freshener hung in its place takes the charm down")
+	hit = _scrape_rail()
+	check(not GameData.as_bool(hit.get("spared")), "and with the charm gone the first scrape is not turned aside")
+	check_eq(_sim.faults.lamps, 1, "it lights its lamp")
+
 
 # --- T-ITEM-AIR-FRESHENER ----------------------------------------------------
 
@@ -338,6 +416,34 @@ func test_item_duct_tape() -> void:
 	_run(after + 0.5)
 	check_eq(_sim.faults.lamps, 2, "the next act's first fault it does hold: that one repairs itself")
 
+	# Each act, not each leg: once the act's first fault has repaired itself,
+	# the first fault of each later leg of that act stays, and so does the
+	# first fault of the act's boss. No stop lies between.
+	_to_quiet_leg("fuel_station")
+	_give("duct_tape")
+	_scrape_rail()
+	_run(after + 0.5)
+	check_eq(_sim.faults.lamps, 0, "(the act's first fault, on its first leg, has repaired itself)")
+	lamps = 0
+	for leg: int in range(1, RunGenerator.LEGS_PER_ACT):
+		_into_next_quiet_leg()
+		check(_sim.run.act == 1 and _sim.run.legs_done == leg, "(leg %d of the same act, with no stop since the mend)" % (leg + 1))
+		_scrape_rail()
+		lamps += 1
+		check_eq(_sim.faults.lamps, lamps, "(a scrape on it: a lamp)")
+		_run(after + 0.5)
+		check_eq(_sim.faults.lamps, lamps, "the first fault of leg %d stays lit: the tape holds the act's first fault, not each leg's" % (leg + 1))
+	_drive_on_to_boss()
+	check_eq(_sim.run.act, 1, "(the boss of the same act)")
+	_scrape_rail()
+	lamps += 1
+	check_eq(_sim.faults.lamps, lamps, "(a scrape in the boss: a lamp)")
+	# (His foot on the brake: the boss's road waits, the night does not.)
+	_input.rmb = true
+	_run(after + 0.5)
+	_input.clear()
+	check_eq(_sim.faults.lamps, lamps, "nor is the act's boss a new act: its first fault stays lit")
+
 
 # --- T-ITEM-LUCKY-NOTE -------------------------------------------------------
 
@@ -390,6 +496,41 @@ func test_item_lucky_note() -> void:
 	cash = _sim.cash
 	_pass_closely("truck", tuning.f("close_call_min_closing") + 10.0)
 	check_near(_sim.cash - cash, base, 0.000001, "without the note again: just the 2")
+
+	# Flat against Courage too: three stacks pay the close call two and a half
+	# times over, and the note still 1. (The note is put on the dash with the
+	# Courage already in him.)
+	var courage: Dictionary = data.record("effects", "courage")
+	var stacks: int = GameData.as_int(courage.get("max_stacks"))
+	var cash_up: float = GameData.as_float(courage.get("close_call_cash_per_stack"))
+	_new_sim()
+	_give("arak_flask")
+	for _sip: int in stacks:
+		_hold_at(_anchor_of("arak_flask"), GameData.as_float(_ritual("flask_sip").get("hold_s")))
+	check_eq(_sim.courage(), stacks, "(3 stacks of Courage)")
+	_give("lucky_note")
+	_run(tuning.f("chain_window") + 0.5)
+	cash = _sim.cash
+	_pass_closely("truck", tuning.f("close_call_min_closing") + 10.0)
+	check_eq(_sim.courage(), stacks, "(still 3 stacks at the pass)")
+	check_near(GameData.as_float(_event("close_call").get("mult")), 1.0, 0.000001, "(no chain)")
+	check(cash_up * float(stacks) > 0.0, "(Courage pays close calls better)")
+	check_near(_sim.cash - cash, base * (1.0 + cash_up * float(stacks)) + bonus, 0.000001, "Courage multiplies the close call, not the note's 1")
+	check_near(GameData.as_float(_event("close_call").get("cash")), base * (1.0 + cash_up * float(stacks)) + bonus, 0.000001, "(as the event says)")
+
+	# One note is one note: given him when he has one (and the other place on
+	# the dash is free), it takes the place of the one he has.
+	_new_sim()
+	_give("lucky_note")
+	_give("lucky_note")
+	var notes: int = 0
+	for owned: ItemSim.Item in _sim.items.items:
+		if owned.id == &"lucky_note":
+			notes += 1
+	check_eq(notes, 1, "a note given him when he has one takes that one's place: he has one")
+	cash = _sim.cash
+	_pass_closely("truck", tuning.f("close_call_min_closing") + 10.0)
+	check_near(_sim.cash - cash, base + bonus, 0.000001, "and a close call pays its 1, not 2")
 
 
 # --- T-ITEM-SUNGLASSES -------------------------------------------------------
