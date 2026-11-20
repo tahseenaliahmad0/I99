@@ -1438,3 +1438,38 @@ three additions made while building:
   T-RUN-01 through the queue, the window and the papers. A car set down
   beyond the bar by a test is not held by it (only crossing it is), so the
   suites that jump a Telling forward keep working.
+
+## D-049 (M6 review, 2026-11-20) Rulings on the findings of the items review
+
+The review `m6-items-review` (four lenses, 49 findings with overlaps, in
+`wip/m6_review_findings.json`) asked for these decisions. They are being
+built by the workflow `m6-fixes`; this entry is what that work is held to.
+
+- **At a stop and while pulled over the hand does only what the stop or the
+  officer is there for:** the vendor's tray, placing what he bought, and
+  gripping the wheel to leave; his licence or banknotes for the officer.
+  The cabin's own rituals are not offered there. (The review's "owner's
+  call": beads gave unlimited calm at a two-minute stop, and a cigarette,
+  three sips and a pill could be loaded at the stall to start whole on the
+  road. GDD 2.2 pillars 1 and 3, 12.4 rule 3; 9.6: "the hand does the
+  shopping".)
+- **Pulled over, the night waits as at a stop:** no timer runs, no call
+  rings, Nerves keep still. A Snap's two seconds are the hand's time and
+  are counted down at a stop and with the officer.
+- **"Once per leg"** (the photo, the charm's first scrape, statuses held for
+  the leg) renews when a leg begins and when a boss begins, nowhere else;
+  every save keeps it.
+- **A stop cancels nothing that is owed:** the craving and the wait for the
+  next call keep their seconds through it.
+- **Firsts are firsts** whether or not the keepsake is aboard yet (the
+  charm's scrape of the leg, the tape's fault of the act).
+- **What a stop ends is announced** before the simulation is rebuilt there.
+- **A ritual's requirements are checked again when its gesture completes.**
+- **A carried thing's destination comes before another anchor at the same
+  place** (the tape deck before the radio's dial).
+- **A gust lasts its second of road time** (Focus stretches it with the road).
+- **The cigarette's calm ends on a whole tick.** The order in which a status
+  is counted down and read within a tick stays (on for exactly its ticks
+  from the tick it is added; what reads it late in that last tick misses
+  it: 0.03% of a 25 s status).
+- **After a Wreck there is no saved Telling** to continue.
