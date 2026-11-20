@@ -498,6 +498,42 @@ func _drive_on_to_act(act: int) -> void:
 	check_eq(_sim.run.act, act, "(act %d)" % act)
 
 
+## Drives the Telling on, each stretch to its end at once and through every
+## stop, until the boss of the act he is in has begun.
+func _drive_on_to_boss() -> void:
+	var guard: int = 40000
+	_input.clear()
+	while _sim.run.stage != RunState.Stage.BOSS and guard > 0:
+		guard -= 1
+		if _sim.stopped:
+			_leave_stop()
+			continue
+		_sim.car.x = _sim.car.lane_center(1 if _sim.car.lanes > 1 else 0)
+		if _sim.leg.active and _sim.car.s < _sim.leg.length - 2.0:
+			_sim.car.s = _sim.leg.length - 1.0
+		_sim.step(_input)
+	for event: Dictionary in _sim.drain_events():
+		_events.append(event)
+	check_eq(_sim.run.stage, RunState.Stage.BOSS, "(the act's boss)")
+	_sim.in_encounter = true
+
+
+## From inside a boss to the stop at its end: its road is driven to the end
+## at once.
+func _drive_on_to_boss_stop() -> void:
+	var guard: int = 4000
+	_input.clear()
+	while not _sim.stopped and guard > 0:
+		guard -= 1
+		_sim.car.x = _sim.car.lane_center(1 if _sim.car.lanes > 1 else 0)
+		if _sim.leg.active and _sim.car.s < _sim.leg.length - 2.0:
+			_sim.car.s = _sim.leg.length - 1.0
+		_sim.step(_input)
+	for event: Dictionary in _sim.drain_events():
+		_events.append(event)
+	check(_sim.stopped and _sim.run.stage == RunState.Stage.BOSS_STOP, "(the boss stop)")
+
+
 ## Drives on past the next fork into the leg behind it (the right branch),
 ## with nothing on that leg's road.
 func _into_next_quiet_leg() -> void:

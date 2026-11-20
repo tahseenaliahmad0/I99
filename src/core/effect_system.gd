@@ -8,8 +8,9 @@ extends RefCounted
 ## ("while lit", "while tuned to the news"). Stacks are separate timers: each
 ## Courage sip lasts its own 45 s.
 
-## Statuses that began or ended since begin_tick(); DriveSim turns them into
-## effect_added and effect_expired events.
+## Statuses that began or ended since begin_tick() and are not yet announced:
+## DriveSim turns them into effect_added and effect_expired events and
+## empties the lists as it does, so that each change is said once.
 var added: Array[StringName] = []
 var expired: Array[StringName] = []
 
