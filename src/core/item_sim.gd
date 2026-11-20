@@ -1242,6 +1242,7 @@ func _ring(handset: Item) -> void:
 	events.append({"type": "sfx_requested", "id": "phone_ring"})
 	if answered_for_him:
 		# His passenger picks it up: what the call gives, without his hand.
+		taken_for_him = caller
 		_answer(handset, true)
 
 
@@ -1273,8 +1274,6 @@ func _answer(handset: Item, for_him: bool) -> void:
 		paid += GameData.as_float(in_a_row.get("amount"))
 	cash_delta += paid
 	events.append({"type": "call_resolved", "caller": String(caller), "answered": true, "cash": paid, "nerves": calmed, "in_a_row": answered_run, "for_him": for_him})
-	if for_him:
-		taken_for_him = caller
 	_hang_up()
 
 

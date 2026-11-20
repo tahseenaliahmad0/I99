@@ -965,6 +965,18 @@ func _check_a_snap_wakes_him() -> void:
 	_ask()
 	check(_item("cigarettes").burning, "woken by the Snap, the first tap on his shoulder is a cigarette")
 	check_eq(_count_events("line_requested", "id", "passenger.conscript.wake"), 0, "(not a second waking)")
+	# A Snap that a missed Exit brings is reported after the leg's progress:
+	# the horn wakes him then too, and what he says is said in that tick.
+	_to_quiet_leg("fuel_station")
+	check(_sim.board("conscript"), "(he rides along in a Telling)")
+	_sim.nerves.set_value(tuning.f("snap_at") - tuning.f("missed_exit_nerves") * 0.5)
+	_sim.car.s = _sim.leg.length - tuning.f("leg_tail") + tuning.f("exit_slip_length") - 2.0
+	_events = []
+	_ticks(_ticks_in(0.5))
+	check(not _sim.stopped and _count_events("snap") == 1, "(he drives past the stall: the missed Exit's Nerves are a Snap)")
+	check(not GameData.as_bool(_shot("passenger_asleep")), "that Snap's horn wakes him as well")
+	check_eq(_count_events("line_requested", "id", "passenger.conscript.wake"), 1, "and what he says to it is heard")
+
 	# With an officer at his window the night waits for the soldier too. A
 	# Snap can still begin there: the weather cramp is the hand's and runs on
 	# (D-055), and its Nerves can be the last. That Snap wakes nobody.
@@ -1180,6 +1192,19 @@ func _check_one_music() -> void:
 	check_near(_music_calm(true, false, true, false) - silent, tape, 0.01, "beside a tape the drum is no second music: the stronger of the two, not their sum")
 	check_near(_music_calm(false, false, true, true) - silent, tape * open, 0.01, "(the tape through an open window is %.2f)" % (tape * open))
 	check_near(_music_calm(true, false, true, true) - silent, minf(tape * open, music), 0.01, "the tape through an open window and his drum: one music still, the stronger")
+	# A tape that warbles is no music (GDD 7.4): beside it the drum is the
+	# music, whole, and the warble frays as it does without him.
+	var side: float = GameData.as_float(_params("mixtape").get("side_s"))
+	var warble: Array[float] = []
+	for drums: bool in [false, true]:
+		_on_the_road("drummer" if drums else "")
+		_give("mixtape")
+		_ticks(_ticks_in(side) + 2)
+		check(_sim.items.warbling(_item("mixtape")), "(a tape left unflipped past its side warbles)")
+		_sim.nerves.set_value(60.0)
+		warble.append(_nerves_over(4.0) / 4.0 - silent)
+	check(warble[0] > 0.0, "(a warbling tape frays: %.2f Nerves a second)" % warble[0])
+	check_near(warble[1] - warble[0], music, 0.01, "beside a tape that warbles his drum calms as a drum does: the warble is not music")
 
 
 # --- T-PASS-STUDENT ----------------------------------------------------------
@@ -1410,6 +1435,11 @@ func _check_the_sign_is_ahead_of_him() -> void:
 		_leave_stop()
 		check(_sim.run.boss_on_sign, "(after tea the next fork's sign owes him the boss ahead)")
 		after_tea.append(_watch_the_sign_to_the_gore())
+		if not rider.is_empty():
+			# On the leg that follows he has come onto the road at its start again.
+			_sim.car.s = _sim.leg.length - usual - early - 10.0
+			_tick()
+			check_near(GameData.as_float(_fork_sign().get("ahead", -1.0)), 10.0, 0.5, "on the next leg, driven from its start, her sign stands 5 s earlier again")
 	var alone: Array[float] = after_tea[0]
 	var with_her: Array[float] = after_tea[1]
 	check(alone[0] > float(_ticks_in(1.0)), "(without her the fork's sign is ahead of him for %.1f s after he leaves the stall)" % (alone[0] * DT))

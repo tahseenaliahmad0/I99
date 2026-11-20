@@ -432,25 +432,22 @@ func step(input: DriveInput) -> void:
 			_catch_left = 0.0
 	if hand.let_go:
 		wheel.release()
+		# From here it returns to its centre (GDD 4.3). A passenger who holds
+		# the wheel "at its current angle" can be asked for this angle for a
+		# moment yet (GDD 8.2; D-043 has the hook wait for the let-go for the
+		# same reason).
+		_let_go_angle = wheel.angle
+		_catch_left = passengers.catch_time()
 		if effects.has_own(ItemSim.HOOK_ARMED):
 			# The hook, hung in its ring, takes the wheel as his hand leaves it
 			# (GDD 7.6): for hook_lock_s at most.
 			effects.hold(ItemSim.HOOK_ARMED, ItemSim.HOOK, false)
 			effects.add(ItemSim.HOOK_SET, items.passive("hook_lock_s"))
-		else:
-			# Nothing has it: it returns to its centre (GDD 4.3). A passenger
-			# who holds the wheel "at its current angle" can be asked for
-			# this angle for a moment yet (GDD 8.2; D-043 has the hook wait
-			# for the let-go for the same reason).
-			_let_go_angle = wheel.angle
-			_catch_left = passengers.catch_time()
 	if hand.took_grip:
 		wheel.grip()
 		effects.remove(ItemSim.HOOK_SET)
-		# Whoever held the wheel for him lets go of it, and what he let go of
-		# before is past.
+		# Whoever held the wheel for him lets go of it.
 		passengers.wheel_taken()
-		_catch_left = 0.0
 	if hand.at_ear != _wrist_on_wheel:
 		# The Call taken alone: his wrist is on the wheel while his hand holds
 		# the phone to his ear (GDD 10.4).
@@ -2081,9 +2078,7 @@ func _anchor_moves() -> Dictionary:
 ## are stepped: what they make of what he has just done, and their own time.
 func _step_passenger() -> void:
 	if items.asked:
-		# Asked as his hand leaves the wheel, the wheel he is asked to hold is
-		# the wheel as it was let go; asked later, the wheel as it is.
-		passengers.ask(_let_go_angle if _catch_left > 0.0 else wheel.angle)
+		passengers.ask(_angle_asked_for())
 	if items.horn_blown:
 		passengers.on_horn()
 	if items.taken_for_him != &"":
@@ -2091,6 +2086,16 @@ func _step_passenger() -> void:
 	if not items.used_tags.is_empty():
 		passengers.on_used(items.used_tags)
 	passengers.step(DT, gate.gear, leg.active and leg.raining)
+
+
+## The angle a passenger asked to hold the wheel "at its current angle" is
+## to hold it at (GDD 8.2): the wheel as it is; or, asked within the catch
+## time of the driver's hand leaving a wheel that nothing else took, the
+## wheel as it was let go. (What the hook has taken, it has where it is.)
+func _angle_asked_for() -> float:
+	if _catch_left > 0.0 and not effects.has_own(ItemSim.HOOK_SET):
+		return _let_go_angle
+	return wheel.angle
 
 
 ## The wheel angle that holds the car on a straight line where the road is
