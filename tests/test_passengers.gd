@@ -1307,6 +1307,7 @@ func test_pass_apprentice() -> void:
 	_check_retune_ends_the_station()
 	_check_radio_line_only_when_playing()
 	_check_tape_and_apprentice()
+	_check_he_takes_the_wheel_back()
 
 
 ## The dial dragged `steps` stations to the right, through the hand.
@@ -1320,6 +1321,193 @@ func _tune(steps: int) -> void:
 	_input.lmb = false
 	_ticks(SETTLE)
 	_input.clear()
+
+
+## Grips the wheel, turns it to `angle` and holds it there until it has settled.
+func _steer_to(angle: float) -> void:
+	_grip()
+	_input.pointer_is_absolute = false
+	var per_px: float = tuning.f("steer_deg_per_px") * _sim.wheel.turn_rate_mult * _sim.steer_sensitivity
+	var guard: int = _ticks_in(5.0)
+	while absf(_sim.wheel.command - angle) > 0.001 and guard > 0:
+		guard -= 1
+		_input.pointer_delta = Vector2(clampf((angle - _sim.wheel.command) / per_px, -25.0, 25.0), 0.0)
+		_tick()
+	_input.pointer_delta = Vector2.ZERO
+	_ticks(_ticks_in(0.5))
+
+
+## He lets go of the wheel with the pointer already on the boy's shoulder, and
+## makes his TAP so that it ends `after` ticks after the tick in which he let
+## go (0: as soon as the hand is there). Returns that number of ticks (-1
+## when no TAP was completed).
+func _let_go_and_ask(after: int = 0) -> int:
+	_input.clear()
+	_input.pointer_is_absolute = true
+	_input.pointer = _sim.hand.anchor_pointer(_sim.hand.anchor_index(StringName(SHOULDER)))
+	_events = []
+	_tick()
+	var let_go_tick: int = _sim.tick - 1
+	check(not _sim.hand.gripping, "(he lets go of the wheel)")
+	var guard: int = _ticks_in(3.0)
+	while guard > 0 and (_sim.hand.at_id() != StringName(SHOULDER) or _sim.tick - let_go_tick < after - TAP_TICKS):
+		guard -= 1
+		_tick()
+	_input.lmb = true
+	_ticks(TAP_TICKS)
+	_input.lmb = false
+	_tick()
+	var asked: bool = _count_events("ritual_completed", "ritual", "passenger_ask") == 1
+	_input.clear()
+	_input.pointer_is_absolute = true
+	_input.pointer = _sim.hand.anchor_pointer(_sim.hand.anchor_index(StringName(SHOULDER)))
+	return _sim.tick - 1 - let_go_tick if asked else -1
+
+
+## "On a tap he holds the wheel at its current angle for 3 s" (GDD 8.2). A
+## wheel let go returns to its centre at 200 degrees a second (GDD 4.3) and
+## his shoulder is half a second away: by the time a TAP can land, "its
+## current angle" is nothing. So, asked within `catch_s` of the driver's hand
+## leaving the wheel, he takes it back to the angle it was let go at; asked
+## later, he holds it where it is (as D-043 has the hook wait for the let-go).
+func _check_he_takes_the_wheel_back() -> void:
+	var hand: Dictionary = GameData.as_dict(_passenger("apprentice").get("hand"))
+	var hold: float = GameData.as_float(hand.get("duration_s"))
+	var catch_s: float = GameData.as_float(hand.get("catch_s"))
+	var reach: float = GameData.as_float(data.record("anchors", SHOULDER).get("time_s"))
+	check(catch_s > reach + tuning.f("tap_max_time"), "(the time in which he can still be asked for the angle let go, %.1f s, is longer than the reach to his shoulder and a TAP)" % catch_s)
+	check(catch_s < hold, "(and shorter than his hold: it is for the reach, not for an afterthought)")
+	var catch_ticks: int = _ticks_in(catch_s)
+
+	# A medium bend and a straight, each held by hand at the angle that keeps
+	# the car's line and then handed to him; against the same with nobody asked.
+	for k: float in [tuning.fi("curve_k", 1), 0.0]:
+		var where: String = "in a bend" if k > 0.0 else "on a straight"
+		var carried: Array[float] = []
+		var took: int = -1
+		for asks: bool in [true, false]:
+			_on_the_road("apprentice")
+			_cruise(3, 0)
+			_sim.curve_k = k
+			var push: float = _sim.car.steady_drift(_sim.car.curve_push(k))
+			var angle: float = -push / _sim.car.lat_authority() * _sim.wheel.max_angle()
+			check(tuning.f("wheel_return_rate") * reach > absf(angle), "(%s: let go at %.1f degrees, the wheel is back at its centre before a hand can be at his shoulder)" % [where, angle])
+			_steer_to(angle)
+			var let_go_at: float = _sim.wheel.angle
+			check(_sim.hand.gripping and absf(let_go_at - angle) < 0.05, "(%s he holds the car's line with the wheel at %.2f degrees)" % [where, angle])
+			_keep_lane = false
+			if asks:
+				took = _let_go_and_ask()
+				check(took > 0 and took < catch_ticks, "(%s: the TAP on his shoulder lands %.2f s after the let-go)" % [where, float(took) * DT])
+				check_eq(_count_events("line_requested", "id", "passenger.apprentice.hand"), 1, "(he says he has the wheel)")
+			else:
+				# The same let-go and the same reach, and no TAP.
+				_input.clear()
+				_input.pointer_is_absolute = true
+				_input.pointer = _sim.hand.anchor_pointer(_sim.hand.anchor_index(StringName(SHOULDER)))
+				_ticks(took + 1)
+				check(not _sim.hand.gripping and _sim.hand.at_id() == StringName(SHOULDER), "(%s, the same again with nobody asked)" % where)
+			# The tick after the TAP his hand is on the wheel.
+			_tick()
+			if asks:
+				check_eq(GameData.as_int(_shot("wheel_held")), PassengerSim.HOLD_ANGLE, "%s: asked as the hand leaves the wheel, he holds it" % where)
+				check_near(_sim.wheel.angle, let_go_at, 0.000001, "at the angle it was let go at (%.2f degrees), not at the centre it had returned to" % let_go_at)
+			else:
+				check(absf(_sim.wheel.angle) < 0.000001, "(%s, nobody asked: the wheel is at its centre)" % where)
+			# Half a second for the car to follow the wheel; then the rest of his 3 s.
+			_ticks(_ticks_in(0.5))
+			var from_x: float = _sim.car.x
+			var turned: float = 0.0
+			for _index: int in _ticks_in(hold - 0.5) - 2:
+				_tick()
+				turned = maxf(turned, absf(_sim.wheel.angle - let_go_at))
+			carried.append(_sim.car.x - from_x)
+			if asks:
+				check(turned < 0.000001, "and holds it there for his 3 s (it moves %.6f degrees)" % turned)
+				check(absf(carried[0]) < 0.05, "%s the car keeps the line the driver had it on (%.3f m off it in %.1f s)" % [where, carried[0], hold - 0.5])
+				_ticks(4)
+				check_eq(GameData.as_int(_shot("wheel_held")), PassengerSim.HOLD_NONE, "(3 s after the TAP he lets go)")
+			else:
+				check(carried[1] > push * (hold - 0.5) * 0.9, "%s with nobody asked the car is carried %.2f m off its line in the same time" % [where, carried[1]])
+
+	# Asked too late he holds the wheel where it is: the catch lasts catch_s
+	# from the let-go, to the tick.
+	var crown: float = 0.0
+	for late: bool in [false, true]:
+		_on_the_road("apprentice")
+		_cruise(3, 0)
+		crown = _sim.car.steady_drift(0.0)
+		_steer_to(-30.0)
+		var let_go_at: float = _sim.wheel.angle
+		_keep_lane = false
+		var took: int = _let_go_and_ask(catch_ticks if late else catch_ticks - 1)
+		check_eq(took, catch_ticks if late else catch_ticks - 1, "(a TAP that ends %d ticks after the let-go)" % took)
+		var from_x: float = _sim.car.x
+		_ticks(_ticks_in(hold) - 2)
+		check_eq(GameData.as_int(_shot("wheel_held")), PassengerSim.HOLD_ANGLE, "(he holds the wheel)")
+		if late:
+			check(absf(_sim.wheel.angle) < 0.000001, "asked %.1f s after the let-go he holds the wheel where it is, at its centre: what was let go is past" % catch_s)
+			check(_sim.car.x - from_x > crown * hold * 0.8, "and the car goes where an unheld wheel lets it (%.2f m down the crown), not back to the old turn" % (_sim.car.x - from_x))
+		else:
+			check_near(_sim.wheel.angle, let_go_at, 0.000001, "asked one tick short of %.1f s after the let-go he still takes the wheel back to %.1f degrees" % [catch_s, let_go_at])
+			check(_sim.car.x - from_x < -1.0, "(and the car turns with it: %.2f m)" % (_sim.car.x - from_x))
+
+	# The slowest hand still catches it: a wheel at full left lock (its grip
+	# point has ridden round to the far side of the hub), Nerves at Pound,
+	# and a TAP of full length made only when the hand is there.
+	_on_the_road("apprentice")
+	_cruise(1, 0)
+	_sim.nerves.set_value(tuning.f("pound_from") + 1.0)
+	_steer_to(-_sim.wheel.max_angle())
+	var full_lock: float = _sim.wheel.angle
+	_input.clear()
+	_input.pointer_is_absolute = true
+	_input.pointer = _sim.hand.anchor_pointer(_sim.hand.anchor_index(StringName(SHOULDER)))
+	_events = []
+	_tick()
+	var slow_from: int = _sim.tick - 1
+	var slow_guard: int = _ticks_in(3.0)
+	while _sim.hand.at_id() != StringName(SHOULDER) and slow_guard > 0:
+		slow_guard -= 1
+		_tick()
+	check(float(_sim.tick - slow_from) * DT > reach * 1.5, "(the long way round, with a pounding heart: %.2f s to his shoulder)" % (float(_sim.tick - slow_from) * DT))
+	_input.lmb = true
+	_ticks(_ticks_in(tuning.f("tap_max_time")) - 1)
+	_input.lmb = false
+	_ticks(2)
+	check_eq(_count_events("ritual_completed", "ritual", "passenger_ask"), 1, "(a slow TAP)")
+	check(_sim.tick - slow_from < catch_ticks, "(%.2f s after the let-go)" % (float(_sim.tick - slow_from) * DT))
+	check_near(_sim.wheel.angle, full_lock, 0.1, "the slowest reach and the longest TAP are still in time: he has the wheel at %.0f degrees" % full_lock)
+
+	# It is the last let-go that counts.
+	_on_the_road("apprentice")
+	_cruise(3, 0)
+	_steer_to(-30.0)
+	_release()
+	_steer_to(12.0)
+	var second: float = _sim.wheel.angle
+	_let_go_and_ask()
+	_tick()
+	check_near(_sim.wheel.angle, second, 0.000001, "let go, taken again and let go again: he holds the angle of the last let-go (%.1f degrees)" % second)
+
+	# What the hook has taken, he takes from the hook where it is: with a
+	# Wheel ring and a Spinner knob the hook keeps the lane (GDD 7.8), and
+	# asked then he holds the wheel where the hook has it, not where the hand left it.
+	_on_the_road("apprentice")
+	_give("wheel_ring")
+	_give("spinner_knob")
+	_tick()
+	_tap_at("hook")
+	check(_sim.effects.has_own(ItemSim.HOOK_ARMED), "(the hook hangs in its ring)")
+	_steer_to(20.0)
+	check(_sim.wheel.angle > 19.0, "(he turns the wheel to %.1f degrees)" % _sim.wheel.angle)
+	var asked_after: int = _let_go_and_ask()
+	check(_sim.effects.has_own(ItemSim.HOOK_SET) and asked_after < catch_ticks, "(the hook takes the wheel as he lets go, and he asks the boy at once)")
+	var hooked: float = _sim.wheel.angle
+	check(absf(hooked) < 15.0, "(the hook has brought the wheel to %.1f degrees to keep the lane)" % hooked)
+	_ticks(_ticks_in(1.0))
+	check_eq(GameData.as_int(_shot("wheel_held")), PassengerSim.HOLD_ANGLE, "(the boy holds it)")
+	check_near(_sim.wheel.angle, hooked, 0.000001, "from the hook he takes the wheel where the hook has it")
 
 
 ## Duct tape and the boy do not mend the same fault (GDD 7.5: the act's first

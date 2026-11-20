@@ -230,6 +230,11 @@ var _side: int = RunState.RIGHT
 var _shady_here: bool = false
 ## Seconds until a wrecked Telling is told again.
 var _wreck_left: float = 0.0
+## The angle the wheel had when his hand last let go of it with nothing to
+## hold it, and the seconds for which a passenger asked to hold the wheel "at
+## its current angle" still takes it back there (GDD 8.2; 0: no longer).
+var _let_go_angle: float = 0.0
+var _catch_left: float = 0.0
 
 
 func _init(game_data: GameData) -> void:
@@ -337,6 +342,8 @@ func _build() -> void:
 	_side = RunState.RIGHT
 	_shady_here = false
 	_wreck_left = 0.0
+	_let_go_angle = 0.0
+	_catch_left = 0.0
 	hand.grip_toggle = grip_toggle
 
 	var start_gear: int = tuning.i("start_gear")
@@ -410,6 +417,10 @@ func step(input: DriveInput) -> void:
 	_step_wheel_keys(input)
 
 	# 4. Wheel.
+	if _catch_left > 0.0:
+		_catch_left -= DT
+		if _catch_left < DT * 0.5:
+			_catch_left = 0.0
 	if hand.let_go:
 		wheel.release()
 		if effects.has_own(ItemSim.HOOK_ARMED):
@@ -417,11 +428,20 @@ func step(input: DriveInput) -> void:
 			# (GDD 7.6): for hook_lock_s at most.
 			effects.hold(ItemSim.HOOK_ARMED, ItemSim.HOOK, false)
 			effects.add(ItemSim.HOOK_SET, items.passive("hook_lock_s"))
+		else:
+			# Nothing has it: it returns to its centre (GDD 4.3). A passenger
+			# who holds the wheel "at its current angle" can be asked for
+			# this angle for a moment yet (GDD 8.2; D-043 has the hook wait
+			# for the let-go for the same reason).
+			_let_go_angle = wheel.angle
+			_catch_left = passengers.catch_time()
 	if hand.took_grip:
 		wheel.grip()
 		effects.remove(ItemSim.HOOK_SET)
-		# Whoever held the wheel for him lets go of it.
+		# Whoever held the wheel for him lets go of it, and what he let go of
+		# before is past.
 		passengers.wheel_taken()
+		_catch_left = 0.0
 	if hand.at_ear != _wrist_on_wheel:
 		# The Call taken alone: his wrist is on the wheel while his hand holds
 		# the phone to his ear (GDD 10.4).
@@ -436,7 +456,10 @@ func step(input: DriveInput) -> void:
 		# whatever else pulls steadily, so that on a straight the car keeps
 		# its line. A curve or a gust still carries it off.
 		wheel.hold_at(_straight_angle())
-	elif wheel.locked and _hook_keeps_lane and curve_k == 0.0 and not passengers.holds_wheel():
+	elif passengers.holds_wheel():
+		# Held for him at an angle (GDD 8.2): the one he was asked for.
+		wheel.hold_at(passengers.held_angle)
+	elif wheel.locked and _hook_keeps_lane and curve_k == 0.0:
 		wheel.hold_at(_lane_keeping_angle())
 	wheel.tremor = nerves.tremor_offset
 	wheel.step(DT, hand.steer_px, steer_sensitivity)
@@ -1326,7 +1349,7 @@ func state() -> Array:
 				vehicle.direction, vehicle.lane, vehicle.signalling, vehicle.changing, vehicle.role])
 	return [
 		tick, snapshot(), capture(), effects.get_state(), vehicles,
-		car.s, car.x, car.speed, car.v_lat, car.drift, wheel.angle, gate.gear, gate.lever,
+		car.s, car.x, car.speed, car.v_lat, car.drift, wheel.angle, _let_go_angle, _catch_left, gate.gear, gate.lever,
 		hand.pos, hand.target, hand.pointer, hand.gripping, nerves.value, nerves.snap_left,
 		collision.chain, collision.immunity_left, leg.time, clock.minutes, suspicion.value, cash,
 	]
@@ -2027,7 +2050,9 @@ func _anchor_moves() -> Dictionary:
 ## are stepped: what they make of what he has just done, and their own time.
 func _step_passenger() -> void:
 	if items.asked:
-		passengers.ask()
+		# Asked as his hand leaves the wheel, the wheel he is asked to hold is
+		# the wheel as it was let go; asked later, the wheel as it is.
+		passengers.ask(_let_go_angle if _catch_left > 0.0 else wheel.angle)
 	if items.horn_blown:
 		passengers.on_horn()
 	if items.taken_for_him != &"":

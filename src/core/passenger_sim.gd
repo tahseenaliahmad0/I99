@@ -59,9 +59,11 @@ var id: String = ""
 var record: Dictionary = {}
 ## Legs whose stall they have ridden past since they boarded.
 var legs_ridden: int = 0
-## The wheel is held for him, and for how long yet.
+## The wheel is held for him, and for how long yet; and, by one who holds it
+## "at its current angle", the angle at which.
 var hold: int = HOLD_NONE
 var hold_left: float = 0.0
+var held_angle: float = 0.0
 ## One who sleeps: seconds they stay awake (0: asleep).
 var awake_left: float = 0.0
 ## One who drums: drumming now. (Not drumming, his hands are free for the tea.)
@@ -142,6 +144,7 @@ func _seat(passenger_id: String) -> void:
 		_weights.append(_weight(GameData.as_dict(entry)))
 	hold = HOLD_NONE
 	hold_left = 0.0
+	held_angle = 0.0
 	awake_left = 0.0
 	repair = REPAIR_IDLE
 	repair_left = 0.0
@@ -206,6 +209,7 @@ func _empty_seat() -> void:
 	legs_ridden = 0
 	hold = HOLD_NONE
 	hold_left = 0.0
+	held_angle = 0.0
 	awake_left = 0.0
 	drumming = false
 	repair = REPAIR_IDLE
@@ -265,7 +269,9 @@ func begin_leg() -> void:
 
 # --- The Hand (GDD 8.1: a TAP on the shoulder) -------------------------------
 
-func ask() -> void:
+## `wheel_angle` is the angle one who holds the wheel "at its current angle"
+## is to hold it at (DriveSim knows the wheel).
+func ask(wheel_angle: float) -> void:
 	if not aboard():
 		return
 	if record.has("sleeps") and awake_left <= 0.0:
@@ -280,6 +286,7 @@ func ask() -> void:
 		HAND_HOLD:
 			hold = HOLD_ANGLE
 			hold_left = GameData.as_float(hand.get("duration_s"))
+			held_angle = wheel_angle
 		HAND_CIGARETTE:
 			if not _items.light_handed():
 				return
@@ -322,6 +329,14 @@ func on_call_taken(caller: StringName) -> void:
 func wheel_taken() -> void:
 	hold = HOLD_NONE
 	hold_left = 0.0
+
+
+## Seconds after the driver's hand has left the wheel in which one who holds
+## it "at its current angle" still takes it back to the angle it was let go
+## at (GDD 8.2; 0 for everybody else). A wheel let go is back at its centre
+## before a TAP can land on a shoulder half a second away (GDD 4.3).
+func catch_time() -> float:
+	return GameData.as_float(GameData.as_dict(record.get("hand")).get("catch_s"))
 
 
 func holds_wheel() -> bool:

@@ -638,6 +638,9 @@ func _passenger_schema() -> Dictionary:
 			"kind": _enum(PASSENGER_HANDS),
 			"on": _opt(_enum(PackedStringArray(["tap", "always"]))),
 			"duration_s": _opt(_num(0.0)),
+			# Seconds after his hand left the wheel in which one who holds it
+			# "at its current angle" still takes it back to the angle let go.
+			"catch_s": _opt(_num(0.0)),
 			# Where a thing that is passed to him is held, in the cabin frame.
 			"at": _opt(_t("vec3")),
 		}),
