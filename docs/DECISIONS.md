@@ -1558,3 +1558,87 @@ built by the workflow `m6-fixes`; this entry is what that work is held to.
   by the second half of the false dawn and that he meets no vehicle between
   the last checkpoint's barriers.
 - **Pictures:** `artifacts/m7_*.png`.
+
+## D-051 (M8, 2026-11-20) The five passengers
+
+- **Context.** GDD 8 gives the rules of passengers and a table of five; GDD
+  14 gives one record as an example. How a passenger is met, how a ride is
+  counted, and what several cells of the table mean in the simulation's
+  terms is not said.
+- **`PassengerSim`** (GDD 13.2) keeps who rides and what they are doing; a
+  passenger is a record of passengers.json. Besides GDD 14's fields (`hand`,
+  `weights`, `on_leave`, `rides_legs` or `rides_until`, `fare`,
+  `line_prefix`) a record may have `always` (`suspicion_gain_mult`,
+  `fork_sign_lead_s`, `answers_calls`, `effects`), `sleeps`, `drums`,
+  `repairs`, `retunes` and `view_block_right`. A Weight is `when` (a tag of
+  what he uses, a gear, a gear in rain, asleep, a scrape, drumming under a
+  Patrol), a `resource` and an `amount` or a rate. The validator knows all
+  of it and asks for the five of GDD 8.2.
+- **Where hitchers stand.** A stop's record says `"hitcher": "always"` (the
+  Hitcher stop) or `"sometimes"` (fuel stations and tea stalls: at
+  `hitcher_chance`, 0.25, of them; GDD 8.1 says "sometimes"). Who stands
+  there is drawn from the Telling seed and the stop's place in the night,
+  each of the five as likely as another, without drawing from the streams
+  the stops' stock uses (so no stop sells anything else than it did). Never
+  the one he already carries: the next of the five stands there instead.
+- **Getting in.** A new anchor, `passenger_door` (0.96, -0.04, 0.10), 0.57 s
+  from the wheel like the glovebox (GDD 8.1: a "glovebox-class Far reach").
+  A TAP there is the stop's ritual `stop_board`, offered while a hitcher
+  stands there and the seat is free. Leaving the stop is declining.
+- **The seat.** What lies on it (the Thermos) goes to a slot `back_seat`
+  that no anchor reaches, and comes back when the seat is free. What is
+  bought for the seat while somebody sits there goes behind it as well.
+- **How far they ride.** A leg is ridden when its stall is behind the car,
+  stopped at or not. Nobody gets out of a moving car: a passenger whose legs
+  are ridden gets out at the first stop he makes after that, and one who
+  rides to the end of the act at the stop after its boss. A boss is no leg.
+  One who rides to Basra gets out at no stop, and the `arrived` event names
+  them as `guest` (the game adds them to the profile's guests, GDD 11.5).
+  The fare is paid on getting out.
+- **The Hajjiya.** *"Holds the wheel dead straight"* is read as: the car
+  goes dead straight where the road is straight. She holds the wheel
+  against what is always there (the crown, a steering that pulls); a bend
+  or a gust carries the car off all the same, as their tells say they will.
+  With the wheel merely at its centre the crown would have the car out of
+  its lane in 3.4 s, exactly as with nobody holding it: her Hand would be
+  nothing. Held through bends she would be an autopilot. It ends after 6 s
+  or when he takes the wheel. Her food (-20 Nerves) and her blessing come
+  as she gets out (GDD 14: `on_leave`); the blessing is kept through stops
+  and is spent by the first scrape that nothing else turned aside (the
+  charm's first scrape of a leg comes before it).
+- **The Conscript.** The uniform halves every gain of Suspicion, asleep or
+  awake, the Checkpoint's included. He gets in asleep. A tap or the horn
+  wakes him for 20 s; the tap that wakes him is not yet a cigarette. Awake,
+  a tap lights one: it burns in the driver's ashtray as his own would, with
+  nothing taken from his pack and no ritual, and he hands over no second
+  while it burns. He snores (-0.5 Nerves a second) only asleep.
+- **The Drummer.** One tap, two things (GDD 8.2 gives the tap both to the
+  tea and to the drum): a tap stops the drum and he holds out the tea beside
+  the wheel (the tea's anchor moves to `hand.at`, an at-wheel reach); the
+  next tap puts it back and he drums again. "The music effect" is the
+  status `music` and the radio's own rate (`radio_music_rate`); with the
+  radio on music too it is still one music. The drum blocks the right 10%
+  of the view whether he plays or not (a drum on the right end of the dash;
+  the snapshot says `view_block_right`). Under a Patrol's ears the drumming
+  is +10 Suspicion a second; a checkpoint is no Patrol.
+- **The Student.** Every call of the phone is answered in the tick it rings:
+  the fare or the calm without his hand, and nothing for a Patrol to see.
+  Noor's call is his own to take (GDD 10.4); she holds the phone if he
+  hands it to her, as any passenger does. A fork's sign stands 5 s of road
+  further ahead of the fork. Her talk keeps him Awake all the time she rides.
+- **The Apprentice.** With a lamp lit and no repair yet on this leg he says
+  so, 2 s later he leans across the gear lever for 3 s (the lever cannot be
+  taken, and is taken out of the hand that holds it), and then the oldest
+  fault is mended. "Per leg" renews when a leg or a boss begins. "At its
+  current angle" locks the wheel where it is, as the hook does, for 3 s or
+  until he takes it. The radio goes to static every 30 s from when he got in.
+- **At a stop the night waits** for passengers too: no Hand, no Weight, no
+  timers.
+- **Views.** A purple capsule in the seat (leaning while asleep), an arm to
+  the wheel, the lever or the tea, the drum; a hitcher beside the front wing
+  with their name over their head; HUD rows. `--ride=<id>` puts a passenger
+  in the seat.
+- **Tests.** T-PASS-HAJJIYA (which also carries GDD 8.1: the roadside, the
+  door, the seat, where hitchers stand), -CONSCRIPT, -DRUMMER, -STUDENT,
+  -APPRENTICE; T-DATA-01 gains the failure cases of the new rules; the
+  mutation list is `tools/mutants/passengers.py`.

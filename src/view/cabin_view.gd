@@ -10,6 +10,8 @@ const WHEEL_NODE: String = "Wheel"
 const GEAR_LEVER_NODE: String = "GearLever"
 const GEAR_LEVER_ANCHOR: String = "gear_lever"
 const MIRROR_ANCHOR: String = "mirror"
+## What a slot that takes the tea holds.
+const DRINK: String = "drink"
 const POCKET_ANCHOR: String = "pocket"
 ## Who watches him, as the snapshot's "suspicion_by" names a Patrol.
 const PATROL: String = "patrol"
@@ -70,6 +72,21 @@ var _cell_pos: Vector3 = Vector3.ZERO
 var _cell_spread: float = 0.0
 ## His own phone, seen at his pocket while it rings (GDD 10.4).
 var _pocket_phone: Node3D
+## Whoever rides in the seat (GDD 8, 16.1): a purple capsule; the arm they
+## reach out with (to the wheel, across the lever, with the tea); the drum.
+var _passenger: Node3D
+var _passenger_at: Vector3 = Vector3.ZERO
+var _passenger_arm: MeshInstance3D
+var _arm_from: Vector3 = Vector3.ZERO
+var _sleep_tilt: float = 0.0
+var _drum: Node3D
+var _drum_at: Vector3 = Vector3.ZERO
+var _drum_bob: float = 0.0
+var _drum_hz: float = 0.0
+var _grip_point: Vector3 = Vector3.ZERO
+## The anchors of the cup holders: where the tea stands, and so the anchors a
+## passenger moves when he holds it out.
+var _held_out: PackedStringArray = PackedStringArray()
 
 
 func setup(data: GameData, factory: PlaceholderFactory) -> void:
@@ -132,6 +149,8 @@ func setup(data: GameData, factory: PlaceholderFactory) -> void:
 		_slot_anchor[GameData.as_string(slot.get("id"))] = GameData.as_string(slot.get("anchor"))
 		if GameData.as_string(slot.get("id")).begins_with(ItemSim.GLOVEBOX):
 			_cells.append(GameData.as_string(slot.get("id")))
+		if GameData.as_array(slot.get("holds")).has(DRINK):
+			_held_out.append(GameData.as_string(slot.get("anchor")))
 	_cell_pos = Vector3(tuning.fi("glovebox_cell_pos", 0), tuning.fi("glovebox_cell_pos", 1), tuning.fi("glovebox_cell_pos", 2))
 	_cell_spread = tuning.f("glovebox_cell_spread")
 	_item_lift = tuning.f("item_lift")
@@ -201,6 +220,27 @@ func setup(data: GameData, factory: PlaceholderFactory) -> void:
 	_pocket_phone.visible = false
 	_items.add_child(_pocket_phone)
 
+	var seat: Node3D = _group("Seat")
+	_passenger_at = Vector3(tuning.fi("passenger_pos", 0), tuning.fi("passenger_pos", 1), tuning.fi("passenger_pos", 2))
+	_arm_from = Vector3(tuning.fi("passenger_arm_from", 0), tuning.fi("passenger_arm_from", 1), tuning.fi("passenger_arm_from", 2))
+	_sleep_tilt = deg_to_rad(tuning.f("passenger_sleep_tilt"))
+	_drum_at = Vector3(tuning.fi("drum_pos", 0), tuning.fi("drum_pos", 1), tuning.fi("drum_pos", 2))
+	_drum_bob = tuning.f("drum_bob")
+	_drum_hz = tuning.f("drum_hz")
+	_grip_point = GameData.as_vec3(GameData.as_dict(data.root("anchors").get("points")).get("G"))
+	_passenger = factory.make("cabin_passenger")
+	_passenger.position = _passenger_at
+	_passenger.visible = false
+	seat.add_child(_passenger)
+	_passenger_arm = factory.make("cabin_passenger_arm") as MeshInstance3D
+	if _passenger_arm != null:
+		_passenger_arm.visible = false
+		seat.add_child(_passenger_arm)
+	_drum = factory.make("cabin_drum")
+	_drum.position = _drum_at
+	_drum.visible = false
+	seat.add_child(_drum)
+
 	_lit_tip = factory.make("item_cigarette_lit")
 	_lit_tip.visible = false
 	_items.add_child(_lit_tip)
@@ -231,6 +271,7 @@ func apply(snapshot: Dictionary) -> void:
 		var offset: Vector3 = _marker_offset[id]
 		marker_node.position = (GameData.as_vec3(moves[str(id)]) + offset) if moves.has(str(id)) else home
 	_show_mirror(snapshot)
+	_show_passenger(snapshot, moves)
 
 	var capacity: int = snapshot["lamp_capacity"]
 	var lit: int = snapshot["lamps"]
@@ -306,6 +347,44 @@ func _show_mirror(snapshot: Dictionary) -> void:
 	_mirror_blue.visible = str(snapshot["suspicion_by"]) == PATROL and suspicion > 0.0
 	if _mirror_blue.visible:
 		PlaceholderFactory.set_alpha(_mirror_blue, suspicion / maxf(_suspicion_max, 1.0))
+
+
+## Whoever rides (GDD 8.2): in the seat; leaning toward the door while they
+## sleep; an arm out to the wheel they hold, across the gear lever they block,
+## or with the tea they hold out; and a drummer's drum on the right of the
+## dash, moving while it is played.
+func _show_passenger(snapshot: Dictionary, moves: Dictionary) -> void:
+	var riding: bool = str(snapshot["passenger"]) != ""
+	_passenger.visible = riding
+	var block: float = snapshot["view_block_right"]
+	_drum.visible = riding and block > 0.0
+	if _passenger_arm != null:
+		_passenger_arm.visible = false
+	if not riding:
+		return
+	_passenger.rotation = Vector3(0.0, 0.0, -_sleep_tilt if snapshot["passenger_asleep"] else 0.0)
+	var time: float = snapshot["time"]
+	if _drum.visible:
+		var beat: float = sin(TAU * _drum_hz * time) if snapshot["passenger_drumming"] else 0.0
+		_drum.position = _drum_at + Vector3(0.0, _drum_bob * beat, 0.0)
+	# Where the arm goes, if it goes anywhere.
+	var to: Vector3 = _arm_from
+	var held: int = snapshot["wheel_held"]
+	if held != PassengerSim.HOLD_NONE:
+		to = _grip_point
+	elif snapshot["lever_blocked"] and _anchor_pos.has(GEAR_LEVER_ANCHOR):
+		to = _anchor_pos[GEAR_LEVER_ANCHOR]
+	elif snapshot["tea_passed"]:
+		for id: Variant in moves:
+			# What he holds out stood in a cup holder: it is where his arm ends.
+			if _held_out.has(str(id)):
+				to = GameData.as_vec3(moves[id])
+	var along: Vector3 = to - _arm_from
+	if _passenger_arm == null or along.length() < 0.001:
+		return
+	_passenger_arm.visible = true
+	_passenger_arm.transform = Transform3D(Basis.looking_at(along.normalized(), Vector3.UP), (_arm_from + to) * 0.5)
+	_passenger_arm.scale = Vector3(1.0, 1.0, along.length())
 
 
 ## Each item is drawn at its slot (GDD 7.1), from its own placeholder

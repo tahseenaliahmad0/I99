@@ -23,6 +23,9 @@ const WITH_ARGUMENTS: Array = [
 	["res://scenes/drive.tscn", ["--boss=storm,crosswind", "--bot=line", "--hud"], 5400],
 	["res://scenes/drive.tscn", ["--boss=dawn,early_sun", "--bot=line", "--hud"], 9600],
 	["res://scenes/drive.tscn", ["--boss=arrival", "--bot=line", "--hud"], 2400],
+	# Somebody in the seat (GDD 8): the figure, the drum, the HUD's row.
+	["res://scenes/drive.tscn", ["--leg=open_road,1", "--bot=line", "--hud", "--ride=drummer"], 900],
+	["res://scenes/drive.tscn", ["--leg=rain,1", "--bot=line", "--hud", "--ride=conscript"], 900],
 ]
 
 

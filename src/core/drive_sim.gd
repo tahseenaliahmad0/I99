@@ -1657,6 +1657,7 @@ func snapshot() -> Dictionary:
 		"passenger_asleep": passengers.asleep(),
 		"passenger_awake_left": passengers.awake_left,
 		"passenger_drumming": passengers.drumming,
+		"tea_passed": passengers.passes_tea(),
 		"passenger_repair": passengers.repair,
 		"passenger_repair_left": passengers.repair_left,
 		"wheel_held": passengers.hold,

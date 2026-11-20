@@ -81,6 +81,8 @@ func _ready() -> void:
 		for item_id: String in str(Game.args["give"]).split(",", false):
 			if sim.give_item(StringName(item_id)) == null:
 				push_error("Drive: --give names an item that cannot be put in the cabin: '%s'" % item_id)
+	if Game.args.has("ride") and not sim.board(str(Game.args["ride"])):
+		push_error("Drive: --ride names nobody who can get in: '%s'" % str(Game.args["ride"]))
 	if Game.args.has("hud") and not _hud.visible:
 		_hud.toggle()
 	if Game.args.has("aim"):
@@ -142,6 +144,11 @@ func _physics_process(_delta: float) -> void:
 			print("[drive] %s at %.1f s: %s" % [type, sim.seconds(), JSON.stringify(event)])
 		if type == "arrived":
 			print("[drive] arrived at %s (frame %d)" % [sim.clock.text(), _frames])
+			# Whoever he carried all the way is a wedding guest from now on (GDD 11.5).
+			if Game.add_guest(GameData.as_string(event.get("guest"))):
+				print("[drive] a new guest: %s" % GameData.as_string(event.get("guest")))
+				if not _boss_spec.is_empty():
+					Game.write_save(Game.saved_telling)
 		if type == "arrived" and _boss_spec.is_empty():
 			# Until the wedding room exists (M9) the night simply begins again.
 			Game.write_save({})

@@ -166,6 +166,16 @@ hud.cramp.hum,,A HUM...,false
 hud.cramp.cramp,,CRAMP,false
 hud.ghost,,His left hand reaches,false
 hud.carrying,,Carrying: %s,false
+hud.passenger,,Passenger: %s (%s legs)%s,false
+hud.passenger.asleep,,", asleep",false
+hud.passenger.awake,,", awake for %s s",false
+hud.passenger.drumming,,", drumming",false
+hud.passenger.tea,,", holds out the tea",false
+hud.passenger.holds,,", holds the wheel for %s s",false
+hud.passenger.warns,,", repairs in %s s",false
+hud.passenger.leans,,", across the lever for %s s",false
+hud.hitcher,,At the roadside: %s,false
+hud.blessed,,Blessed: the next scrape lights no lamp,false
 sign.boss_modifier.long_queue,,LONG QUEUE,true
 sign.boss_modifier.thorough,,THOROUGH,true
 sign.boss_modifier.crosswind,,CROSSWIND,true

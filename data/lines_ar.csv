@@ -166,6 +166,16 @@ hud.cramp.hum,,,true
 hud.cramp.cramp,,,true
 hud.ghost,,,true
 hud.carrying,,,true
+hud.passenger,,,true
+hud.passenger.asleep,,,true
+hud.passenger.awake,,,true
+hud.passenger.drumming,,,true
+hud.passenger.tea,,,true
+hud.passenger.holds,,,true
+hud.passenger.warns,,,true
+hud.passenger.leans,,,true
+hud.hitcher,,,true
+hud.blessed,,,true
 sign.boss_modifier.long_queue,,,true
 sign.boss_modifier.thorough,,,true
 sign.boss_modifier.crosswind,,,true

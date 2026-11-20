@@ -841,6 +841,62 @@
     },
     "scene": null
   },
+  "cabin_passenger": {
+    "placeholder": {
+      "shape": "capsule",
+      "size": [
+        0.17,
+        0.9
+      ],
+      "color": "#7B4FA3"
+    },
+    "scene": null
+  },
+  "cabin_passenger_arm": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.05,
+        0.05,
+        1.0
+      ],
+      "color": "#7B4FA3"
+    },
+    "scene": null
+  },
+  "cabin_drum": {
+    "placeholder": {
+      "shape": "cylinder",
+      "size": [
+        0.12,
+        0.5
+      ],
+      "color": "#8B5A2B"
+    },
+    "scene": null
+  },
+  "stop_hitcher": {
+    "placeholder": {
+      "shape": "capsule",
+      "size": [
+        0.17,
+        1.1
+      ],
+      "color": "#7B4FA3"
+    },
+    "scene": null
+  },
+  "stop_hitcher_text": {
+    "placeholder": {
+      "shape": "label",
+      "size": [
+        0.0016
+      ],
+      "color": "#FFFFFF",
+      "text": "[HITCHER]"
+    },
+    "scene": null
+  },
   "cabin_clock_text": {
     "placeholder": {
       "shape": "label",

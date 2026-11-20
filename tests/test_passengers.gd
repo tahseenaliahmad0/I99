@@ -164,6 +164,8 @@ func _check_boarding(who: String) -> void:
 	_events = []
 	_tap_at(DOOR)
 	check_eq(_count_events("passenger_boarded"), 0, "(nobody else gets in)")
+	check(not _sim.board(who), "nobody can be put in a seat that is taken")
+	check_eq(_count_events("passenger_boarded"), 0, "(nobody is)")
 	check_eq(GameData.as_string(_shot("passenger")), other, "(the one he had rides on)")
 
 
@@ -195,6 +197,18 @@ func _check_where_hitchers_stand() -> void:
 	for who: String in ALL:
 		check(GameData.as_int(met.get(who)) > 20, "the %s is met at the roadside (%d times in 1500 nights)" % [who, GameData.as_int(met.get(who))])
 	check_eq(RunGenerator.hitcher(data, 5, 1, 0, "boss_stop", ""), "", "(and nobody at the stop after a boss)")
+	# Whoever he carries does not stand at the roadside as well: another does.
+	var would_be_them: int = 0
+	for candidate: int in range(1, 201):
+		var plain: String = RunGenerator.hitcher(data, candidate, 1, 0, HITCHER_STOP, "")
+		for rider: String in ALL:
+			var there: String = RunGenerator.hitcher(data, candidate, 1, 0, HITCHER_STOP, rider)
+			check(there != rider and not there.is_empty(), "(seed %d: with the %s in the seat somebody else stands at a Hitcher stop)" % [candidate, rider])
+			if plain == rider:
+				would_be_them += 1
+			else:
+				check_eq(there, plain, "(seed %d: who stands there does not depend on who rides, unless it would be them)" % candidate)
+	check(would_be_them > 100, "(the draw would have been the one he carries %d times in a thousand)" % would_be_them)
 
 
 # --- T-PASS-HAJJIYA ----------------------------------------------------------
@@ -981,6 +995,11 @@ func test_pass_apprentice() -> void:
 	_ticks(10)
 	_input.clear()
 	check_eq(_sim.gate.gear, gear, "no shift is possible")
+	# Nor with the lever set to shift by a flick (GDD 17.1).
+	_sim.sequential_shift = true
+	_reach("gear_lever")
+	_flick(Vector2(0.0, -tuning.f("flick_min_distance") * 1.5))
+	check_eq(_sim.gate.gear, gear, "nor by a flick, with sequential shifting on")
 	check_eq(_sim.faults.lamps, 1, "(the lamp is still lit while he works)")
 	guard = _ticks_in(lean + 1.0)
 	while GameData.as_bool(_shot("lever_blocked")) and guard > 0:
@@ -992,9 +1011,15 @@ func test_pass_apprentice() -> void:
 	check_eq(GameData.as_string(mended.get("fault")), fault, "(the fault that was lit)")
 	check_eq(GameData.as_string(mended.get("by")), "apprentice", "(by him)")
 	check(_reach("gear_lever"), "and the lever is the driver's again")
+	# (The hand never left the lever: one tick puts the pointer back on it.)
+	_tick()
+	_flick(Vector2(0.0, -tuning.f("flick_min_distance") * 1.5))
+	check_eq(_sim.gate.gear, gear + 1, "(the same flick shifts now)")
+	_sim.sequential_shift = false
+	_reach("gear_lever")
 	_input.lmb = true
 	_ticks(3)
-	check(_sim.gate.held, "(he can take it)")
+	check(_sim.gate.held, "(and he can take it in his hand)")
 	_input.clear()
 	_ticks(SETTLE)
 	# One per leg: a second fault stays lit until the next leg.

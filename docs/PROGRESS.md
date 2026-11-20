@@ -28,7 +28,7 @@ Useful commands:
 ## Current state
 
 - **Milestone:** M7 (bosses): all four tests pass and the set pieces have their views (D-050). Left of M7: its adversarial review. Two workflows are at work beside the main line: `m6-fixes` applies the M6 review's findings (rulings in D-049), `m10-take-in` takes in the three parked M10 pieces; their branches are merged here when they report.
-- **Tests:** 92 of 114 passing (M0: 2, M1: 8, M2: 10, M3: 7, M4: 13, M5: 6, M6: 42, M7: 4).
+- **Tests:** 97 of 114 passing (M0: 2, M1: 8, M2: 10, M3: 7, M4: 13, M5: 6, M6: 42, M7: 4, M8: 5).
 - **Reviews:** `m1-review` and `m2-review` reported on every lens (run ids wf_53ae3899-d40 and wf_d8c835c4-884; findings saved as JSON under the scratchpad `fixes/` folder, which does not survive the container: the lists below are what is left). Applied: M1 hand, wheel and gate; M2 car (D-028), traffic and collisions (D-029); M1 gesture pipeline code (D-030); M1 rules and the M2 view findings on indicators, vehicle ids, dashes, bend (D-035). **Still open:** (a) M2 views: pointer ring drawn at the hand's clamped target; the hand does not follow the gear knob; forearm stretches beyond 0.30 m for five far anchors (decision not recorded); `scene` in placeholders ignored for road strips, arm and pointer. (b) M1 test honesty (18): no test moves the pointer with relative motion; T-WHEEL-01 never releases a turned wheel; grip and ride on an off-centre wheel; gate engage radius and grind band probed from one side; FLICK time and direction limits; CRANK angle-not-distance; gate channel width; camera pitch and glance following the hand; pointer pixels to screen; steering sensitivity wiring; loose brackets on timing limits; literals standing in for tuning values. (c) M1 gesture: rituals.json is not checked against the table of GDD 4.6. (d) M2 test honesty leftovers (see D-028 and D-029 for what was done). M3, M4 and M5 have not been reviewed. Workflows work again (the usage limit of 2026-11-17 has lifted): use them for reviews and for independent parts.
 - **Next step:**
   1. **Finish M7.** Run the rest of the mutation lists on a copy (`tools/mutants/checkpoint.py`: the eight that lived should die now; `tools/mutants/dawn.py` numbers 44 to 66 were never run) and close what lives. Then an adversarial review of M7 as a workflow (core, tests against `passes_when`, the views), and its findings.
@@ -142,7 +142,10 @@ Do not start a milestone until every test of the previous one passes (GDD 18).
 - [ ] Adversarial review of M7 (workflow)
 
 ### M8 Passengers: T-PASS-* (5)
-- [ ] not started
+- [x] `PassengerSim` and passengers.json (D-051): hitchers at the roadside, the passenger door, the seat and the back seat, rides counted at stalls, fares, guests at arrival, the save
+- [x] The Hajjiya, the Conscript, the Drummer, the Student, the Apprentice: five tests; T-DATA-01 knows the new rules
+- [x] Views: the figure in the seat, the arm, the drum, the hitcher and their name, HUD rows; `--ride=<id>`; pictures `artifacts/m8_*.png`
+- [ ] Mutation run of `tools/mutants/passengers.py` closed; adversarial review of M8
 
 ### M9 The frame: T-TABLE-* (7), T-HECKLE-01, T-END-01, T-PROLOGUE-01, T-FINALE-01
 - [ ] not started
@@ -219,3 +222,4 @@ Two lines per slice, newest last.
   The owed checks at the real set pieces are in; the whole-Telling test drives all three bosses for real. All four tests of M7 pass: 92 of 114.
 - 2026-11-20 M7: the views of the set pieces, `--boss=`, the stand-in bot through every set piece (D-050). His eyes stay on the road during the Call; the ring is written out as well as heard.
   T-BOSS-01 and T-BOSS-03 gained the checks their mutation runs asked for. Rulings on the M6 review's open questions: D-049.
+- 2026-11-20 M8: the five passengers (D-051). Hitchers stand at stops and get in by the passenger door; each has a Hand and Weights from data; a ride is counted at stalls and ends where the car stands.

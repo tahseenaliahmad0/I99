@@ -102,8 +102,41 @@ func apply(snapshot: Dictionary) -> void:
 		rows.append(Lines.get_text("hud.ghost"))
 	if str(snapshot["carrying"]) != "":
 		rows.append(Lines.format("hud.carrying", [str(snapshot["carrying"])]))
+	_add_passenger_rows(snapshot, rows)
 	_add_set_piece_rows(snapshot, rows)
 	_label.text = "\n".join(rows)
+
+
+## Who rides, how far, and what they are doing; who stands at the roadside.
+func _add_passenger_rows(snapshot: Dictionary, rows: PackedStringArray) -> void:
+	var who: String = str(snapshot["passenger"])
+	if not who.is_empty():
+		var doing: String = ""
+		var awake_left: float = snapshot["passenger_awake_left"]
+		var held_left: float = snapshot["wheel_held_left"]
+		var repair_left: float = snapshot["passenger_repair_left"]
+		var repair: int = snapshot["passenger_repair"]
+		var held: int = snapshot["wheel_held"]
+		if snapshot["passenger_asleep"]:
+			doing += Lines.get_text("hud.passenger.asleep")
+		elif awake_left > 0.0:
+			doing += Lines.format("hud.passenger.awake", ["%.1f" % awake_left])
+		if snapshot["passenger_drumming"]:
+			doing += Lines.get_text("hud.passenger.drumming")
+		elif snapshot["tea_passed"]:
+			doing += Lines.get_text("hud.passenger.tea")
+		if held != PassengerSim.HOLD_NONE:
+			doing += Lines.format("hud.passenger.holds", ["%.1f" % held_left])
+		if repair == PassengerSim.REPAIR_ANNOUNCED:
+			doing += Lines.format("hud.passenger.warns", ["%.1f" % repair_left])
+		elif repair == PassengerSim.REPAIR_LEANING:
+			doing += Lines.format("hud.passenger.leans", ["%.1f" % repair_left])
+		rows.append(Lines.format("hud.passenger", [Lines.get_text("passenger.%s.name" % who), str(snapshot["passenger_legs"]), doing]))
+	var hitcher: String = str(snapshot["hitcher"])
+	if not hitcher.is_empty():
+		rows.append(Lines.format("hud.hitcher", [Lines.get_text("passenger.%s.name" % hitcher)]))
+	if snapshot["blessed"]:
+		rows.append(Lines.get_text("hud.blessed"))
 
 
 ## The set pieces (GDD 10.2 to 10.5): which boss, and what it is doing.
