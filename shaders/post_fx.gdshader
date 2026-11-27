@@ -5,15 +5,30 @@
 //
 // What is of the glass (haze, rain, cracks) is drawn only where he looks
 // through the windscreen, and what is of the world outside (the night, a
-// light that dazzles) in full only where he looks out of a window: the
-// cabin stays readable. A canvas shader cannot read the depth of the 3D
-// view, so the glass is found by geometry: the ray through each pixel is
-// taken into the cabin frame and met with the panes, which are rectangles
-// there, and with what the cabin hangs before them.
+// light that dazzles, the falling rain) in full only where he sees the
+// world: the cabin stays readable. A canvas shader cannot read the depth of
+// the 3D view, so it is told the two apart. `cabin_mask` is a picture of the
+// cabin alone, drawn once more from his eye (PostFxView): where it is solid
+// the pixel is of the cabin, whatever stands there (his arm, the clock, what
+// stands on the dash, a passenger, the vendor's tray). Everything else is
+// the world. Which of it he sees through the windscreen is found by
+// geometry: the ray through the pixel is taken into the cabin frame and met
+// with the windscreen, which is a rectangle there. `cabin_smear` is the
+// cabin's picture again, read from the mipmap the rain's blur reads the view
+// from (post_fx_cabin.gdshader), so that the blur can leave the cabin out.
 //
 // Everything here works in the Compatibility renderer as well as in
-// Forward+ and Mobile: the screen texture and its mipmaps (the blur), and
-// arithmetic. Every number comes from data/tuning.json through PostFxView.
+// Forward+ and Mobile: the screen texture and its mipmaps (the blur), two
+// more textures, and arithmetic.
+//
+// Every number that shapes what is seen comes from data/tuning.json through
+// PostFxView. The numbers left here are the shader's own arithmetic: the
+// hashes, the halves and doubles of geometry, the thresholds below which
+// nothing is drawn or divided by, the offsets that keep two patterns apart
+// (rain_streaks, the haze's finer patches, crack_web), and where the five
+// taps of the blur lie (its middle and the four ends of a slightly turned
+// cross, about half the radius out, on the mipmap whose texels are about
+// half the radius wide).
 shader_type canvas_item;
 render_mode unshaded;
 
@@ -40,7 +55,7 @@ uniform vec2 glare_position = vec2(0.5, 0.5);
 uniform float darkness : hint_range(0.0, 1.0) = 0.0;
 
 // --- What goes with them, every frame ----------------------------------------
-// 1 while it rains: streaks outside every window.
+// 1 while it rains: streaks over the world outside.
 uniform float rain : hint_range(0.0, 1.0) = 0.0;
 // Seconds of the simulation: moves the rain and the smoke.
 uniform float fx_time = 0.0;
@@ -59,30 +74,28 @@ uniform mat3 eye_basis = mat3(1.0);
 uniform vec3 eye_origin = vec3(0.0);
 uniform vec2 view_tan = vec2(1.0, 1.0);
 
+// --- The cabin ----------------------------------------------------------------
+// The cabin alone as his eye sees it, over nothing: its alpha says how much
+// of the pixel is the cabin's. With no such picture nothing is of the cabin.
+uniform sampler2D cabin_mask : hint_default_transparent, repeat_disable, filter_linear;
+// The same picture from the mipmap the rain's blur reads the view from
+// (post_fx_cabin.gdshader): the cabin's part of a blurred texel.
+uniform sampler2D cabin_smear : hint_default_transparent, repeat_disable, filter_linear;
+
 // --- From data/tuning.json, through PostFxView -------------------------------
 // These have no values of their own: a shader that was never set up shows
 // nothing.
 
-// The glass, in the cabin frame (m). The windscreen as the eye sees it:
-// left, bottom, right, top; its plane's z.
+// How solid what the cabin draws must be to count as the cabin: none of it
+// below the first, all of it from the second (glass he sees through is not).
+uniform vec2 cabin_solid;
+// The windscreen's glass in the cabin frame (m), as the eye sees it: left,
+// bottom, right, top; and its plane's z.
 uniform vec4 windscreen_rect;
 uniform float windscreen_z;
-// The side windows: front (z), bottom, back (z), top; their plane's x.
-uniform vec4 window_left_rect;
-uniform float window_left_x;
-uniform vec4 window_right_rect;
-uniform float window_right_x;
-// Over this much glass an effect fades in at the window's frame.
+// Where the cabin's own frame does not end the windscreen, its effects fade
+// out over this much glass (m).
 uniform float glass_feather;
-// How far above the dash the windscreen is still clear, and how far above it
-// the windscreen's effects have their full strength.
-uniform vec2 demist_strip;
-// What of the cabin hangs before the glass (the mirror, the visor): each a
-// rectangle (left, bottom, right, top) in a plane of its own z. Every frame.
-const int MAX_BLINDS = 4;
-uniform int blind_count = 0;
-uniform vec4 blind_rect[MAX_BLINDS];
-uniform float blind_z[MAX_BLINDS];
 
 // Tunnel (GDD 5.8).
 uniform vec3 tunnel_color : source_color;
@@ -96,19 +109,27 @@ uniform vec3 lid_color : source_color;
 uniform float lid_feather;
 uniform float lid_curve;
 
-// Haze.
+// Haze. haze_fine: the weight of the finer patches among all of them, and
+// how many of them lie across a coarse one.
 uniform float haze_mottle;
 uniform float haze_patch;
 uniform float haze_drift;
+uniform vec2 haze_fine;
 
-// Rain.
+// Rain. rain_blur_center: the weight of the middle one of the blur's taps.
+// rain_streak_far: how many times larger and faster the second layer of
+// streaks is than the first.
 uniform float rain_blur_radius;
+uniform float rain_blur_center;
 uniform vec3 rain_streak_color : source_color;
 uniform float rain_streak_alpha;
 uniform float rain_streak_speed;
 uniform float rain_streak_slant;
 uniform vec2 rain_streak_density;
 uniform float rain_streak_width;
+uniform float rain_streak_share;
+uniform float rain_streak_taper;
+uniform float rain_streak_far;
 
 // Cracks.
 uniform vec2 crack_center;
@@ -136,6 +157,12 @@ uniform vec2 beam_aim;
 uniform vec2 beam_size;
 uniform float beam_feather;
 
+// The four taps of the blur around its middle: the ends of a turned cross.
+const vec2 BLUR_TAPS[4] = { vec2(1.0, 0.4), vec2(-0.4, 1.0), vec2(-1.0, -0.4), vec2(0.4, -1.0) };
+// The world's share of a smear below which eight-bit pictures leave too
+// little of it to divide by: there the smear gives way to the sharp view.
+const float SMEAR_FLOOR = 0.1;
+
 
 float hash12(vec2 p) {
 	vec3 p3 = fract(vec3(p.xyx) * 0.1031);
@@ -161,32 +188,36 @@ float value_noise(vec2 p) {
 	return mix(mix(a, b, w.x), mix(c, d, w.x), w.y);
 }
 
-// 1 inside the rectangle (min.xy, max.xy) and 0 outside it, passing from
-// the one to the other over `feather`: across its edge with `grown` 0,
-// wholly outside its edge with `grown` 1.
-float inside_rect(vec2 at, vec4 rect, float feather, float grown) {
+// How much of the pixel at `at` (screen UV) is the cabin's, 0 to 1.
+float cabin_at(vec2 at) {
+	return smoothstep(cabin_solid.x, max(cabin_solid.y, cabin_solid.x + 0.0001), texture(cabin_mask, at).a);
+}
+
+// 1 inside the rectangle (min.xy, max.xy), passing to 0 over `feather`
+// outside its edge.
+float inside_rect(vec2 at, vec4 rect, float feather) {
 	vec2 margin = min(at - rect.xy, rect.zw - at);
-	float soft = max(feather, 0.0001);
-	float from = -0.5 * soft * (1.0 + grown);
-	return smoothstep(from, from + soft, min(margin.x, margin.y));
+	return smoothstep(-max(feather, 0.0001), 0.0, min(margin.x, margin.y));
 }
 
 // Falling rain: thin slanted streaks in two sizes. `p` is in view heights.
 float rain_streaks(vec2 p, float time) {
 	float sum = 0.0;
+	float wide = clamp(rain_streak_width, 0.0001, 0.5);
+	float taper = clamp(rain_streak_taper, 0.0001, 0.5);
 	for (int layer = 0; layer < 2; layer++) {
-		float grow = 1.0 + 0.6 * float(layer);
+		float grow = mix(1.0, max(rain_streak_far, 0.0001), float(layer));
 		vec2 q = vec2(p.x - p.y * rain_streak_slant, p.y - time * rain_streak_speed * grow);
 		q *= rain_streak_density / grow;
 		vec2 id = floor(q) + 37.0 * float(layer);
 		vec2 f = fract(q);
-		// Two cells in five hold a streak, somewhere across the cell.
-		float held = step(0.6, hash12(id));
-		float across = abs(f.x - 0.25 - 0.5 * hash12(id + 11.0));
-		float wide = max(rain_streak_width, 0.0001);
+		// That share of the cells hold a streak, somewhere across the cell
+		// where the whole of it is inside.
+		float held = step(1.0 - rain_streak_share, hash12(id));
+		float across = abs(f.x - mix(wide, 1.0 - wide, hash12(id + 11.0)));
 		float body = 1.0 - smoothstep(0.5 * wide, wide, across);
-		float taper = smoothstep(0.0, 0.35, f.y) * (1.0 - smoothstep(0.65, 1.0, f.y));
-		sum += held * body * taper / grow;
+		float ends = smoothstep(0.0, taper, f.y) * (1.0 - smoothstep(1.0 - taper, 1.0, f.y));
+		sum += held * body * ends / grow;
 	}
 	return min(sum, 1.0);
 }
@@ -198,14 +229,17 @@ vec2 shard_middle(vec2 id, float around) {
 }
 
 // The web of a cracked windscreen around its point of impact. `d` is the way
-// from that point (m on the glass), `radius` the web's reach. Returns how
-// much of a crack this spot is, 0 to 1; `shard` is a number of the shard of
-// glass the spot lies on (-0.5 to 0.5 each way), `core` how near the impact.
+// from that point (m on the glass), `radius` the reach of a web that covers
+// its share. Returns how much of a crack this spot is, 0 to 1; `shard` is a
+// number of the shard of glass the spot lies on (-0.5 to 0.5 each way; 0
+// where the glass is whole), `core` how near the impact.
 float crack_web(vec2 d, float radius, out vec2 shard, out float core) {
 	shard = vec2(0.0);
 	core = 0.0;
 	float r = length(d) / radius;
-	if (r >= 1.0 || r <= 0.0001) {
+	float fray = max(crack_fray, 0.001);
+	float wide = max(crack_width, 0.00001);
+	if (r >= 1.0 + 0.5 * fray + wide / radius || r <= 0.0001) {
 		return 0.0;
 	}
 	// Log-polar cells: equal steps are equal ratios of distance, so the
@@ -247,12 +281,15 @@ float crack_web(vec2 d, float radius, out vec2 shard, out float core) {
 	core = 1.0 - smoothstep(0.0, max(crack_core, 0.001), r);
 	// One cell is this wide here (m), so the crack is this far (m):
 	float to_crack = border * r * radius * TAU / around;
-	float wide = max(crack_width, 0.00001);
-	float line = 1.0 - smoothstep(0.5 * wide, wide, to_crack);
-	// The web ends raggedly: each shard a little nearer or further.
-	float fray = max(crack_fray, 0.001);
-	float rim = 1.0 - smoothstep(1.0 - fray, 1.0, r + fray * (shard.x + 0.5));
-	return line * rim;
+	// The web ends raggedly: each shard a little short of the web's reach or
+	// a little past it, so that on the whole the web covers its share. The
+	// glass is cracked along the shard's end too, and whole beyond it.
+	float to_end = (1.0 - fray * shard.x - r) * radius;
+	if (to_end < 0.0) {
+		shard = vec2(0.0);
+		return 1.0 - smoothstep(0.5 * wide, wide, -to_end);
+	}
+	return 1.0 - smoothstep(0.5 * wide, wide, min(to_crack, to_end));
 }
 
 
@@ -262,39 +299,16 @@ void fragment() {
 	// The ray through this pixel, in the cabin frame; -Z is ahead.
 	vec3 ray = eye_basis * vec3(vec2(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0) * view_tan, -1.0);
 
-	// --- Where the glass is -------------------------------------------------
-	// windscreen: 1 where he looks through the windscreen's glass, less over
-	// the strip above the dash. outside: 1 where he looks out of any window;
-	// it reaches a feather onto the window's frame, so that no rim of the
-	// world is left out of the night.
+	// --- What is the cabin, what the world, and where the windscreen is ------
+	// outside: how much of this pixel is the world, seen through a window or
+	// past the cabin's edge. windscreen: how much of it he sees through the
+	// windscreen's glass.
+	float outside = 1.0 - cabin_at(uv);
 	float windscreen = 0.0;
-	float outside = 0.0;
 	vec2 glass_at = vec2(0.0);
-	if (ray.z < -0.0001) {
-		glass_at = eye_origin.xy + ray.xy * (windscreen_z - eye_origin.z) / ray.z;
-		outside = inside_rect(glass_at, windscreen_rect, glass_feather, 1.0);
-		windscreen = inside_rect(glass_at, windscreen_rect, glass_feather, 0.0)
-				* smoothstep(demist_strip.x, max(demist_strip.y, demist_strip.x + 0.0001), glass_at.y - windscreen_rect.y);
-	}
-	if (ray.x < -0.0001) {
-		vec2 at = eye_origin.zy + ray.zy * (window_left_x - eye_origin.x) / ray.x;
-		outside = max(outside, inside_rect(at, window_left_rect, glass_feather, 1.0));
-	}
-	if (ray.x > 0.0001) {
-		vec2 at = eye_origin.zy + ray.zy * (window_right_x - eye_origin.x) / ray.x;
-		outside = max(outside, inside_rect(at, window_right_rect, glass_feather, 1.0));
-	}
-	// What hangs before the glass is of the cabin, not of the glass.
 	if (ray.z < -0.0001 && outside > 0.0) {
-		float covered = 0.0;
-		for (int i = 0; i < MAX_BLINDS; i++) {
-			if (i < blind_count) {
-				vec2 at = eye_origin.xy + ray.xy * (blind_z[i] - eye_origin.z) / ray.z;
-				covered = max(covered, inside_rect(at, blind_rect[i], glass_feather, 0.0));
-			}
-		}
-		windscreen *= 1.0 - covered;
-		outside *= 1.0 - covered;
+		glass_at = eye_origin.xy + ray.xy * (windscreen_z - eye_origin.z) / ray.z;
+		windscreen = outside * inside_rect(glass_at, windscreen_rect, glass_feather);
 	}
 
 	// --- Cracks (GDD 5.8, 6.3): a web over a share of the windscreen ---------
@@ -302,16 +316,17 @@ void fragment() {
 	float crack_line = 0.0;
 	float crack_dust = 0.0;
 	if (cracks > 0.0005 && windscreen > 0.0) {
-		// The web is a disc as large as that share of the windscreen.
+		// The web is as large as a disc of that share of the windscreen.
 		vec2 size = windscreen_rect.zw - windscreen_rect.xy;
 		float radius = max(sqrt(cracks * size.x * size.y / PI), 0.0001);
 		vec2 from_impact = glass_at - (windscreen_rect.xy + crack_center * size);
 		vec2 shard;
 		crack_line = crack_web(from_impact, radius, shard, crack_dust) * windscreen;
 		crack_dust *= windscreen;
-		// Each shard shows what is behind it a little out of place.
-		float in_web = 1.0 - smoothstep(1.0 - max(crack_fray, 0.001), 1.0, length(from_impact) / radius);
-		look_uv += shard * crack_shift * in_web * windscreen * vec2(1.0 / aspect, 1.0);
+		// Each shard shows the world behind it a little out of place, and
+		// never the cabin there.
+		vec2 shifted = uv + shard * crack_shift * windscreen * vec2(1.0 / aspect, 1.0);
+		look_uv = mix(shifted, uv, cabin_at(shifted));
 	}
 
 	// --- Rain on the glass: the view blurs between wiper sweeps (GDD 9.1) ----
@@ -323,16 +338,28 @@ void fragment() {
 		float radius = blur * rain_blur_radius;
 		float level = max(log2(max(radius / SCREEN_PIXEL_SIZE.y, 1.0)) - 1.0, 0.0);
 		vec2 reach = vec2(radius / aspect, radius) * 0.5;
-		col = textureLod(screen_texture, look_uv, level).rgb * 0.36;
-		col += textureLod(screen_texture, look_uv + reach * vec2(1.0, 0.4), level).rgb * 0.16;
-		col += textureLod(screen_texture, look_uv + reach * vec2(-0.4, 1.0), level).rgb * 0.16;
-		col += textureLod(screen_texture, look_uv + reach * vec2(-1.0, -0.4), level).rgb * 0.16;
-		col += textureLod(screen_texture, look_uv + reach * vec2(0.4, -1.0), level).rgb * 0.16;
+		// The glass smears the world, not what stands before it. A texel of
+		// that mipmap is a mix of whatever it covers; cabin_smear is the
+		// cabin's part of the very same texel (its colour, and in its alpha
+		// its share), so that part is taken out again and what is left is
+		// weighed by the world's share.
+		float middle = clamp(rain_blur_center, 0.0001, 1.0);
+		vec4 own = texture(cabin_smear, look_uv);
+		vec3 world = (textureLod(screen_texture, look_uv, level).rgb - own.rgb) * middle;
+		float share = (1.0 - own.a) * middle;
+		for (int tap = 0; tap < 4; tap++) {
+			vec2 at = look_uv + reach * BLUR_TAPS[tap];
+			own = texture(cabin_smear, at);
+			world += (textureLod(screen_texture, at, level).rgb - own.rgb) * 0.25 * (1.0 - middle);
+			share += (1.0 - own.a) * 0.25 * (1.0 - middle);
+		}
+		// Where nothing but the cabin is near there is no world to smear.
+		col = mix(textureLod(screen_texture, look_uv, 0.0).rgb, clamp(world / max(share, 0.0001), 0.0, 1.0), smoothstep(0.0, SMEAR_FLOOR, share));
 	} else {
 		col = textureLod(screen_texture, look_uv, 0.0).rgb;
 	}
 
-	// --- Rain in the air: streaks outside every window ------------------------
+	// --- Rain in the air: streaks over the world outside ----------------------
 	if (rain > 0.001 && outside > 0.0) {
 		float streak = rain_streaks(vec2(uv.x * aspect, uv.y), fx_time);
 		col = mix(col, rain_streak_color, streak * rain * outside * rain_streak_alpha);
@@ -340,10 +367,11 @@ void fragment() {
 
 	// --- Haze (GDD 5.8): the windscreen clouds --------------------------------
 	if (haze > 0.0005 && windscreen > 0.0) {
-		// Patches where it is thinner; never thicker than the snapshot says.
+		// Patches where it is thinner and where it is thicker: over the whole
+		// glass the veil is as thick as the snapshot says.
 		vec2 patch_at = glass_at / max(haze_patch, 0.001) + vec2(fx_time * haze_drift, 0.0);
-		float thin = 0.65 * value_noise(patch_at) + 0.35 * value_noise(patch_at * 2.7 + 13.0);
-		col = mix(col, haze_color, haze * windscreen * (1.0 - haze_mottle * thin));
+		float thin = mix(value_noise(patch_at), value_noise(patch_at * haze_fine.y + 13.0), haze_fine.x);
+		col = mix(col, haze_color, clamp(haze * (1.0 + haze_mottle * (0.5 - thin)), 0.0, 1.0) * windscreen);
 	}
 
 	// The cracks themselves, and the crushed glass at the impact.
@@ -382,11 +410,13 @@ void fragment() {
 	vec2 centred = uv * 2.0 - 1.0;
 	// Tunnel (GDD 5.8): dark edges close in. What is left of the view is an
 	// ellipse, the whole view when Tunnel begins and tunnel_min_view of it
-	// at its worst; the dark comes up over the first part of the way, so
-	// that nothing jumps as his Nerves pass the threshold.
+	// at its worst: its soft edge lies half inside that share and half
+	// outside it. The dark comes up over the first part of the way, so that
+	// nothing jumps as his Nerves pass the threshold.
 	if (tunnel > 0.0005) {
 		float open = mix(1.0, tunnel_min_view, tunnel);
-		float edge = smoothstep(open, open + max(tunnel_feather, 0.001), length(centred));
+		float soft = 0.5 * max(tunnel_feather, 0.001);
+		float edge = smoothstep(open - soft, open + soft, length(centred));
 		col = mix(col, tunnel_color, edge * tunnel_strength * smoothstep(0.0, max(tunnel_onset, 0.001), tunnel));
 	}
 	// Lids and Blink (GDD 5.8): dark bars from the top and the bottom, which
