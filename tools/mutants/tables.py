@@ -18,7 +18,7 @@ MUTANTS = [
  # (_can_rewind asks for a rewind too); the condition only saves the work.
  (D, '\t\t"rewinds": rewinds_left,\n', '', 'the save does not hold the rewind'),
  (D, '\trewinds_left = GameData.as_int(telling.get("rewinds"))\n', '\trewinds_left = table.free_rewinds\n', 'a loaded night has its rewind back'),
- (D, '"rewind": run.active and _can_rewind()})', '"rewind": false})', 'the Wreck never says it is taken back'),
+ (D, '"rewind": run.active and _can_rewind(),', '"rewind": false,', 'the Wreck never says it is taken back'),
  (D, '\treturn base + heavy_floor_bonus + table.heavy_floor_add + effects.total(HEAVY_FLOOR)', '\treturn base + heavy_floor_bonus + effects.total(HEAVY_FLOOR)', 'no Table raises the Heavy floor'),
  (D, '\t\tstop.begin(run.stop, run.act, shady, table.price_mult, table)\n', '\t\tstop.begin(run.stop, run.act, shady, 1.0, table)\n', 'every Table pays the same prices'),
  (D, '\t\tstop.begin(run.stop, run.act, shady, table.price_mult, table)\n', '\t\tstop.begin(run.stop, run.act, shady, table.price_mult)\n', 'the stop does not know the Table'),

@@ -46,7 +46,7 @@ MUTANTS = [
  (H, '\t\t\tQUESTION:\n\t\t\t\t_resolve(PASSED, GameData.as_dict(record.get("pass")))', '\t\t\tQUESTION:\n\t\t\t\t_resolve(FAILED, {})', 'a Question kept to its end gives nothing'),
  # Order.
  (H, '\t\t\tif in_ritual != &"" and String(in_ritual) == GameData.as_string(record.get("ritual")):', '\t\t\tif in_ritual != &"":', 'any ritual obeys an Order'),
- (D, '\theckles.in_ritual = StringName(ritual_id)\n\t_emit("ritual_completed", {\n\t\t"ritual": ritual_id,', '\t_emit("ritual_completed", {\n\t\t"ritual": ritual_id,', 'the Table sees no ritual'),
+ (D, '\theckles.in_ritual = StringName(ritual_id)\n\tprologue.ritual_done(ritual_id)\n\t_emit("ritual_completed", {\n\t\t"ritual": ritual_id,', '\tprologue.ritual_done(ritual_id)\n\t_emit("ritual_completed", {\n\t\t"ritual": ritual_id,', 'the Table sees no ritual'),
  (H, '\tif not _can_be_asked(chosen):\n\t\tchosen = _another(GameData.as_float(entry["roll"]))\n\t\tif chosen.is_empty():\n\t\t\treturn\n', '', 'an Order he cannot obey is given all the same'),
  # The Fib.
  (H, '\t\tFIB:\n\t\t\tghost_holds = true', '\t\tFIB:\n\t\t\tpass', 'the Fib has no hand'),

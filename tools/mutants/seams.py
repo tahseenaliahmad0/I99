@@ -77,7 +77,7 @@ MUTANTS = [
   'a dropped call is announced as a missed one'),
  (D, '\t\tif not items.held_for_leg(id):\n', '\t\tif false:\n', 'the statuses a stop ends are not announced'),
  (D, '\t\tif not items.held_for_leg(id):\n', '\t\tif true:\n', 'what the leg holds is announced as over at its stop'),
- (D, '\teffects.begin_tick()\n\treturn true', '\treturn true', 'what the save put back is announced as new'),
+ (D, '\t# What the save put back did not begin here: it is not said again.\n\teffects.begin_tick()\n', '\t# What the save put back did not begin here: it is not said again.\n', 'what the save put back is announced as new'),
  (D, '\t_report_effects()\n\tif nerves.snapped and not snap_said:', '\tif nerves.snapped and not snap_said:', 'what ends at the gore is not announced'),
  (D, '\teffects.added.clear()\n\teffects.expired.clear()\n', '', 'statuses are announced twice a tick'),
  (D, '\tif nerves.snapped and not snap_said:\n\t\t_report_snap()\n', '', 'a Snap from a missed Exit is not announced'),
