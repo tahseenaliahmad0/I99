@@ -346,11 +346,15 @@ func _build_bay() -> void:
 	_bay_node.name = "Bay"
 	add_child(_bay_node)
 	var length: float = _bay.y - _bay.x
-	_add_flat(_bay_node, "road_bay", 0.0, _lane_width, LIFT_PAINT, length, -length * 0.5)
-	_add_flat(_bay_node, "road_line", 0.0, _line_width, LIFT_LINE, length, -length * 0.5)
-	_add_flat(_bay_node, "road_line", _lane_width - _line_width, _lane_width, LIFT_LINE, length, -length * 0.5)
-	_add_flat(_bay_node, "road_line", 0.0, _lane_width, LIFT_LINE, _line_width, -_line_width * 0.5)
-	_add_flat(_bay_node, "road_line", 0.0, _lane_width, LIFT_LINE, _line_width, -(length - _line_width * 0.5))
+	# Painted where the simulation has it (D-047): the street's last metres
+	# across its whole width, from what ends it on the left to the guardrail.
+	var left: float = _limits.x
+	var right: float = _limits.y if _limits.y > _limits.x else _lane_width
+	_add_flat(_bay_node, "road_bay", left, right, LIFT_PAINT, length, -length * 0.5)
+	_add_flat(_bay_node, "road_line", left, left + _line_width, LIFT_LINE, length, -length * 0.5)
+	_add_flat(_bay_node, "road_line", right - _line_width, right, LIFT_LINE, length, -length * 0.5)
+	_add_flat(_bay_node, "road_line", left, right, LIFT_LINE, _line_width, -_line_width * 0.5)
+	_add_flat(_bay_node, "road_line", left, right, LIFT_LINE, _line_width, -(length - _line_width * 0.5))
 	var end: Vector3 = _factory.size_of("road_street_end")
 	var house: Node3D = _factory.make_world("road_street_end")
 	house.position = Vector3(_lane_width * 0.5, end.y * 0.5, -(length + end.z * 0.5))

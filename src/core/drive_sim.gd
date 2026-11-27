@@ -1960,6 +1960,10 @@ func _vehicle_snapshots() -> Array[Dictionary]:
 
 func _anchors_in_use() -> Array[StringName]:
 	var out: Array[StringName] = []
+	if not hand.can_reach:
+		# The talk of the Call, a Snap: the hand goes nowhere (GDD 10.4, 6.1),
+		# so nothing in the cabin is his to use.
+		return out
 	for index: int in hand.anchor_count():
 		if hand.is_anchor_active(index):
 			out.append(hand.anchor_id(index))

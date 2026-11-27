@@ -2358,6 +2358,7 @@ func test_boss_03() -> void:
 	_check_dawn_traffic_builds()
 	_check_dawn_glare()
 	_check_where_the_sun_stands()
+	_check_the_sun_rises_into_no_night_sky()
 	_check_last_checkpoint()
 	_check_nobody_leaves_a_corridor()
 	_check_dawn_traffic_fits_the_barriers()
@@ -3124,6 +3125,78 @@ func test_call_01() -> void:
 	_check_review_passenger_pulled_over()
 	_check_the_end_of_the_talk()
 	_check_two_phones_ringing()
+	_check_no_anchor_while_he_cannot_reach()
+
+
+## "The real sun rises ahead" (GDD 10.4): on Dawn's road the sky is never
+## darker than Dawn driven by itself has it, however far ahead of the Clock
+## he is. (The review of M7: in a Telling the sky was the Clock's alone, and
+## a driver who was early saw the sun come up into a night sky.)
+func _check_the_sun_rises_into_no_night_sky() -> void:
+	var from: float = tuning.f("sky_dawn_from")
+	var road: Vector2 = Vector2(tuning.fi("sky_boss_dawn", 0), tuning.fi("sky_boss_dawn", 1))
+	check(road.x > 0.0 and road.y > road.x and road.y <= 1.0, "(Dawn's own road lightens from %.2f to %.2f of day)" % [road.x, road.y])
+	# Early in the night by the Clock, on Dawn's road.
+	var early: float = from * 0.5
+	check_near(SkyView.day_share(true, early, from, 0, 0.5, road), 0.0, 0.000001, "in a Telling, on a road that is not Dawn's, an early hour is night")
+	for along: float in [0.0, 0.5, 1.0]:
+		check_near(SkyView.day_share(true, early, from, BossSim.SUNRISE, along, road), lerpf(road.x, road.y, along), 0.000001,
+				"on Dawn's road, ahead of the Clock, the sky is as light as Dawn's road makes it (%.0f%% along)" % (along * 100.0))
+	check_near(SkyView.day_share(true, early, from, BossSim.FALSE_DAWN, 0.0, road), road.x, 0.000001, "from the false dawn on")
+	# Late by the Clock: the Clock's day is lighter, and the sky follows it.
+	check_near(SkyView.day_share(true, 1.0, from, BossSim.SUNRISE, 0.0, road), 1.0, 0.000001, "at the deadline it is day, wherever on Dawn's road he is")
+	var late: float = from + (1.0 - from) * 0.9
+	check_near(SkyView.day_share(true, late, from, BossSim.SUNRISE, 0.0, road), 0.9, 0.000001, "late by the Clock the sky is the Clock's, where that is lighter")
+	# Outside a Telling nothing has changed.
+	check_near(SkyView.day_share(false, 0.0, from, BossSim.SUNRISE, 0.5, road), lerpf(road.x, road.y, 0.5), 0.000001, "Dawn by itself lightens along its road")
+	check_near(SkyView.day_share(false, 0.0, from, 0, 0.5, road), 0.0, 0.000001, "(and no other road does)")
+	# The snapshot carries what the sky needs, in a Telling too.
+	_begin_quiet_boss(DAWN)
+	var shot: Dictionary = _sim.snapshot()
+	check(GameData.as_int(shot["dawn_phase"]) > 0 and shot.has("leg_length") and shot.has("car_s") and shot.has("night_share"), "(the snapshot says where on Dawn's road he is)")
+
+
+## "He ... cannot reach anything" (GDD 10.4): while the hand can reach
+## nothing (the talk, the two seconds of a Snap) no anchor is in use, so the
+## cabin shows him none (GDD 16.1: an anchor is yellow while something can be
+## done there). The review of M7: every marker stayed lit through the 30 s.
+func _check_no_anchor_while_he_cannot_reach() -> void:
+	for passenger: bool in [false, true]:
+		var how: String = "with a passenger" if passenger else "alone"
+		_to_the_call(passenger)
+		check(GameData.as_array(_sim.snapshot()["anchors_in_use"]).has(&"pocket"), "%s, while it rings his pocket is an anchor in use" % how)
+		if passenger:
+			_drag("pocket", "passenger_shoulder")
+		else:
+			_reach(POCKET)
+			_input.lmb = true
+			_ticks(TAP_TICKS)
+			_input.lmb = false
+		var guard: int = SETTLE * 4
+		while _sim.boss.call != BossSim.CALL_TALKING and guard > 0:
+			guard -= 1
+			_tick()
+		_tick()
+		if not check(_sim.boss.call == BossSim.CALL_TALKING and not _sim.hand.can_reach, "(%s: he talks, and can reach nothing)" % how):
+			continue
+		_ticks(_ticks_in(1.0))
+		check_eq(GameData.as_array(_sim.snapshot()["anchors_in_use"]).size(), 0, "%s: while he talks no anchor is in use" % how)
+		guard = _ticks_in(GameData.as_float(GameData.as_dict(_dawn().get("call")).get("talk_s")) + 2.0)
+		while _sim.boss.call == BossSim.CALL_TALKING and guard > 0:
+			guard -= 1
+			if _sim.car.s > _sim.leg.length - 100.0:
+				_sim.car.s -= 400.0
+			_tick()
+		_ticks(_ticks_in(1.0))
+		check(_sim.hand.can_reach and GameData.as_array(_sim.snapshot()["anchors_in_use"]).has(&"horn"), "%s: the talk over, the cabin is his again" % how)
+	# A Snap: two seconds in which the hand goes nowhere.
+	_begin_quiet_boss(DAWN)
+	_sim.nerves.set_value(tuning.f("snap_at") - 1.0)
+	_tap_at("face")
+	if check(_sim.nerves.snap_left > 0.0, "(a slap at the edge is a Snap)"):
+		check_eq(GameData.as_array(_sim.snapshot()["anchors_in_use"]).size(), 0, "through a Snap no anchor is in use")
+		_ticks(_ticks_in(tuning.f("snap_duration") + 0.5))
+		check(GameData.as_array(_sim.snapshot()["anchors_in_use"]).has(&"horn"), "after it they are again")
 
 
 ## Dawn at the moment the phone begins to ring, on an empty road.

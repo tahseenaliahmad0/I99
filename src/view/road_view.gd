@@ -51,6 +51,12 @@ var _lane_width: float = 0.0
 var _rumble_width: float = 0.0
 var _shoulder_width: float = 0.0
 var _median_x: float = 0.0
+## A tail light's own height, and the least it is drawn with per metre of
+## distance while dust or the night ends his view, up to so many times its size.
+var _tail_height: float = 0.0
+var _light_least: float = 0.0
+var _light_cap: float = 1.0
+var _lights_kept_large: bool = false
 var _left_rail_margin: float = 0.0
 
 var _lanes: int = -1
@@ -116,6 +122,9 @@ func setup(data: GameData, factory: PlaceholderFactory) -> void:
 	_bend_tau = tuning.f("bend_smoothing")
 	_light_height = tuning.f("vehicle_light_height")
 	_blink_hz = tuning.f("signal_blink_hz")
+	_tail_height = factory.size_of("veh_taillight").y
+	_light_least = tuning.f("light_least_per_m")
+	_light_cap = tuning.f("light_scale_cap")
 	_sign_inset = tuning.f("sign_inset")
 	_sign_text_height = tuning.f("sign_text_height")
 	_vehicle_sign_lift = tuning.f("vehicle_sign_lift")
@@ -209,6 +218,10 @@ func apply(snapshot: Dictionary, delta: float) -> void:
 	var time: float = snapshot["time"]
 	var vehicles: Array[Dictionary] = snapshot["vehicles"]
 	var police_lights: bool = snapshot["police_lights"]
+	# Where dust or the night ends his view, the lights of what drives ahead
+	# are what he follows (GDD 10.3): they keep a least size on screen.
+	var sight: float = snapshot["sight_shown"]
+	_lights_kept_large = is_finite(sight)
 	_show_vehicles(vehicles, time, police_lights)
 	var hazards: Array[Dictionary] = snapshot["hazards"]
 	_show_hazards(hazards)
@@ -410,6 +423,7 @@ func _show_vehicles(vehicles: Array[Dictionary], time: float, police_lights: boo
 			sign_text = Lines.get_text("sign.motorcade.keep_back")
 		view.apply(vehicle, Vector3(x, 0.0, -ahead), time, _blink_hz,
 				police_lights and role == EncounterSim.POLICE, sign_text, _bend_shift(ahead))
+		view.set_light_scale(VehicleView.light_scale(_tail_height, ahead, _light_least, _light_cap) if _lights_kept_large else 1.0)
 	for id: Variant in _shown.keys():
 		if not seen.has(id):
 			var gone: VehicleView = _shown[id]
