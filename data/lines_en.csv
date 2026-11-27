@@ -530,3 +530,65 @@ settings.value.sequential,,Sequential flicks,true
 settings.value.small,,Small,true
 settings.value.medium,,Medium,true
 settings.value.large,,Large,true
+hint.ritual.horn,,Horn,true
+hint.ritual.wipers,,Wipers,true
+hint.ritual.hazards,,Hazard lights,true
+hint.ritual.radio_tune,,Radio dial,true
+hint.ritual.gear_shift,,Gear lever,true
+hint.ritual.visor_photo,,Sun visor and her photo,true
+hint.ritual.slap,,Slap your own face,true
+hint.ritual.passenger_ask,,Ask the passenger for a hand,true
+hint.ritual.glovebox_toggle,,Glovebox,true
+hint.ritual.indicator,,"Indicator: up for right, down for left",true
+hint.ritual.headlights,,High beam,true
+hint.ritual.window_crank,,Window crank,true
+hint.ritual.hand_licence,,"Licence, for the officer at your window",true
+hint.ritual.photo_tuck,,"Photo, up behind the visor",true
+hint.ritual.hand_banknotes,,"Banknotes, for the officer at your window",true
+hint.ritual.cig_light,,Cigarettes: light one,true
+hint.ritual.cig_ash,,Cigarette: flick the ash,true
+hint.ritual.tea_sip,,Tea: sip,true
+hint.ritual.beads_count,,Beads: count one,true
+hint.ritual.seeds_chew,,Seeds: chew,true
+hint.ritual.tissue_wipe,,Tissue box,true
+hint.ritual.tape_flip,,Mixtape: flip it,true
+hint.ritual.energy_drink_sip,,Energy drink: sip,true
+hint.ritual.painkillers_take,,Painkillers: take one,true
+hint.ritual.flask_sip,,Flask: sip,true
+hint.ritual.mints_take,,Mints: take one,true
+hint.ritual.phone_answer,,Phone: answer,true
+hint.ritual.thermos_pour,,Thermos: pour,true
+hint.ritual.window_switch_hold,,Window switch,true
+hint.ritual.hook_arm,,Wheel hook,true
+hint.ritual.call_hand_over,,"Your phone, over to the passenger",true
+hint.ritual.call_answer,,Your phone: answer,true
+hint.ritual.key_turn,,Ignition key,true
+hint.ritual.papers_licence,,"Licence, for the soldier at your window",true
+hint.ritual.papers_id,,"Identity card, for the soldier at your window",true
+hint.ritual.letter_aside,,The letter: move it aside,true
+hint.ritual.papers_registration,,"Registration, for the soldier at your window",true
+hint.ritual.checkpoint_bribe,,"Banknotes, for the soldier at your window",true
+hint.ritual.stow,,Put it away in the glovebox,true
+hint.ritual.unstow,,Take it out of the glovebox,true
+hint.ritual.stop_buy,,Buy this,true
+hint.ritual.stop_place,,Bought: carry it to its place in the cabin,true
+hint.ritual.stop_board,,Passenger door: let them in,true
+hint.gesture.tap,,Press,true
+hint.gesture.hold,,Press and hold for %s s,true
+hint.gesture.flick,,"Press, flick %s",true
+hint.gesture.drag,,Press and drag left or right,true
+hint.gesture.drag_to,,"Press, carry it there, release",true
+hint.gesture.crank,,Press and circle %s times,true
+hint.gesture.bead,,"Press, not too fast",true
+hint.gesture.gate,,"Press and hold, slide along the slots, release in a gear",true
+hint.dir.up,,up,true
+hint.dir.down,,down,true
+hint.dir.left,,left,true
+hint.dir.right,,right,true
+hint.dir.or,, or ,true
+hint.missed,,Not done: %s,true
+hint.gear,,Gear %s,true
+hint.gear.neutral,,Neutral,true
+hint.gear.grind,,Grind! Release nearer the end of a slot,true
+hint.gear.locked,,Wait,true
+dash.clock.due,,wedding %s,true

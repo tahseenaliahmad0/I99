@@ -715,7 +715,8 @@ func _next_task() -> Array[Array]:
 	# Rain: a sweep before the glass is blind.
 	if _sim.items.raining and _sim.items.since_wipe >= _tuning.f("bot_wipe_every_s") and calm >= _task_time("flick"):
 		_task = "wipers"
-		return [["go", "wiper_stalk"], _pause("bot_flick_s", 6), ["flick", 6, 0.0, 1.0], ["up", 2]]
+		# Up the screen (y grows downward): the wipers are a FLICK up (GDD 4.6).
+		return [["go", "wiper_stalk"], _pause("bot_flick_s", 6), ["flick", 6, 0.0, -1.0], ["up", 2]]
 	# Night: the high beam shows him more road.
 	if _sim.visibility() < _tuning.f("bot_look_ahead_m") * 0.5 and _sim.headlight_cone() > 0.0 and not _sim.items.flag(DriveSim.FLAG_HIGH_BEAM) and calm >= _task_time("tap"):
 		_task = "headlights"

@@ -97,6 +97,30 @@ var _grip_point: Vector3 = Vector3.ZERO
 ## The anchors of the cup holders: where the tea stands, and so the anchors a
 ## passenger moves when he holds it out.
 var _held_out: PackedStringArray = PackedStringArray()
+## What his hand has just done (D-071); null draws no feedback.
+var feedback: ActionFeedback = null
+var _hints: bool = true
+var _press_scale: float = 1.0
+var _pop_scale: float = 1.0
+var _pop_s: float = 0.3
+var _fail_s: float = 0.4
+var _shake_m: float = 0.0
+var _shake_hz: float = 0.0
+var _flash_alpha: float = 0.5
+## Flashes round a marker: [node, is it the one for a miss] each.
+var _flashes: Array[Array] = []
+## The gear on the dash, and when the night is due under the clock.
+var _gear_text: Label3D
+var _due_text: Label3D
+var _due: String = ""
+var _neutral: String = ""
+
+
+## The words on the dash, from whoever has the lines (this view names no
+## autoload: see ActionFeedback): when the night is due, and neutral.
+func set_dash_words(due: String, neutral: String) -> void:
+	_due = due
+	_neutral = neutral
 
 
 func setup(data: GameData, factory: PlaceholderFactory) -> void:
@@ -193,6 +217,32 @@ func setup(data: GameData, factory: PlaceholderFactory) -> void:
 		_clock.position = Vector3(tuning.fi("dash_clock_pos", 0), tuning.fi("dash_clock_pos", 1), tuning.fi("dash_clock_pos", 2))
 		dash.add_child(_clock)
 
+	# While the art is boxes (D-071): the gear he is in beside the clock, and
+	# under the clock the hour the night must be over by.
+	_hints = tuning.b("hints_enabled")
+	_gear_text = factory.make("cabin_gear_text") as Label3D
+	if _gear_text != null:
+		_gear_text.position = Vector3(tuning.fi("dash_gear_pos", 0), tuning.fi("dash_gear_pos", 1), tuning.fi("dash_gear_pos", 2))
+		_gear_text.visible = _hints
+		dash.add_child(_gear_text)
+	_due_text = factory.make("cabin_clock_due_text") as Label3D
+	if _due_text != null:
+		_due_text.position = Vector3(tuning.fi("dash_due_pos", 0), tuning.fi("dash_due_pos", 1), tuning.fi("dash_due_pos", 2))
+		_due_text.visible = _hints
+		dash.add_child(_due_text)
+	_press_scale = tuning.f("feedback_press_scale")
+	_pop_scale = tuning.f("feedback_pop_scale")
+	_pop_s = tuning.f("feedback_pop_s")
+	_fail_s = tuning.f("feedback_fail_s")
+	_shake_m = tuning.f("feedback_shake_m")
+	_shake_hz = tuning.f("feedback_shake_hz")
+	_flash_alpha = tuning.f("feedback_flash_alpha")
+	for kind: String in ["anchor_flash_ok", "anchor_flash_ok", "anchor_flash_fail", "anchor_flash_fail"]:
+		var flash: Node3D = factory.make(kind)
+		flash.visible = false
+		add_child(flash)
+		_flashes.append([flash, kind == "anchor_flash_fail"])
+
 	# What is fitted to the car shows where it is fitted, on the wheel or off it.
 	var fitted: Node3D = _group("Fittings")
 	for fitting: Dictionary in data.records("fittings"):
@@ -283,10 +333,6 @@ func apply(snapshot: Dictionary) -> void:
 	# Clockwise for the driver, who looks along -Z, is a negative turn about +Z.
 	_wheel.rotation.z = -deg_to_rad(wheel_angle)
 
-	var lever: Vector2 = snapshot["lever"]
-	if _lever_knob != null:
-		_lever_knob.position = _lever_rest + Vector3(lever.x, 0.0, -lever.y) * _gate_scale
-
 	# An anchor is drawn only while something can be done there, and where it
 	# is now: an Adaptation may have moved it (the crossover stalk).
 	var in_use: Array[StringName] = snapshot["anchors_in_use"]
@@ -297,6 +343,14 @@ func apply(snapshot: Dictionary) -> void:
 		var home: Vector3 = _marker_home[id]
 		var offset: Vector3 = _marker_offset[id]
 		marker_node.position = (GameData.as_vec3(moves[str(id)]) + offset) if moves.has(str(id)) else home
+		marker_node.scale = Vector3.ONE
+	# The knob is the lever's marker: it goes where the lever is in its gate.
+	# (After the markers are put home: before, the loop above put the knob
+	# back at rest every frame and the lever was never seen to move.)
+	var lever: Vector2 = snapshot["lever"]
+	if _lever_knob != null:
+		_lever_knob.position = _lever_rest + Vector3(lever.x, 0.0, -lever.y) * _gate_scale
+	_show_feedback()
 	_show_mirror(snapshot)
 	_show_passenger(snapshot, moves)
 
@@ -310,6 +364,12 @@ func apply(snapshot: Dictionary) -> void:
 	_cash.scale.y = maxf(cash / _cash_per_note, 0.05)
 	if _clock != null:
 		_clock.text = str(snapshot["clock"])
+	if _gear_text != null and _hints:
+		var gear: int = snapshot["gear"]
+		_gear_text.text = _neutral if gear == GearGate.NEUTRAL else str(gear)
+	if _due_text != null and _hints:
+		# (The morning of the prologue is no night to be home by.)
+		_due_text.text = "" if GameData.as_int(snapshot["prologue_step"]) > 0 else _due
 
 	_visor_down.visible = snapshot["visor_down"]
 	var items: Array[Dictionary] = snapshot["items"]
@@ -334,6 +394,68 @@ func apply(snapshot: Dictionary) -> void:
 		_outline.global_position = marker.global_position
 	else:
 		_outline.visible = false
+
+
+## Feedback at the markers (D-071): the one whose gesture is being made is
+## pressed in; one where something was just done pops, with a flash round
+## it; one let go of undone shakes, with a red flash. Called after the
+## markers are put in their places, and before the lever's knob is moved.
+func _show_feedback() -> void:
+	for entry: Array in _flashes:
+		var idle: Node3D = entry[0]
+		idle.visible = false
+	if feedback == null or not _hints:
+		return
+	if _markers.has(feedback.pressed):
+		var pressed: Node3D = _markers[feedback.pressed]
+		pressed.scale = Vector3.ONE * _press_scale
+	var used_ok: int = 0
+	var used_fail: int = 0
+	for pulse: ActionFeedback.Pulse in feedback.pulses:
+		if not _markers.has(pulse.anchor) or pulse.kind == ActionFeedback.KIND_NOTE:
+			continue
+		var marker: Node3D = _markers[pulse.anchor]
+		if not marker.visible:
+			continue
+		var missed: bool = pulse.kind == ActionFeedback.KIND_MISSED
+		var life: float = _fail_s if missed else _pop_s
+		if pulse.age >= life:
+			continue
+		var share: float = pulse.age / maxf(life, 0.001)
+		if missed:
+			marker.position.x += _shake_m * sin(TAU * _shake_hz * pulse.age) * (1.0 - share)
+		else:
+			marker.scale = Vector3.ONE * (1.0 + (_pop_scale - 1.0) * sin(PI * share))
+		# The flash: one of the two of its kind, growing and fading.
+		var wanted: int = used_fail if missed else used_ok
+		var seen: int = 0
+		for entry: Array in _flashes:
+			if GameData.as_bool(entry[1]) != missed:
+				continue
+			if seen == wanted:
+				var flash: Node3D = entry[0]
+				flash.visible = true
+				flash.global_position = marker.global_position
+				flash.scale = Vector3.ONE * (1.0 + share)
+				PlaceholderFactory.set_alpha(flash, _flash_alpha * (1.0 - share))
+				break
+			seen += 1
+		if missed:
+			used_fail += 1
+		else:
+			used_ok += 1
+
+
+## Where a control is, in the world: its marker while that is drawn, else
+## the anchor itself (his own face has no marker).
+func control_position(id: String) -> Vector3:
+	if _markers.has(id):
+		var marker: Node3D = _markers[id]
+		return marker.global_position
+	if _anchor_pos.has(id):
+		var at: Vector3 = _anchor_pos[id]
+		return to_global(at)
+	return global_position
 
 
 ## A prop that shows a cabin switch (the window's glass, the hazard lamp, the

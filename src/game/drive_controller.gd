@@ -81,6 +81,14 @@ func _ready() -> void:
 	_pointer.setup(data, _factory)
 	_pause_hold = PauseHold.new(data.tuning.f("pause_hold_s"))
 	_touch = TouchInput.new(data.tuning)
+	_feedback.setup(tuning)
+	_cabin.feedback = _feedback
+	_cabin.set_dash_words(Lines.format("dash.clock.due", [tuning.s("clock_deadline")]), Lines.get_text("hud.neutral"))
+	_hints = HintView.new()
+	$Overlay.add_child(_hints)
+	$Overlay.move_child(_hints, 0)
+	_hints.setup(data, _factory)
+	_hints.mirrored = _mirrored
 	_touch_view = TouchView.new()
 	$Overlay.add_child(_touch_view)
 	_touch_view.setup(_factory, _touch)
@@ -258,6 +266,7 @@ func _physics_process(_delta: float) -> void:
 	for event: Dictionary in sim.drain_events():
 		var type: String = GameData.as_string(event.get("type"))
 		Events.emit_event(type, event)
+		_feedback.on_event(type, event)
 		if not _in_prologue:
 			# What he, the Table and the stalls say to it.
 			var said: String = _narration.on_event(type, event, sim.seconds(), sim.run.table)
@@ -344,6 +353,9 @@ var _pause_hold: PauseHold = null
 ## Fingers on the glass (GDD 4.1, 17.4), and what is drawn for them.
 var _touch: TouchInput = null
 var _touch_view: TouchView = null
+## Names, feedback and the gate's diagram (D-071), and what they show.
+var _hints: HintView = null
+var _feedback: ActionFeedback = ActionFeedback.new()
 
 
 ## The night waits (the tree is paused) and the settings are on the screen:
@@ -405,6 +417,8 @@ func _apply_settings() -> void:
 	_mirrored = GameData.as_bool(values[SettingsSpec.MIRRORED])
 	_mirror.visible = _mirrored
 	_pointer.mirrored = _mirrored
+	if _hints != null:
+		_hints.mirrored = _mirrored
 	_prologue_view.mirrored = _mirrored
 	_hud.visible = GameData.as_bool(values[SettingsSpec.NUMERIC_HUD]) or Game.args.has("hud")
 	print("[drive] settings: steering=%.2f grip=%s shifting=%s speed=%.2f assist=%s steady=%s phantom=%s shake=%.2f hud=%s mirrored=%s" % [
@@ -434,6 +448,7 @@ func _process(delta: float) -> void:
 	# the horizon (GDD 5.8): the camera rolls with the push.
 	var sway: float = snapshot["sway"]
 	_camera.rotation = Vector3(deg_to_rad(cam_pitch), -deg_to_rad(cam_yaw), deg_to_rad(sway * sim.tuning.f("sway_view_roll") * _shake))
+	_feedback.step(snapshot, delta)
 	_cabin.apply(snapshot)
 	_hand.apply(snapshot)
 	_road.apply(snapshot, delta)
@@ -441,6 +456,7 @@ func _process(delta: float) -> void:
 	_sky.apply(snapshot)
 	_post_fx.apply(snapshot, delta)
 	_pointer.apply(snapshot, _camera, _cabin)
+	_hints.apply(snapshot, _feedback, _camera, _cabin, _pointer.shown())
 	_touch_view.dpi = _dpi()
 	_hud.apply(snapshot)
 	_prologue_view.apply(snapshot, _camera, _cabin, delta)

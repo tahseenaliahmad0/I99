@@ -214,6 +214,12 @@ func _is_anchor(index: int) -> bool:
 	return false
 
 
+## True while a press waits for the hand to arrive at its anchor (the
+## input buffer): made, and not yet applied or forgotten.
+func press_pending() -> bool:
+	return _press_pending
+
+
 func snap_id() -> StringName:
 	return anchor_id(snap_index)
 

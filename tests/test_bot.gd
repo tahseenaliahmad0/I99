@@ -61,6 +61,7 @@ func test_bot_01() -> void:
 	_check_the_hand_shifts()
 	_check_the_policy()
 	_check_one_telling_twice()
+	_check_what_it_begins_it_finishes()
 	_check_the_report()
 	_check_the_run()
 
@@ -302,6 +303,53 @@ func _check_the_policy() -> void:
 	check(let_go_at < 0.0 or let_go_at > 0.5, "and its hand stays on the wheel while they are two seconds away")
 	check(let_go_at < 0.0 or time_then >= needs - 0.1, "it lets go only when there is time for the lever and its margin (%.1f s to the trucks when it did)" % time_then)
 	check_eq(_hits(), 0, "and touches nothing")
+
+
+## What its hand begins, its hand finishes: every gesture it makes on a
+## rain leg, a night leg and an open road completes the ritual it was for.
+## (It flicked the wiper stalk down for a month and drove every rain leg
+## blind: nothing counted the gestures that came to nothing.)
+func _check_what_it_begins_it_finishes() -> void:
+	for skill: String in DriverBot.SKILLS:
+		for leg: String in ["rain", "night", "open_road"]:
+			_sim = DriveSim.new(data)
+			_sim.heckling = false
+			_sim.rng.reseed(SEED)
+			_sim.gate.reset(3)
+			_sim.begin_leg(LegGenerator.generate(data, leg, 1, SEED, ""))
+			_bot = DriverBot.new(_sim, data, skill, SEED)
+			_input = DriveInput.new()
+			var begun: int = 0
+			var done: int = 0
+			var wipes: int = 0
+			var undone: PackedStringArray = []
+			var making: String = ""
+			var finished: bool = false
+			var blind_ticks: int = 0
+			for _index: int in roundi(45.0 / DT):
+				_tick()
+				for event: Dictionary in _sim.drain_events():
+					if GameData.as_string(event.get("type")) == "ritual_completed":
+						finished = true
+						if GameData.as_string(event.get("ritual")) == "wipers":
+							wipes += 1
+				var now: String = String(_sim.hand.anchor_id(_sim.hand.at_index)) if _sim.gesture.is_active() else ""
+				if now != making:
+					if not making.is_empty():
+						begun += 1
+						if finished:
+							done += 1
+						else:
+							undone.append(making)
+					finished = false
+					making = now
+				if _sim.items.rain_blur() >= 1.0:
+					blind_ticks += 1
+			var what: String = "the %s bot on a %s leg" % [skill, leg]
+			check(undone.is_empty(), "%s: every gesture it begins completes its ritual (%d of %d; not: %s)" % [what, done, begun, ", ".join(undone)])
+			if leg == "rain":
+				check(wipes >= 3, "%s sweeps the wipers (%d sweeps in 45 s)" % [what, wipes])
+				check(float(blind_ticks) * DT < 3.0, "%s is not left behind a blind windscreen (%s s at full blur)" % [what, str(snappedf(float(blind_ticks) * DT, 0.1))])
 
 
 ## The same Telling by the same bot is the same Telling.

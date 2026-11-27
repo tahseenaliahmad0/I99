@@ -2947,3 +2947,69 @@ GDD 4.1 (the Touch column), 17.4, and D-016.
   finding is a test that should have failed) and GDD 1.1 (the registry is
   how an artist replaces a placeholder: it must not swallow one).
 
+## D-071 (the owner, 2026-11-27) Names, feedback and a readable gearbox while the art is boxes
+
+- **Context.** The owner, after a first look at the game in motion: "add
+  feedback animation to different actions as it is not clear when an action
+  was registered, also change the colors so they are not all yellow and
+  add a text when hovering over. the gearbox is especially confusing", and
+  did not know what the clock on the dash was for. GDD 2 says "No
+  conventional HUD"; GDD 16.3 lists what shows each state. This is the
+  owner's instruction for the placeholder stage and stands above both
+  (GDD 1.5); `hints_enabled` in tuning turns all of it off again for the
+  day real art can carry the meaning.
+- **Colours.** Every control's marker has a colour of its own kind
+  (`marker_*` in placeholders.json, named by each anchor): wipers blue,
+  horn orange-red, hazards red, radio teal, tape purple, indicator green,
+  high beam pale yellow, window cyan, glovebox tan, passenger purple, what
+  a stop offers orange; a plain slot is slate. The gear knob is ivory; the
+  visor and the mirror's frame are no longer yellow slabs; a gesture's arc
+  is mint.
+- **A label under the pointer** (`HintView`): the control's name and how it
+  is worked, from the ritual a press there would begin
+  (`DriveSim.hint_at`, in the snapshot as `hint`; `gesture_hint` while a
+  gesture is being made). Names are lines `hint.ritual.<ritual id>`, the
+  item's name where a ritual has none; the gesture is `hint.gesture.<kind>`
+  with its seconds, turns or ways. The words say "press", not "click": a
+  thumb reads them too.
+- **Feedback** (`ActionFeedback`, read by `CabinView` and `HintView`).
+  The simulation announces nothing new (GDD 13.6's list of events is
+  closed): what happened is read from `ritual_completed`, from the grind's
+  sound, and from the snapshot's gesture and gear. A marker is pressed in
+  while its gesture is made; pops, with a green flash and its name rising
+  from it, when the ritual completes; shakes, with a red flash and "Not
+  done: <how>", when the gesture ends and nothing came of it. A click made
+  while the hand is still on its way fills the pointer's ring until the
+  hand arrives (`press_pending`).
+- **The gearbox.** Three things. The knob in the cabin now moves with the
+  lever: `CabinView` put it back at rest every frame after moving it (the
+  knob is also the lever's marker, and the loop that places markers ran
+  second), so since M1 the lever had never been seen to move. While the
+  hand is at the lever, holds it, or has just let it go, the gate is drawn
+  as it is: the neutral bar and a slot per gear with its number, a ring
+  where letting go still finds the gear, the lever as a dot (ringed in his
+  hand, red while a grind has locked it), the gear he is in lit; "Gear 4",
+  "Neutral" or "Grind! Release nearer the end of a slot" over it. And the
+  dash shows the gear beside the clock.
+- **The clock** is the night: 22:00 in Baghdad, the wedding at 06:00, one
+  second of driving twenty of the night's (GDD 6.4). Under it the dash now
+  says "wedding 06:00".
+- **What it found.** With "Not done" on the screen the bot was seen to
+  miss every wiper sweep: it flicked the stalk down, the wipers are a
+  FLICK up, and it had driven every rain leg behind a blind windscreen
+  since D-068. Fixed; T-BOT-01 now holds that every gesture the bot begins
+  on a rain, a night and an open leg completes its ritual, that it sweeps,
+  and that it is not left blind (+15 checks; one mutant more in
+  `tools/mutants/bot.py`). `artifacts/balance.json` was made again with
+  the bot that can see (84 Tellings, `tools/run_balance.sh 4`): 39 nights
+  won, 44 late, 1 wrecked (it was 42, 39 and 3). Against GDD 12.5 nothing
+  changes side: hands-off time 3.41 s, the hand off the wheel 8% (it was
+  10%: a sweep that works is made once), expert at the Drivers' Table 75%,
+  competent 100%, novice at the Children's Table to the Checkpoint every
+  night, no Wreck from one event. D-068's reading of the numbers stands.
+- **Not done here.** The lamps, the cash and the mirror have no captions
+  (nobody asked; GDD 16.3 says what they are). The label names what a
+  press would do now, not everything a control can ever do. No test looks
+  at pixels: the views were checked by eye, in pictures and a recording
+  made under Xvfb (`--write-movie`).
+
