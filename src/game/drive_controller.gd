@@ -83,6 +83,7 @@ func _ready() -> void:
 	_touch = TouchInput.new(data.tuning)
 	_feedback.setup(tuning)
 	_cabin.feedback = _feedback
+	_cabin.set_dash_words(Lines.format("dash.clock.due", [tuning.s("clock_deadline")]), Lines.get_text("hud.neutral"))
 	_hints = HintView.new()
 	$Overlay.add_child(_hints)
 	$Overlay.move_child(_hints, 0)

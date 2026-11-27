@@ -120,8 +120,8 @@ func apply(snapshot: Dictionary, feedback: ActionFeedback, camera: Camera3D, cab
 	elif pointer_at != Vector2.INF:
 		hint = snapshot["hint"]
 		at = pointer_at
-	var named: String = ActionFeedback.name_of(hint)
-	var how: String = ActionFeedback.how_of(hint)
+	var named: String = name_of(hint)
+	var how: String = how_of(hint)
 	_plate.visible = at != Vector2.INF and not (named.is_empty() and how.is_empty())
 	if _plate.visible:
 		_name.text = named
@@ -147,7 +147,8 @@ func apply(snapshot: Dictionary, feedback: ActionFeedback, camera: Camera3D, cab
 	# A word at each control something has just happened at.
 	var used: int = 0
 	for pulse: ActionFeedback.Pulse in feedback.pulses:
-		if pulse.text.is_empty() or pulse.age > _toast_s:
+		var said: String = text_of(pulse)
+		if said.is_empty() or pulse.age > _toast_s:
 			continue
 		var where: Vector2 = _on_screen(camera, cabin.control_position(pulse.anchor))
 		if pulse.anchor == ActionFeedback.GEAR_LEVER and _show_gate:
@@ -159,7 +160,7 @@ func apply(snapshot: Dictionary, feedback: ActionFeedback, camera: Camera3D, cab
 		used += 1
 		var share: float = pulse.age / maxf(_toast_s, 0.001)
 		var color: Color = _ok_color if pulse.kind == ActionFeedback.KIND_OK else (_fail_color if pulse.kind == ActionFeedback.KIND_MISSED else _text_color)
-		label.text = pulse.text
+		label.text = said
 		label.add_theme_color_override("font_color", Color(color, clampf((1.0 - share) * 3.0, 0.0, 1.0)))
 		label.add_theme_font_size_override("font_size", maxi(roundi(_name_px * scale_px), 8))
 		label.add_theme_constant_override("outline_size", maxi(roundi(_name_px * scale_px * 0.25), 2))
@@ -249,3 +250,60 @@ func _on_screen(camera: Camera3D, world: Vector3) -> Vector2:
 ## The top-left corner that keeps a box of `box` wholly in the view.
 func _keep_inside(at: Vector2, box: Vector2) -> Vector2:
 	return Vector2(clampf(at.x, 0.0, maxf(size.x - box.x, 0.0)), clampf(at.y, 0.0, maxf(size.y - box.y, 0.0)))
+
+# --- The words ------------------------------------------------------------------
+
+## What a pulse says at its control.
+static func text_of(pulse: ActionFeedback.Pulse) -> String:
+	match pulse.what:
+		ActionFeedback.WHAT_RITUAL:
+			return name_of(pulse.hint)
+		ActionFeedback.WHAT_MISSED:
+			return Lines.format("hint.missed", [how_of(pulse.hint)])
+		ActionFeedback.WHAT_GEAR:
+			return Lines.format("hint.gear", [str(pulse.gear)])
+		ActionFeedback.WHAT_NEUTRAL:
+			return Lines.get_text("hint.gear.neutral")
+		ActionFeedback.WHAT_GRIND:
+			return Lines.get_text("hint.gear.grind")
+	return ""
+
+
+## What a control is called: its ritual's own line, or the name of the item
+## the ritual belongs to; "" when neither is written.
+static func name_of(hint: Dictionary) -> String:
+	var ritual: String = GameData.as_string(hint.get("ritual"))
+	if not ritual.is_empty() and Lines.has_line("hint.ritual." + ritual):
+		return Lines.get_text("hint.ritual." + ritual)
+	var item: String = GameData.as_string(hint.get("item"))
+	if not item.is_empty() and Lines.has_line("item.%s.name" % item):
+		return Lines.get_text("item.%s.name" % item)
+	return ""
+
+
+## How it is worked, in words: the gesture, with its time, turns or ways.
+static func how_of(hint: Dictionary) -> String:
+	var gesture: String = GameData.as_string(hint.get("gesture"))
+	if gesture.is_empty():
+		return ""
+	var id: String = "hint.gesture." + gesture.to_lower()
+	if not Lines.has_line(id):
+		return ""
+	match gesture:
+		"HOLD":
+			return Lines.format(id, [_number(GameData.as_float(hint.get("amount")))])
+		"CRANK":
+			return Lines.format(id, [_number(GameData.as_float(hint.get("amount")))])
+		"FLICK":
+			var ways: PackedStringArray = []
+			for dir: Variant in GameData.as_array(hint.get("dirs")):
+				ways.append(Lines.get_text("hint.dir." + GameData.as_string(dir)))
+			return Lines.format(id, [Lines.get_text("hint.dir.or").join(ways)])
+	return Lines.get_text(id)
+
+
+## 3 for 3.0, 1.2 for 1.2.
+static func _number(value: float) -> String:
+	if is_equal_approx(value, roundf(value)):
+		return str(roundi(value))
+	return str(snappedf(value, 0.1))

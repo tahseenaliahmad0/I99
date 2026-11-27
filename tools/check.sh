@@ -28,6 +28,11 @@ if ! command -v "$GODOT" >/dev/null 2>&1; then
   exit 2
 fi
 
+LIMIT=()
+if command -v timeout >/dev/null 2>&1; then
+  LIMIT=(timeout "${STEP_LIMIT:-3600}")
+fi
+
 LOG_DIR=".godot/check"
 mkdir -p "$LOG_DIR"
 FAILED=()
@@ -38,7 +43,9 @@ run_step() {
   local name="$1"; shift
   local log="$LOG_DIR/$name.log"
   local started=$SECONDS
-  "$GODOT" --headless --path . "$@" 2>&1 | sed -e 's/\x1b\[[0-9;]*[A-Za-z]//g' > "$log"
+  # A step that never ends is a step that failed (a tool whose script does
+  # not compile waits for ever): STEP_LIMIT seconds, an hour unless set.
+  "${LIMIT[@]}" "$GODOT" --headless --path . "$@" 2>&1 | sed -e 's/\x1b\[[0-9;]*[A-Za-z]//g' > "$log"
   local code=${PIPESTATUS[0]}
   local errors
   errors=$(grep -cE '^[[:space:]]*(SCRIPT ERROR|USER SCRIPT ERROR|USER ERROR|ERROR):' "$log")

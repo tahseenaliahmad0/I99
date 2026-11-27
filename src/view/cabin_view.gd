@@ -116,6 +116,13 @@ var _due: String = ""
 var _neutral: String = ""
 
 
+## The words on the dash, from whoever has the lines (this view names no
+## autoload: see ActionFeedback): when the night is due, and neutral.
+func set_dash_words(due: String, neutral: String) -> void:
+	_due = due
+	_neutral = neutral
+
+
 func setup(data: GameData, factory: PlaceholderFactory) -> void:
 	_factory = factory
 	var tuning: Tuning = data.tuning
@@ -223,8 +230,6 @@ func setup(data: GameData, factory: PlaceholderFactory) -> void:
 		_due_text.position = Vector3(tuning.fi("dash_due_pos", 0), tuning.fi("dash_due_pos", 1), tuning.fi("dash_due_pos", 2))
 		_due_text.visible = _hints
 		dash.add_child(_due_text)
-	_due = Lines.format("dash.clock.due", [tuning.s("clock_deadline")])
-	_neutral = Lines.get_text("hud.neutral")
 	_press_scale = tuning.f("feedback_press_scale")
 	_pop_scale = tuning.f("feedback_pop_scale")
 	_pop_s = tuning.f("feedback_pop_s")
