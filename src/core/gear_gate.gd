@@ -120,6 +120,16 @@ func shift_sequential(step_by: int) -> bool:
 	return true
 
 
+## Gesture completion for the DriverBot (GDD 13.8): the lever, in his hand,
+## is put in a gear's slot; letting go leaves it there. Nothing happens
+## while the lever is not held, or is locked after a grind.
+func place_held(gear_number: int) -> void:
+	if not held or lock_left > 0.0:
+		return
+	_place(gear_number)
+	engaged = true
+
+
 ## The hand takes the knob.
 func press() -> void:
 	if held:
