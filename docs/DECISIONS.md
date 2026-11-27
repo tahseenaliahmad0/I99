@@ -2610,6 +2610,9 @@ menu and every in-game action".
   Esc does the same from anywhere. Both open the same screen: the
   settings, "Drive on", and "Back to the wedding". The settings screen
   says how (`settings.hint.pause`).
+  *(Later, D-069: GDD 4.1 already names the pointer's pause, "the hotspot
+  in the top-left corner", which this entry overlooked. It is built with
+  touch in M12. The hold on nothing stays as a second way.)*
 - **The menus** are pressed with the left button (the settings' rows with
   either). A tool, `tools/onehand_walk.gd`, walks them in a headless
   build with mouse events and nothing else: the title, its options, the
@@ -2698,7 +2701,179 @@ builds a wall."
   slower pace (any other pace still meets the wall). What it costs:
   while he crawls or stands at the barriers, so does everybody else in
   sight. At a checkpoint that reads as a checkpoint.
+  *One exception, found by the DriverBot:* on a road that waits, the
+  brake no longer opens a gap, because what is ahead slows as he does. A
+  driver tailing a minibus toward the barriers crept into its back
+  however hard he braked. So a vehicle he is within `traffic_follow_gap`
+  behind, in his own lane, never moves slower than he does (up to its own
+  speed): behind it the brake works as it does anywhere. T-WALL-01 has
+  the case.
 - **The Motorcade** holds every lane at 70 km/h (GDD 9.3). The plan's line
   behind it is open at the motorcade's pace: third gear does 70 there for
   120 s and touches nothing. The way through at third gear's own pace is
   the side road, and the scripted driver takes it too (100.7 s, par 110).
+
+## D-068 (M11, 2026-11-27) The DriverBot and the balance runner as built
+
+GDD 13.8: "`DriverBot` plays through the simulation at the intent level:
+it sets the hand target, grip and gesture completion, with realistic
+durations. It does not synthesise mouse motion." GDD 12.5: "The bot gives
+the builder numbers before a human plays."
+
+- **Where it is.** `src/game/driver_bot.gd` (it took the place of
+  `stand_in_bot.gd`), `src/game/balance_run.gd`, `tools/run_balance.gd`
+  and `tools/run_balance.sh`. In the drive scene: `--bot=novice`,
+  `competent` or `expert`, and F7. Any other word after `--bot=` is the
+  smoke runs' driver: the competent bot, pulling in at every stop.
+- **Through the input, as he plays.** What it does goes into the
+  `DriveInput` of the tick: the pointer on an anchor (the hand travels
+  there in its own time), the left button, the brake. It steers with the
+  wheel in its hand and not otherwise: the angle that takes the car where
+  it wants it becomes the sideways motion that turns a gripped wheel
+  there. With the hand off the wheel the car goes where the road takes
+  it. Two things are "gesture completion": the lever is put in a gear's
+  slot once it has been held for `bot_shift_s` (`GearGate.place_held`),
+  and a FLICK, a DRAG or the crank is the pointer thrown or led for a few
+  ticks. Each gesture takes what GDD 7.4 gives its kind (TAP 0.3 s, FLICK
+  0.4 s, DRAG 0.8 s): the hand waits at the anchor for the rest.
+- **The four numbers of GDD 13.8** are tuning arrays, novice to expert:
+  `bot_reaction_s` (what it decides is done that much later),
+  `bot_lane_error_m` (a slow random walk about the middle of its lane,
+  with that spread; smaller at a crawl), `bot_let_go_margin_s`,
+  `bot_cruise_gear` (the expert's fourth only with Nerves under
+  `bot_fourth_nerves`, no Patrol, no rain, and a road clear as far as it
+  sees).
+- **The policy** is GDD 13.8's, read so: "the lane whose next obstacle is
+  farthest" is farthest in time at the pace it means to keep, over all
+  lanes; it moves for `bot_lane_gain_s` more, and at once for any gain
+  when time to collision is under 3 s. Boxed in, it drops back behind
+  what is beside it. Behind what it cannot pass it keeps `bot_keep_gap_m`
+  and `bot_headway_s` of its speed. It lets go only when the road leaves
+  it alone (nothing in its lane, no bend, gust, cones, Exit or barriers)
+  for as long as the task takes with the way there and back, plus the
+  skill's margin.
+- **One thing the GDD's policy does not say, added because without it
+  nobody arrives:** the competent and the expert bot *read the road*
+  (`bot_reads_road`). The generator leaves one way through the traffic
+  (GDD 9.2 rule 3) and a driver who looks ahead sees it; a bot that only
+  reacts lane by lane is boxed in behind every pair of slow vehicles,
+  averages 70 km/h and is late every night. So they take the plan's line
+  when the move it asks for is clear, and fall back on the policy when it
+  is not, or when they are much faster than third gear's pace (the line is
+  only true at that pace). The novice does not read: it reacts, brakes
+  early, and is usually late.
+- **What it cannot see it does not know.** With his eyes shut (Blink,
+  Nod) or down on an eyes-down ritual it decides nothing new and does not
+  turn the wheel. Haze, rain between two sweeps, Glare and his Lids
+  shorten how far it looks; so do night and dust.
+- **What its hand does on the road:** the gear; the wipers in rain; the
+  high beam at night; the radio (music from `bot_music_nerves`, the news
+  near the Heavy floor), found again each time it drifts to static; a
+  slap when Heavy; the photo once a leg and the horn when Frayed; the
+  indicator under a Patrol's eye. At stops: repairs; after a boss the
+  fitter or the tea; and, where it buys, the free pick and "sensibly":
+  what works on its own (a Keepsake, an Adaptation), dearest first, with
+  the price of a repair left in its pocket. It pulls in for tea when
+  Frayed, for the fitter with a lamp lit, for a shop with cash, and never
+  with less than `bot_clock_reserve_min` to spare. The Checkpoint's papers,
+  the officer's licence, Dawn's barriers in second gear and the Arrival's
+  key it does as the stand-in did. **It does not:** smoke, drink the tea,
+  use a Habit it bought, take a passenger, answer the phone or the Call,
+  answer a heckle, take the Motorcade's side road. A night ends in
+  `on_time` at best, never in the Call.
+- **"No purchases"** (GDD 12.5, the expert) is read as: buys no items.
+  Repairs and the tea are services and it takes them.
+- **A win** is a night that arrives and is not late. A Wreck ends the
+  Telling for the numbers, though the game would tell it again. "Reaches
+  the Checkpoint" is the first boss beginning. "A Wreck from one
+  unavoidable event" is counted as a Wreck whose last hit found no lamp
+  lit: one event that took a whole car. No single hit can (the dearest
+  lights three of five lamps), so the measure can only be 0%; whether a
+  hit was avoidable the runner does not judge.
+- **"Hand off the wheel with a mid-game cabin"** is measured as the
+  competent bot's share of ticks with no hand on the wheel on the legs of
+  Act 2, the car moving.
+- **The report** (`artifacts/balance.json`): the six measures of GDD 12.5
+  with target, measured value, whether it is within, and the sample; a
+  row for each Table and skill; and where the Wrecks happened. It never
+  fails on the numbers; T-BOT-01 checks its shape and its arithmetic,
+  and runs the runner on two Tellings.
+
+## D-069 (M12, 2026-11-27) Touch, the hotspot, and the export presets
+
+GDD 4.1 (the Touch column), 17.4, and D-016.
+
+- **Where it is.** `src/game/touch_input.gd` (`TouchInput`: fed what
+  fingers do, it fills the tick's `DriveInput`), `src/view/touch_view.gd`
+  (what is drawn for it), the drive scene's `_unhandled_input`. Nothing in
+  `src/core` knows a thumb from a mouse; two small things were added there
+  for it: `DriveSim.gesture_at(anchor)` and `HandSim.set_snap_radius`.
+- **The thumb is the hand.** The pointer goes to the place under the thumb
+  (the ray through that point of the glass, turned into the pointer's own
+  coordinates) and follows it; what it moves by is given to the simulation
+  as a mouse's motion is, so that a wheel in the hand turns and a dial
+  under it drags. The button is the thumb: on the wheel, in a gesture, or
+  on nothing, down is down and "lifting it is letting go".
+- **"TAP rituals perform automatically when the hand arrives."** A thumb
+  that comes down on an anchor whose ritual is a TAP arms it; when the
+  hand rests there the press is made for `touch_tap_s`, thumb or no thumb.
+  A mouse's press is kept for `input_buffer` (0.3 s) only: by touch the
+  glovebox across the cabin opens on a tap, by mouse it does not unless
+  the button is still down when the hand is there. A tap on something
+  else meanwhile takes its place.
+- **"HOLD, DRAG and CRANK need the gesture."** On any other anchor the
+  press is made when the hand arrives *with the thumb still down*, and
+  lasts as long as the thumb: a HOLD is timed from the hand's arrival, a
+  DRAG and a CRANK take the thumb's motion, the gear lever is led by it.
+  A thumb lifted on the way does nothing.
+- **The brake** is a finger that comes down in the pedal zone: the bottom
+  left of the view, `touch_pedal_zone` of its width and height (a quarter
+  by two fifths), never less than a tap target either way.
+- **"At least 9 mm across."** Sizes on the glass come from the screen's
+  dots per inch (`DisplayServer.screen_get_dpi`, in the view's own pixels).
+  An anchor's target is its snap radius: by touch that is
+  `anchor_snap_radius` or 4.5 mm, whichever is more on this screen (on a
+  phone it is more: 9 mm are about 150 px of a 1080-line view). The pedal
+  zone and the hotspot are at least 9 mm.
+- **The hotspot** (GDD 4.1: "Esc, or click the hotspot in the top-left
+  corner"; "Tap the hotspot"): the top-left corner, `touch_hotspot_px`
+  of a 1080-line view or 9 mm, with a pause's two bars drawn in it. A
+  tap on it pauses; so does a click with the game's own pointer on it.
+  D-066 missed this row of GDD 4.1 and gave the pointer the left button
+  held on nothing; both are in the game now. The hotspot is the GDD's.
+- **A second finger** beside the hand's, for the Thumb keypad (GDD 7.6:
+  "a second finger on touch"): a tap is the horn's pad, a swipe the
+  wipers'. Without the keypad the simulation ignores the pads.
+- **The mouse the engine makes up for a finger** (emulation is left on, so
+  that the menus' buttons work by touch) is not heard in the drive scene
+  once a finger has been on the glass.
+- **Landscape only:** `display/window/handheld/orientation` is sensor
+  landscape.
+- **Export presets** (`export_presets.cfg`): Windows Desktop, Linux, macOS
+  and iOS (D-016), each with the data files in and the tests, tools and
+  docs out. No export templates are installed here: nothing was exported,
+  and the bundle identifier (`com.example.i99`) and the Apple team id are
+  the owner's to fill in.
+- **What nobody has done:** put a finger on it. T-TOUCH-01 drives
+  `TouchInput` against the simulation and hands the headless drive scene
+  screen-touch events (`tools/touch_walk.gd`); no phone was near.
+- **The first report** (D-068; four seeds per skill per Table, 84
+  Tellings, `tools/run_balance.sh 4`): 42 nights won, 39 late, 3 wrecked.
+  Against GDD 12.5: hands-off time 3.41 s (within); hand off the wheel
+  10% (wanted 25% to 40%); expert at the Drivers' Table 75% (wanted 40%
+  to 60%); competent 100% (wanted 15% to 30%); novice at the Children's
+  Table reaches the Checkpoint every night (wanted 50% or more); no Wreck
+  from one event. Four nights to a cell is a look, not a measurement. What
+  it shows all the same: nobody is wrecked (the road, read well, is safe
+  at third gear's pace), the novice is late rather than wrecked, and the
+  later Tables bite through the Clock (nobody was on time at Noor's). The
+  hand is idle because the bot does only what it must; a player with a
+  cigarette, a tea and a Table to answer is not.
+- **What the tuning pass was.** The bot's own parameters until it played
+  as a person could: gestures at GDD 7.4's durations (the hand off the
+  wheel went from 4% to 10% of the time), eyes that shut, sight that
+  shortens, a sense of the Clock before a stop. The numbers of GDD 15
+  were not moved: the tests hold them to the GDD's letter and GDD 1.5
+  puts them first. Moving the game toward the targets (a harder road, a
+  hungrier cabin, a shorter night) is a change to the spec and the
+  owner's to ask for.

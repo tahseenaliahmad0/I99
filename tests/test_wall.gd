@@ -346,6 +346,39 @@ func _check_dawn() -> void:
 	check(_clear(quick_rest) and _clear(slow_rest), "and both reach the end of the road untouched (%s; %s)" % [_what(quick_rest), _what(slow_rest)])
 	check_eq(GameData.as_int(slow_rest["close_call"]), 0, "the slow one, too, without a close call: no wall in the stretch of the Call")
 
+	# The road waits; what he follows does not wait on him. Close behind a
+	# vehicle in his own lane on that stretch, slower than it: the gap opens,
+	# as it does anywhere else. (The brake must be a way out, there too.)
+	_begin_dawn("", SEED + 41, false)
+	var sign_at: float = _sim.boss.corridor().x - GameData.as_float(check.get("sign_lead_s")) * third * KMH_TO_MS
+	_drive(sign_at + 5.0)
+	var ahead: TrafficSim.Vehicle = _sim.traffic.spawn(&"pickup", _sim.car.lane_of(_sim.car.x), _sim.car.s + 12.0, tuning.fi("gear_speeds", 1))
+	if check(ahead != null, "(a pickup doing second gear's pace is put %d m ahead of him, past the checkpoint's sign)" % 12):
+		var input: DriveInput = DriveInput.new()
+		var first_gear: float = tuning.fi("gear_speeds", 0)
+		var gap_then: float = (ahead.s - ahead.half_length) - (_sim.car.s + _sim.car.length() * 0.5)
+		var least: float = gap_then
+		var hits: int = 0
+		_sim.gate.reset(1)
+		for _tick: int in roundi(4.0 / DT):
+			input.clear()
+			input.rmb = _sim.car.speed > first_gear
+			_sim.car.x = _sim.car.lane_center(_sim.car.lane_of(_sim.car.x))
+			_sim.step(input)
+			least = minf(least, (ahead.s - ahead.half_length) - (_sim.car.s + _sim.car.length() * 0.5))
+			for event: Dictionary in _sim.drain_events():
+				if GameData.as_string(event.get("type")) == "hit":
+					hits += 1
+		var gap_now: float = (ahead.s - ahead.half_length) - (_sim.car.s + _sim.car.length() * 0.5)
+		check(_sim.boss.traffic_pace() < 0.5, "(the road is waiting: its traffic at %d%% of its pace)" % roundi(100.0 * _sim.boss.traffic_pace()))
+		check_eq(hits, 0, "he brakes to first gear's pace behind it and does not touch it")
+		# From third gear's pace down to the pickup's the brake needs this
+		# much road more than the pickup covers; after that he is no faster.
+		var second: float = tuning.fi("gear_speeds", 1)
+		var braking: float = (third - second) * (third - second) / (2.0 * tuning.f("brake_decel")) * KMH_TO_MS
+		check(least > gap_then - braking - 1.0, "the gap never closes by more than his braking takes (%.1f m at the least, %.1f m to begin with, %.1f m of braking)" % [least, gap_then, braking])
+		check(gap_now >= least, "and it is opening or holding when he is down to his pace (%.1f m)" % gap_now)
+
 
 ## Dawn begun, the scripted driver at its start with the checkpoint's limit
 ## in his script: from the barriers' mouth, or (`early`) from the sign.

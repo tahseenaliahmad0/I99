@@ -77,7 +77,7 @@ MUTANTS = [
  (D, '\t\t# Whoever held the wheel for him lets go of it.\n\t\tpassengers.wheel_taken()\n', '', 'his grip does not end the hold'),
  (P, '\t\thold_left -= dt\n', '', 'the hold has no time'),
  (D, '\twheel.locked = effects.has_own(ItemSim.HOOK_SET) or passengers.holds_wheel()', '\twheel.locked = effects.has_own(ItemSim.HOOK_SET)', 'a held wheel is not held'),
- (D, '\t\twheel.hold_at(_straight_angle())', '\t\twheel.hold_at(0.0)', 'straight is the wheel at its centre'),
+ (D, '\t\t# its line. A curve or a gust still carries it off.\n\t\twheel.hold_at(_straight_angle())', '\t\t# its line. A curve or a gust still carries it off.\n\t\twheel.hold_at(0.0)', 'straight is the wheel at its centre'),
  (D, '\tvar steady: float = car.steady_drift(-faults.param(FAULT_PULL, "drift_left", 0.0))', '\tvar steady: float = car.steady_drift(0.0)', 'she does not hold against a pulling steering'),
  (D, '\treturn clampf(-steady / authority, -1.0, 1.0) * wheel.max_angle()', '\treturn clampf(steady / authority, -1.0, 1.0) * wheel.max_angle()', 'she steers with the drift'),
  (I, '\tif smoke.burning or (smoke.use_effect != &"" and _effects.has_own(smoke.use_effect)):\n\t\treturn false\n', '', 'a second cigarette while one burns'),

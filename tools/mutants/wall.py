@@ -3,11 +3,13 @@ for T-WALL-01, with the Tailgater's own test:
     python3 tools/mutants.py T-WALL,T-LEG-06 tools/mutants/wall.py
 """
 B = 'src/core/boss_sim.gd'
+T = 'src/core/traffic_sim.gd'
 D = 'src/core/drive_sim.gd'
 E = 'src/core/encounter_sim.gd'
 MUTANTS = [
+ (T, '\t\t\t\town = maxf(pace, minf(vehicle.speed, player_speed) / vehicle.speed)', '\t\t\t\town = pace', 'what he follows waits on him too: the brake does not open the gap'),
  (B, '\treturn _car.speed / _par_kmh', '\treturn 1.0', 'Dawn\'s road does not wait at the last checkpoint'),
- (D, '\t\tvar traffic_dt: float = _road_dt * boss.traffic_pace()', '\t\tvar traffic_dt: float = _road_dt', 'the traffic\'s time step ignores the checkpoint'),
+ (D, '\t\tvar pace: float = boss.traffic_pace()', '\t\tvar pace: float = 1.0', 'the traffic\'s time step ignores the checkpoint'),
  (B, 'or _car.s < _corridor_sign_at or _car.s >= _corridor_clear_at:', 'or _car.s < _corridor_at or _car.s >= _corridor_clear_at:', 'the road waits only from the barriers\' mouth, not from the sign'),
  (B, 'or _car.s < _corridor_sign_at or _car.s >= _corridor_clear_at:', 'or _car.s < _corridor_sign_at or _car.s >= _corridor_to:', 'the road stops waiting where the barriers end, before he is back at par'),
  (E, '\tvar seconds: float = _tail_pass_time(driver, behind, from_behind)\n', '\tvar seconds: float = _tail_pass_time(driver, behind, from_behind)\n\tif seconds > 0.0:\n\t\treturn true\n', 'the Tailgater passes whether there is room or not'),

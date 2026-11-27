@@ -412,6 +412,12 @@ func _wants_wheel(down: bool) -> bool:
 	return _grip_latched if grip_toggle else down
 
 
+## How near an anchor the pointer has to be to snap to it, in reference px
+## (tuning anchor_snap_radius; wider under a thumb, GDD 17.4).
+func set_snap_radius(radius: float) -> void:
+	_snap_radius = radius
+
+
 func _nearest_anchor() -> int:
 	if not can_reach:
 		return NO_ANCHOR

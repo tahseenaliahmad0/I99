@@ -62,6 +62,11 @@ static func shown_at(at: Vector2, width: float, mirrored: bool) -> Vector2:
 	return Vector2(width - at.x, at.y) if mirrored else at
 
 
+## Where on the screen the pointer is drawn (Vector2.INF while it is hidden).
+func shown() -> Vector2:
+	return shown_at(_at, size.x, mirrored) if _visible_pointer else Vector2.INF
+
+
 func _draw() -> void:
 	if _visible_pointer:
 		draw_arc(shown_at(_at, size.x, mirrored), _pointer_radius, 0.0, TAU, 32, _pointer_color, _ring_width, true)

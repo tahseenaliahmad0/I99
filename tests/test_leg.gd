@@ -702,6 +702,61 @@ func _check_tailgater_in_traffic(special: Dictionary) -> void:
 	check(s_at_pass < change_at + tuning.f("gen_lane_change") + 3.0, "and no later")
 	check_eq(_sim.encounter.tail_phase, EncounterSim.TAIL_GONE, "(and goes by, and is gone)")
 
+	# A slow truck well ahead in the car's own lane: clear of him now, and in
+	# his way before he would be done. He counts on where it will be.
+	_begin_quiet_straight("tailgater", 2, 71)
+	_drive_quiet_until(20.0, 1)
+	var far_truck: TrafficSim.Vehicle = _sim.traffic.spawn(&"truck", 2, _sim.car.s + 100.0, 60.0)
+	changed_at = _sim.leg.time
+	_drive_quiet_until(changed_at + hold + 2.0 * DT, 2)
+	check(far_truck != null and far_truck.s - _sim.car.s > 50.0, "(a truck doing 60 km/h is still %d m ahead of the car in its lane)" % roundi(far_truck.s - _sim.car.s))
+	check_eq(_sim.encounter.tail_phase, EncounterSim.TAIL_HANGING_BACK, "he does not pass into a lane that will be shut before he is out of it")
+
+	# His lane blocked, and somebody already behind the car: nowhere to
+	# swerve in. He is lost, and drives through nobody.
+	_begin_quiet_straight("tailgater", 2, 71)
+	_drive_quiet_until(20.0, 1)
+	_events = []
+	driver = _sim.encounter.tailgater()
+	_sim.traffic.spawn(&"truck", 1, _sim.car.s + 30.0, 60.0)
+	_sim.car.x = _sim.car.lane_center(2)
+	_sim.traffic.spawn(&"pickup", 2, _sim.car.s - 9.0, _sim.car.speed)
+	changed_at = _sim.leg.time
+	through = 0
+	while _sim.encounter.active and _sim.leg.time < changed_at + hold:
+		_hold_lane_and_step(2)
+		if _sim.encounter.tailgater() != null:
+			through += _inside_another(_sim.encounter.tailgater())
+	check(_sim.encounter.tail_phase == EncounterSim.TAIL_GONE and _sim.leg.time < changed_at + hold - 2.0 * DT, "with a vehicle right behind the car he cannot swerve in: he is lost (%.2f s after the change)" % (_sim.leg.time - changed_at))
+	check_eq(through, 0, "and he drove into nobody")
+	check(_events_named("hit").is_empty() and not _has_event_named("close_call"), "nor touched the car")
+
+	# From behind the car he pulls out before he goes by: not through it.
+	_begin_quiet_straight("tailgater", 2, 71)
+	_drive_quiet_until(20.0, 1)
+	_events = []
+	_sim.traffic.spawn(&"truck", 1, _sim.car.s + 30.0, 20.0)
+	changed_at = _sim.leg.time
+	passing_from = -1.0
+	var behind_at_pull_out: float = 0.0
+	var beside_when_level: float = INF
+	while _sim.encounter.active and _sim.leg.time < changed_at + 20.0:
+		_hold_lane_and_step(2)
+		driver = _sim.encounter.tailgater()
+		if driver == null:
+			break
+		if _sim.encounter.tail_phase == EncounterSim.TAIL_PASSING:
+			if passing_from < 0.0:
+				passing_from = _sim.leg.time
+				behind_at_pull_out = (_sim.car.s - _sim.car.length() * 0.5) - (driver.s + driver.half_length)
+			if absf(driver.s - _sim.car.s) < driver.half_length + _sim.car.length() * 0.5:
+				beside_when_level = minf(beside_when_level, absf(driver.x - _sim.car.x) - driver.half_width - _sim.car.half_width())
+	check(passing_from > 0.0 and passing_from < changed_at + hold + 0.5, "the slow truck far behind already, he pulls out as soon as he is left (%.2f s after the change)" % (passing_from - changed_at))
+	check(behind_at_pull_out < follow, "from close behind the car (%.1f m)" % behind_at_pull_out)
+	check(beside_when_level > 0.5, "and is a lane away when he comes level with it (%.2f m of air between them)" % beside_when_level)
+	check(_events_named("hit").is_empty() and _sim.faults.lamps == 0, "he touches nothing")
+	check_eq(_sim.encounter.tail_phase, EncounterSim.TAIL_GONE, "(and is gone)")
+
 
 ## A quiet Tailgater leg whose plan's line keeps one lane.
 func _begin_quiet_straight(leg_id: String, act: int, leg_seed: int) -> Dictionary:

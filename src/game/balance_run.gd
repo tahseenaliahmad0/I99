@@ -37,8 +37,10 @@ func _init(data: GameData) -> void:
 ##   { table, skill, seed, outcome, ending, act, stage, reached_checkpoint,
 ##     seconds, clock_minutes, hits, lamps, close_calls, nerves_peak,
 ##     road_ticks, hand_off_ticks, hand_off_act2, road_act2, stops, bought,
-##     rituals, last_hits, wreck_from_one_event }
-func tell(table: String, skill: String, telling_seed: int, buys: bool) -> Dictionary:
+##     rituals, blind_ticks, last_hits, wreck_from_one_event, state }
+## `max_seconds` cuts it short (a test's); `state` is the simulation's hash
+## where it ended.
+func tell(table: String, skill: String, telling_seed: int, buys: bool, max_seconds: float = -1.0) -> Dictionary:
 	var sim: DriveSim = DriveSim.new(_data)
 	sim.begin_telling(table, telling_seed)
 	var bot: DriverBot = DriverBot.new(sim, _data, skill, Rng.derive(telling_seed, DriverBot.SEED_SALT))
@@ -55,7 +57,7 @@ func tell(table: String, skill: String, telling_seed: int, buys: bool) -> Dictio
 	var road_before: int = 0
 	var off_before: int = 0
 	var lamps_before_hit: int = 0
-	var guard: int = roundi(_tuning.f("balance_max_seconds") / DriveSim.DT)
+	var guard: int = roundi((max_seconds if max_seconds > 0.0 else _tuning.f("balance_max_seconds")) / DriveSim.DT)
 	var done: bool = false
 	while not done and guard > 0:
 		guard -= 1
@@ -103,6 +105,8 @@ func tell(table: String, skill: String, telling_seed: int, buys: bool) -> Dictio
 	out["stops"] = bot.stops
 	out["bought"] = bot.bought
 	out["rituals"] = bot.rituals.duplicate()
+	out["blind_ticks"] = bot.blind_ticks
+	out["state"] = sim.state_hash()
 	out["last_hits"] = hits.slice(maxi(hits.size() - 3, 0))
 	if GameData.as_string(out["outcome"]) == WRECKED and not hits.is_empty():
 		# One event did it: the hit that wrecked him found no lamp lit.

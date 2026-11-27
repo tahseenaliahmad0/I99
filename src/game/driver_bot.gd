@@ -36,12 +36,16 @@ var debug: bool = false
 ## Ticks on a road with the car moving, and those of them with no hand on the wheel.
 var road_ticks: int = 0
 var hand_off_ticks: int = 0
+## Ticks on a road with his eyes shut or down.
+var blind_ticks: int = 0
 ## Rituals done, by id; stops pulled in at; things bought.
 var rituals: Dictionary = {}
 var stops: int = 0
 var bought: int = 0
 ## Whether it buys at stops (the runner sets it: GDD 12.5 "no purchases").
 var buys: bool = true
+## It pulls in at every stop, wanted or not (the smoke runs' driver).
+var every_stop: bool = false
 
 var _sim: DriveSim
 var _data: GameData
@@ -90,7 +94,11 @@ var _crank_heading: float = 0.0
 var _stood: float = 0.0
 var _key_ticks: int = 0
 var _shop_done: bool = false
+var _stop_actions: int = 0
+var _stop_tried: Dictionary = {}
 var _horn_at: float = -INF
+var _blind: bool = false
+var _last_brake: bool = false
 var _last_station: StringName = &""
 ## When each kind of task may be done again (seconds of the night).
 var _not_before: Dictionary = {}
@@ -130,7 +138,10 @@ func drive(input: DriveInput) -> void:
 		return
 	_stood = 0.0
 	_shop_done = false
-	if _sim.wrecked or not _sim.leg.active:
+	_stop_actions = 0
+	_stop_tried = {}
+	if _sim.wrecked or not _sim.leg.active or _sim.prologue.active:
+		# (The prologue is his own, with both hands: GDD 10.1.)
 		return
 	if not is_same(_plan, _sim.leg.plan):
 		_new_stretch()
@@ -159,6 +170,15 @@ func drive(input: DriveInput) -> void:
 	if boss.active and boss.kind == BossSim.CHECKPOINT:
 		_at_the_checkpoint(input)
 		return
+	# With his eyes shut (a blink, a nod) or down on what his hand is doing,
+	# he sees nothing new: what he last meant to do stands, and the wheel
+	# stays where it is.
+	_blind = _sim.nerves.eyes_shut or _sim.hand.eyes_down
+	if _blind:
+		blind_ticks += 1
+		input.rmb = _last_brake
+		_hand(input)
+		return
 	var decided: Vector2 = _decide()
 	want_x = decided.x
 	brake = decided.y > 0.5
@@ -169,6 +189,7 @@ func drive(input: DriveInput) -> void:
 	_ring_brake[_ring_at] = 1 if brake else 0
 	_ring_at = (_ring_at + 1) % _reaction_ticks
 	input.rmb = then_brake
+	_last_brake = then_brake
 	_steer(input, then_x)
 	_hand(input)
 
@@ -217,7 +238,7 @@ func _decide() -> Vector2:
 		_target_lane = lane
 	# A slip lane is no lane to drive in: it is for whoever takes the Exit.
 	var through: int = mini(lanes, GameData.as_int(_plan.get("lanes"), lanes)) if not _sim.leg.on_side_road else lanes
-	var look: float = minf(_tuning.f("bot_look_ahead_m"), _sim.visibility())
+	var look: float = _sight()
 	var speed_ms: float = car.speed * KMH_TO_MS
 
 	# Between cones there is one way through.
@@ -333,6 +354,16 @@ func _decide() -> Vector2:
 	return Vector2(x, 1.0 if brake else 0.0)
 
 
+## How far he sees the road, m: as far as he looks, less where less can be
+## seen (night, dust), and less again through what is on the glass and in
+## his eyes: Haze, rain between two sweeps of the wipers, Glare, his Lids
+## (GDD 5.8). Never less than bot_sight_min_m.
+func _sight() -> float:
+	var clear: float = (1.0 - _sim.items.haze) * (1.0 - _sim.items.rain_blur() * _tuning.f("bot_blur_blinds")) \
+			* (1.0 - _sim.glare() * _tuning.f("bot_glare_blinds")) * (1.0 - 2.0 * _sim.nerves.lids)
+	return maxf(minf(_tuning.f("bot_look_ahead_m"), _sim.visibility()) * clampf(clear, 0.0, 1.0), _tuning.f("bot_sight_min_m"))
+
+
 ## Fills, for each lane, the road that is clear ahead in it (m), the time
 ## until he would be at what is in it (s), how fast that is going (km/h),
 ## and whether something is beside him there.
@@ -404,6 +435,10 @@ func _scan(look: float) -> void:
 ## read the road, or it has none).
 func _line_lane(s: float) -> int:
 	if not _reads_road or _path_s.is_empty() or _sim.leg.on_side_road:
+		return NO_LANE
+	# The way through is where the traffic leaves room at third gear's
+	# pace. Much faster than that, he is on his own.
+	if _sim.car.speed > _tuning.fi("gear_speeds", 2) + _tuning.f("bot_line_over_kmh"):
 		return NO_LANE
 	var lane: int = _path_lane[0]
 	for index: int in _path_s.size():
@@ -533,7 +568,14 @@ func _wants_the_stop() -> bool:
 	var stop_id: String = GameData.as_string(_sim.run.branch.get("stop"))
 	if not _data.has_record("stops", stop_id):
 		return false
-	var service: String = GameData.as_string(_data.record("stops", stop_id).get("service"))
+	if every_stop:
+		return true
+	# The Clock (GDD 6.4): no stop he has not the minutes for. What is still
+	# to drive is the legs and bosses ahead at their pars.
+	var record: Dictionary = _data.record("stops", stop_id)
+	if _minutes_in_hand() < GameData.as_float(record.get("clock_min")) + _tuning.f("bot_clock_reserve_min"):
+		return false
+	var service: String = GameData.as_string(record.get("service"))
 	match service:
 		"tea":
 			return _sim.nerves.value >= _tuning.f("bot_tea_nerves") or _sim.nerves.value < _sim.heavy_floor()
@@ -544,6 +586,16 @@ func _wants_the_stop() -> bool:
 		"find":
 			return buys
 	return false
+
+
+## Game minutes he can still spend standing: what is left of the night less
+## what is left of the road, at par (three legs and a boss to an act, the
+## boss counted as a leg and a half).
+func _minutes_in_hand() -> float:
+	var run: RunState = _sim.run
+	var legs_left: float = float((RunGenerator.ACTS - run.act) * 3 + maxi(2 - run.legs_done, 0)) + 1.5 * float(RunGenerator.ACTS - run.act + 1)
+	var par_minutes: float = _tuning.f("leg_length") / (_tuning.fi("gear_speeds", 2) * KMH_TO_MS) * _tuning.f("clock_scale") / 60.0
+	return _sim.clock.minutes_left() - legs_left * par_minutes
 
 
 ## The side of the fork he takes: toward the stop he needs, else the leg
@@ -578,7 +630,12 @@ func _cruise_gear_now() -> int:
 	var gear: int = mini(_cruise_gear, 3)
 	if _cruise_gear >= 4 and _sim.nerves.value <= _tuning.f("bot_fourth_nerves") and not _sim.suspicion.watching \
 			and not _sim.leg.raining and _sim.visibility() >= _tuning.f("bot_look_ahead_m") and not boss.active:
-		gear = 4
+		# Fourth on a road that is clear as far as he sees; back to third
+		# when something in his lane is within bot_lane_look_s.
+		var lane: int = clampi(car.lane_of(car.x), 0, car.lanes - 1)
+		var own: float = _time_to(lane, _tuning.fi("gear_speeds", 3)) if lane < _room.size() else 0.0
+		if own >= _tuning.f("bot_lane_far_s") or (_sim.gate.gear == 4 and own >= _tuning.f("bot_lane_look_s")):
+			gear = 4
 	if boss.active and boss.kind == BossSim.DAWN:
 		var corridor: Vector3 = boss.corridor()
 		if corridor.z > corridor.x and car.s > corridor.y - 60.0 and car.s < corridor.z:
@@ -658,11 +715,11 @@ func _next_task() -> Array[Array]:
 	# Rain: a sweep before the glass is blind.
 	if _sim.items.raining and _sim.items.since_wipe >= _tuning.f("bot_wipe_every_s") and calm >= _task_time("flick"):
 		_task = "wipers"
-		return [["go", "wiper_stalk"], ["flick", 6, 0.0, 1.0], ["up", 2]]
+		return [["go", "wiper_stalk"], _pause("bot_flick_s", 6), ["flick", 6, 0.0, 1.0], ["up", 2]]
 	# Night: the high beam shows him more road.
 	if _sim.visibility() < _tuning.f("bot_look_ahead_m") * 0.5 and _sim.headlight_cone() > 0.0 and not _sim.items.flag(DriveSim.FLAG_HIGH_BEAM) and calm >= _task_time("tap"):
 		_task = "headlights"
-		return [["go", "headlight_knob"], ["down", 4], ["up", 2]]
+		return [["go", "headlight_knob"], _pause("bot_tap_s", 4), ["down", 4], ["up", 2]]
 	var nerves: float = _sim.nerves.value
 	# The radio: music while his Nerves are up, the news to stay awake.
 	var station: StringName = _sim.items.radio
@@ -673,26 +730,26 @@ func _next_task() -> Array[Array]:
 		want = &"news"
 	elif nerves >= _tuning.f("bot_music_nerves"):
 		want = &"music"
-	if want != &"" and station != want and calm >= _task_time("flick"):
+	if want != &"" and station != want and calm >= _task_time("drag"):
 		var way: int = _dial_way(station, want)
 		if way != 0:
 			_task = "radio_tune"
 			# One station: a little over one step of the dial, and the tick
 			# the press is taken in does not count.
-			return [["go", "radio"], ["flick", 10, float(way) * _tuning.f("radio_step_px") * 0.14 / maxf(_tuning.f("bot_flick_px"), 0.001), 0.0], ["up", 2]]
+			return [["go", "radio"], _pause("bot_drag_s", 10), ["flick", 10, float(way) * _tuning.f("radio_step_px") * 0.14 / maxf(_tuning.f("bot_flick_px"), 0.001), 0.0], ["up", 2]]
 	# Falling asleep: a slap.
 	if (_sim.nerves.heavy or nerves < _sim.heavy_floor()) and not _sim.nerves.awake and calm >= _task_time("tap"):
 		_task = "slap"
-		return [["go", "face"], ["down", 4], ["up", 2]]
+		return [["go", "face"], _pause("bot_tap_s", 4), ["down", 4], ["up", 2]]
 	# Frayed: the photo once a leg, then the horn.
 	if nerves >= _tuning.fi("bot_calm_nerves", _index):
 		if not _sim.items.photo_used and calm >= _task_time("flick"):
 			_task = "visor_photo"
-			return [["go", "visor"], ["flick", 6, 0.0, 1.0], ["up", 2]]
+			return [["go", "visor"], _pause("bot_flick_s", 6), ["flick", 6, 0.0, 1.0], ["up", 2]]
 		if not _sim.suspicion.watching and _sim.seconds() - _horn_at >= _tuning.f("horn_cooldown") and calm >= _task_time("tap"):
 			_task = "horn"
 			_horn_at = _sim.seconds()
-			return [["go", "horn"], ["down", 4], ["up", 2]]
+			return [["go", "horn"], _pause("bot_tap_s", 4), ["down", 4], ["up", 2]]
 	return none
 
 
@@ -714,14 +771,26 @@ func _dial_way(station: StringName, want: StringName) -> int:
 	return 1 if right <= left else -1
 
 
+## A pause with the hand at its anchor before the gesture, so that the
+## whole of it takes what GDD 7.4 gives a gesture of its kind (a TAP 0.3 s,
+## a FLICK 0.4 s, a DRAG 0.8 s): "realistic durations" (GDD 13.8). `ticks`
+## are those the gesture itself takes.
+func _pause(duration: String, ticks: int) -> Array:
+	return ["up", maxi(_ticks(_tuning.f(duration)) - ticks, 1)]
+
+
 ## Seconds a task takes from letting go of the wheel to having it again.
 func _task_time(kind: String) -> float:
 	var reach: float = 2.0 * _tuning.f("bot_reach_s")
 	match kind:
 		"shift":
 			return reach + _tuning.f("bot_shift_s") + _margin
-		"flick", "tap":
-			return reach + 0.15 + _margin
+		"flick":
+			return reach + _tuning.f("bot_flick_s") + _margin
+		"tap":
+			return reach + _tuning.f("bot_tap_s") + _margin
+		"drag":
+			return reach + _tuning.f("bot_drag_s") + _margin
 	return reach + 1.0 + _margin
 
 
@@ -733,7 +802,7 @@ func _calm_for() -> float:
 	var lane: int = clampi(car.lane_of(car.x), 0, car.lanes - 1)
 	if _target_lane != lane or absf(car.x - car.lane_center(lane)) > _tuning.f("bot_centre_m"):
 		return 0.0
-	var look: float = minf(_tuning.f("bot_look_ahead_m"), _sim.visibility())
+	var look: float = _sight()
 	var calm: float = look / speed_ms
 	_scan(look)
 	calm = minf(calm, _soon[lane])
@@ -826,7 +895,7 @@ func _wants_to_indicate(way: int) -> void:
 	if _sim.items.indicator == way:
 		return
 	_task = "indicator"
-	_steps = [["go", "indicator_stalk"], ["flick", 6, 0.0, float(-way)], ["up", 2]]
+	_steps = [["go", "indicator_stalk"], _pause("bot_flick_s", 6), ["flick", 6, 0.0, float(-way)], ["up", 2]]
 
 
 # --- Where the night waits ------------------------------------------------------
@@ -849,22 +918,76 @@ func _at_a_stop(input: DriveInput) -> void:
 		input.lmb = true
 
 
-## The next thing he takes from the tray, as steps; empty when he is done.
+## The next thing he does at the vendor's tray, as steps; empty when he is
+## done. What he has paid for goes to its place first. Repairs come before
+## anything else. Then, if he buys (GDD 12.5: the expert is measured with
+## no purchases): the free pick, and "sensibly", which here means what
+## works on its own (a Keepsake, an Adaptation), dearest first, as long as
+## the price of a repair stays in his pocket. A Habit needs a hand he has
+## no time for, and a Deal is the shady guy's.
 func _next_purchase() -> Array[Array]:
 	var none: Array[Array] = []
 	var stop: StopSim = _sim.stop
-	for offer: Dictionary in stop.offers_view():
-		if GameData.as_bool(offer.get("bought")):
+	_stop_actions += 1
+	if _stop_actions > _tuning.i("bot_stop_actions"):
+		return none
+	var offers: Array[Dictionary] = stop.offers_view()
+	for offer: Dictionary in offers:
+		if not GameData.as_bool(offer.get("bought")) or _kind_of(offer) != StopSim.ITEM:
 			continue
 		var anchor: String = GameData.as_string(offer.get("anchor"))
-		var kind: StringName = StringName(GameData.as_string(offer.get("kind")))
-		var price: float = GameData.as_float(offer.get("price"))
-		if price > _sim.cash:
+		for slot: String in stop.slot_anchors(GameData.as_string(offer.get("id"))):
+			var key: String = "%s>%s" % [anchor, slot]
+			if _stop_tried.has(key):
+				continue
+			_stop_tried[key] = true
+			return [["go", anchor], ["down", 12], ["carry", slot], ["up", 30]]
+	for offer: Dictionary in offers:
+		if GameData.as_bool(offer.get("bought")) or _kind_of(offer) != StopSim.REPAIR:
 			continue
-		if kind == StopSim.REPAIR:
+		if GameData.as_float(offer.get("price")) <= _sim.cash:
 			bought += 1
-			return [["go", anchor], ["down", 4], ["up", 12]]
-	return none
+			return [["go", GameData.as_string(offer.get("anchor"))], ["down", 4], ["up", 12]]
+	# After a boss: one service of his choice (GDD 9.6): the fitter with a
+	# lamp lit, the tea with his Nerves up.
+	for offer: Dictionary in offers:
+		if GameData.as_bool(offer.get("bought")) or _kind_of(offer) != StopSim.SERVICE:
+			continue
+		var service: String = GameData.as_string(_data.record("stops", GameData.as_string(offer.get("id"))).get("service")) if _data.has_record("stops", GameData.as_string(offer.get("id"))) else ""
+		if (service == "repair" and _sim.faults.lamps > 0) or (service == "tea" and _sim.faults.lamps == 0 and _sim.nerves.value >= _tuning.f("bot_tea_nerves")):
+			return [["go", GameData.as_string(offer.get("anchor"))], ["down", 4], ["up", 12]]
+	if not buys:
+		return none
+	var best: Dictionary = {}
+	for offer: Dictionary in offers:
+		if GameData.as_bool(offer.get("bought")) or GameData.as_bool(offer.get("shady")) or _kind_of(offer) != StopSim.ITEM:
+			continue
+		var id: String = GameData.as_string(offer.get("id"))
+		var kind: String = GameData.as_string(_data.record("items", id).get("kind")) if _data.has_record("items", id) else ""
+		if kind != "keepsake" and kind != "adaptation":
+			continue
+		if stop.slot_anchors(id).is_empty() or _stop_tried.has("buy>" + id):
+			continue
+		var price: float = GameData.as_float(offer.get("price"))
+		var free: bool = GameData.as_bool(offer.get("free")) and stop.picks_left > 0
+		if not free and price > _sim.cash - _tuning.f("repair_price"):
+			continue
+		var worth: float = GameData.as_float(_data.record("items", id).get("price")) + (1000.0 if free else 0.0)
+		if best.is_empty() or worth > GameData.as_float(best.get("worth")):
+			best = {"anchor": GameData.as_string(offer.get("anchor")), "id": id, "worth": worth}
+	if best.is_empty():
+		return none
+	_stop_tried["buy>" + GameData.as_string(best["id"])] = true
+	bought += 1
+	return [["go", GameData.as_string(best["anchor"])], ["down", 4], ["up", 12]]
+
+
+## What an offer on the tray is: an item, a restock, a repair, a service.
+func _kind_of(offer: Dictionary) -> StringName:
+	var kind: Variant = offer.get("kind")
+	if kind is StringName:
+		return kind
+	return StringName(GameData.as_string(kind))
 
 
 ## An officer at his window (GDD 6.5): his licence across.

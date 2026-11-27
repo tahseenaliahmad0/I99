@@ -4,8 +4,10 @@ extends SceneTree
 ##
 ##   godot --headless --path . --script res://tools/run_balance.gd -- \
 ##       [--seeds=100] [--first=1] [--tables=drivers,children] [--skills=novice,competent,expert] \
+##       [--cells=drivers/expert,children/novice] [--list-tables] \
 ##       [--out=res://artifacts/balance.json] [--part=<file>] [--merge=<file>,<file>...] [--verbose]
 ##
+## --cells runs only those Table/skill pairs (instead of --tables x --skills).
 ## --part writes the Tellings themselves instead of a report, so that
 ## several runs (one for each core: tools/run_balance.sh) can be put
 ## together with --merge. The report does not fail on the numbers: the
@@ -24,6 +26,7 @@ func _initialize() -> void:
 	var part: String = ""
 	var merge: PackedStringArray = []
 	var verbose: bool = false
+	var cells: PackedStringArray = []
 	for arg: String in OS.get_cmdline_user_args():
 		if arg.begins_with("--seeds="):
 			seeds = maxi(arg.trim_prefix("--seeds=").to_int(), 1)
@@ -39,6 +42,13 @@ func _initialize() -> void:
 			part = arg.trim_prefix("--part=")
 		elif arg.begins_with("--merge="):
 			merge = arg.trim_prefix("--merge=").split(",", false)
+		elif arg.begins_with("--cells="):
+			cells = arg.trim_prefix("--cells=").split(",", false)
+		elif arg == "--list-tables":
+			for table: Dictionary in data.records("tables"):
+				print("table %s" % GameData.as_string(table.get("id")))
+			quit(0)
+			return
 		elif arg == "--verbose":
 			verbose = true
 	if tables.is_empty():
@@ -63,17 +73,26 @@ func _initialize() -> void:
 			seeds = maxi(seeds, GameData.as_int(counted[key]))
 	else:
 		var started: int = Time.get_ticks_msec()
-		for table: String in tables:
-			for skill: String in skills:
-				for index: int in seeds:
-					var telling: Dictionary = runner.tell(table, skill, first + index, runner.buys_as(table, skill))
-					tellings.append(telling)
-					if verbose:
-						print("%s %s seed %d: %s in act %d (%s), %.0f s, %d hit(s), hand off %.0f%%, last: %s" % [table, skill, first + index,
-								GameData.as_string(telling["outcome"]), GameData.as_int(telling["act"]), GameData.as_string(telling["stage"]),
-								GameData.as_float(telling["seconds"]), GameData.as_int(telling["hits"]),
-								100.0 * float(GameData.as_int(telling["hand_off_ticks"])) / maxf(float(GameData.as_int(telling["road_ticks"])), 1.0),
-								str(GameData.as_array(telling["last_hits"]).slice(-1))])
+		if cells.is_empty():
+			for table: String in tables:
+				for skill: String in skills:
+					cells.append("%s/%s" % [table, skill])
+		for cell: String in cells:
+			var table: String = cell.get_slice("/", 0)
+			var skill: String = cell.get_slice("/", 1)
+			if not data.has_record("tables", table) or not DriverBot.SKILLS.has(skill):
+				printerr("run_balance: no such Table or skill: %s" % cell)
+				quit(1)
+				return
+			for index: int in seeds:
+				var telling: Dictionary = runner.tell(table, skill, first + index, runner.buys_as(table, skill))
+				tellings.append(telling)
+				if verbose:
+					print("%s %s seed %d: %s in act %d (%s), %.0f s, %d hit(s), hand off %.0f%%, last: %s" % [table, skill, first + index,
+							GameData.as_string(telling["outcome"]), GameData.as_int(telling["act"]), GameData.as_string(telling["stage"]),
+							GameData.as_float(telling["seconds"]), GameData.as_int(telling["hits"]),
+							100.0 * float(GameData.as_int(telling["hand_off_ticks"])) / maxf(float(GameData.as_int(telling["road_ticks"])), 1.0),
+							str(GameData.as_array(telling["last_hits"]).slice(-1))])
 		print("run_balance: %d Tellings in %.0f s" % [tellings.size(), float(Time.get_ticks_msec() - started) / 1000.0])
 	if not part.is_empty():
 		if not _write(part, JSON.stringify(tellings)):
