@@ -1,0 +1,145 @@
+{
+ "covered": "STATE. Worktree /home/user/I99/.claude/worktrees/wf_99cd96aa-b0b-1 at 2940233 (detached), imported; nothing in the repository was changed (git status clean); /home/user/I99 untouched. Everything of mine is in /tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/m7rev-checkpoint/ (probe_base.gd, p00 to p19, and userdir/, the save folder handed to the scene runs).\n\nREAD. docs/CLAUDE.md; GDD 1.3-1.6, 2, 4, 5, 6, 7, 9, 10, 11, 12, 13, 15, 16.2-16.3, 18 (10.2, 6.5, 6.1, 7.7, the mints row of 7.4, 4.4, 4.6, 7.3 word by word); DECISIONS D-031, D-036, D-040 to D-050. Every line of src/core/boss_sim.gd, drive_sim.gd, item_sim.gd, car_sim.gd, collision.gd, suspicion_sim.gd; also hand_sim.gd, gesture.gd, effect_system.gd, nerves_sim.gd, leg_sim.gd, traffic_sim.gd, run_state.gd, run_generator.gd, stop_sim.gd, save.gd, clock_sim.gd, event_names.gd; data/legs.json, rituals.json, items.json, anchors.json, stops.json; tests/test_boss.gd 1-1030 (test_boss_01 and its helpers), tests/support/cabin_suite.gd; of the views only cabin_view.gd:306 and road_view.gd:517-521.\n\nRAN. Registered tests T-BOSS-01, T-ITEM-FORGED-PAPERS, T-ITEM-BREATH-MINTS, T-SUS-01, T-SAVE-01: all pass at this commit. 24 probes (every seam of the brief at least once); none logged an engine or script error. The real scene headless (scenes/drive.tscn, --boss=checkpoint plain / thorough / long_queue, also with --give=arak_flask,forged_papers,loud_horn,tinted_glass, stand-in bot, 6000-7000 frames each, --user-dir in my folder): passes and begins again, no error line. No event name outside EventNames.ALL was met.\n\nHELD UP (probed, no finding).\n- Stop zone (p03): nose 8.01 m short of the bar: nothing in 30 s, no event; 8.00 m and nearer: the Stow; 0.9 km/h counts as standing. The car cannot get past the lowered bar.\n- Bar (p03): 4.9 km/h only stops him; from 5 km/h a scrape and +25; at 40, 70 and 100 km/h always one scrape, one lamp, +25, gear kept.\n- Never handing anything over (p05): Suspicion pinned at 100 after 50 s, no verdict in 120 s (Clock +40 game min), car held; then the licence: turned back. As D-048 has it; it agrees with \"banknotes pass at any level\".\n- Wrong document five times: five refusals, only the delay counts. Bribe: 59 refused (three times, nothing lost), 60 leaves cash 0, 61 leaves 1; not offered again once the bar is up. Thorough: forged papers pass both documents; banknotes after the first document pass.\n- Turned back twice: +30 min each, same document, new queue 6/6/6, Suspicion 0, first gear at s=0, lamps and cabin kept.\n- Search (p06): takes what is marked contraband, stowed or not; tinted glass, turbo, the good stuff and Courage stay; the cell is free again. Tinted glass halves the Checkpoint's own rows (27.5 for 55).\n- Stowing in either order works; forged papers in a cell: pass at 0; on the dash: pass at 40.\n- Wreck in the queue and at the window inside a Telling: 3.00 s cut, told again from the approach with nothing of the Checkpoint left.\n- Inside a Telling (p09, p10): boss_started, pass, boss stop with three free picks and 0 minutes, save +1. The save, through Save.to_text/from_text into a fresh DriveSim: same state hash at the stop and after 12 s of the same inputs into Act 2, for pass, search, bribe, and turned back then pass.\n- Held car (p08): full lock, any gear, brake: 0.0000 m moved; a lever in the hand at a turn-back is dropped and first gear set.\n- Replay (p12): one input script (queue, wrong document, turn-back) twice: same hash. A hand that steers gets through the queue untouched (0.12 m off the middle at most).\n\nOBSERVED, not ranked (decided, or by the letter).\n- He always begins the Checkpoint in the middle lane, whatever lane leg 3 ended in (D-036 keeps \"its place across its lane\"): 3.5 m sideways in the tick of the seam (p16).\n- At 100 a suspicion_changed {100} is still announced every 5 s (24 in 120 s).\n- With the glovebox open and a cell free the flask cannot be drunk from (D-048), also after the Papers if the door is left open. Out of the glovebox the cabin's first stowed thing comes first; the player cannot pick. Registration wanted with the window still shut: a drag from the glovebox takes the stowed flask out instead.\n- A car astride a lane line where the taper begins is scraped and put up to 1.33 m sideways in one tick (3.07 m from the shoulder).\n- The bar met at speed inside a barrier scrape's 0.8 s costs nothing more. With forged papers the verdict falls as the soldier arrives, so banknotes can no longer be offered.\n- Nobody at the wheel in the corridor at 40 km/h: first touch 7 m in, five touches, a Wreck in 5.4 s.\n- The plain Checkpoint's \"one document\" is the literal default 1 in BossSim._plan_checkpoint; legs.json holds no number for it.\n\nNOT CHECKED / UNVERIFIED.\n- The pictures beyond the two view lines read; touch; grip toggle; sequential shifting.\n- Tables (Uncles x1.25, In-laws without bribes, the Children's rewind) and passengers (the Conscript) do not exist yet.\n- A Snap while a document is being carried (my probe set Nerves between ticks and got no Snap event). The phone answered at the Checkpoint (the probe's phone never rang; by reading it is a Patrol row and is not counted).\n- Sway of three Courage stacks and Tremor inside the corridor: computed, not run.\n- The stale barrier flag for the Call taken pulled over (same held branch): read, not reproduced.",
+ "findings": [
+  {
+   "id": "CP-01",
+   "title": "Changing lane before the barriers costs +20 Suspicion: a Patrol row is applied at the Checkpoint",
+   "severity": "bug",
+   "where": "src/core/drive_sim.gd:452-458 (step(): `suspicion.add(tuning.f(\"suspicion_lane_cross\"))` runs whenever Suspicion is watched; the Checkpoint branch of _step_suspicion at 1259-1266 does not cover it)",
+   "gdd": "D-048: \"the Patrol's rows of GDD 6.5 do not apply, only the Checkpoint's own\". GDD 6.5 lists \"Crossing a lane line without indicating | +20\" under \"Behaviour during a Patrol\". GDD 10.2 names three sources only: barrier +25, item left out +40 / Courage stack +15, each 5 s of delay +10.",
+   "evidence": "/tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/m7rev-checkpoint/p01_lanes.gd B and C: rolling in at 100 km/h, steered by hand out of the middle lane into lane 0 (crossed at s=74.5) and into lane 2 (s=44.9), both before the taper at 140 m, no indicator: Suspicion 0 -> 20.0 each, one suspicion_changed {value 20}; the same change with the indicator set: 0.0. /tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/m7rev-checkpoint/p16_arrival_lane.gd, in a Telling (Drivers, seed 5): leg 3 ended in lane 2, the Checkpoint begins with him in lane 1 (x 8.75 -> 5.25 in that tick); steering back to lane 2: there at s=32 with Suspicion 20. p01 E: a car on the shoulder at the taper gets 45 (25 for the barrier and 20 for the 'lane change' the barrier's push made).",
+   "failure": "The one free choice of the approach, which queue to join, is taxed. One change is 20, there and back 40; with a single 5 s delay at the window (50) or one item left out (60) he is searched, 15 game minutes and his contraband gone, having touched nothing. Nothing at the Checkpoint says the indicator matters there, and T-BOSS-01 only checks that fourth gear and the horn add nothing.",
+   "fix": "Guard the row: `if items.indicator != signi(lane - _lane) and boss.kind != BossSim.CHECKPOINT:` (or move the lane-line row into the Patrol part of _step_suspicion); add the lane change to T-BOSS-01's checks that the Patrol's rows are not the Checkpoint's."
+  },
+  {
+   "id": "CP-02",
+   "title": "A barrier brushed on the tick the car is first held is counted again every 0.8 s: a Wreck about 3 s into the Stow, with every input released",
+   "severity": "bug",
+   "where": "src/core/drive_sim.gd:441-447 (held branch: car.step() is skipped, so car.edge_touched and car.wall_touched keep their last values) with 471-486 (collision.step() and the +25 still run each tick); src/core/collision.gd:140-142; src/core/car_sim.gd:244-246 (the flags are cleared only inside _step_edges). The same branch holds the car for the Call taken pulled over.",
+   "gdd": "D-048: \"The car stands from the Stow to the verdict ... held where it stopped\". GDD 10.2: \"Touching a barrier is a scrape and +25 Suspicion\" (one touch, one scrape). GDD 5.6: \"After a hit the car is pushed 0.5 m clear and cannot be hit again for 0.8 s.\" GDD 12.5: \"Share of Wrecks from one unavoidable event | 0%\".",
+   "evidence": "/tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/m7rev-checkpoint/p02b_stale_edge_inputs.gd, inputs only (first gear, his lane's queue gone, the wheel held at 12 degrees of right lock from 5 m before the bar; only the start varied, by 11 mm): in 4 of 300 runs (1.3%) the touch fell on the tick the bar stopped him. Start s=341.000: at the hold hits=1, lamps=1, Suspicion 25; then, hands and foot off, +13 hits in 10.5 s, lamps 5 of 5, Suspicion 100, Nerves 80, Wreck 3.20 s into the hold. With the brake held from 5.3 m before the bar: 8 of 300 (2.7%), Wreck 2.40 s into the hold. Control with no lock: 1 hit (the bar), 0 while held. p02c_stale_edge_natural.gd (hands-off crawl from 14 m, 300 starts): 0. p02d_fix_check.gd: the same run with the two flags cleared on held ticks: 0 hits while held, lamps 1, Suspicion 25.",
+   "failure": "Rare (the touch has to fall on one tick), but then nothing he does matters: the car cannot be moved, and every 0.8 s it takes a lamp, +10 Nerves and +25 Suspicion until every lamp is lit. In a Telling that is a Wreck and the night starts over, from a single brush of a barrier.",
+   "fix": "In the held branch of DriveSim.step add `car.edge_touched = CarSim.EDGE_NONE` and `car.wall_touched = false`: a car that stands touches nothing. One check in T-BOSS-01 (a touch on the tick the Stow begins is one scrape)."
+  },
+  {
+   "id": "CP-03",
+   "title": "A Snap adds no Suspicion at the Checkpoint",
+   "severity": "rule",
+   "where": "src/core/drive_sim.gd:1259-1266 (the Checkpoint branch of _step_suspicion clears _snapped unread)",
+   "gdd": "GDD 6.1: \"100 | Snap: he leans on the horn for 2 s. He can steer and cannot reach. Suspicion +30. Nerves reset to 70.\" with GDD 6.5: \"Suspicion exists only while a police car is behind (Patrol) or at a checkpoint.\" D-048 rules out \"the Patrol's rows of GDD 6.5\"; the Snap's +30 is also 6.1's own sentence, which names no Patrol.",
+   "evidence": "/tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/m7rev-checkpoint/p04_suspicion_rows.gd: a Snap brought on (Nerves 99.5, a slap) in the queue, during the soldier's walk and at the window: one snap event each time, Suspicion 0.0 -> 0.0 in all three phases. The same probe shows the other Patrol rows adding nothing, as D-048 has it (horn, fourth gear for 2 s, a sip of arak with the soldier at the window, high beam and hazards: all 0.0 -> 0.0).",
+   "failure": "He leans on the horn for two seconds with the soldier at his window and it costs nothing but the reach; a frayed driver is likely to Snap in the queue (vehicles within 25 m all the way), and the one price 6.1 puts on it where the law is watching is not charged.",
+   "fix": "In the Checkpoint branch: `if _snapped: suspicion.add(tuning.f(\"suspicion_snap\"))` before `_snapped = false`; or write into D-048 that 6.1's +30 is meant for a Patrol only."
+  },
+  {
+   "id": "CP-04",
+   "title": "Hiding contraband in the glovebox while a Patrol watches is charged as using it (+40); taking it out into view is free",
+   "severity": "seam",
+   "where": "src/core/item_sim.gd:710-718 (complete(): any ritual of an item marked contraband sets contraband_used) with data/rituals.json \"stow\" and data/items.json (stow is the first ritual of arak_flask and the only one of forged_papers); read at src/core/drive_sim.gd:1274-1275",
+   "gdd": "GDD 6.5: \"Using contraband in view | +40\"; GDD 7.1: the glovebox \"Hides contraband\"; GDD 6.5: the fine takes \"visible contraband\". D-031 (\"count when a ritual of an item marked contraband ... completes\") was written when the flask had only its sip; D-048 added `stow` as \"a ritual contraband items share\" without it.",
+   "evidence": "/tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/m7rev-checkpoint/p15_stow_patrol.gd: third gear, watched, Suspicion set to 50 (it wears off 5 a second): 4 s clean -> 30.0. The flask dragged into the open glovebox: 50 -> 73.8 after 3.2 s (clean driving alone: 33.8), that is +40. Forged papers stowed: 73.5 (clean: 33.5). The flask taken out of the glovebox into view: 32.6, the same as clean driving. A sip, for comparison: 84.6 (clean: 44.6).",
+   "failure": "On a Patrol leg the sensible answer to blue lights, putting the flask away so a fine cannot take it, costs as much as drinking from it: 40 of the 100 that pull him over. Forged papers, which cannot be used at all, earn +40 only by being hidden, while pulling the flask out in full view costs nothing. Whatever M8 hangs on the same flag (the Hajjiya: \"using either adds 10 Nerves\") inherits it.",
+   "fix": "In ItemSim.complete() leave the shared stow ritual out: `if GameData.as_bool(owner.record.get(\"contraband\")) and not GameData.as_bool(ritual.get(\"shared\")): contraband_used = true`; one check beside T-SUS-01's contraband row."
+  },
+  {
+   "id": "CP-05",
+   "title": "Forged papers are spent on a visit that turns him back",
+   "severity": "seam",
+   "where": "src/core/drive_sim.gd:944-951 and 958-959 (_report_soldier: use_forged_papers() removes the item before _give_the_verdict() reads Suspicion)",
+   "gdd": "GDD 7.7: \"Forged papers | Passes the next checkpoint's Papers phase automatically | 60 cash; contraband until used\"; GDD 10.2: \"At 100 he is turned back: 30 game minutes and the queue again.\"",
+   "evidence": "/tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/m7rev-checkpoint/p07_stow_orders.gd C: real queue, forged papers stowed, Suspicion 100 as the soldier arrives: verdict {paid: turned_back, minutes: 30, suspicion: 100}, forged papers left = false; on the second visit the Checkpoint is in the Papers phase and the sign asks for 'licence'. Reachable without help: flask and papers left out and two stacks of Courage are 40 + 40 + 15 + 15.",
+   "failure": "He paid 60 cash to have the Papers pass. The papers are gone, he is at the end of the queue again, and the second time he must find the documents himself.",
+   "fix": "Decide before spending: in _report_soldier, if Suspicion after the Stow count is at turned_back_at, call _turn_back and leave the papers in the cabin; otherwise use them."
+  },
+  {
+   "id": "CP-06",
+   "title": "The shady guy sells forged papers in Acts 2 and 3, after the only Papers phase of a Telling",
+   "severity": "seam",
+   "where": "src/core/stop_sim.gd:201-231 (_draw_items: any deal he does not own, whatever the act); data/items.json forged_papers (kind deal, rare, price 60); Dawn's last checkpoint in src/core/boss_sim.gd has no Papers phase",
+   "gdd": "GDD 7.7: \"Passes the next checkpoint's Papers phase automatically\"; GDD 11.1: \"Act 1: Checkpoint   Act 2: Storm   Act 3: Dawn\"; GDD 10.4: \"A last checkpoint waves him through at 70 km/h between barriers.\"; GDD 12.4 rule 2: \"Every item has a job.\"",
+   "evidence": "/tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/m7rev-checkpoint/p14_forged_after.gd: over 300 seeded stops the shady guy joins, forged papers are held out at 54 (18%) in Act 1, 86 (29%) in Act 2 and 115 (38%) in Act 3, for 60 cash. Carried to Dawn's last checkpoint: at 70 km/h nothing happens and they are still in the cabin at the road's end; too fast, the search takes them ({paid: search, taken: [forged_papers]}).",
+   "failure": "After Act 1 the papers can never be used: 60 cash for contraband that only a Patrol's fine or Dawn's search can take, and offered more often the later it is, since rare items get likelier by act.",
+   "fix": "Leave forged papers out of the draw once the Checkpoint is behind him: an `\"acts\": [1]` on the item, honoured in StopSim._draw_items through `_act`."
+  },
+  {
+   "id": "CP-07",
+   "title": "Focus slows the queue but not the soldier",
+   "severity": "seam",
+   "where": "src/core/boss_sim.gd:503-513 (step_road: `_step_soldier(cabin_dt)`) against 518-520 (the queue is stepped by the road's tick)",
+   "gdd": "GDD 7.4: \"Focus for 30 s: the road runs at 85% speed while the hand runs at full speed.\" D-041: the shorter tick is for \"the car ..., traffic, hazards, collisions' timers and the leg's encounter\". D-046: the Storm's dust, \"Focus slows it with the rest of the road\". D-047 keeps only what rings in his pocket on his own time; D-048 says nothing of the soldier's.",
+   "evidence": "/tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/m7rev-checkpoint/p08_focus_held.gd A: the middle lane's queue is gone after 43.7 s, with Focus kept on after 51.5 s (x1.177, that is 1/0.85). The soldier's walk takes 10.000 s of the hand's time with and without Focus; the first +10 of delay comes after 5.000 s with and without.",
+   "failure": "The one status that buys hand time buys none where the Checkpoint counts it (10 s to stow, 5 s per +10) and makes the wait behind the queue 18% longer instead: at the Checkpoint an energy drink is a pure loss.",
+   "fix": "Step the soldier by the road's tick (`_step_soldier(dt)` in step_road), so that under Focus the Stow is 11.8 s and a delay 5.9 s of his time; or record in D-048 that the soldier keeps the cabin's time."
+  },
+  {
+   "id": "CP-08",
+   "title": "Phase 1 can be waited out before the barriers, and the Checkpoint calms him like an empty road",
+   "severity": "exploit",
+   "where": "src/core/boss_sim.gd:610-647 (_step_queue serves every lane whether or not he has joined it); src/core/drive_sim.gd:1818 (_feed_nerves: the empty-road calm is off for a leg's encounter and for a pull-over, not for the Checkpoint; in_encounter is never set by a set piece)",
+   "gdd": "GDD 10.2: \"1. Queue | Stop-and-go in first gear between concrete barriers 2.34 m apart\" and \"Long queue (phase 1 is 50% longer)\". GDD 2.3: \"traffic and the law fray his Nerves, and empty road at night makes his eyes heavy.\" GDD 6.1: \"Empty road: no vehicle within 60 m and no encounter | -0.5 per second\".",
+   "evidence": "/tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/m7rev-checkpoint/p19_wait_near.gd (Nerves 50 on entry, counted as a Telling counts them): queueing, first in line at 46.2 s with Nerves 47.9. Standing on the brake at s=130, 10 m short of the taper, until his lane's queue is gone (43.7 s, Nerves 28.1), then up the empty corridor: first in line at 65.9 s with Nerves 17.1, no hit, Suspicion 0: 19.7 s (6.6 game minutes) later and 30.8 Nerves calmer. Long queue: 70.0 s with Nerves 64.8 against 89.6 s with Nerves 5.2. p11_queue_exploits.gd D: at the window, Nerves 60.0 as the soldier sets out, 55.0 when he arrives, 45.0 after 20 s more of waiting. p09_telling.gd E: whole plain Checkpoints in a Telling: Nerves 14.9 on entry, 12.9 after the queue, 1.0 at the boss stop.",
+   "failure": "The queue needs no driving: the calmest way through phase 1 is to stand still outside it, for under 7 game minutes, and a Long queue only lengthens the rest. And the law at his window lowers his Nerves at the empty-road rate, where a Patrol and a pull-over do not.",
+   "fix": "Smallest: count the Checkpoint as an encounter for the empty-road calm until he is let through (in _feed_nerves: `in_encounter or encounter.active or pulled_over or (boss.kind == BossSim.CHECKPOINT and not boss.released)`). To close the skip as well, serve a lane only while his car is between the barriers; or record that waiting it out is allowed."
+  },
+  {
+   "id": "CP-09",
+   "title": "After one bump the queue needs no brake",
+   "severity": "exploit",
+   "where": "src/core/collision.gd:151-162 and 305-309 (one contact is one hit; _hold_behind keeps him at the speed of the vehicle he touches) with src/core/boss_sim.gd:626-633 (the queue pulls up at 12 km/h or less)",
+   "gdd": "GDD 10.2: \"Stop-and-go in first gear\"; T-BOSS-01's reading of it: \"which is less than first gear gives: he must use the brake\". GDD 5.6: \"After a hit the car is pushed 0.5 m clear and cannot be hit again for 0.8 s.\" The behaviour follows from D-029 (one contact, one hit); it is the Checkpoint that it empties.",
+   "evidence": "/tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/m7rev-checkpoint/p18_towed.gd: rolled onto the queue's tail at 20 km/h, then the brake never touched, a hand that only steers: 44 s of queue, hits on vehicles 1, on barriers 0, lamps 1 of 5, Suspicion 0, his lane empty at the end. p11_queue_exploits.gd B: the same with the charm aboard: lamps 0. p03_stop_bump_ram.gd E: straight into the tail at 40 km/h with no brake at all: one crash at 1.80 s (2 lamps), nothing more until the bar 43 s later.",
+   "failure": "The stop-and-go is bought off with one lamp, or none with the charm: pressed against the vehicle ahead, first gear follows the queue by itself and that vehicle never counts as touched again.",
+   "fix": "Owner's call. Smallest inside the Checkpoint: when BossSim pulls a queue vehicle up and it has moved clear, end its contact with the car (`vehicle.cc_hit = false`), so that rolling into it again after the 0.8 s is a new hit."
+  },
+  {
+   "id": "CP-10",
+   "title": "The Checkpoint's sign stands 1.1 m into its road: it is in view for five ticks",
+   "severity": "minor",
+   "where": "src/core/boss_sim.gd:737 (_set_corridor: the sign sign_lead_s at par short of the taper) with data/legs.json checkpoint.corridor {at_m 200, taper_m 60, sign_lead_s 5}: 140 m less 138.9 m; signs_near shows a sign only while it is ahead",
+   "gdd": "D-048: \"a sign 5 s short of a 60 m taper\"; D-050: \"\\\"[CHECKPOINT / STOP]\\\" before the Checkpoint's\"; GDD 2.2 pillar 4: a tell \"at least 1 s ahead\".",
+   "evidence": "/tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/m7rev-checkpoint/p01_lanes.gd A: rolling in at 100 km/h the snapshot carries the 'checkpoint' sign on 5 ticks (0.042 s), first seen 1.11 m ahead; corridor (140, 200, 350).",
+   "failure": "The sign that says this is a checkpoint to stop at can never be read, and the leg before it has none; the barriers and the queue are the only tell.",
+   "fix": "Give it road to be seen from: sign_lead_s 2 (it then stands 84 m in, 3 s ahead at par), or a longer approach before the taper."
+  },
+  {
+   "id": "CP-11",
+   "title": "Vehicles that were waved on vanish in mid-road",
+   "severity": "minor",
+   "where": "src/core/boss_sim.gd:640-647 (one _waved_on slot per lane: the one before is taken off the road when the next is waved on)",
+   "gdd": "D-048: \"The one at the bar is served for 4 s and leaves at up to 40 km/h\"; GDD 5.5: vehicles \"are removed 100 m behind\".",
+   "evidence": "/tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/m7rev-checkpoint/p11_queue_exploits.gd A (plain queue, seed 3, watched from s=250): of 18 vehicles waved on, 15 were gone at s=416 to 418, 66 to 68 m past the bar and ahead of him (road_draw_ahead is 600 m); only the last of each lane reached the road's end at 500 m.",
+   "failure": "About every 7 s a car pops out of existence on open road, straight ahead of the player who sits in the queue watching it.",
+   "fix": "Keep each lane's waved-on vehicles in a list and take each off only once it is past the road's end."
+  },
+  {
+   "id": "CP-12",
+   "title": "A search that comes while the hand carries contraband leaves the taken thing in the hand",
+   "severity": "minor",
+   "where": "src/core/drive_sim.gd:985-1000 (_give_the_verdict, take_all_contraband), 1615-1626 (_carried) and 2148-2172 (_complete_ritual): a gesture in progress is not ended when its item is taken",
+   "gdd": "GDD 10.2: \"From 50 to 99 he is searched: 15 game minutes and contraband is taken.\" D-049: \"A ritual's requirements are checked again when its gesture completes.\"",
+   "evidence": "/tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/m7rev-checkpoint/p07_stow_orders.gd B: forged papers stowed, Suspicion 20, the flask picked up 0.5 s before the soldier arrives: verdict {paid: search, taken: [arak_flask], suspicion: 60}; the cabin no longer holds the flask, yet hand.carrying is true and the snapshot's carrying is 'arak_flask' for as long as the button is down (still so 1 s later); let go over the glovebox: ritual_completed stow = 1, with no flask anywhere.",
+   "failure": "The player sees the flask the soldier took still in his hand and then stows nothing. Only with forged papers, the one case where a verdict falls while the hand is busy.",
+   "fix": "When a verdict or use_pass removes the item of _active_ritual, cancel the gesture (`gesture.cancel()`)."
+  },
+  {
+   "id": "CP-13",
+   "title": "The Loud horn moves queue vehicles through the barriers where the next lane is clear",
+   "severity": "minor",
+   "where": "src/core/item_sim.gd:1185-1187 (_horn: horn_yields_all overrides yields_to_horn) against src/core/boss_sim.gd:587-588 (\"Between barriers nobody can move over for a horn\" is only yields_to_horn = false)",
+   "gdd": "D-050: T-BOSS-01 checks \"that a honk moves nobody out of a queue even with free road beside it\"; GDD 7.6: \"Loud horn | Every vehicle yields\"; GDD 10.2: barriers 2.34 m apart.",
+   "evidence": "/tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/m7rev-checkpoint/p13_loud_horn.gd A (the test's own lone queue: plan of seed 3, middle lane only): plain horn, 0 vehicles moved; Loud horn, 5 of 6 moved to x=8.75, outside their corridor's barriers at 4.08 and 6.42, and are still served as his lane's queue (he is at the bar after 6.3 s, the soldier sets out after 43.3 s). p13b_loud_horn_scan.gd: in 72 whole Checkpoints (12 seeds, plain and Long queue, each lane, the Loud horn blown every second) no vehicle moved: a neighbouring queue is always within the 12 m the horn wants clear.",
+   "failure": "Latent: today only a lone queue shows it. Any change to queue lengths or serve times that leaves a neighbouring lane clear lets cars slide through concrete, and the check that guards the rule never tries the adaptation that breaks it.",
+   "fix": "Let _horn skip vehicles that cannot change lane (role queue, or a flag on the Vehicle set by BossSim) even with horn_yields_all; run T-BOSS-01's lone-queue check with the Loud horn too."
+  },
+  {
+   "id": "CP-14",
+   "title": "Suspicion has no tell at the Checkpoint",
+   "severity": "minor",
+   "where": "src/view/cabin_view.gd:306 (the mirror's blue only when suspicion_by is \"patrol\"); the snapshot's \"suspicion_by\" at src/core/drive_sim.gd:1508; D-050",
+   "gdd": "GDD 16.3: \"Suspicion | Blue light in the mirror growing brighter; siren chirps\"; GDD 1.3: \"No conventional HUD. State is shown by cabin objects, post effects and sound.\" D-050: \"At the Checkpoint nobody is behind him and the mirror stays dark.\"",
+   "evidence": "/tmp/claude-0/-home-user-I99/1f0e83f4-90ea-55fd-b6c8-8fb38ca9acc1/scratchpad/m7rev-checkpoint/p17_suspicion_tell.gd: at the window with Suspicion 75 the snapshot gives suspicion_by='checkpoint', police_lights=false, and the view's own condition for the mirror's blue is false (true for the same 75 when watched on the road). Nothing else in the snapshot is drawn for it, and nothing is sounded.",
+   "failure": "The meter that decides pass, search or turned back at 50 and 100 cannot be read where it decides: before he hands the document over he cannot tell 40 from 60, or whether banknotes are worth 60.",
+   "fix": "Owner's call, in the views: a tell of the Checkpoint's own, for instance the soldier's stance or sign by level and a sound on each +25, +40 and +10. The snapshot already carries the value."
+  }
+ ]
+}

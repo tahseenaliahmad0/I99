@@ -25,6 +25,6 @@ MUTANTS = [
  (I, 'var deck_mult: float = _window_radio_mult if window_open else 1.0', 'var deck_mult: float = 1.0', 'the deck is as loud with the window open'),
  (I, 'met = owner != null and owner.is_tape and not (owner.side_time >= owner.side_s)', 'met = owner != null and owner.is_tape', 'a tape plays for ever'),
  (I, 'met = owner != null and owner.is_tape and owner.side_time >= owner.side_s', 'met = false', 'a tape never warbles (condition)'),
- (I, '_nerves.add_rate(_radio_music_rate * (_window_radio_mult if flag(FLAG_WINDOW) else 1.0))', '_nerves.add_rate(_radio_music_rate)', 'the window does not halve the radio\'s music'),
+ (I, '\tvar mult: float = _window_radio_mult if flag(FLAG_WINDOW) else 1.0\n\tif radio == &"music":', '\tvar mult: float = 1.0\n\tif radio == &"music":', 'the window does not halve the radio\'s music'),
  (I, '\tvar ash_by: float = candidate.ash_by\n', '\tvar ash_by: float = candidate.ash_by * 2.0\n', 'the ash falls late'),
 ]

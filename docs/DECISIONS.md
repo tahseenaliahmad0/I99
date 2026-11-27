@@ -1756,6 +1756,28 @@ built by the workflow `m6-fixes`; this entry is what that work is held to.
   fifteen are in `artifacts/m10_postfx_*.png`).
 - **Not run:** Forward+ and Mobile (no Vulkan here), and no frame time on a
   GPU. NEEDS OWNER.
+- **After its review** (merged as `m10/postfx-in-fix`; the fix agent's
+  work, taken from its worktree when the workflow ended, checked and its
+  pictures retaken here, with no review of its own):
+  - *What stands in the cabin before a window keeps the cabin's light.*
+    The windows were three panes in tuning, and whatever he saw against
+    one (his arm, what stands on the dash, the tray and its labels at a
+    stop, a passenger) was darkened, veiled, blurred and rained on as
+    glass. The cabin is now told apart by what is drawn under the Cabin
+    node (`postfx_cabin_solid`); for the rain's blur a helper shader
+    (`shaders/post_fx_cabin.gdshader`) gives the cabin's picture at the
+    mipmap the blur reads, so that its colours do not run into the glass.
+  - *Cracks* are centred before his eyes and all of the web lies on the
+    glass; *haze* at the cap veils as much as the snapshot says over the
+    whole glass, down to the dash; *Tunnel* leaves `tunnel_min_view` at
+    Nerves 100; a *light that changes place* while its wash is up is
+    moved there (`postfx_light_speed`), not put there.
+  - The shader's look constants are tuning numbers. Not done: the two
+    files keep their names (GDD 13.2 has others).
+  - `tools/post_fx_shots.gd` takes a stop at night by driving a stand-in
+    Telling to its fifth stop; the hand is aimed for the picture only once
+    he stands there (aimed all the way, the stand-in cannot hand over the
+    papers at the Checkpoint).
 
 ## D-054 (M10, 2026-11-20) Subtitles
 
@@ -1939,8 +1961,8 @@ D-040, D-041 and D-042 where they describe stops and pull-overs.
 
 The review `m7-review` read commit 2940233 through five lenses (the
 Checkpoint, the Storm, Dawn, the tests, the views), each finding with a
-probe. This entry is what was decided and built for the first four; where
-it changes D-046 to D-050, this is the later word. Every fix came with a
+probe. This entry is what was decided and built; where it changes D-046 to
+D-050, this is the later word. Every fix came with a
 check that failed before it.
 
 **The Checkpoint (amends D-048)**
@@ -2033,6 +2055,27 @@ check that failed before it.
   taper's mouth is pushed up to 1.4 m sideways in one tick (it should
   meet the barrier's head).
 
+**The views (the fifth lens, amends D-050)**
+- *What is drawn is never more open than the simulation* (V-01): a lane's
+  bar is up for a waved-on vehicle only while that vehicle is under it,
+  and in his own lane it is down in the frame after.
+- *A checkpoint's barriers close in from the road's own limits* (V-05):
+  over the taper the outermost two run in from the guardrail and from what
+  ends the road on the left, in the simulation (`BossSim.walls`) and in
+  the picture (`road_limits` in the snapshot). The shoulder beside the
+  barriers was a wall that nothing showed.
+- *The sun rises into no night sky* (V-07): in a Telling the sky follows
+  the Clock, but on Dawn's road it is never darker than Dawn driven by
+  itself has it (`SkyView.day_share`).
+- *An anchor is in use only while the hand can reach* (V-10): none during
+  the talk of the Call or a Snap.
+- *The bay is painted across the whole street* (V-11), where D-047 has it.
+- *Tail lights keep a least size on screen* where dust or the night ends
+  his view (V-19; `light_least_per_m`, `light_scale_cap`).
+- V-02, V-06, V-09 and V-12 are in the lists above; V-03 is D-058; V-08 is
+  D-055. Left open: V-04's cut, V-11's marker for the key, V-13 to V-18
+  (PROGRESS has them).
+
 **The tests**
 - The lens's 34 appended checks are in T-BOSS-01 to 03 and T-CALL-01 as
   it wrote them. Four loops got guards. T-DATA-01 has the failure cases of
@@ -2109,3 +2152,70 @@ this is the later word:
   the Phantom's hum have no picture): that belongs to the rest of M10
   (settings and accessibility, D-056).
 - **NEEDS OWNER:** nobody has heard these sounds either (D-052).
+
+## D-059 (M8 review, 2026-11-27) Rulings on the findings of the passengers' review
+
+The review `m8-review` read commit b26cde6 through two lenses, each
+verified by a second agent: the rules (RULES-01 to 13) and the tests and
+views (m8tv-01 to 15). The rules were fixed on the branch `m8fix/rules`
+(merged), each with a check that failed first and with its mutants; the
+rest on the main line. Where this changes D-051, it is the later word.
+
+- **The boy's Hand** (RULES-03). "On a tap he holds the wheel at its
+  current angle for 3 s" did nothing: a wheel let go is back at its centre
+  before the hand has reached his shoulder. When the driver's hand lets go
+  of the wheel and nothing else takes it, the angle it had is remembered
+  for `catch_s` (passengers.json: 1.5 s, the slowest reach and a full
+  TAP). Asked within that time he takes the wheel back to that angle and
+  holds it; asked later, or with no let-go, he holds it where it is.
+  D-043 made the hook wait for the let-go for the same reason.
+- **The Hitcher's service at a boss stop** (RULES-04) puts somebody at the
+  roadside: the hitcher is drawn again for the stop the boss stop has
+  become, as every hitcher is drawn (the Telling's seed, the act, the
+  stop's place in the night).
+- **Nobody stands where they got out** (RULES-08): who got out at the stop
+  he stands at is remembered (`left_here` in the save) and skipped by the
+  draw, like the one he carries; in their place stands the next in the
+  order of passengers.json.
+- **The Student's sign** (RULES-06) stands 5 s earlier only where that
+  place is still ahead of where the car came onto the road it is on (the
+  road's start, or the stall he pulled away from); otherwise at its own
+  place. It is one sign either way.
+- **The boy leaves the tape's fault to the tape** (RULES-07): he mends the
+  oldest fault that duct tape is not already mending. **A Snap's horn
+  wakes the Conscript** (RULES-09), while the night runs.
+- **The boy's retune** (RULES-01) ends what the station held on, as the
+  dial does. **The drum is one music** (RULES-11): beside the radio's
+  music or a tape it gives only what it is stronger by, and it is never
+  weaker for the radio being on.
+- **What a passenger says is what they do** (RULES-10): the Student's hand
+  line when the call she took was the dispatcher's (a line of its own for
+  Um Noor's), the boy's radio line only when a station was playing, the
+  Drummer's tea only when a tea stands in the cabin for him to take.
+- **The validator** (RULES-12) refuses passenger records the simulation
+  cannot run as written: on_leave ops it does not run, a Weight on a
+  resource its condition cannot weigh, the lines a record makes the
+  simulation ask for, `catch_s` on a Hand that is no hold.
+- **RULES-02 and RULES-05** (one repair per leg across a stop; nothing of
+  a passenger runs with the officer at the window) were cured by D-055;
+  their failure cases are in the T-PASS tests.
+- **Asked again while she holds** (RULES-13, refuted as a defect): each
+  tap gives the Hajjiya's "up to 6 s" from that tap. The GDD names no
+  pause where it wants none (the hook has one), and each asking costs the
+  far reach and the turned view. On a straight this is an autopilot for as
+  long as he keeps his hand on her shoulder: a balance question for M11
+  (NEEDS OWNER).
+- **The views** (m8tv-07, m8tv-14): the drum is the right tenth of the
+  view in a window of any shape; a passenger leans back at a stop.
+  **The sounds** (m8tv-04): D-058.
+- **Not done: the tests-and-views lens's test gaps** (m8tv-08, 09, 10).
+  No check takes a standing Hand or Weight through a stop; "he pays
+  nothing", "food once" and "never the one he carries" rest on checks
+  that cannot fail; seventeen clauses of GDD 8 and D-051 are carried by
+  one line each that no test would miss (fifth gear, a crash as her
+  scrape, a honk while he is awake, the oldest fault, a boss renewing the
+  repair, the drum at the Checkpoint, the blessing and the charm in one
+  scrape, the hitcher's draw across stops and acts, Focus and a
+  passenger, the hook with somebody in the seat). The build is right in
+  each today (the verifier's probes); the checks are owed. The lists are
+  in the review's reports, copied to `docs/reviews/`.

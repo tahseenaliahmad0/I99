@@ -30,7 +30,7 @@ RING = 'caller = CALLER_FAMILY if every > 0 and calls % every == 0 else CALLER_D
 ROW = 'if every > 0 and answered_run % every == 0:'
 SAVED = 'return {"calls": calls, "answered_run": answered_run, '
 BY_THE_SECOND = '\tif per_second > 0.0:\n\t\tper_second *= gain_mult\n'
-SPARED = 'var spared: bool = collision.hit == Collision.Hit.SCRAPE and items.absorbs_scrape()'
+SPARED = 'var spared: bool = collision.hit == Collision.Hit.SCRAPE and (items.absorbs_scrape() or passengers.absorbs_scrape())'
 CUT_OFF = '\t\tnerves.add(tuning.f("cut_off_nerves"))'
 SIP = 'if GameData.as_string(synergy.get("rule")) == "sip_extends_burn" and GameData.as_string(synergy.get("with")) == String(owner.id):'
 PUT_OUT_LIT = '\tif item_instance.burning and item_instance.use_effect != &"" and _effects.has_own(item_instance.use_effect):\n\t\t_effects.remove(item_instance.use_effect)\n'
@@ -43,7 +43,7 @@ TAPE = [
  (I, 'func begin_leg() -> void:\n\tphoto_used = false\n\tscrape_spared = false\n', 'func begin_leg() -> void:\n\tphoto_used = false\n\tscrape_spared = false\n\ttape_spent = false\n', 'the tape renews with every leg'),
  (D, '\tif act != act_before:\n\t\titems.begin_act()', '\tif act >= act_before:\n\t\titems.begin_act()', 'an act begins with every stretch of road'),
  (D, '\trun.begin_boss()\n', '\trun.begin_boss()\n\titems.begin_act()\n', 'the boss is a new act for the tape'),
- (D, '\t_shady_here = false\n\t_save_point()\n', '\t_shady_here = false\n\titems.mending = &""\n\t_save_point()\n', 'a boss stop forgets the mend'),
+ (D, '\t_shady_here = false\n\t_let_passenger_out(true)\n\t_save_point()\n', '\t_shady_here = false\n\t_let_passenger_out(true)\n\titems.mending = &""\n\t_save_point()\n', 'a boss stop forgets the mend'),
 ]
 # --- The phone: every fourth call of the Telling is hers, stop or no stop; no phone, no calls.
 CALLS = [
@@ -82,7 +82,7 @@ FOCUS = [
  (D, '\t\titems.step(DT)\n', '\t\titems.step(_road_dt)\n', 'Focus: the things in the cabin slow with the road'),
  (D, '\t\tnerves.step(DT)\n', '\t\tnerves.step(_road_dt)\n', 'Focus: his Nerves slow with the road'),
  (D, '\tgate.step(DT, input.pointer_delta', '\tgate.step(_road_dt, input.pointer_delta', 'Focus: the gear gate slows with the road'),
- (D, '\tsuspicion.add(leg.hazard_suspicion)\n\tsuspicion.step(DT)', '\tsuspicion.add(leg.hazard_suspicion)\n\tsuspicion.step(_road_dt)', 'Focus: Suspicion slows with the road'),
+ (D, '\tsuspicion.add_rate(passengers.suspicion_rate())\n\tsuspicion.step(DT)', '\tsuspicion.add_rate(passengers.suspicion_rate())\n\tsuspicion.step(_road_dt)', 'Focus: Suspicion slows with the road'),
 ]
 # --- Painkillers: "for the leg" on every leg.
 PILLS = [
@@ -97,8 +97,8 @@ SMOKES = [
 ]
 # --- The charm: a scrape is a scrape whatever he touches; one thing hangs at the mirror.
 CHARM = [
- (D, SPARED, SPARED.replace('and items', 'and collision.hit_vehicle_id == 0 and items'), 'the charm turns aside only what is no vehicle'),
- (D, SPARED, SPARED.replace('and items', 'and car.edge_touched != CarSim.EDGE_LEFT and items'), 'the charm turns aside nothing on his left'),
+ (D, SPARED, SPARED.replace('and (items', 'and collision.hit_vehicle_id == 0 and (items'), 'the charm turns aside only what is no vehicle'),
+ (D, SPARED, SPARED.replace('and (items', 'and car.edge_touched != CarSim.EDGE_LEFT and (items'), 'the charm turns aside nothing on his left'),
  (D, '\tif place != &"":\n\t\titems.remove_item(items.item_in_slot(place))\n', '', 'two things in one slot'),
 ]
 # --- Seeds: being cut off still frays him, a happy honk still calms him.
