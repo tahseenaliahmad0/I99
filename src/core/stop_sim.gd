@@ -77,6 +77,8 @@ var _clock: ClockSim
 var _rng: Rng
 var _act: int = 1
 var _price_mult: float = 1.0
+## The Table's rules (GDD 11.2): what it leaves out of every stop.
+var _rules: TableRules = TableRules.new()
 
 
 func configure(data: GameData, items: ItemSim, faults: FaultSim, nerves: NervesSim, clock: ClockSim, rng: Rng) -> void:
@@ -90,12 +92,14 @@ func configure(data: GameData, items: ItemSim, faults: FaultSim, nerves: NervesS
 
 
 ## He has stopped. `shady` when the shady guy has joined this stop.
-## `price_mult` is the Table's (GDD 11.2).
-func begin(id: String, act: int, shady: bool, price_mult: float = 1.0) -> void:
+## `price_mult` is the Table's (GDD 11.2), and `rules` what else it says of
+## stops (none: the base rules).
+func begin(id: String, act: int, shady: bool, price_mult: float = 1.0, rules: TableRules = null) -> void:
 	active = true
 	stop_id = id
 	_act = act
 	_price_mult = price_mult
+	_rules = rules if rules != null else TableRules.new()
 	offers = []
 	picks_left = 0
 	shady_used = false
@@ -108,7 +112,7 @@ func begin(id: String, act: int, shady: bool, price_mult: float = 1.0) -> void:
 	service = GameData.as_string(record.get("service"))
 	free_minutes = service == BOSS_SERVICE
 	_lay_out(record)
-	if shady:
+	if shady and _rules.deals_offered():
 		for item_id: String in _draw_items(GameData.as_dict(_data.record("stops", "shady_guy").get("stock"))):
 			var deal: Offer = _item_offer(item_id)
 			deal.shady = true
@@ -135,8 +139,14 @@ func id_now() -> String:
 ## The service of a stop record: its entry effect and its offers.
 func _lay_out(record: Dictionary) -> void:
 	var stock: Dictionary = GameData.as_dict(record.get("stock"))
+	if not _rules.stock_offered():
+		# A Table that names its services has no shops: nothing is held out.
+		stock = {}
 	var free: int = GameData.as_int(stock.get("free"))
-	match GameData.as_string(record.get("service")):
+	var given: String = GameData.as_string(record.get("service"))
+	if given != BOSS_SERVICE and not _rules.allows_service(given):
+		return
+	match given:
 		"tea":
 			# A tea stall sets his Nerves and fills the glass, hot.
 			tea_served = true
@@ -151,7 +161,7 @@ func _lay_out(record: Dictionary) -> void:
 				var repair: Offer = Offer.new()
 				repair.kind = REPAIR
 				repair.id = String(fault)
-				repair.price = _tuning.f("repair_price")
+				repair.price = roundf(_tuning.f("repair_price") * _price_mult)
 				offers.append(repair)
 		"boss":
 			# After a boss: one free item out of those shown, then one service.
@@ -161,6 +171,10 @@ func _lay_out(record: Dictionary) -> void:
 				pick.free_pick = true
 				pick.price = 0.0
 				offers.append(pick)
+			if offers.is_empty():
+				# Nothing to pick (a Table without shops): the services at once.
+				picks_left = 0
+				_lay_out_services()
 		_:
 			picks_left = free
 			for item_id: String in _draw_items(stock):
@@ -169,7 +183,7 @@ func _lay_out(record: Dictionary) -> void:
 					offer.free_pick = true
 					offer.price = 0.0
 				offers.append(offer)
-	if GameData.as_bool(record.get("restocks")):
+	if GameData.as_bool(record.get("restocks")) and _rules.stock_offered():
 		_offer_restocks(false)
 
 
@@ -177,6 +191,8 @@ func _lay_out(record: Dictionary) -> void:
 ## that restocks, contraband from the shady guy alone (the flask is "sold
 ## only as a Deal", GDD 7.4).
 func _offer_restocks(contraband: bool) -> void:
+	if contraband and _rules.no_contraband:
+		return
 	for owned: ItemSim.Item in _items.items:
 		if GameData.as_bool(owned.record.get("contraband")) != contraband:
 			continue
@@ -206,6 +222,8 @@ func _lay_out_services() -> void:
 	for record: Dictionary in _data.records("stops"):
 		if GameData.as_float(record.get("weight")) <= 0.0:
 			continue
+		if not _rules.allows_service(GameData.as_string(record.get("service"))):
+			continue
 		var choice: Offer = Offer.new()
 		choice.kind = SERVICE
 		choice.id = GameData.as_string(record.get("id"))
@@ -227,6 +245,8 @@ func _draw_items(stock: Dictionary) -> Array[String]:
 		if not pools.has(GameData.as_string(record.get("kind"))) or _items.item(StringName(id)) != null:
 			continue
 		if not _has_a_job(record):
+			continue
+		if _rules.no_contraband and GameData.as_bool(record.get("contraband")):
 			continue
 		var rarity: int = DataValidator.RARITIES.find(GameData.as_string(record.get("rarity"), "common"))
 		by_rarity[maxi(rarity, 0)].append(id)

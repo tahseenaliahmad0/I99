@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/view/wedding_view.gd" id="1_wedding"]
+
+[node name="Wedding" type="Node3D"]
+script = ExtResource("1_wedding")

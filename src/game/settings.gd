@@ -49,6 +49,9 @@ func reset_to_defaults() -> void:
 
 
 func save() -> void:
+	# The folder may have been cleared away since the game started.
+	if _user_dir != "user://":
+		DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(_user_dir))
 	var file: FileAccess = FileAccess.open(_path(), FileAccess.WRITE)
 	if file == null:
 		push_error("Settings: cannot write %s (%s)" % [_path(), error_string(FileAccess.get_open_error())])

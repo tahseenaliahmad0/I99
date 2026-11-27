@@ -30,6 +30,10 @@ const EVENT_TYPES: PackedStringArray = ["HAZARD", "CLUSTER", "SLOWPOKE"]
 ## Beats that put nothing beside the player.
 const QUIET_TYPES: PackedStringArray = ["CALM", "CURVE", "GUST"]
 const KMH_TO_MS: float = 1.0 / 3.6
+## The modifiers that take a stretch of road of their own (GDD 9.4), and the
+## role of the vehicles each puts on it ("" where it puts none).
+const ZONE_KINDS: PackedStringArray = ["sheep", "wedding", "melon_truck"]
+const TWIST_ROLES: Dictionary = {"sheep": "", "wedding": "wedding", "melon_truck": "melon_truck"}
 ## Lane index of the oncoming lane on an undivided road.
 const ONCOMING_LANE: int = -1
 ## Lane index used for things parked on the shoulder.
@@ -97,6 +101,10 @@ var _random: RandomNumberGenerator = Rng.seeded(0)
 var _leg: Dictionary = {}
 var _modifier: Dictionary = {}
 var _modifier_id: String = ""
+## A Twist's modifier ({} for none) and where along the beats it goes.
+var _twist: Dictionary = {}
+var _twist_at: float = 0.5
+var _twist_zone: Dictionary = {}
 var _act: int = 1
 var _lanes: int = 3
 var _divided: bool = true
@@ -175,9 +183,22 @@ var _late_share: float = 0.0
 ##     "zones":   [ { "kind", "s", "length", ... } ],
 ##     "flock", "melons", "motorcade": {} or what that encounter needs,
 ##     "path":    [ [s, lane], ... ]  a line through the leg that meets nothing }
-static func generate(data: GameData, leg_id: String, act: int, leg_seed: int, modifier_id: String = "") -> Dictionary:
+##
+## `twist` is a Twist a guest will throw in (GDD 11.3: "injects a modifier
+## beat"): { "modifier": a modifier with a stretch of its own (sheep, the
+## wedding, the melon truck), "at": where along the beats, 0 to 1 }. It is
+## laid out like the leg's own, so every rule of the generator holds with it
+## on the road, and the plan says where it is in "twist": { "modifier",
+## "s", "length", "first_s" (the car's progress at which the first thing of
+## it would come onto the road), "end_s" }. LegSim keeps it off the road
+## until the heckle has been heard.
+static func generate(data: GameData, leg_id: String, act: int, leg_seed: int, modifier_id: String = "", twist: Dictionary = {}) -> Dictionary:
 	var generator: LegGenerator = LegGenerator.new()
 	generator._setup(data, data.record("legs", leg_id), act, modifier_id)
+	var twist_id: String = GameData.as_string(twist.get("modifier"))
+	if not twist_id.is_empty() and twist_id != modifier_id and ZONE_KINDS.has(twist_id):
+		generator._twist = data.record("modifiers", twist_id)
+		generator._twist_at = GameData.as_float(twist.get("at"), 0.5)
 	return generator._generate(leg_id, leg_seed)
 
 
@@ -291,6 +312,36 @@ func _to_plan(leg_id: String, leg_seed: int, attempts: int) -> Dictionary:
 	var path: Array = []
 	for index: int in _path_s.size():
 		path.append([_round(_path_s[index]), _path_lane[index]])
+	var plan: Dictionary = _plan_of(leg_id, leg_seed, attempts, spawns, path)
+	if not _twist_zone.is_empty():
+		plan["twist"] = _twist_in(spawns)
+	return plan
+
+
+## Where the Twist is: its stretch, and the car's progress at which the first
+## thing of it would come onto the road (a vehicle's trigger, or the point
+## from which the sheep walk).
+func _twist_in(spawns: Array[Dictionary]) -> Dictionary:
+	var id: String = GameData.as_string(_twist.get("id"))
+	var zone_s: float = _twist_zone["s"]
+	var zone_length: float = _twist_zone["length"]
+	var first: float = zone_s
+	if id == "sheep":
+		first = minf(first, GameData.as_float(_flock.get("start_s")))
+	var role: String = GameData.as_string(TWIST_ROLES.get(id))
+	for spawn: Dictionary in spawns:
+		if not role.is_empty() and GameData.as_string(spawn.get("role")) == role:
+			first = minf(first, GameData.as_float(spawn.get("trigger_s")))
+	return {
+		"modifier": id,
+		"s": zone_s,
+		"length": zone_length,
+		"first_s": _round(maxf(first, 0.0)),
+		"end_s": zone_s + zone_length,
+	}
+
+
+func _plan_of(leg_id: String, leg_seed: int, attempts: int, spawns: Array[Dictionary], path: Array) -> Dictionary:
 	return {
 		"leg": leg_id,
 		"act": _act,
@@ -353,6 +404,7 @@ func _reset() -> void:
 	_curves = []
 	_gusts = []
 	_zones = []
+	_twist_zone = {}
 	_flock = {}
 	_melons = {}
 	_motorcade = {}
@@ -374,7 +426,9 @@ func _draw() -> bool:
 		_keep_reserved()
 		if kind == "roadworks":
 			_reserve_chicanes(special)
-		if not _reserve_modifier_zone():
+		if not _reserve_zone(_modifier, -1.0):
+			return false
+		if not _twist.is_empty() and not _reserve_zone(_twist, _twist_at):
 			return false
 		if kind == "two_lane" and not _draw_two_lane(special):
 			return false
@@ -1148,44 +1202,55 @@ func _reserve_chicanes(special: Dictionary) -> void:
 
 
 ## Sheep, the wedding and the melon truck each take a stretch of road of
-## their own, laid out as a SPECIAL beat, with what belongs in it.
-func _reserve_modifier_zone() -> bool:
-	var id: String = GameData.as_string(_modifier.get("id"))
+## their own, laid out as a SPECIAL beat, with what belongs in it. `modifier`
+## is the leg's own or a Twist's; `twist_at` (0 to 1) is where a Twist's goes
+## instead of the modifier's own place.
+func _reserve_zone(modifier: Dictionary, twist_at: float) -> bool:
+	var id: String = GameData.as_string(modifier.get("id"))
 	var kind: String = ""
 	var length: float = 0.0
 	var at: float = 0.0
 	match id:
 		"sheep":
-			var flock: Dictionary = GameData.as_dict(_modifier.get("flock"))
+			var flock: Dictionary = GameData.as_dict(modifier.get("flock"))
 			kind = "flock"
 			length = GameData.as_float(flock.get("zone_m"))
 			at = GameData.as_float(flock.get("at"))
 		"wedding":
 			kind = "wedding"
-			length = GameData.as_float(_modifier.get("zone_m"))
-			at = GameData.as_float(_modifier.get("at"))
+			length = GameData.as_float(modifier.get("zone_m"))
+			at = GameData.as_float(modifier.get("at"))
 		"melon_truck":
 			kind = "melon"
-			length = _melon_zone_length()
-			at = GameData.as_float(_modifier.get("at"))
+			length = _melon_zone_length(modifier)
+			at = GameData.as_float(modifier.get("at"))
 		_:
 			return true
+	if twist_at >= 0.0:
+		at = twist_at
 	var s: float = roundf(clampf(at * _beats_end + _random.randf_range(-60.0, 60.0),
 			_tuning.f("first_event_within") + _tuning.f("calm_length"), _beats_end - length - _tuning.f("calm_length")))
 	var zone: Dictionary = {"kind": kind, "s": s, "length": ceilf(length)}
+	# Two stretches (the leg's own and a Twist's) keep a CALM beat's length
+	# apart. A Twist asked for where there is no such room is left out of
+	# this draw: the leg stands without it, and the plan names none.
+	if twist_at >= 0.0 and _in_zone(s - _tuning.f("calm_length"), s + ceilf(length) + _tuning.f("calm_length")):
+		return true
 	_zones.append(zone)
+	if twist_at >= 0.0:
+		_twist_zone = zone
 	match kind:
 		"flock":
-			return _place_flock(zone)
+			return _place_flock(zone, modifier)
 		"wedding":
-			return _place_wedding(zone)
-	return _place_melon_truck(zone)
+			return _place_wedding(zone, modifier)
+	return _place_melon_truck(zone, modifier)
 
 
 ## Sheep (GDD 9.4): a row across the road with one gap, walking toward the
 ## right. The gap is at a lane's centre when the player arrives at par.
-func _place_flock(zone: Dictionary) -> bool:
-	var flock: Dictionary = GameData.as_dict(_modifier.get("flock"))
+func _place_flock(zone: Dictionary, modifier: Dictionary) -> bool:
+	var flock: Dictionary = GameData.as_dict(modifier.get("flock"))
 	var zone_s: float = zone["s"]
 	var zone_length: float = zone["length"]
 	var s: float = zone_s + zone_length * 0.5
@@ -1236,10 +1301,10 @@ func _place_flock(zone: Dictionary) -> bool:
 
 
 ## The wedding (GDD 9.4): slow decorated cars, two abreast, in two lanes.
-func _place_wedding(zone: Dictionary) -> bool:
-	var cars: int = GameData.as_int(_modifier.get("cars"))
-	var across: int = clampi(GameData.as_int(_modifier.get("lanes")), 1, _lanes - 1)
-	var speed: float = GameData.as_float(_modifier.get("speed_kmh"))
+func _place_wedding(zone: Dictionary, modifier: Dictionary) -> bool:
+	var cars: int = GameData.as_int(modifier.get("cars"))
+	var across: int = clampi(GameData.as_int(modifier.get("lanes")), 1, _lanes - 1)
+	var speed: float = GameData.as_float(modifier.get("speed_kmh"))
 	var zone_s: float = zone["s"]
 	var first_lane: int = _random.randi_range(0, _lanes - across)
 	var closing: float = 1.0 - speed / _par
@@ -1258,12 +1323,12 @@ func _place_wedding(zone: Dictionary) -> bool:
 	return true
 
 
-func _melon_zone_length() -> float:
-	var speed: float = GameData.as_float(_modifier.get("truck_speed_kmh"))
+func _melon_zone_length(modifier: Dictionary) -> float:
+	var speed: float = GameData.as_float(modifier.get("truck_speed_kmh"))
 	var closing: float = 1.0 - speed / _par
 	var type: Dictionary = _data.record("vehicles", "melon_truck")
 	var reach: float = (GameData.as_float(type.get("length")) * 0.5 + _car_length * 0.5 + _margin) / closing
-	var shed_gap: float = GameData.as_float(_modifier.get("shed_gap_m"))
+	var shed_gap: float = GameData.as_float(modifier.get("shed_gap_m"))
 	# From the first melon to the truck itself.
 	return (shed_gap / closing + reach) - (shed_gap - _hazard_reach("melon")) + 4.0
 
@@ -1271,11 +1336,11 @@ func _melon_zone_length() -> float:
 ## The melon truck (GDD 9.4): it sheds melons for shed_s once the player is
 ## shed_gap_m behind it. They roll toward the right shoulder, so the lanes to
 ## the truck's left stay clear.
-func _place_melon_truck(zone: Dictionary) -> bool:
-	var speed: float = GameData.as_float(_modifier.get("truck_speed_kmh"))
+func _place_melon_truck(zone: Dictionary, modifier: Dictionary) -> bool:
+	var speed: float = GameData.as_float(modifier.get("truck_speed_kmh"))
 	var closing: float = 1.0 - speed / _par
-	var shed_gap: float = GameData.as_float(_modifier.get("shed_gap_m"))
-	var shed_time: float = GameData.as_float(_modifier.get("shed_s"))
+	var shed_gap: float = GameData.as_float(modifier.get("shed_gap_m"))
+	var shed_time: float = GameData.as_float(modifier.get("shed_s"))
 	var zone_s: float = zone["s"]
 	var melon_reach: float = _hazard_reach("melon")
 	# The player's progress when the first melon falls, shed_gap ahead of him.
@@ -1294,8 +1359,8 @@ func _place_melon_truck(zone: Dictionary) -> bool:
 		"kind": "melon",
 		"shed_gap": shed_gap,
 		"shed_s": shed_time,
-		"every_s": GameData.as_float(_modifier.get("melon_every_s")),
-		"roll_ms": GameData.as_float(_modifier.get("roll_ms")),
+		"every_s": GameData.as_float(modifier.get("melon_every_s")),
+		"roll_ms": GameData.as_float(modifier.get("roll_ms")),
 		"lane": lane,
 	}
 	return true

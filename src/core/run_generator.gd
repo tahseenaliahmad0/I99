@@ -15,6 +15,9 @@ const FORK_SALT: int = 1000
 const LEG_SALT: int = 2000
 const BOSS_SALT: int = 3000
 const HITCHER_SALT: int = 4000
+## Where in each act a Table that wants a Patrol leg in every act has it.
+const PATROL_SALT: int = 4500
+const PATROL_LEG: String = "patrol"
 ## A stop's "hitcher": one stands there always, or at hitcher_chance of them.
 const HITCHER_ALWAYS: String = "always"
 const HITCHER_SOMETIMES: String = "sometimes"
@@ -33,7 +36,24 @@ static func leg_pool(data: GameData, act: int) -> PackedStringArray:
 ## (1 to 3): [ { "leg", "modifier", "seed", "par_s", "stop" }, ... ], the left
 ## branch first. The two branches are different leg types. `modifier` is ""
 ## for none; `stop` is the stop at the leg's end.
-static func fork(data: GameData, telling_seed: int, act: int, leg_index: int) -> Array[Dictionary]:
+##
+## `rules` are the Table's (GDD 11.2). On a fixed road (Noor's) there is no
+## fork: the list holds the one leg that comes next. At a Table that has a
+## Patrol leg in every act, one place of each act (drawn from the Telling's
+## seed) is a Patrol leg whichever way he goes.
+static func fork(data: GameData, telling_seed: int, act: int, leg_index: int, rules: TableRules = null) -> Array[Dictionary]:
+	if rules != null and rules.fixed_road():
+		var fixed: Array[Dictionary] = []
+		var only: String = rules.leg_at(act, leg_index)
+		if data.has_record("legs", only):
+			fixed.append({
+				"leg": only,
+				"modifier": "",
+				"seed": leg_seed(telling_seed, act, leg_index, 0),
+				"par_s": GameData.as_float(data.record("legs", only).get("par_s")),
+				"stop": rules.stop_at(act, leg_index),
+			})
+		return fixed
 	var slot: int = (act - 1) * LEGS_PER_ACT + leg_index
 	var random: RandomNumberGenerator = Rng.seeded(Rng.derive(telling_seed, FORK_SALT + slot))
 	var pool: PackedStringArray = leg_pool(data, act)
@@ -64,7 +84,23 @@ static func fork(data: GameData, telling_seed: int, act: int, leg_index: int) ->
 	# else so that the legs of a Telling do not depend on its stops.
 	for branch: Dictionary in branches:
 		branch["stop"] = _draw_stop(data, random)
+	if rules != null and rules.patrol_every_act and leg_index == patrol_place(telling_seed, act) and data.has_record("legs", PATROL_LEG):
+		# Both roads are watched: the draws above are made all the same, so
+		# that the stops and the other forks are those of any Table.
+		var patrol: Dictionary = data.record("legs", PATROL_LEG)
+		var allowed: Array = GameData.as_array(patrol.get("modifiers_allowed"))
+		for branch: Dictionary in branches:
+			branch["leg"] = PATROL_LEG
+			branch["par_s"] = GameData.as_float(patrol.get("par_s"))
+			if not allowed.has(branch["modifier"]):
+				branch["modifier"] = ""
 	return branches
+
+
+## The place (0 to 2) of the Patrol leg in `act` at a Table that has one in
+## every act.
+static func patrol_place(telling_seed: int, act: int) -> int:
+	return Rng.seeded(Rng.derive(telling_seed, PATROL_SALT + act)).randi_range(0, LEGS_PER_ACT - 1)
 
 
 ## One stop, by the weights of GDD 15. Stops with no weight (the shady guy,
@@ -157,7 +193,8 @@ static func leg_seed(telling_seed: int, act: int, leg_index: int, branch: int) -
 	return Rng.derive(telling_seed, LEG_SALT + slot)
 
 
-## The plan of one branch of a fork.
-static func plan(data: GameData, branch: Dictionary, act: int) -> Dictionary:
+## The plan of one branch of a fork; `twist` is the Twist a guest throws
+## into it ({} for none: see LegGenerator.generate).
+static func plan(data: GameData, branch: Dictionary, act: int, twist: Dictionary = {}) -> Dictionary:
 	return LegGenerator.generate(data, GameData.as_string(branch.get("leg")), act,
-			GameData.as_int(branch.get("seed")), GameData.as_string(branch.get("modifier")))
+			GameData.as_int(branch.get("seed")), GameData.as_string(branch.get("modifier")), twist)

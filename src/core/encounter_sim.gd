@@ -471,6 +471,18 @@ func _tail_gone() -> void:
 	active = false
 
 
+## The encounter is at him now (GDD 11.3 has no heckle begin "during an
+## encounter"): the Patrol from its lights until it leaves, the Tailgater
+## from its tell until it is gone, the Motorcade while its spotlight is on
+## his windscreen.
+func pressing() -> bool:
+	if patrol_phase == PATROL_LIGHTS or patrol_phase == PATROL_WATCHING:
+		return true
+	if tail_phase >= TAIL_TELL and tail_phase < TAIL_GONE:
+		return true
+	return glare > 0.0
+
+
 # --- Motorcade (GDD 9.3) -----------------------------------------------------
 
 ## Five cars fill the road at a steady speed. Within keep_back_m of the last

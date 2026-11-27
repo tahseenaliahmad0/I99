@@ -4,9 +4,9 @@
 D = 'src/core/drive_sim.gd'
 C = 'src/game/drive_controller.gd'
 MUTANTS = [
- (D, '\tcheckpoint = {}\n\trun.table = table', '\trun.table = table', 'the simulation keeps the wrecked night\'s save'),
- (C, 'if type == "wreck" and sim.run.active:', 'if type == "wreck" and false:', 'a Wreck leaves the Telling in the file'),
- (C, '\t\t\t# nothing that the file holds.)\n\t\t\tGame.write_save({})', '\t\t\t# nothing that the file holds.)\n\t\t\tGame.write_save(sim.checkpoint)', 'a Wreck writes the last stop again'),
- (C, 'if type == "wreck" and sim.run.active:', 'if type == "wreck":', 'a Wreck on a road of no Telling clears the file'),
+ (D, '\tcheckpoint = {}\n\trun.rules = table', '\trun.rules = table', "the simulation keeps the wrecked night's save"),
+ (C, 'if type == "wreck" and sim.run.active and not GameData.as_bool(event.get("rewind")):', 'if type == "wreck" and false:', 'a Wreck leaves the Telling in the file'),
+ (C, '\t\t\t# takes back, GDD 11.2.)\n\t\t\tGame.write_save({})', '\t\t\t# takes back, GDD 11.2.)\n\t\t\tGame.write_save(sim.checkpoint)', 'a Wreck writes the last stop again'),
+ (C, 'if type == "wreck" and sim.run.active and not GameData.as_bool(event.get("rewind")):', 'if type == "wreck" and not GameData.as_bool(event.get("rewind")):', 'a Wreck on a road of no Telling clears the file'),
  (D, '\tif wrecked:\n\t\t# The Wreck is where the Telling stops', '\tif false:\n\t\t# The Wreck is where the Telling stops', 'he pulls in at a stall in the tick of the Wreck'),
 ]

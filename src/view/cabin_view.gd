@@ -266,8 +266,20 @@ func setup(data: GameData, factory: PlaceholderFactory) -> void:
 	_group("Visor").add_child(_visor_down)
 
 
+## Tremor and shake visuals (GDD 17.1), 0 to 1: how much of the wheel's
+## trembling is drawn. "The mechanical effect stays": the car is steered by
+## the wheel as it is, whatever is drawn.
+var shake_visuals: float = 1.0
+
+
+## The wheel's angle as it is drawn: the angle it has, less the share of
+## its Tremor that the setting takes out of the picture.
+static func drawn_wheel_angle(wheel_angle: float, wheel_tremor: float, shake: float) -> float:
+	return wheel_angle - wheel_tremor * (1.0 - clampf(shake, 0.0, 1.0))
+
+
 func apply(snapshot: Dictionary) -> void:
-	var wheel_angle: float = snapshot["wheel_angle"]
+	var wheel_angle: float = drawn_wheel_angle(GameData.as_float(snapshot["wheel_angle"]), GameData.as_float(snapshot["wheel_tremor"]), shake_visuals)
 	# Clockwise for the driver, who looks along -Z, is a negative turn about +Z.
 	_wheel.rotation.z = -deg_to_rad(wheel_angle)
 

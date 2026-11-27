@@ -1543,6 +1543,8 @@ func _in_the_scene(tree: SceneTree) -> void:
 	view = drive.get_node("Subtitles") as SubtitlesView
 	var telling_seed: int = sim.run.seed
 	var parked: bool = sim.run.active and sim.boss.in_bay and sim.hand.at_id() == KEY
+	# (The night's own first line, narrator.start, has had its say.)
+	view.clear()
 	Events.emit_event("line_requested", {"id": LONG_LINE})
 	await _a_frame_drawn(tree)
 	_check(parked and view.is_showing() and view.waiting() == 2, "a Telling's car stands in the bay of the Arrival, the hand on the key, while a line of two parts is said")
@@ -1555,7 +1557,10 @@ func _in_the_scene(tree: SceneTree) -> void:
 	await _a_frame_drawn(tree)
 	Input.action_release("brake")
 	_check(_bus_arrivals == 1 and sim.run.active and sim.run.seed == telling_seed + 1, "a TAP on the key ends the night (`arrived`), and the scene begins the Telling again")
-	_check(not view.is_showing() and view.waiting() == 0, "nothing that was being said is left on screen or waiting")
+	# The new night begins with its first line (GDD 3.6, 10.1), and with nothing else.
+	var opening: Array[SubtitleQueue.Part] = queue.parts_of("", Lines.get_text("narrator.start"))
+	_check(_bus_lines.has("narrator.start") and view.is_showing() and view.shown_lines() == opening[0].lines and view.waiting() == opening.size(),
+			"nothing that was being said is left on screen or waiting: only the new night's first line (%s)" % " | ".join(view.shown_lines()))
 
 	# Nothing is left behind for the next tool or test.
 	Events.line_requested.disconnect(_on_bus_line)

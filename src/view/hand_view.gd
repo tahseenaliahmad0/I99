@@ -29,6 +29,14 @@ var _ghost_arm: MeshInstance3D
 var _ghost_arm_mesh: CapsuleMesh
 var _ghost_hand: Node3D
 var _ghost_from: Vector3 = Vector3.ZERO
+## Tremor and shake visuals (GDD 17.1), 0 to 1: see CabinView.
+var shake_visuals: float = 1.0
+## Nine o'clock on the wheel's rim: where the Fib's ghost hand holds it.
+var _wheel_left: Vector3 = Vector3.ZERO
+## The prologue's left arm (GDD 10.1: "a solid left arm holds the wheel").
+var _left_arm: MeshInstance3D
+var _left_arm_mesh: CapsuleMesh
+var _left_hand: Node3D
 ## anchor id -> where it is.
 var _anchor_pos: Dictionary = {}
 
@@ -49,6 +57,16 @@ func setup(data: GameData, factory: PlaceholderFactory, space: CabinSpace) -> vo
 	for prop: Dictionary in data.records("props"):
 		if GameData.as_string(prop.get("id")) == "left_sleeve":
 			_ghost_from = GameData.as_vec3(prop.get("pos"))
+	_wheel_left = Vector3(-tuning.f("wheel_radius"), 0.0, 0.0)
+	_left_arm = factory.make("prologue_left_arm") as MeshInstance3D
+	_left_hand = factory.make("prologue_left_hand")
+	if _left_arm != null:
+		_left_arm_mesh = _left_arm.mesh.duplicate() as CapsuleMesh
+		_left_arm.mesh = _left_arm_mesh
+		_left_arm.visible = false
+		add_child(_left_arm)
+	_left_hand.visible = false
+	add_child(_left_hand)
 	_ghost_arm = factory.make("ghost_arm") as MeshInstance3D
 	_ghost_hand = factory.make("ghost_hand")
 	var faint: float = tuning.f("ghost_alpha")
@@ -87,7 +105,7 @@ func apply(snapshot: Dictionary) -> void:
 	# Lag (GDD 5.8): the hand trails the wheel. It is drawn where the wheel
 	# was when the car last answered it.
 	if snapshot["hand_gripping"]:
-		var wheel_angle: float = snapshot["wheel_angle"]
+		var wheel_angle: float = CabinView.drawn_wheel_angle(GameData.as_float(snapshot["wheel_angle"]), GameData.as_float(snapshot["wheel_tremor"]), shake_visuals)
 		var steer_angle: float = snapshot["steer_angle"]
 		hand = hand.rotated(Vector3.BACK, deg_to_rad(wheel_angle - steer_angle))
 	var solved: Dictionary = solve(_shoulder, hand, _upper_length, _forearm_length, _slide_max, _pole)
@@ -108,6 +126,11 @@ func apply(snapshot: Dictionary) -> void:
 	var moves: Dictionary = snapshot["anchor_moves"]
 	var ghost_progress: float = snapshot["ghost_progress"]
 	_show_ghost(str(snapshot["ghost_at"]), ghost_progress, moves)
+	_show_left_arm(str(snapshot["left_hand"]), GameData.as_float(snapshot["prologue_lift"]), moves)
+	if snapshot["ghost_hand"] and str(snapshot["ghost_at"]).is_empty():
+		# The Fib (GDD 11.3): "Both hands!" The ghost of his left hand is on
+		# the wheel, at nine o'clock.
+		_place_ghost(_wheel_left, 1.0)
 
 
 ## What he carries goes with the hand: the item's own placeholder, or a
@@ -139,7 +162,36 @@ func _show_ghost(anchor: String, progress: float, moves: Dictionary) -> void:
 		return
 	var to: Vector3 = GameData.as_vec3(moves[anchor]) if moves.has(anchor) else _anchor_pos[anchor]
 	# It passes through the control: a little beyond it at the end.
-	var at: Vector3 = _ghost_from.lerp(to, progress * 1.15)
+	_place_ghost(to, progress * 1.15)
+
+
+## The prologue's left arm (GDD 10.1), from where his sleeve is pinned
+## tonight to where the hand is: on the wheel at nine o'clock, at the
+## indicator stalk while it changes lane, and lifting from the wheel toward
+## the window crank as the last step runs.
+func _show_left_arm(at: String, lift: float, moves: Dictionary) -> void:
+	var showing: bool = not at.is_empty()
+	_left_hand.visible = showing
+	if _left_arm != null:
+		_left_arm.visible = showing
+	if not showing:
+		return
+	var to: Vector3 = _wheel_left
+	if _anchor_pos.has(at):
+		var there: Vector3 = GameData.as_vec3(moves[at]) if moves.has(at) else _anchor_pos[at]
+		to = _wheel_left.lerp(there, lift) if lift > 0.0 else there
+	_place_capsule(_left_arm, _left_arm_mesh, _ghost_from, to)
+	var along: Vector3 = to - _ghost_from
+	if along.length_squared() > 0.0:
+		_left_hand.transform = Transform3D(_basis_along(along, Vector3.UP), to)
+
+
+## The ghost arm from the empty sleeve `share` of the way to `to`.
+func _place_ghost(to: Vector3, share: float) -> void:
+	_ghost_hand.visible = true
+	if _ghost_arm != null:
+		_ghost_arm.visible = true
+	var at: Vector3 = _ghost_from.lerp(to, share)
 	_place_capsule(_ghost_arm, _ghost_arm_mesh, _ghost_from, at)
 	var along: Vector3 = at - _ghost_from
 	if along.length_squared() > 0.0:

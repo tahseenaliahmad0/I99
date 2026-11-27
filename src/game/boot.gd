@@ -20,3 +20,5 @@ func _ready() -> void:
 			autoloads += 1
 	print("[boot] ready autoloads=%d json_files=%d lines=%d data_errors=%d" % [
 		autoloads, Game.data.roots.size(), Game.data.line_ids().size(), Game.data_errors.size()])
+	# BOOT > TITLE (GDD 13.4).
+	Game.go(Game.AppState.TITLE)

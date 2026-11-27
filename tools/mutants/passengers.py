@@ -27,7 +27,7 @@ MUTANTS = [
  (S, '\treturn not hitcher.is_empty() and not _items.seat_occupied', '\treturn not hitcher.is_empty()', 'the door opens with the seat taken'),
  (S, '\t\treturn {"id": BOARD, "anchor": anchor, "gesture": "TAP"} if _door_can_open() else {}', '\t\treturn {}', 'the door cannot be unlocked'),
  (D, '\t\tif board(stop.hitcher):\n\t\t\tstop.hitcher = ""', '\t\tstop.hitcher = ""', 'the hitcher vanishes instead of getting in'),
- (D, '\t\tstop.begin(run.stop, run.act, shady)\n\t\tstop.hitcher = _hitcher_here()', '\t\tstop.begin(run.stop, run.act, shady)\n\t\tstop.hitcher = ""', 'nobody ever stands at the roadside'),
+ (D, '\t\tstop.begin(run.stop, run.act, shady, table.price_mult, table)\n\t\tstop.hitcher = _hitcher_here()', '\t\tstop.begin(run.stop, run.act, shady, table.price_mult, table)\n\t\tstop.hitcher = ""', 'nobody ever stands at the roadside'),
  (R, '\t\tif ids[which] != aboard and ids[which] != left_here:', '\t\tif ids[which] != left_here:', 'the one he carries stands at the roadside'),
  (R, '(stands != HITCHER_SOMETIMES or roll >= data.tuning.f("hitcher_chance"))', '(stands != HITCHER_SOMETIMES or roll >= 1.0)', 'a hitcher at every fuel station and tea stall'),
  (R, '(stands != HITCHER_SOMETIMES or roll >= data.tuning.f("hitcher_chance"))', '(stands != HITCHER_SOMETIMES or roll >= 0.0)', 'never one at a fuel station or tea stall'),
@@ -86,7 +86,7 @@ MUTANTS = [
  (D, '\tif passengers.passes_tea():\n', '\tif false:\n', 'the tea is never held out'),
  # what they do all the time
  (P, '\treturn GameData.as_float(GameData.as_dict(record.get("always")).get("suspicion_gain_mult"), 1.0)', '\treturn 1.0', 'the uniform does nothing'),
- (D, '\tsuspicion.gain_mult = items.passive("suspicion_gain_mult") * passengers.suspicion_mult()', '\tsuspicion.gain_mult = items.passive("suspicion_gain_mult")', 'the uniform is not asked'),
+ (D, '\tvar gain: float = items.passive("suspicion_gain_mult") * passengers.suspicion_mult()', '\tvar gain: float = items.passive("suspicion_gain_mult")', 'the uniform is not asked'),
  (P, '\treturn GameData.as_float(GameData.as_dict(record.get("always")).get("fork_sign_lead_s"))', '\treturn 0.0', 'she does not read the road'),
  (D, '\t\tvar early_at: float = fork_sign_at - passengers.fork_sign_lead() * par_ms', '\t\tvar early_at: float = fork_sign_at + passengers.fork_sign_lead() * par_ms', 'the sign stands later'),
  (P, '\treturn GameData.as_float(record.get("view_block_right"))', '\treturn 0.0', 'the drum blocks nothing'),

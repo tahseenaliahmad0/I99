@@ -232,3 +232,301 @@ hud.checkpoint.queue,,Checkpoint: the queue,false
 hud.checkpoint.stow,,Checkpoint: the soldier is %s s away,false
 hud.checkpoint.papers,,Checkpoint: he wants %s (%s s),false
 hud.checkpoint.passed,,Checkpoint: through,false
+table.children.name,,THE CHILDREN,true
+table.drivers.name,,THE DRIVERS,true
+table.uncles.name,,THE UNCLES,true
+table.inlaws.name,,THE IN-LAWS,true
+table.aunts.name,,THE AUNTS,true
+table.groom.name,,THE GROOM,true
+table.noor.name,,NOOR,true
+speaker.in_law,,In-law,true
+speaker.groom,,Groom,true
+heckle.children.twist.melons,Child,And a truck full of MELONS! And they all fell off!,true
+heckle.children.fib.1,Child,Both hands! You have to drive with BOTH hands!,true
+heckle.drivers.dare.close,Driver,"Tell them how close you cut it. Three of them, one after the other!",true
+heckle.drivers.dare.hands_off,Driver,"And on the straight you let go of the wheel. Go on, tell them!",true
+heckle.drivers.dare.pass,Driver,You passed three of them before I could count to ten!,true
+heckle.uncles.doubt.2,Uncle,With one hand. On that road. And we are to believe it.,true
+heckle.inlaws.question.1,In-law,"And you stayed calm, of course? The whole way?",true
+heckle.inlaws.question.2,In-law,"You are not one of those drivers who lean on the horn, are you?",true
+heckle.aunts.order.seeds,Aunt,Eat something. You never eat. Have some seeds.,true
+heckle.aunts.order.window,Aunt,That window! You will catch your death. Wind it.,true
+heckle.aunts.order.wipers,Aunt,Look at the state of that glass. Wipe it.,true
+heckle.groom.dare.1,Groom,"They say that car has a fourth gear, uncle. I have never seen it.",true
+heckle.groom.dare.2,Groom,"I would have passed them. Three, at least.",true
+heckle.groom.doubt.1,Groom,"Forgive me, uncle. But were you not afraid?",true
+heckle.groom.order.1,Groom,"You are shaking, uncle. Light one. Please.",true
+heckle.groom.order.2,Groom,"Sound the horn for us, uncle. For the wedding.",true
+heckle.guest.hajjiya.1,Old woman,"He was gentle as a lamb, this one. Were you not, my son?",true
+heckle.guest.hajjiya.2,Old woman,"Drink, my son. I told him then and I tell him now.",true
+heckle.guest.conscript.1,Soldier,He drove like my sergeant was behind us. That close. Three times!,true
+heckle.guest.conscript.2,Soldier,I slept through most of it. Was it really so hard?,true
+heckle.guest.drummer.1,Drummer,There was a wedding on the road that night too! I played for them from the window!,true
+heckle.guest.drummer.2,Drummer,He kept time on the wheel with me. No hands!,true
+heckle.guest.student.1,Student,And then it rained. I remember: my notes were ruined.,true
+heckle.guest.student.2,Student,He never once raised his voice. Or the horn. Is that not so?,true
+heckle.guest.apprentice.1,Boy,"We passed everybody, ustadh! Three at a time!",true
+heckle.guest.apprentice.2,Boy,"The wipers, ustadh! Show them how you do the wipers!",true
+hud.heckle,,"Heckle: %s, %s, %s s left, %s%%",false
+hud.heckle.twist,,Twist,false
+hud.heckle.dare,,Dare,false
+hud.heckle.doubt,,Doubt,false
+hud.heckle.question,,Question,false
+hud.heckle.order,,Order,false
+hud.heckle.fib,,the Fib,false
+hud.heckle.lead,,being said,false
+hud.heckle.open,,running,false
+hud.ghost_hand,,A ghost left hand is on the wheel,false
+prologue.step.1,,Tune the radio to music.,true
+prologue.step.2,,Sip the tea.,true
+prologue.step.3,,Shift from second to third.,true
+prologue.step.4,,Honk at a friend passing.,true
+prologue.step.5,,It rains. Flick the wipers.,true
+prologue.step.6,,Tuck the new photo into the visor.,true
+finale.baba,Noor,Baba.,true
+speaker.caller,,Caller,true
+speaker.radio,,Radio,true
+speaker.vendor,,Vendor,true
+speaker.fitter,,Fitter,true
+speaker.man_in_the_shade,,Man in the shade,true
+speaker.officer,,Officer,true
+title.begin,,Begin,true
+title.continue,,Continue,true
+title.prologue,,The prologue,true
+title.quit,,Quit,true
+title.subtitle,,One hand. One night. One road to Basra.,true
+title.card.prologue,,TWO HANDS,true
+title.card.tonight,,Twenty-two years later,true
+title.card.finale,,ONE HAND,true
+wedding.heading,,The wedding,true
+wedding.sit,,Sit down and tell it,true
+wedding.continue,,Go on with the story,true
+wedding.locked,,Win %s on time first,true
+wedding.told_true,,Told true,true
+wedding.guests,,Wedding guests: %s,true
+wedding.back,,Back to the title,true
+wedding.mode.commute,,THE COMMUTE,true
+wedding.mode.commute.rule,,"One road of 5 km, today's. Scored on cash.",true
+wedding.mode.endless_night,,ENDLESS NIGHT,true
+wedding.mode.endless_night.rule,,Legs without end. Scored on distance.,true
+wedding.mode.locked.commute,,Win a Table on time first,true
+wedding.mode.locked.endless_night,,Answer the Call first,true
+wedding.best.commute,,Best: %s cash,true
+wedding.best.endless_night,,Best: %s km,true
+table.children.rule,,One free rewind. Prices -25%.,true
+table.drivers.rule,,The night as it is.,true
+table.uncles.rule,,A Patrol in every act. The Checkpoint is suspicious.,true
+table.inlaws.rule,,"No contraband, no Deals, no bribes. A Snap costs 15 minutes.",true
+table.aunts.rule,,A heavier heart. Prices +25%. A Thermos and seeds.,true
+table.groom.rule,,He leaves at 22:45. A boss alone is +20 Nerves.,true
+table.noor.rule,,"The true night. One road, no forks, no heckles.",true
+ending.heading.late,,LATE,true
+ending.heading.on_time,,ON TIME,true
+ending.heading.call,,THE CALL,true
+ending.clock,,Parked at %s,true
+ending.unlocked.table,,%s will hear it next.,true
+ending.unlocked.mode,,New: %s,true
+ending.told_true,,This Table has heard it told true.,true
+ending.guest,,%s sits down at the wedding.,true
+ending.nothing,,Nothing unlocks.,true
+ending.continue,,Back to the wedding,true
+mode.over.commute,,The Commute: %s cash,true
+mode.over.endless_night,,Endless Night: %s km,true
+mode.over.best,,A new best.,true
+credits.1,,I-99,true
+credits.2,,"A game about one night, one road and one hand.",true
+credits.3,,"Dialogue: placeholder lines, to be replaced by an Iraqi writer.",true
+credits.4,,Thank you for driving.,true
+credits.continue,,Back to the wedding,true
+hud.prologue,,Prologue: step %s of 7%s,false
+hud.prologue.done,,", done",false
+hud.mode,,%s: %s,false
+narrator.leg.open_road.1,Abu Noor,The road was empty. An empty road is a liar.,true
+narrator.leg.open_road.2,Abu Noor,Nothing ahead but my own headlights.,true
+narrator.leg.rush.1,Abu Noor,Then everybody in Iraq decided to drive south.,true
+narrator.leg.rush.2,Abu Noor,Trucks. Minibuses. A man with a fridge on his roof.,true
+narrator.leg.rain.1,Abu Noor,"And then it rained. In that car, with those wipers.",true
+narrator.leg.rain.2,Abu Noor,The road shone like a plate. Lovely. Terrible.,true
+narrator.leg.night.1,Abu Noor,"Then the lights went out. All of them, the whole district.",true
+narrator.leg.night.2,Abu Noor,Dark like the inside of a pocket.,true
+narrator.leg.roadworks.1,Abu Noor,They were mending the road. They are always mending it.,true
+narrator.leg.roadworks.2,Abu Noor,Cones. A river of cones.,true
+narrator.leg.tailgater.1,Abu Noor,A man came up behind me. Close enough to share my seat.,true
+narrator.leg.tailgater.2,Abu Noor,"His lights were in my mirror, in my eyes, in my teeth.",true
+narrator.leg.patrol.1,Abu Noor,Blue lights. I became the best driver in the country.,true
+narrator.leg.patrol.2,Abu Noor,The police. I sat up straight like a schoolboy.,true
+narrator.leg.two_lane.1,Abu Noor,"One lane down, one lane back. And trucks.",true
+narrator.leg.two_lane.2,Abu Noor,To pass a truck there you borrow the other man's road.,true
+narrator.leg.motorcade.1,Abu Noor,Black cars. All the lanes. Somebody important.,true
+narrator.leg.motorcade.2,Abu Noor,You do not overtake those people. You wait.,true
+narrator.modifier.crosswind,Abu Noor,The wind had opinions that night.,true
+narrator.modifier.potholes,Abu Noor,That stretch has more holes than road.,true
+narrator.modifier.sheep,Abu Noor,"Sheep. At that hour. Ask the shepherd, not me.",true
+narrator.modifier.wedding,Abu Noor,A wedding on the road! I took it as a sign.,true
+narrator.modifier.melon_truck,Abu Noor,The truck ahead was losing its melons.,true
+narrator.modifier.dust_haze,Abu Noor,Dust in the air like flour.,true
+narrator.fork.1,Abu Noor,The road split. I chose.,true
+narrator.fork.2,Abu Noor,"Left or right. Both go to Basra, they say.",true
+narrator.fork.3,Abu Noor,I read the sign. I think I read the sign.,true
+narrator.act.2,Abu Noor,Past the checkpoint the night got longer.,true
+narrator.act.3,Abu Noor,"After the storm there was only the south, and the hour.",true
+narrator.stop.tea,Abu Noor,I stopped for tea. A man is not a machine.,true
+narrator.stop.repair,Abu Noor,There was a fitter awake. There is always one.,true
+narrator.stop.shop,Abu Noor,"A fuel station, lit up like a ship.",true
+narrator.stop.find,Abu Noor,Something by the road caught my lights.,true
+narrator.stop.hitcher,Abu Noor,Somebody stood at the roadside with a hand out.,true
+narrator.stop.shady,Abu Noor,A man in the shade had things to sell. Quietly.,true
+narrator.stop.boss,Abu Noor,I stopped. I breathed. I counted what I had left.,true
+narrator.boss.checkpoint,Abu Noor,"The checkpoint. Papers, window, patience.",true
+narrator.boss.storm,Abu Noor,Then the dust came down the road like a wall.,true
+narrator.boss.dawn,Abu Noor,The sky went grey. Her morning was coming.,true
+narrator.boss.arrival,Abu Noor,Her street. I knew it by the lamp post.,true
+narrator.scrape.1,Abu Noor,A scratch. The car has had worse.,true
+narrator.scrape.2,Abu Noor,I touched him. Lightly. Like a greeting.,true
+narrator.scrape.3,Abu Noor,The rail and I had a word.,true
+narrator.close.1,Abu Noor,That close. You could not fit a cigarette paper.,true
+narrator.close.2,Abu Noor,I felt his mirror go past my ear.,true
+narrator.close.3,Abu Noor,Close. I prefer the word precise.,true
+narrator.snap.1,Abu Noor,My hand let go by itself. It does that.,true
+narrator.snap.2,Abu Noor,For a moment I was only a man shaking.,true
+narrator.lamp.1,Abu Noor,A new light on the dash. I did not look at it.,true
+narrator.lamp.2,Abu Noor,"Something broke. In that car, something always does.",true
+narrator.fault.rattle,Abu Noor,Then the rattle started. It never stopped again.,true
+narrator.fault.cracked_mirror,Abu Noor,"The mirror cracked. Seven years, they say.",true
+narrator.fault.pulling_steering,Abu Noor,She began to pull left. Like a mule to its stable.,true
+narrator.fault.dead_headlight,Abu Noor,One headlight died. I drove on with one eye.,true
+narrator.fault.slipping_clutch,Abu Noor,The clutch went soft on me.,true
+narrator.fault.stuck_wiper,Abu Noor,The wiper stuck halfway. A salute.,true
+narrator.fault.loose_bumper,Abu Noor,The bumper came loose and sang.,true
+narrator.repaired.1,Abu Noor,He fixed it with wire and a prayer.,true
+narrator.bought.1,Abu Noor,I bought it. Do not ask what it cost.,true
+narrator.bought.2,Abu Noor,A man needs things on a road like that.,true
+narrator.pulled_over.1,Abu Noor,He waved me down. I found my most honest face.,true
+narrator.clean_leg.1,Abu Noor,Not a mark on her. I checked.,true
+wreck.children.2,"Child, then Abu Noor",You CRASHED? / I did not. Sit down. Again.,true
+wreck.children.3,"Child, then Abu Noor",Were you a ghost then? / ...From the start.,true
+wreck.drivers.2,"Driver, then Abu Noor",In that car? You would be in pieces. / Fine. Again.,true
+wreck.drivers.3,"Driver, then Abu Noor","And who drove you here, your corpse? / Again.",true
+wreck.uncles.1,"Uncle, then Abu Noor",So you died on the road. / No. That is not how it went.,true
+wreck.uncles.2,"Uncle, then Abu Noor",I knew it. I said he would not make it. / I made it.,true
+wreck.uncles.3,"Uncle, then Abu Noor",A dead man tells us stories now. / From the start.,true
+wreck.inlaws.1,"In-law, then Abu Noor","Forgive me, but then you were killed? / No. Again.",true
+wreck.inlaws.2,"In-law, then Abu Noor",That cannot be right. / It is not. Let me say it properly.,true
+wreck.inlaws.3,"In-law, then Abu Noor",Is this how the story goes? / No. Not like that.,true
+wreck.aunts.1,"Aunt, then Abu Noor","God forbid! You crashed? / I did not crash, aunt.",true
+wreck.aunts.2,"Aunt, then Abu Noor",And who would have told Noor? / Nobody. It did not happen.,true
+wreck.aunts.3,"Aunt, then Abu Noor",Do not say such things at a wedding. / You are right. Again.,true
+wreck.groom.1,"Groom, then Abu Noor",Uncle. You are standing here. / So I am. Again.,true
+wreck.groom.2,"Groom, then Abu Noor",I do not think that happened. / Clever boy. It did not.,true
+wreck.groom.3,"Groom, then Abu Noor",Then who walked in this morning? / From the start.,true
+wreck.noor.1,"Noor, then Abu Noor",Baba. That is not how it went. / No. It is not.,true
+wreck.noor.2,"Noor, then Abu Noor",You promised me the true one. / I did. Again.,true
+wreck.noor.3,"Noor, then Abu Noor",I was there in the morning. So were you. / So was I.,true
+rewind.children.1,"Child, then Abu Noor",NO! Not like that! / No? Then let me think. It went so.,true
+table.children.greeting,Child,Uncle! Tell the one with the car!,true
+table.drivers.greeting,Driver,Here he is. The man who beat the southern road.,true
+table.uncles.greeting,Uncle,So. The father who was not coming.,true
+table.inlaws.greeting,In-law,"Please, sit with us. We have heard so little.",true
+table.aunts.greeting,Aunt,Look at him. Thin. Sit and talk.,true
+table.groom.greeting,Groom,Uncle. Tell me how you got here. Truly.,true
+table.noor.greeting,Noor,"Now tell me, Baba. Only me.",true
+heckle.passed.children,Child,He DID it!,true
+heckle.passed.drivers,Driver,Ha! I told you he could.,true
+heckle.passed.uncles,Uncle,Hm. Perhaps.,true
+heckle.passed.inlaws,In-law,A careful man. Good.,true
+heckle.passed.aunts,Aunt,There. Was that so hard?,true
+heckle.passed.groom,Groom,"All right, uncle. All right.",true
+heckle.failed.children,Child,Awww.,true
+heckle.failed.drivers,Driver,No? Maybe that was another night.,true
+heckle.failed.uncles,Uncle,As I thought.,true
+heckle.failed.inlaws,In-law,I see.,true
+heckle.failed.aunts,Aunt,He never listens. Never did.,true
+heckle.failed.groom,Groom,"I only asked, uncle.",true
+ending.late.children,Child,She was awake already? Then you LOST!,true
+ending.late.drivers,Driver,"After six. Ah, brother. The road wins sometimes.",true
+ending.late.uncles,Uncle,Late. I will say nothing.,true
+ending.late.inlaws,In-law,She had been up an hour. We remember.,true
+ending.late.aunts,Aunt,She was at the window. I saw her face.,true
+ending.late.groom,Groom,"She told me you came in at seven, uncle.",true
+ending.late.noor,Noor,"I was already up, Baba. I made the tea myself.",true
+ending.on_time.children,Child,Before she woke up! He WON!,true
+ending.on_time.drivers,Driver,Before six. In that car. I take my hat off.,true
+ending.on_time.uncles,Uncle,Before six. Well. A man may change his mind.,true
+ending.on_time.inlaws,In-law,On time. She has a reliable father.,true
+ending.on_time.aunts,Aunt,And she found him asleep in the kitchen chair.,true
+ending.on_time.groom,Groom,"Before she woke. I will remember that, uncle.",true
+ending.on_time.noor,Noor,You were in the chair when I woke. Like always.,true
+ending.call.children,Child,And you TALKED to her on the phone! While driving!,true
+ending.call.drivers,Driver,"He took the call. One hand, and he took the call.",true
+ending.call.uncles,Uncle,You answered her. Good. That part I believe.,true
+ending.call.inlaws,In-law,She told us about that call. Every word is true.,true
+ending.call.aunts,Aunt,She cried after that call. Happy. I was there.,true
+ending.call.groom,Groom,She told me about the call first. Before anything.,true
+ending.call.noor,Noor,"I knew it was you before you spoke, Baba.",true
+ending.parked.late,Abu Noor,I turned the key. The sun was already on the wall.,true
+ending.parked.on_time,Abu Noor,I turned the key. The street was still asleep.,true
+ending.parked.call,Abu Noor,I turned the key. She was at the door before me.,true
+guest.hajjiya.seated,Old woman,I pray for this driver every Friday.,true
+guest.conscript.seated,Soldier,I slept the whole way. Best night of my service.,true
+guest.drummer.seated,Drummer,"A wedding! And I brought the drum, of course.",true
+guest.student.seated,Student,I passed the exam. I studied in his car.,true
+guest.apprentice.seated,Boy,Ustadh let me hold the wheel! Ask him!,true
+radio.news.1,Newsreader,"The southern road is open, the ministry says.",true
+radio.news.2,Newsreader,Dust is expected south of Kut after midnight.,true
+radio.news.3,Newsreader,Drivers are asked to carry their papers tonight.,true
+radio.news.4,Newsreader,A convoy is moving south. Expect delays.,true
+radio.news.5,Newsreader,Sunrise in Basra will be at five fifty-one.,true
+radio.callin.1,Caller,My husband drives nights. Tell him to call home.,true
+radio.callin.2,Caller,I want to greet everyone on the road to Basra.,true
+radio.callin.3,Caller,This song is for my daughter. She marries tomorrow.,true
+radio.callin.4,Caller,Is it true about the sheep on the highway?,true
+radio.music.1,Radio,"And now, an old one. You know the words.",true
+radio.music.2,Radio,"For the night drivers: do not sleep, sing.",true
+vendor.tea.1,Vendor,"Sit, driver. The glass is hot, the night is long.",true
+vendor.tea.2,Vendor,Sugar? Of course sugar.,true
+vendor.fitter.1,Fitter,I have seen worse. Not often.,true
+vendor.fitter.2,Fitter,Which noise? There are several.,true
+vendor.fuel.1,Vendor,Everything a driver needs. And some things he does not.,true
+vendor.fuel.2,Vendor,Basra? Tonight? God go with you.,true
+vendor.shady.1,Man in the shade,"For a careful man, I have something.",true
+vendor.shady.2,Man in the shade,You did not buy it from me.,true
+vendor.find.1,Abu Noor,Somebody had left it there. Finders keepers.,true
+officer.stop.1,Officer,Licence. Slowly.,true
+officer.fine.1,Officer,"A fine. Next time, indicate.",true
+officer.bribe.1,Officer,"...Drive carefully, uncle.",true
+officer.go.1,Officer,Go on. And fix that light.,true
+noor.call.2,Noor,I cannot sleep. Tell me you are at home.,true
+noor.call.3,Noor,Is that the road I hear? Baba?,true
+noor.call.4,Abu Noor,"It is the radio. Sleep, my heart.",true
+noor.call.5,Noor,I wish you were coming. I know. I know.,true
+finale.noor.palm,Noor,"Come, Baba. Like when I was small.",true
+finale.groom,Groom,Uncle.,true
+settings.heading,,Options,true
+title.options,,Options,true
+settings.back,,Back,true
+settings.resume,,Drive on,true
+settings.leave,,Back to the wedding,true
+settings.hint,,Left button: next. Right button: back.,true
+settings.hint.pause,,"To pause on the road: Esc, or hold the left button with the hand on nothing.",true
+settings.steering_sensitivity.name,,Steering sensitivity,true
+settings.grip_mode.name,,Grip mode,true
+settings.shifting.name,,Shifting,true
+settings.game_speed.name,,Game speed,true
+settings.brake_assist.name,,Brake assist,true
+settings.steady_start.name,,Steady start,true
+settings.phantom.name,,The Phantom,true
+settings.shake_visuals.name,,Tremor and shake visuals,true
+settings.numeric_hud.name,,Numeric HUD,true
+settings.subtitle_size.name,,Subtitles: size,true
+settings.subtitle_background.name,,Subtitles: background,true
+settings.mirrored_cabin.name,,Mirrored cabin,true
+settings.value.percent,,%s%%,true
+settings.value.on,,On,true
+settings.value.off,,Off,true
+settings.value.hold,,Hold,true
+settings.value.toggle,,"Click to grip, click to release",true
+settings.value.gate,,Gate,true
+settings.value.sequential,,Sequential flicks,true
+settings.value.small,,Small,true
+settings.value.medium,,Medium,true
+settings.value.large,,Large,true

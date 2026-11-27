@@ -38,7 +38,7 @@ MUTANTS = [
  (D, '\t\tif use_forged_papers():\n\t\t\tboss.papers_passed()', '\t\tif false:\n\t\t\tboss.papers_passed()', 'forged papers pass nothing'),
  (D, '\tif boss.delayed:\n\t\tsuspicion.add(_checkpoint_number("delay_suspicion"))', '\tif boss.delayed:\n\t\tpass', 'delay costs nothing'),
  (D, '\t\tif not items.flag(ItemSim.FLAG_WINDOW):\n\t\t\t# He cannot be handed anything through the glass.', '\t\tif true:\n\t\t\t# He cannot be handed anything through the glass.', 'he taps on an open window'),
- (D, '\t\tif cash < price:\n\t\t\t_emit("pulled_over", {"released": false, "refused": true, "paid": "bribe", "cost": price})\n\t\t\treturn\n', '', 'a bribe he cannot pay is taken'),
+ (D, '\t\tif cash < price or table.no_bribes:\n\t\t\t_emit("pulled_over", {"released": false, "refused": true, "paid": "bribe", "cost": price})\n\t\t\treturn\n', '\t\tif table.no_bribes:\n\t\t\t_emit("pulled_over", {"released": false, "refused": true, "paid": "bribe", "cost": price})\n\t\t\treturn\n', 'a bribe he cannot pay is taken'),
  (D, '\t\tcash -= price\n\t\t_let_through("bribe", price, 0.0, [])', '\t\t_let_through("bribe", price, 0.0, [])', 'the bribe is free'),
  (D, '\tif not boss.hand_over(String(what)):\n\t\t_emit("line_requested", {"id": "soldier.wrong"})\n\t\treturn', '\tif not boss.hand_over(String(what)):\n\t\treturn', 'no shake of the head'),
  (D, '\tif level >= _checkpoint_number("turned_back_at"):\n\t\t_turn_back(level)', '\tif level > _checkpoint_number("turned_back_at"):\n\t\t_turn_back(level)', 'never turned back'),

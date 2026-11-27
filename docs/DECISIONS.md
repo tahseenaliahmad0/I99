@@ -2219,3 +2219,402 @@ rest on the main line. Where this changes D-051, it is the later word.
   passenger, the hook with somebody in the seat). The build is right in
   each today (the verifier's probes); the checks are owed. The lists are
   in the review's reports, copied to `docs/reviews/`.
+
+## D-060 (M9, 2026-11-27) The seven Tables as built
+
+GDD 11.2 gives each Table a row of one or two sentences. This is how each
+sentence became a rule. A Table's rules are the keys of `rules` in its
+record of `data/tables.json`; `TableRules` reads them once and every sim
+asks it; the validator knows every key, so a misspelt rule is an error and
+not a rule that silently does not hold. "Rules do not stack": a Telling
+has the rules of its own Table and of no other.
+
+- **The Children.** "One free rewind: the first Wreck returns to the start
+  of that leg." The Telling is kept as `capture()` makes it at the moment a
+  leg (or a boss) begins. The first Wreck puts that back: cash, Clock,
+  Nerves, lamps, cabin, passengers, the same leg from its first metre with
+  the same seed. It is not a retelling (the Telling's seed and its count of
+  retellings stay) and the last stop's save is not cleared. The rewind is
+  spent by the Wreck that uses it; the second Wreck is Baghdad (GDD 11.5),
+  and the Telling told again from Baghdad has its rewind again: it is one
+  per night told. The save holds how many are left. A Wreck on the approach
+  to the first fork, before any leg has begun, is Baghdad: there is no leg
+  to return to. "Prices -25%" is `price_mult` 0.75 on everything a stop
+  asks cash for: stock, restocks, Deals with a price, and repairs.
+- **The Drivers.** `rules` is empty. A Table the data does not have (a leg
+  driven by itself, a save from before the Tables) has these rules too.
+- **The Uncles.** "A Patrol leg in every act": one place of each act's
+  three, drawn from the Telling's seed, where both branches of the fork are
+  Patrol legs, so the choice there is of stop and modifier only. Their
+  stops and seeds stay those the generator drew; par is the Patrol leg's.
+  One place and not "at least one branch somewhere", because a Patrol he
+  can drive around is no rule. "Checkpoint Suspicion gains x1.25" scales
+  every gain while the Checkpoint is the boss he is in, on top of what the
+  cabin and the passenger do; losses are not scaled. The record's heckle
+  weights are Doubts alone: GDD 14's example record weighs DOUBT, TWIST and
+  DARE, the table of 11.2 says "Doubts", and Part II overrides Part III on
+  what the rules are (GDD 1.5). The example stays in the test fixture of
+  T-DATA-01 as an example of the format.
+- **The In-laws.** "No contraband": no stop holds contraband out, restocks
+  it or deals in it. "No Deals": the shady guy is never there. "No bribes":
+  neither the officer nor the soldier takes banknotes; the gesture is
+  refused and the snapshot says a bribe cannot be offered, so the HUD shows
+  none. What he already carries is not taken from him: nothing in the
+  starting cabin is contraband. "Each Snap costs 15 game minutes": added to
+  the Clock at the Snap, and the `snap` event carries the minutes.
+- **The Aunts.** "Heavy floor +10 all night": added wherever the Heavy
+  floor is read. "Prices +25%": `price_mult` 1.25, as above. "He starts
+  with a Thermos and seeds": given at the start of every Telling told,
+  besides the starting cabin, into the slots those items take.
+- **The Groom.** "He leaves at 22:45": `depart_min` 45, added to the Clock
+  at the start (the wedding does not wait: he has 45 minutes less). "Any
+  boss begun without a passenger starts with +20 Nerves": at the tick the
+  boss begins, when the seat is empty.
+- **Noor.** "One fixed road with no forks": the record names the leg of
+  each of the nine places and its stop, and a seed (1977) that is the
+  Telling's whatever seed is asked for, so every beat is where it was last
+  time. The generator gives one branch per place: there is no gore, no fork
+  sign, no `fork_taken`; the car is carried onto the next leg wherever it
+  is. A Wreck tells the same road again (the retelling's seed is not
+  drawn). "No shops but tea and repairs": `services` lists the two; a stop
+  holds out no stock, restocks nothing, has no shady guy, and the boss stop
+  (GDD 9.6: a choice of three) offers the tea stall and the fitter alone.
+  The nine stops alternate tea stall and fitter, beginning with tea, so the
+  second stop of Act 2 is a tea stall. "The Student waits at the second
+  stop of Act 2": `hitchers` says who waits where, and at a Table that
+  says so nobody else waits anywhere. "The starting cabin plus beads and a
+  full pack": `start_items` and `full_supplies` (the pack of cigarettes
+  starts at its full count instead of the starting cabin's). "No heckles":
+  its weights are empty.
+- **The chain.** `unlock` is `start` (the Children) or `win:<table>`:
+  Children, Drivers, Uncles, In-laws, Aunts, Groom, Noor, in the order of
+  the GDD's table. `TableRules.win` opens in a profile what a win on time
+  opens; what calls it, and what a win is, belongs to the endings (M9c).
+
+## D-061 (M9, 2026-11-27) Heckles as built
+
+GDD 11.3 is two sentences and a table of six rows; GDD 14 gives one record.
+This is how they were read.
+
+- **Where they live.** `HeckleDirector` (the name GDD 13.1 gives the file)
+  is a pure class DriveSim steps at step 11 of the tick. The records are
+  `data/heckles.json`; the validator knows every key and which type may
+  carry it. A record says: `type`, `tables`, `line_id`; `window_s` (how
+  long he has; for the Fib, how long the hand holds); `twist` and, for a
+  shower, `duration_s`; `answer` (a Dare, a Doubt: any one answers);
+  `keep` (a Question: all, for the whole window); `ritual` (an Order);
+  `pass` and `fail` (`nerves`, `cash`); `guest` (below).
+- **The words.** GDD 14 writes answers as words with their numbers in
+  them: `"close_call"`, `"gear4_5s"`. The director reads that form and no
+  other: `close_call`, `close_call_x3`, `gear<g>_<s>s`, `hands_off_<s>s`,
+  `pass_x<n>_<s>s`; for a Question `nerves_under_<n>` and `no_horn`. A
+  word it cannot read is a validation error.
+- **How many.** `heckles_per_leg` ([1, 2, 2], the row of GDD 12.3) are
+  drawn when the leg is taken, from the `heckle` stream, each with a place
+  along the leg's beats (inside `heckle_span`, the first half of its own
+  slot). A heckle is said when the car reaches its place, the last one is
+  over, and one may begin. They are said one at a time.
+- **"Never during an encounter or a boss."** Read as: none *begins* then.
+  A window that is open when the Patrol's lights come on runs on. On a leg
+  "an encounter" is the time the leg's encounter is at him
+  (`EncounterSim.pressing()`): the Patrol from its lights until it leaves,
+  the Tailgater from its tell until he is gone, the Motorcade while its
+  spotlight is on his windscreen. Not the whole leg: the Motorcade is
+  there from the first metre to the last and Two-lane is nothing but its
+  encounter, and "two per leg after Act 1" would then never hold in Act 3.
+  Nor does one begin once the Exit's slip lane has opened: that stretch is
+  the Exit's and the fork's. Where the two rules cannot both hold (he
+  crowds the Motorcade for the whole leg), this one wins and the heckles
+  that found no room are dropped: the count is what the Table means to
+  say, the silence is what it owes him. A heckle still running at the
+  leg's end, or when he pulls in at a stall, lapses with no effect.
+- **The lead.** At the subtitle: the `heckle` ding, the line (asked for as
+  a tell, D-058) and `heckle_started`. For `heckle_lead` nothing else
+  happens and nothing he does counts; then the window opens or the change
+  comes. `heckle_resolved` says how it ended: `passed`, `failed`, `over`
+  (a Twist, the Fib: nothing to answer) or `lapsed`.
+- **Twist.** "Injects a modifier beat." A Twist of sheep, the wedding or
+  the melon truck is handed to the leg generator when the leg is laid out,
+  and takes a stretch of its own like the leg's own modifier would (never
+  the same one, clear of it by a CALM beat's length, and only on a leg
+  whose record allows that modifier; one stretch to a leg). So the
+  generator's rules hold with it on the road: there is a line through it
+  and nothing is put on top of anything. LegSim keeps everything of that
+  stretch off the road until the director says the lead is over; the
+  heckle falls due `heckle_lead` at top gear's speed before the car would
+  reach the point where the first thing of it shows, so that nothing has
+  been missed by then. If it is said late (the Table had to wait), what it
+  holds appears where the plan has it by now. On a leg where nobody says
+  it, the stretch stays empty. The shower is rain for `duration_s` of the
+  road's time, on a leg where it is not raining already. A Twist is over
+  when its stretch is behind him, or the rain has stopped. The save holds
+  the Twist of the leg he stands on, so that a continued Telling has the
+  road he drove.
+- **Dare.** Optional: `fail` is not allowed on one. "Chain three close
+  calls" is three in the window. "Hold fourth gear for 10 s" is 10 s in
+  one piece, begun in the window. "Hands-off on a straight" is no hand of
+  his on the wheel where the road has no bend (a hook or a boy's hand on
+  it is still hands-off: he paid for those). "Pass three vehicles in 10 s"
+  counts vehicles going his way that were ahead and are behind, any three
+  within 10 s of each other inside the 15 s.
+- **Doubt, Question, Order.** As their rows. A Doubt answered is -10 at
+  the answer and nothing at 15 s. A Question is lost in the tick his
+  Nerves are at 50 or the horn sounds, with nothing taken; kept to the
+  end it pays. An Order is obeyed by completing the ritual it names within
+  its window. An Order he cannot obey when it falls due (the thing is not
+  in the cabin, the glass is empty, the cigarette is already lit) is not
+  given: another Order he can obey takes its place, or else another
+  challenge of that Table's.
+- **The Fib.** Children only (a validation rule). For `window_s` after the
+  lead, whenever his own hand and wrist are off the wheel, the wheel is
+  held at the angle that keeps the car in its lane, bends included. His
+  own grip takes the wheel as always.
+- **Who says what.** A Table's `heckle_weights` weigh its types; a type's
+  weight is shared among the Table's records of that type. The Groom's
+  Doubts include the Uncle's first, as in GDD 14. The Children have the
+  sheep, the melons and the Fib; the wedding and the shower, which the
+  Twist's row also names, are a guest's each. GDD 11.5: "Each passenger
+  carried to Basra sits at a Table from then on and adds two heckles to
+  the pool": two records per passenger carry `guest`, are said at every
+  Table that heckles once that passenger is in the profile's guests, and
+  weigh `guest_heckle_weight` each beside the Table's own 100. Exactly two
+  per passenger is a validation rule. At Noor's Table nobody heckles,
+  guests included.
+- **Tests.** `DriveSim.heckling` turns the Table's voice off (the modes of
+  GDD 11.5 have no Table). The T-TABLE tests set it so: they compare a
+  night told to the Drivers with a night told to nobody, to the bit, and
+  the Drivers' Dares are the one difference that comparison is not about.
+  Every other test runs with the Table talking.
+
+## D-062 (M9, 2026-11-27) Endings and what persists
+
+- **Where.** `Save.ending_of(arrived)` reads the ending from the Telling's
+  `arrived` event (the Clock is read when the key is turned, GDD 10.5);
+  `Save.apply_ending(data, profile, arrived)` writes what it leaves behind
+  into the profile and returns what is new, for the ending's scene to
+  show; `Game.end_telling(arrived)` does that and writes the save file
+  with no Telling in it. A Wreck is no ending and touches nothing.
+- **Late beats the Call.** GDD 11.4 gives the Call's condition as
+  "Answered the Call and parked by 06:00": a father who answered and came
+  late is Late. "Nothing unlocks": no Table, no mode, not told true, no
+  finale at Noor's Table.
+- **A win** is On time or the Call: both open the next Table, and the
+  first of either earns the Commute ("the first win"). The Call also marks
+  the Table told true and earns Endless Night ("any Call ending").
+- **The finale** follows the Call at the Table whose win opens no other:
+  the end of the chain, which the data says is Noor's.
+- **Guests.** "Each passenger carried to Basra sits at a Table from then
+  on": whoever is beside him when the key is turned, on time or late. A
+  late night unlocks nothing, but he did carry them there, and a guest is
+  not an unlock. (Only the Drummer and the Apprentice ride "until Basra"
+  by their records; the others are guests if their ride happens to end
+  there.)
+- **A new player's profile** has the Tables whose `unlock` is `start`
+  (`Save.new_profile(data)`); `Save.default_profile()`, which needs no
+  data, stays the fallback for a save that cannot be read, and a test
+  holds the two equal.
+- **The modes** are earned here and played in M9e.
+
+## D-063 (M9, 2026-11-27) The two bookends as built
+
+**The prologue (GDD 10.1).**
+
+- It is the drive simulation in another mode, as GDD 13.4 has it ("one
+  scene used for the prologue, legs, bosses, stops and modes"):
+  `DriveSim.begin_prologue(table, seed)`, with `PrologueSim` as its clock.
+- **"It lasts 75 s."** To the tick. The seven steps take their turns by
+  the clock (`prologue_step_s`, which must add up to `prologue_length`),
+  done or not. A step he does stops pulsing; a step he leaves passes when
+  its time is up. So it "cannot be failed", and it cannot be hurried or
+  stalled either.
+- **What does a step.** The radio playing music; a sip of the tea; third
+  gear; the horn; the wipers; the photo carried from the dash to the visor
+  (a ritual of its own, `photo_tuck`, offered only while the prologue
+  plays). The seventh asks nothing: over its length the left hand lifts
+  toward the window crank and the screen goes white (`prologue_lift`).
+- **The left hand** holds the wheel at the lane-keeping angle whenever the
+  right hand is not on it (the Fib's ghost hand, D-061, is the same
+  holding). It keeps the lane to the end of the 75 s: the lifting of the
+  seventh step is shown, and the car is not let go under a white screen.
+  In step 5 it indicates and takes the car one lane over.
+- **"Nothing it does has a cost."** His Nerves stay at 0, the Clock of
+  tonight does not run, and nothing is hit: collisions are not asked
+  about, so no lamp can light and there is no Wreck.
+- **The friend** of step 4 is a taxi (he drove one then too) that comes up
+  from behind in the next lane (`prologue_friend`).
+- **"Cut to tonight."** In the tick the 75 s are over a Telling begins for
+  the Table the prologue was started for: 22:00, first gear, nobody at the
+  wheel, and the narrator says `narrator.start`. It is the same night, to
+  the bit, as that Telling begun by itself; every Telling now begins with
+  that line. GDD 13.4 draws PROLOGUE > WEDDING and GDD 10.1 cuts from the
+  title card straight into the car. Part III decides how a thing is built
+  and Part II what the rules are (GDD 1.5): the cut into the car is the
+  rule, so on first launch the prologue runs on into the first Telling at
+  the Table that is open from the start, and the wedding room is where
+  that Telling's ending leads. Replayed from the title it does the same.
+- **First launch.** `Game.wants_prologue()` is true until the profile has
+  `prologue_seen`, and never with `--skip-prologue` (GDD 13.9).
+
+**The finale (GDD 10.6).** `FinaleSim`, a pure class with no car in it.
+
+- A clap is the button going down with the pointer on her palm; a hand
+  held there is one clap.
+- "After 8 claps she takes his hand": the walk begins with the eighth, and
+  goes on while the button is down. Let go on the way, she holds her hand
+  out and waits; nothing ends and nothing is lost. GDD 18.1 has the finale
+  end "only when the grip input is released", and step 4 puts that moment
+  in front of the groom: letting go on the way there is not that moment.
+- The 20 s of "Baba." and the 90 s of the room's soft clapping are counted
+  from where the walk stopped: they are step 4's, "nothing happens until
+  the player releases the button".
+- Released in front of the groom it is over, whenever that is: at once, or
+  never. It asks for `finale.proverb` and nothing brings it back.
+
+## D-064 (M9, 2026-11-27) The frame on screen: scenes, flow, modes, lines
+
+- **Scenes.** GDD 13.2 names four: `boot`, `title`, `wedding`, `drive`.
+  The states of GDD 13.4 are spread over them: BOOT and TITLE (`boot` goes
+  straight on to `title`); PROLOGUE, TELLING and the Wreck's cut in
+  `drive`; WEDDING, ENDING, FINALE and CREDITS in `wedding`, which is one
+  room seen four ways. `Game.go(state, context)` changes scene.
+- **DriveContext** (GDD 13.4) is `Game.context`: `{prologue, table, seed}`,
+  `{table, seed}`, `{table, continue}` or `{mode, seed}`. `drive.tscn`
+  reads it when it was entered from the menus, and the command line's
+  arguments (GDD 13.9) when it was started by itself; only a night begun
+  from the menus leads back to the wedding. Started by itself it begins
+  again, as before, so that a picture or a smoke run can be asked for.
+  New arguments for looking at things: `--prologue`, `--mode=`, and in
+  `wedding.tscn` `--ending=late|on_time|call|finale|credits`.
+- **The wedding room.** Each Table's record has its place in the room
+  (`room_pos`). The pointer is at the place nearest to it on the screen
+  within `wedding_pick_radius`; a press of the left button sits him down
+  there. A Table whose Telling is in the save file goes on with it; any
+  other begins a new night (a seed from the clock on the wall, or
+  `--seed=`). A Table that is not open says which win opens it. The two
+  modes are doors in the back wall. Everything is the pointer and the left
+  button (GDD 17.4); Esc goes back as well, and a button does the same.
+- **"A short scene follows per ending, then the party"** (GDD 10.5) is a
+  card over the room: the ending, the hour he parked, what it opened, and
+  three spoken lines (how he parked, the Table's answer, the guest he
+  carried). A press goes on: to the finale after the Call at Noor's Table,
+  else into the room.
+- **The Wreck's cut.** "The screen cuts to black one frame before impact":
+  the frame drawn after the tick of the Wreck is black, and stays so for
+  the 3 s the Table objects; the impact itself is never drawn. The Table's
+  objection is asked for by the simulation, as a tell, in the tick of the
+  Wreck: the Table's own lines in turn (`wreck.<table>.<n>`), and for the
+  Children's rewind `rewind.children.1`.
+- **The modes** (GDD 11.5). *The Commute*: one road of `commute_length`
+  (5 km) laid out like the leg `commute_leg` (Rush), from a seed that is
+  today's date; his band starts empty and what is in it at the end is the
+  score. A Wreck ends it and the run does not count for the best: he did
+  not arrive. *Endless Night*: any leg after any leg, with no fork, stall
+  or boss, harder as a Telling's acts are (three legs to an act); the score
+  is the distance, and a Wreck is its end. Neither has a Table, so nobody
+  heckles and nothing is told again. The best of each is kept in the
+  profile's `stats` (GDD 11.5: "statistics: always").
+- **Narration.** `src/view/narration.gd` asks for the lines the simulation
+  does not: what he says as a leg, an act, a stop or a set piece begins,
+  now and then about a scrape, a close call, a new lamp; a vendor's word;
+  the Table's answer to a heckle met or missed; the radio; the rest of
+  Noor's call. It listens to the events, takes turns through its lines
+  (no chance) and keeps `narration_gap` between two lines that mark no
+  moment. It is presentation only: the simulation does not know it.
+- **Lines.** 217 lines were added (164 of them spoken): 502 in all, 226
+  with a speaker, every spoken one `needs_writer`. GDD 3.6 asks for "about
+  250 placeholder lines"; the remaining voices (a second line for each
+  heckle, more of the radio) are an Iraqi writer's to add with the rest.
+- **Not built, and owed.** The prologue's "bundle makes small sounds" has
+  no sound (GDD 16.5 has no row for it; the bundle is drawn). The title
+  has no options entry yet: the settings are M10's. The flow from the
+  title through a night to the wedding has no automatic test of its own:
+  each scene and each state is run by the smoke step, and the clicks
+  between them are T-SMOKE-ALL's and T-ONEHAND-01's (M10).
+
+## D-065 (M10, 2026-11-27) The settings of GDD 17.1 as built
+
+- **Where.** The table of GDD 17.1 is data: `settings` in tuning.json, one
+  record per setting (`range` in percent, `choice`, `toggle`) with its
+  default. `SettingsSpec` reads it; the Settings autoload keeps the
+  player's values in `settings.json` and writes at every change;
+  `DriveSim.apply_settings(values)` takes what is the simulation's
+  (steering, grip mode, shifting, Brake assist, Steady start, the
+  Phantom), the drive scene the rest. Subtitles is two settings there,
+  size and background, as the GDD's row has two options. Nothing is read
+  once and kept: a change takes effect in the tick it is made (GDD 17.2).
+- **Game speed** is the engine's time scale: the simulation's ticks are
+  the same ticks (a replay is the same replay); fewer of them pass in a
+  second of the player's.
+- **Brake assist.** "Slows the car when a crash is certain": the brake is
+  on, for him, in any tick in which something the car's width overlaps is
+  ahead and, at the speed they are closing, less than `brake_assist_time`
+  (0.9 s) away. It slows; it does not promise to stop in time. What is in
+  the next lane is not certain, and is left alone.
+- **Steady start.** "The wheel holds itself for the first 2 s after each
+  stop": after a stall or a boss stop, while his hand is off the wheel, it
+  is held straight for `steady_start_s`. It is on by default (the GDD's
+  default), in the simulation too, so that tests and game drive the same
+  car. "After each stop" is read as the stops of GDD 9.6; a release by an
+  officer is not one.
+- **Tremor and shake visuals** scales what is drawn of the wheel's Tremor
+  (the wheel, and the hand on it) and the camera's roll with Sway. The
+  wheel that steers the car trembles as before ("the mechanical effect
+  stays").
+- **Mirrored cabin.** A layer after the post effects shows everything
+  under it reversed left to right (`shaders/mirror.gdshader`); the
+  pointer's sideways motion is reversed with it and the overlays draw
+  where the reversed picture has them. Subtitles and the HUD come after
+  that layer and read as always. The simulation knows nothing of it: "It
+  does not change the story."
+- **The screen.** `SettingsView`: a row for each setting; the left button
+  takes its next option, the right button the one before. It opens from
+  the title ("Options") and, with the night paused, from the drive (Esc
+  for now: a pointer's way to it is T-ONEHAND-01's).
+
+## D-066 (M10, 2026-11-27) One hand, two buttons: how the claim is held
+
+GDD 17.2: "Every function works with pointer motion and two buttons.
+Keyboard keys only duplicate." T-ONEHAND-01 has to establish it for "every
+menu and every in-game action".
+
+- **In the car.** Everything the hand does is a ritual at an anchor, done
+  with one of eight gestures (TAP, HOLD, FLICK, DRAG, DRAG_TO, CRANK, BEAD,
+  the gear gate), and every gesture is the left button and the pointer's
+  motion. The right button is the brake. The test lists the rituals of
+  rituals.json against that, and performs one of each gesture with a
+  `DriveInput` that has nothing else in it.
+- **The pads** (`pad_horn`, the middle button; `pad_wiper`, the wheel) are
+  the Thumb keypad's, an adaptation he may never own: each only repeats a
+  ritual the pointer can do (the horn's TAP, the wipers' FLICK).
+- **The pause.** GDD 13.1 gives `pause` one key, Esc. Its pointer's way is
+  **the left button held where the hand has nothing to hold**: the pointer
+  on no anchor and off the wheel's rim, nothing carried, no gesture begun,
+  for `pause_hold_s` (1.2 s; an arc goes round the pointer while it
+  fills). A press there does nothing in the car, so holding it can mean
+  this and nothing else, and it works wherever the car is. It costs what
+  everything costs in this cabin: the hand is off the wheel for it. The
+  press has to begin in the air and stay there, so the end of a FLICK or
+  a thing put down pauses nothing, and a bot's hand never does.
+  It is the game's, not the simulation's (`PauseHold` in `src/game`, asked
+  by the drive scene each tick with `DriveSim.hand_is_free()`): the
+  simulation knows nothing of pauses, and a night with the button held on
+  nothing is the same night to the bit (T-ONEHAND-01 compares the hashes).
+  *First built, and taken out again:* a `pause` ritual, a HOLD on the
+  ignition key. Three older rules each keep the hand to its business
+  where the night waits or ends, and their tests said so: at a stall the
+  hand has the vendor's tray and nothing of the cabin's (T-STOP-01), with
+  an officer at his window his licence and banknotes and nothing else
+  (T-LEG-07), and rolling up the last street the key is not for turning
+  (T-BOSS-03). A pause that is some anchor's business breaks one of them
+  or leaves the pointer without a pause there; the air is nobody's.
+  Esc does the same from anywhere. Both open the same screen: the
+  settings, "Drive on", and "Back to the wedding". The settings screen
+  says how (`settings.hint.pause`).
+- **The menus** are pressed with the left button (the settings' rows with
+  either). A tool, `tools/onehand_walk.gd`, walks them in a headless
+  build with mouse events and nothing else: the title, its options, the
+  wedding room and a Table, the pause in the car and the way back, an
+  ending's card, the finale, the proverb and the credits. The test runs
+  it and reads what it prints.
+- **The debug keys** (F1 to F8, GDD 13.9) are for whoever builds the game
+  and are no function of it.

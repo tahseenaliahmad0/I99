@@ -29,6 +29,8 @@
 
     { "id": "hand_licence",    "anchor": "dash_1",             "gesture": "DRAG_TO", "to": "driver_window",
       "eyes_down": false, "over_items": true, "requires": ["pulled_over"], "on_complete": ["pay:fine"] },
+    { "id": "photo_tuck",      "anchor": "dash_1",             "gesture": "DRAG_TO", "to": "visor",
+      "eyes_down": false, "over_items": true, "requires": ["flag:prologue", "!flag:photo_tucked"], "on_complete": ["toggle:photo_tucked"] },
     { "id": "hand_banknotes",  "anchor": "cash",               "gesture": "DRAG_TO", "to": "driver_window",
       "eyes_down": false, "over_items": true, "requires": ["pulled_over"], "on_complete": ["pay:bribe"] },
     { "id": "cig_light",       "anchor": "@slot", "item": "cigarettes", "gesture": "HOLD", "hold_s": 1.2,

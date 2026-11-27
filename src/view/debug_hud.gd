@@ -101,6 +101,19 @@ func apply(snapshot: Dictionary) -> void:
 		rows.append(Lines.get_text("hud.cramp.%s" % str(snapshot["cramp"])))
 	if str(snapshot["ghost_at"]) != "":
 		rows.append(Lines.get_text("hud.ghost"))
+	if str(snapshot["heckle"]) != "":
+		# What the Table has just said, and how he is doing with it.
+		var heckle_left: float = snapshot["heckle_left"]
+		var heckle_progress: float = snapshot["heckle_progress"]
+		rows.append(Lines.format("hud.heckle", [Lines.get_text("hud.heckle.%s" % str(snapshot["heckle_type"]).to_lower()),
+				Lines.get_text("hud.heckle.%s" % str(snapshot["heckle_phase"])), "%.1f" % heckle_left, "%.0f" % (heckle_progress * 100.0)]))
+	if snapshot["ghost_hand"]:
+		rows.append(Lines.get_text("hud.ghost_hand"))
+	if GameData.as_int(snapshot["prologue_step"]) > 0:
+		rows.append(Lines.format("hud.prologue", [str(snapshot["prologue_step"]), Lines.get_text("hud.prologue.done") if snapshot["prologue_done"] else ""]))
+	if str(snapshot["mode"]) != "":
+		var mode_score: float = snapshot["mode_score"]
+		rows.append(Lines.format("hud.mode", [Lines.get_text("wedding.mode.%s" % str(snapshot["mode"])), "%.0f" % mode_score]))
 	if str(snapshot["carrying"]) != "":
 		rows.append(Lines.format("hud.carrying", [str(snapshot["carrying"])]))
 	_add_passenger_rows(snapshot, rows)

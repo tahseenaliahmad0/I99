@@ -1,5 +1,36 @@
 {
   "version": 1,
 
-  "heckles": []
+  "heckles": [
+    {"id": "twist_sheep", "type": "TWIST", "tables": ["children"], "line_id": "heckle.children.twist.sheep", "twist": "sheep"},
+    {"id": "twist_melons", "type": "TWIST", "tables": ["children"], "line_id": "heckle.children.twist.melons", "twist": "melon_truck"},
+    {"id": "fib_both_hands", "type": "FIB", "tables": ["children"], "line_id": "heckle.children.fib.1", "window_s": 5},
+    {"id": "dare_gear4", "type": "DARE", "tables": ["drivers"], "line_id": "heckle.drivers.dare.gear4", "window_s": 15, "answer": ["gear4_10s"], "pass": {"cash": 15}},
+    {"id": "dare_close_calls", "type": "DARE", "tables": ["drivers"], "line_id": "heckle.drivers.dare.close", "window_s": 15, "answer": ["close_call_x3"], "pass": {"cash": 20}},
+    {"id": "dare_hands_off", "type": "DARE", "tables": ["drivers"], "line_id": "heckle.drivers.dare.hands_off", "window_s": 15, "answer": ["hands_off_3s"], "pass": {"cash": 10}},
+    {"id": "dare_pass_three", "type": "DARE", "tables": ["drivers"], "line_id": "heckle.drivers.dare.pass", "window_s": 15, "answer": ["pass_x3_10s"], "pass": {"cash": 15}},
+    {"id": "doubt_all_night", "type": "DOUBT", "tables": ["uncles", "groom"], "line_id": "heckle.uncles.doubt.1", "window_s": 15, "answer": ["close_call", "gear4_5s"], "pass": {"nerves": -10}, "fail": {"nerves": 10}},
+    {"id": "doubt_one_hand", "type": "DOUBT", "tables": ["uncles"], "line_id": "heckle.uncles.doubt.2", "window_s": 15, "answer": ["close_call", "gear4_5s"], "pass": {"nerves": -10}, "fail": {"nerves": 10}},
+    {"id": "question_calm", "type": "QUESTION", "tables": ["inlaws"], "line_id": "heckle.inlaws.question.1", "window_s": 15, "keep": ["nerves_under_50", "no_horn"], "pass": {"nerves": -10, "cash": 10}},
+    {"id": "question_horn", "type": "QUESTION", "tables": ["inlaws"], "line_id": "heckle.inlaws.question.2", "window_s": 15, "keep": ["nerves_under_50", "no_horn"], "pass": {"nerves": -10, "cash": 10}},
+    {"id": "order_tea", "type": "ORDER", "tables": ["aunts"], "line_id": "heckle.aunts.order.tea", "window_s": 10, "ritual": "tea_sip", "pass": {"nerves": -8}, "fail": {"nerves": 6}},
+    {"id": "order_seeds", "type": "ORDER", "tables": ["aunts"], "line_id": "heckle.aunts.order.seeds", "window_s": 10, "ritual": "seeds_chew", "pass": {"nerves": -8}, "fail": {"nerves": 6}},
+    {"id": "order_window", "type": "ORDER", "tables": ["aunts"], "line_id": "heckle.aunts.order.window", "window_s": 10, "ritual": "window_crank", "pass": {"nerves": -8}, "fail": {"nerves": 6}},
+    {"id": "order_wipers", "type": "ORDER", "tables": ["aunts"], "line_id": "heckle.aunts.order.wipers", "window_s": 10, "ritual": "wipers", "pass": {"nerves": -8}, "fail": {"nerves": 6}},
+    {"id": "dare_groom_gear4", "type": "DARE", "tables": ["groom"], "line_id": "heckle.groom.dare.1", "window_s": 15, "answer": ["gear4_10s"], "pass": {"cash": 15}},
+    {"id": "dare_groom_pass", "type": "DARE", "tables": ["groom"], "line_id": "heckle.groom.dare.2", "window_s": 15, "answer": ["pass_x3_10s"], "pass": {"cash": 15}},
+    {"id": "doubt_groom", "type": "DOUBT", "tables": ["groom"], "line_id": "heckle.groom.doubt.1", "window_s": 15, "answer": ["close_call", "gear4_5s"], "pass": {"nerves": -10}, "fail": {"nerves": 10}},
+    {"id": "order_groom_smoke", "type": "ORDER", "tables": ["groom"], "line_id": "heckle.groom.order.1", "window_s": 10, "ritual": "cig_light", "pass": {"nerves": -8}, "fail": {"nerves": 6}},
+    {"id": "order_groom_horn", "type": "ORDER", "tables": ["groom"], "line_id": "heckle.groom.order.2", "window_s": 10, "ritual": "horn", "pass": {"nerves": -8}, "fail": {"nerves": 6}},
+    {"id": "guest_hajjiya_question", "type": "QUESTION", "tables": ["children", "drivers", "uncles", "inlaws", "aunts", "groom"], "line_id": "heckle.guest.hajjiya.1", "guest": "hajjiya", "window_s": 15, "keep": ["nerves_under_50", "no_horn"], "pass": {"nerves": -10, "cash": 10}},
+    {"id": "guest_hajjiya_order", "type": "ORDER", "tables": ["children", "drivers", "uncles", "inlaws", "aunts", "groom"], "line_id": "heckle.guest.hajjiya.2", "guest": "hajjiya", "window_s": 10, "ritual": "tea_sip", "pass": {"nerves": -8}, "fail": {"nerves": 6}},
+    {"id": "guest_conscript_dare", "type": "DARE", "tables": ["children", "drivers", "uncles", "inlaws", "aunts", "groom"], "line_id": "heckle.guest.conscript.1", "guest": "conscript", "window_s": 15, "answer": ["close_call_x3"], "pass": {"cash": 20}},
+    {"id": "guest_conscript_doubt", "type": "DOUBT", "tables": ["children", "drivers", "uncles", "inlaws", "aunts", "groom"], "line_id": "heckle.guest.conscript.2", "guest": "conscript", "window_s": 15, "answer": ["close_call", "gear4_5s"], "pass": {"nerves": -10}, "fail": {"nerves": 10}},
+    {"id": "guest_drummer_twist", "type": "TWIST", "tables": ["children", "drivers", "uncles", "inlaws", "aunts", "groom"], "line_id": "heckle.guest.drummer.1", "guest": "drummer", "twist": "wedding"},
+    {"id": "guest_drummer_dare", "type": "DARE", "tables": ["children", "drivers", "uncles", "inlaws", "aunts", "groom"], "line_id": "heckle.guest.drummer.2", "guest": "drummer", "window_s": 15, "answer": ["hands_off_3s"], "pass": {"cash": 10}},
+    {"id": "guest_student_twist", "type": "TWIST", "tables": ["children", "drivers", "uncles", "inlaws", "aunts", "groom"], "line_id": "heckle.guest.student.1", "guest": "student", "twist": "shower", "duration_s": 20},
+    {"id": "guest_student_question", "type": "QUESTION", "tables": ["children", "drivers", "uncles", "inlaws", "aunts", "groom"], "line_id": "heckle.guest.student.2", "guest": "student", "window_s": 15, "keep": ["nerves_under_50", "no_horn"], "pass": {"nerves": -10, "cash": 10}},
+    {"id": "guest_apprentice_dare", "type": "DARE", "tables": ["children", "drivers", "uncles", "inlaws", "aunts", "groom"], "line_id": "heckle.guest.apprentice.1", "guest": "apprentice", "window_s": 15, "answer": ["pass_x3_10s"], "pass": {"cash": 15}},
+    {"id": "guest_apprentice_order", "type": "ORDER", "tables": ["children", "drivers", "uncles", "inlaws", "aunts", "groom"], "line_id": "heckle.guest.apprentice.2", "guest": "apprentice", "window_s": 10, "ritual": "wipers", "pass": {"nerves": -8}, "fail": {"nerves": 6}}
+  ]
 }

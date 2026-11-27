@@ -17,6 +17,13 @@ var _progress: float = 0.0
 var _progress_at: Vector2 = Vector2.ZERO
 
 
+## The Mirrored cabin setting (GDD 17.1).
+var mirrored: bool = false
+## How far along the hold that pauses the game is, 0 to 1 (D-066): an arc
+## round the pointer, as a HOLD's is round the hand.
+var pause_progress: float = 0.0
+
+
 func setup(data: GameData, factory: PlaceholderFactory) -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -43,8 +50,22 @@ func apply(snapshot: Dictionary, camera: Camera3D, cabin: Node3D) -> void:
 	queue_redraw()
 
 
+## The pointer's motion as the simulation gets it: with the Mirrored cabin
+## the picture is reversed left to right, and so is the hand's way across it.
+static func mirrored_motion(motion: Vector2, mirrored: bool) -> Vector2:
+	return Vector2(-motion.x, motion.y) if mirrored else motion
+
+
+## Where a point of the picture is drawn: reversed left to right with the
+## Mirrored cabin setting (GDD 17.1), as the picture under it is.
+static func shown_at(at: Vector2, width: float, mirrored: bool) -> Vector2:
+	return Vector2(width - at.x, at.y) if mirrored else at
+
+
 func _draw() -> void:
 	if _visible_pointer:
-		draw_arc(_at, _pointer_radius, 0.0, TAU, 32, _pointer_color, _ring_width, true)
+		draw_arc(shown_at(_at, size.x, mirrored), _pointer_radius, 0.0, TAU, 32, _pointer_color, _ring_width, true)
+	if _visible_pointer and pause_progress > 0.0:
+		draw_arc(shown_at(_at, size.x, mirrored), _progress_radius, -PI * 0.5, -PI * 0.5 + TAU * pause_progress, 48, _progress_color, _ring_width * 2.0, true)
 	if _progress > 0.0 and _progress < 1.0:
-		draw_arc(_progress_at, _progress_radius, -PI * 0.5, -PI * 0.5 + TAU * _progress, 48, _progress_color, _ring_width * 2.0, true)
+		draw_arc(shown_at(_progress_at, size.x, mirrored), _progress_radius, -PI * 0.5, -PI * 0.5 + TAU * _progress, 48, _progress_color, _ring_width * 2.0, true)

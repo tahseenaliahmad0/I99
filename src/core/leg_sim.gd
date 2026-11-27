@@ -117,6 +117,21 @@ var _side_road_at: float = -1.0
 ## What a wedding car's honk does to his Nerves (the modifier's honk_nerves).
 var _wedding_honk: float = 0.0
 
+# --- A Twist (GDD 11.3) --------------------------------------------------------
+## The plan's "twist" ({} for none): a stretch a guest throws into the story.
+var twist: Dictionary = {}
+## False until the heckle has been heard (HeckleDirector, by DriveSim): what
+## belongs to the Twist is not on the road before that, and nothing shows it.
+var twist_live: bool = true
+## Seconds of a shower that are left (a Twist: "a 20 s shower"); 0 for none.
+var shower_left: float = 0.0
+## True in the tick the rain began or stopped in the middle of a leg.
+var weather_changed: bool = false
+var _twist_role: StringName = &""
+var _twist_flock: bool = false
+## The Twist's vehicles whose trigger the car passed before it was live.
+var _held: Array[Dictionary] = []
+
 
 func configure(data: GameData, car: CarSim, traffic: TrafficSim) -> void:
 	_data = data
@@ -159,6 +174,15 @@ func begin(leg_plan: Dictionary) -> void:
 		dust_rate = GameData.as_float(modifier.get("haze_per_s"), dust_rate)
 		if modifier.has("visibility_m"):
 			dust_visibility = GameData.as_float(modifier.get("visibility_m"))
+	twist = GameData.as_dict(plan.get("twist"))
+	twist_live = twist.is_empty()
+	shower_left = 0.0
+	_held = []
+	var twist_id: String = GameData.as_string(twist.get("modifier"))
+	_twist_role = StringName(GameData.as_string(LegGenerator.TWIST_ROLES.get(twist_id)))
+	_twist_flock = twist_id == "sheep"
+	if not twist_id.is_empty() and _data.record("modifiers", twist_id).has("honk_nerves"):
+		_wedding_honk = GameData.as_float(_data.record("modifiers", twist_id).get("honk_nerves"))
 	curve_k = 0.0
 	gust_tell_left = 0.0
 	gust_tell_dir = 0
@@ -178,9 +202,8 @@ func begin(leg_plan: Dictionary) -> void:
 		hazards.append(_make_hazard(GameData.as_string(record.get("kind")), GameData.as_float(record.get("s")), GameData.as_float(record.get("x"))))
 	_flock = GameData.as_dict(plan.get("flock"))
 	_flock_started = false
-	if not _flock.is_empty():
-		for x: Variant in GameData.as_array(_flock.get("xs")):
-			movers.append(_make_hazard(GameData.as_string(_flock.get("kind")), GameData.as_float(_flock.get("s")), GameData.as_float(x)))
+	if not (_twist_flock and not twist_live):
+		_stand_the_flock()
 	_melons = GameData.as_dict(plan.get("melons"))
 	_melon_truck = null
 	_shed_left = -1.0
@@ -199,8 +222,38 @@ func stop() -> void:
 	active = false
 
 
+## The sheep, where they stand before they walk.
+func _stand_the_flock() -> void:
+	for x: Variant in GameData.as_array(_flock.get("xs")):
+		movers.append(_make_hazard(GameData.as_string(_flock.get("kind")), GameData.as_float(_flock.get("s")), GameData.as_float(x)))
+
+
+## The heckle has been heard (GDD 11.3): from now the Twist is on the road.
+## Its sheep stand where they wait; its vehicles appear as their triggers
+## come, and those whose trigger is behind the car where the plan has them
+## by now.
+func twist_begins() -> void:
+	if twist_live:
+		return
+	twist_live = true
+	if _twist_flock:
+		_stand_the_flock()
+	for spawn: Dictionary in _held:
+		_waiting.append(spawn)
+	_held = []
+
+
+## A shower begins (a Twist): it rains for `seconds` of the road's time.
+func begin_shower(seconds: float) -> void:
+	shower_left = maxf(seconds, 0.0)
+	var rains: bool = shower_left > 0.0 or GameData.as_string(plan.get("condition")) == "rain"
+	weather_changed = weather_changed or rains != raining
+	raining = rains
+
+
 ## Clears what happened last tick.
 func begin_tick() -> void:
+	weather_changed = false
 	gust_started = 0
 	hazard_nerves = 0.0
 	hazard_suspicion = 0.0
@@ -234,6 +287,10 @@ func fast_forward(s: float, seconds: float) -> void:
 	while _next_gust < _gusts.size() and GameData.as_float(GameData.as_dict(_gusts[_next_gust]).get("s")) - _gust_tell * _par_ms <= s:
 		_next_gust += 1
 	_waiting = []
+	_held = []
+	twist_live = true
+	shower_left = 0.0
+	raining = GameData.as_string(plan.get("condition")) == "rain"
 	_changers = []
 	movers = []
 	_flock_started = true
@@ -344,6 +401,10 @@ func step_traffic(dt: float) -> void:
 		if GameData.as_float(spawn.get("trigger_s")) > _car.s:
 			break
 		_next_spawn += 1
+		if not twist_live and _twist_role != &"" and StringName(GameData.as_string(spawn.get("role"))) == _twist_role:
+			# A Twist's vehicle, and nobody has said so yet.
+			_held.append(spawn)
+			continue
 		if not _spawn(spawn, dt):
 			# Its place is taken: it appears as soon as there is room, ahead of the car as it is then.
 			var later: Dictionary = spawn.duplicate()
@@ -366,6 +427,10 @@ func step_traffic(dt: float) -> void:
 
 	_step_flock(dt)
 	_step_melons(dt)
+	if shower_left > 0.0:
+		shower_left -= dt
+		if shower_left < dt * 0.5:
+			begin_shower(0.0)
 
 
 ## Puts one planned vehicle on the road. False if its place is taken (rule 4:
@@ -420,7 +485,7 @@ func _shoulder_inset() -> float:
 func _step_flock(dt: float) -> void:
 	if _flock.is_empty():
 		return
-	if not _flock_started and _car.s >= GameData.as_float(_flock.get("start_s")):
+	if not _flock_started and (twist_live or not _twist_flock) and _car.s >= GameData.as_float(_flock.get("start_s")):
 		_flock_started = true
 		for sheep: Hazard in movers:
 			if sheep.kind == &"sheep":

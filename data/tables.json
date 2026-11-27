@@ -1,5 +1,34 @@
 {
   "version": 1,
 
-  "tables": []
+  "tables": [
+    { "id": "children", "unlock": "start", "depart_min": 0,
+      "rules": { "free_rewinds": 1, "price_mult": 0.75 },
+      "heckle_weights": { "TWIST": 80, "FIB": 20 }, "line_prefix": "table.children", "room_pos": [-4.5, 1.5] },
+    { "id": "drivers", "unlock": "win:children", "depart_min": 0,
+      "rules": {},
+      "heckle_weights": { "DARE": 100 }, "line_prefix": "table.drivers", "room_pos": [-2.1, 2.2] },
+    { "id": "uncles", "unlock": "win:drivers", "depart_min": 0,
+      "rules": { "patrol_every_act": true, "checkpoint_suspicion_mult": 1.25 },
+      "heckle_weights": { "DOUBT": 100 }, "line_prefix": "table.uncles", "room_pos": [2.1, 2.2] },
+    { "id": "inlaws", "unlock": "win:uncles", "depart_min": 0,
+      "rules": { "no_contraband": true, "no_deals": true, "no_bribes": true, "snap_minutes": 15 },
+      "heckle_weights": { "QUESTION": 100 }, "line_prefix": "table.inlaws", "room_pos": [4.5, 1.5] },
+    { "id": "aunts", "unlock": "win:inlaws", "depart_min": 0,
+      "rules": { "heavy_floor_add": 10, "price_mult": 1.25, "start_items": ["thermos", "seeds"] },
+      "heckle_weights": { "ORDER": 100 }, "line_prefix": "table.aunts", "room_pos": [-3.0, -1.6] },
+    { "id": "groom", "unlock": "win:aunts", "depart_min": 45,
+      "rules": { "boss_alone_nerves": 20 },
+      "heckle_weights": { "DARE": 34, "DOUBT": 33, "ORDER": 33 }, "line_prefix": "table.groom", "room_pos": [3.0, -1.6] },
+    { "id": "noor", "unlock": "win:groom", "depart_min": 0,
+      "rules": {
+        "seed": 1977,
+        "road": [["open_road", "rush", "rain"], ["night", "patrol", "roadworks"], ["tailgater", "two_lane", "motorcade"]],
+        "stops": [["tea_stall", "fitter", "tea_stall"], ["fitter", "tea_stall", "fitter"], ["tea_stall", "fitter", "tea_stall"]],
+        "services": ["tea", "repair"],
+        "start_items": ["beads"], "full_supplies": ["cigarettes"],
+        "hitchers": [ { "act": 2, "stop": 2, "passenger": "student" } ]
+      },
+      "heckle_weights": {}, "line_prefix": "table.noor", "room_pos": [0.0, -2.8] }
+  ]
 }

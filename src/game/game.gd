@@ -21,10 +21,16 @@ enum AppState { BOOT, TITLE, PROLOGUE, WEDDING, TELLING, WRECK_CUT, ENDING, FINA
 ## `--ride=<passenger id>` puts a passenger in the seat (GDD 8).
 ## `--say=<line id>[,<line id>...]` asks for those lines when the drive scene
 ## starts, one after the other (to look at the subtitles).
-const VALUE_ARGS: PackedStringArray = ["table", "seed", "leg", "boss", "bot", "user-dir", "aim", "shot", "shot-frame", "give", "ride", "say"]
+## `--mode=commute` or `--mode=endless_night` plays a mode in the drive scene
+## (GDD 11.5).
+## `--ending=late|on_time|call` with `--table=` shows that ending's card in
+## the wedding scene; `--ending=finale` its finale; `--ending=credits` the
+## credits (to look at them without driving a night).
+const VALUE_ARGS: PackedStringArray = ["table", "seed", "leg", "boss", "bot", "user-dir", "aim", "shot", "shot-frame", "give", "ride", "say", "mode", "ending"]
 ## `--continue` goes on from the save file (until the title screen offers it).
 ## `--hud` starts with the numeric HUD showing.
-const FLAG_ARGS: PackedStringArray = ["skip-prologue", "continue", "hud"]
+## `--prologue` plays the prologue in the drive scene, then `--table=`'s Telling.
+const FLAG_ARGS: PackedStringArray = ["skip-prologue", "continue", "hud", "prologue"]
 
 ## Tools and tests started with `--script` never touch the player's files:
 ## each such process writes under a folder of its own, named after its process
@@ -41,6 +47,19 @@ var state: AppState = AppState.BOOT
 var profile: Dictionary = Save.default_profile()
 ## The Telling of the save file, {} when there is none to continue.
 var saved_telling: Dictionary = {}
+## What the settings of GDD 17.1 are and may be.
+var settings_spec: SettingsSpec
+## The DriveContext (GDD 13.4): what drive.tscn is to do when it is entered
+## from the menus. { "prologue": true, "table", "seed" } plays the prologue
+## and then that Telling; { "table", "seed" } begins a Telling; { "table",
+## "continue": true } goes on with the saved one; { "mode", "seed" } plays a
+## mode. Empty when the scene was started by itself: the command line's
+## arguments say what it does then (GDD 13.9).
+var context: Dictionary = {}
+## What he has just come back to the wedding with, for its card: an
+## ending (Save.apply_ending's result, with "table" and "clock") or a
+## mode's run (Save.apply_mode's result). {} for nothing.
+var last_ending: Dictionary = {}
 
 
 func _ready() -> void:
@@ -62,15 +81,23 @@ func _ready() -> void:
 	for message: String in data_errors:
 		push_error("Data: %s" % message)
 
-	Settings.setup(user_dir, {
-		# Subtitles (GDD 17.1): size small, medium or large; background on or off.
-		"subtitle_size": "medium",
-		"subtitle_background": true,
-		# A font slot for each language (GDD 17.3): the path of a font of the
-		# project, "" for the theme's own.
-		"font_en": "",
-		"font_ar": "",
-	})
+	# The settings of GDD 17.1, as the data defines them, each at its default
+	# until the player's file says otherwise.
+	settings_spec = SettingsSpec.new(data.tuning)
+	var defaults: Dictionary = settings_spec.defaults()
+	# A font slot for each language (GDD 17.3): the path of a font of the
+	# project, "" for the theme's own.
+	defaults["font_en"] = ""
+	defaults["font_ar"] = ""
+	Settings.setup(user_dir, defaults)
+	for id: String in settings_spec.ids():
+		# A value the setting cannot have (a file from elsewhere) is its default.
+		var kept: Variant = Settings.get_value(id)
+		if not settings_spec.allows(id, kept):
+			Settings.set_value(id, settings_spec.default_of(id))
+	if not Settings.changed.is_connected(_on_setting_changed):
+		Settings.changed.connect(_on_setting_changed)
+	apply_settings()
 	Lines.setup(data)
 	Audio.setup(data)
 	read_save()
@@ -85,7 +112,7 @@ func save_path() -> String:
 ## Reads the save file if there is one. A file that cannot be read leaves a
 ## new player's profile and no Telling.
 func read_save() -> void:
-	profile = Save.default_profile()
+	profile = Save.new_profile(data) if data != null else Save.default_profile()
 	saved_telling = {}
 	if not FileAccess.file_exists(save_path()):
 		return
@@ -109,6 +136,160 @@ func write_save(telling: Dictionary) -> bool:
 		return false
 	file.store_string(Save.to_text(profile, telling))
 	return true
+
+
+# --- The settings (GDD 17.1) -------------------------------------------------------
+
+## Every setting of GDD 17.1 as it is now: id -> value.
+func setting_values() -> Dictionary:
+	var out: Dictionary = {}
+	for id: String in settings_spec.ids():
+		out[id] = Settings.get_value(id)
+	return out
+
+
+## What the settings mean to the whole game: Game speed is how fast its
+## clock runs (the simulation's ticks are the same; fewer of them pass in a
+## second of the player's).
+func apply_settings() -> void:
+	Engine.time_scale = game_speed(Settings.get_value(SettingsSpec.GAME_SPEED))
+
+
+## The engine's time scale for a Game speed setting (70 to 100).
+static func game_speed(percent: Variant) -> float:
+	return clampf(SettingsSpec.share(percent), 0.1, 1.0)
+
+
+func _on_setting_changed(key: String, _value: Variant) -> void:
+	if key == SettingsSpec.GAME_SPEED:
+		apply_settings()
+
+
+# --- The way through the game (GDD 13.4) --------------------------------------
+
+## Frames drawn in a menu scene, for `--shot=` there (the drive scene takes
+## its own pictures).
+var _menu_frames: int = 0
+
+
+func _process(_delta: float) -> void:
+	if not args.has("shot") or get_tree().current_scene == null or get_tree().current_scene.scene_file_path == DRIVE_SCENE:
+		return
+	_menu_frames += 1
+	var at: int = maxi(str(args.get("shot-frame", "30")).split(",")[0].to_int(), 1)
+	if _menu_frames != at:
+		return
+	var texture: ViewportTexture = get_viewport().get_texture()
+	var image: Image = texture.get_image() if texture != null else null
+	if image == null or image.is_empty():
+		print("[game] no image to save: this renderer draws nothing")
+	else:
+		print("[game] shot %s (%s)" % [str(args["shot"]), error_string(image.save_png(str(args["shot"])))])
+	get_tree().quit()
+
+
+const TITLE_SCENE: String = "res://scenes/title.tscn"
+const WEDDING_SCENE: String = "res://scenes/wedding.tscn"
+const DRIVE_SCENE: String = "res://scenes/drive.tscn"
+
+
+## Enters a state: its scene, with the DriveContext for the drive.
+func go(next: AppState, drive_context: Dictionary = {}) -> void:
+	state = next
+	context = drive_context
+	var scene: String = WEDDING_SCENE
+	match next:
+		AppState.BOOT, AppState.TITLE:
+			scene = TITLE_SCENE
+		AppState.PROLOGUE, AppState.TELLING, AppState.WRECK_CUT:
+			scene = DRIVE_SCENE
+	print("[game] %s" % state_name())
+	get_tree().change_scene_to_file.call_deferred(scene)
+
+
+func state_name() -> String:
+	return str(AppState.keys()[state]).to_lower()
+
+
+## The title's first entry: the prologue on first launch, else the wedding.
+func begin() -> void:
+	if after_title() == AppState.PROLOGUE:
+		play_prologue()
+	else:
+		go(AppState.WEDDING)
+
+
+## The prologue, and after it tonight at the Table that is open from the
+## start (GDD 10.1, D-063).
+func play_prologue() -> void:
+	var first: PackedStringArray = TableRules.open_at_start(data)
+	go(AppState.PROLOGUE, {"prologue": true, "table": first[0] if not first.is_empty() else "", "seed": new_seed()})
+
+
+## He sits down at a Table (GDD 3.2): the Telling he left at its last stop
+## goes on, or a new one begins.
+func sit_at(table_id: String) -> void:
+	if not saved_telling.is_empty() and GameData.as_string(saved_telling.get("table")) == table_id:
+		go(AppState.TELLING, {"table": table_id, "continue": true})
+	else:
+		go(AppState.TELLING, {"table": table_id, "seed": new_seed()})
+
+
+## A mode (GDD 11.5): the Commute has the day's seed, Endless Night its own.
+func play_mode(mode: String) -> void:
+	go(AppState.TELLING, {"mode": mode, "seed": daily_seed() if mode == Save.COMMUTE else new_seed()})
+
+
+## A seed for a night nobody has driven: `--seed=` when the build was
+## started with one, else from the clock on the wall.
+func new_seed() -> int:
+	if args.has("seed"):
+		return int(str(args["seed"]))
+	return int(Time.get_unix_time_from_system()) % 1000000 * 1000 + Time.get_ticks_usec() % 1000
+
+
+## The Commute's seed (GDD 11.5: "a daily seed"): today's date.
+func daily_seed() -> int:
+	if args.has("seed"):
+		return int(str(args["seed"]))
+	var today: Dictionary = Time.get_date_dict_from_system()
+	return GameData.as_int(today.get("year")) * 10000 + GameData.as_int(today.get("month")) * 100 + GameData.as_int(today.get("day"))
+
+
+## A mode's run is over: its score is kept (GDD 11.5: statistics, always).
+func end_mode(mode: String, score: float, finished: bool) -> Dictionary:
+	var result: Dictionary = Save.apply_mode(profile, mode, score, finished)
+	write_save(saved_telling)
+	return result
+
+
+## The prologue plays on first launch (GDD 10.1): until it has been seen,
+## unless the build was started with --skip-prologue (GDD 13.9). It can be
+## played again from the title at any time.
+func wants_prologue() -> bool:
+	return not GameData.as_bool(profile.get("prologue_seen")) and not args.has("skip-prologue")
+
+
+## Where the title leads (GDD 13.4): BOOT > TITLE > PROLOGUE (first launch)
+## > WEDDING.
+func after_title() -> AppState:
+	return AppState.PROLOGUE if wants_prologue() else AppState.WEDDING
+
+
+## The prologue has been played: it is not played by itself again.
+func prologue_played() -> void:
+	profile["prologue_seen"] = true
+	write_save(saved_telling)
+
+
+## The Telling is over: he has parked (GDD 10.5). What its ending leaves
+## behind goes into the profile (GDD 11.4, 11.5: Tables, told true, modes,
+## the guest) and the save file, which has no Telling to continue any more.
+## Returns what is new (Save.apply_ending).
+func end_telling(arrived: Dictionary) -> Dictionary:
+	var result: Dictionary = Save.apply_ending(data, profile, arrived)
+	write_save({})
+	return result
 
 
 ## A passenger carried to Basra sits at a Table from then on (GDD 11.5).

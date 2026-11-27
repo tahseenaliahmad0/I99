@@ -27,8 +27,8 @@ Useful commands:
 
 ## Current state
 
-- **Milestone:** paused, as the owner asked on 2026-11-20 ("finish M6, M7, M8 and M10, then pause"; read in D-056 as the work in flight on those four). M6 (items), M7 (bosses) and M8 (passengers) are built and reviewed, and what their reviews found is applied but for the open findings below. Of M10 the three presentation pieces are in and reviewed: sound, post effects, subtitles. **The next milestone is M9** (the frame); the rest of M10 (the eleven settings of GDD 17.1, mouse-only menus, T-ONEHAND-01, T-SETTINGS-01, T-SMOKE-ALL) needs M9's scenes and comes after it.
-- **Tests:** 97 of 114 passing (M0: 2, M1: 8, M2: 10, M3: 7, M4: 13, M5: 6, M6: 42, M7: 4, M8: 5). `tools/check.sh` has eight steps (import, parse with the core and event-name lints, data, audio, tests, subtitles, smoke, postfx) and prints `CHECK OK`.
+- **Milestone:** **M10 is built** (2026-11-27; the owner: "continue"): the settings of GDD 17.1 (D-065), one hand and two buttons everywhere (D-066), every scene in the smoke run. **Next is M11, balance** (T-BOT-01, T-WALL-01). M9, the frame, is built too. Done there: the seven Tables (D-060), the heckles (D-061), endings and what persists (D-062), the prologue and the finale as simulations (D-063). **All eleven of M9's tests pass**, and it is on screen (D-064): `boot` > `title` > the prologue on first launch > a night > the wedding room, with the ending's card, the finale and the credits; the Commute and Endless Night behind two doors. It has had no adversarial review (the owner's spend limit ended the workflows on 2026-11-20; none has been run since): see NEEDS OWNER. M6 (items), M7 (bosses) and M8 (passengers) are built and reviewed, and what their reviews found is applied but for the open findings below. Of M10 the three presentation pieces are in and reviewed: sound, post effects, subtitles; and since M9's scenes exist, the rest: the settings, the mouse-only menus, a pause for the pointer, T-ONEHAND-01, T-SETTINGS-01, T-SMOKE-ALL. M10 has had no adversarial review either.
+- **Tests:** 111 of 114 passing (M0: 2, M1: 8, M2: 10, M3: 7, M4: 13, M5: 6, M6: 42, M7: 4, M8: 5, M9: 11, M10: 3). The three that are left: T-BOT-01, T-WALL-01 (M11), T-TOUCH-01 (M12). `tools/check.sh` has eight steps (import, parse with the core and event-name lints, data, audio, tests, subtitles, smoke, postfx) and prints `CHECK OK`.
 - **How the last session ended.** On 2026-11-20 the account's monthly spend limit stopped six workflows in mid-run. What their agents had finished was taken in by hand on 2026-11-27: the M8 rules fixes (`m8fix/rules`, complete), the M6 test gaps (`m6fix/tests`, complete), the post effects review fixes (uncommitted in the agent's worktree; committed, merged, pictures retaken and looked at), and of the M7 views fixes V-01 and V-05. **What never ran and is still owed, if the owner wants it:** a skeptic's check of the fixes themselves. The fixes of D-055, D-057, D-058 and D-059, and the post effects fixes, are held by their own tests and mutants and by nothing else: no second agent tried to break them. The workflows' local branches (`m6fix/*`, `m7fix/views`, `m8fix/rules`, `m10/*-in-fix`) hold nothing that is not merged; they are not pushed and need not be.
 - **The reviews' reports** are in `docs/reviews/` (one JSON per lens, with the GDD sentence, evidence and proposed fix of each finding). The probes they name are gone with the scratch folder.
 - **Open findings, by milestone** (ids as in the reports):
@@ -40,8 +40,8 @@ Useful commands:
   - *M1 and M2* (reviews of 2026-11-17, never finished): (a) M2 views: pointer ring drawn at the hand's clamped target; the hand does not follow the gear knob; forearm stretches beyond 0.30 m for five far anchors (decision not recorded); `scene` in placeholders ignored for road strips, arm and pointer. (b) M1 test honesty (18): no test moves the pointer with relative motion; T-WHEEL-01 never releases a turned wheel; grip and ride on an off-centre wheel; gate engage radius and grind band probed from one side; FLICK time and direction limits; CRANK angle-not-distance; gate channel width; camera pitch and glance following the hand; pointer pixels to screen; steering sensitivity wiring; loose brackets on timing limits; literals standing in for tuning values. (c) M1 gesture: rituals.json is not checked against the table of GDD 4.6. (d) M2 test honesty leftovers (see D-028 and D-029 for what was done). M3, M4 and M5 have not been reviewed.
 - **Next step:**
   1. `tools/check.sh` must print `CHECK OK` (about six minutes on an idle machine).
-  2. **M9, the frame** (GDD 11, 3, 10.1, 10.6): wedding room, seven Tables, heckles, lines, endings, persistence, prologue, finale, modes; tests T-TABLE-* (7), T-HECKLE-01, T-END-01, T-PROLOGUE-01, T-FINALE-01. Heckle lines are tells: ask for them with `"tell": true` (D-058). A Wreck that only rewinds (the Children's Table) must leave the save file alone (D-055).
-  3. Then the rest of M10, M11 (the DriverBot replaces `src/game/stand_in_bot.gd`; T-WALL-01 with DAWN-01), M12.
+  2. **M11, balance** (GDD 13.8, 18): the DriverBot replaces `src/game/stand_in_bot.gd`; the balance runner; T-BOT-01; T-WALL-01 with DAWN-01 (Dawn's traffic after the last checkpoint is laid out for a driver at par). Open from M9 and M10, to be taken at any time: the tells of GDD 17.2 for the earlier milestones (D-058), V-04 of the M7 views (a cut for being turned back), the prologue's bundle has no sound. Heckle lines are tells: ask for them with `"tell": true` (D-058). A Telling is begun with `DriveSim.begin_telling(table_id, seed)`; the Table's rules are `sim.table`; the profile's guests go into `sim.guests` before it (they heckle); `sim.heckling = false` is a road with no Table's voice (the modes). The settings reach the simulation through `DriveSim.apply_settings(values)` (D-065): a bot's run should say which it drives with (Steady start is on by default and holds the wheel for 2 s after a stop). The pointer's pause is the left button held where the hand has nothing to hold (D-066): `PauseHold` in `src/game`, asked by the drive scene with `DriveSim.hand_is_free()`; the simulation knows nothing of it, and a bot's hand never pauses. A headless tool that needs the autoloads is a loader and a body (`tools/onehand_walk.gd`, `tools/subtitles_check.gd`); mouse events are given with `root.push_input(event, true)`.
+  3. Then M12 (touch and export; T-TOUCH-01).
   The open findings above can be taken at any time; each needs a check that fails first.
   Mutation runs are `python3 tools/mutants.py <test ids> tools/mutants/<list>.py [log]` (one textual change at a time, the tests, the file restored; `MUT_ROOT=<copy>` runs them on a copy of the project, `MUT_ONLY=3,5` a few of them). Every entry of every list applies to the code as it is (checked 2026-11-27); a change to `src/core` can make an entry stale, which `tools/mutants.py` reports instead of running it.
   Tests for the cabin extend `CabinSuite` (tests/support): `_reach`, `_hold_at`, `_tap_at`, `_flick`, `_carry`, `_drag`, `_crank`, `_wipe`, `_grip`, `_steer`, `_reach_time`, `_scrape_rail`, `_pass_closely`, `_to_quiet_leg`, `_into_stall`, `_leave_stop`, `_begin_quiet_leg`, `_begin_quiet_boss`, `_begin_checkpoint`, `_stand_at_the_bar`, `_drive_on_to_act`, `_into_next_quiet_leg`, `_drive_on_to_boss`, `_drive_on_to_boss_stop`, `_answer_to_a_pull`, `_check_answer_lags`. How items say what they do is D-040 to D-044; stops and pull-overs D-049 and D-055; bosses D-046 to D-048 and D-057, their views D-050; passengers D-051 and D-059; sound, post effects and subtitles D-052 to D-054; the tells' sounds D-058. A `_reach` to the anchor the hand already rests on does not tick: tick once before a gesture that needs the pointer there. A flag set in `BossSim.step_after_car` must be reported after it in the tick (`_step_set_piece`), not in `_report_soldier`, which runs before the car moves.
@@ -152,17 +152,24 @@ Do not start a milestone until every test of the previous one passes (GDD 18).
 - [ ] Left open: the test gaps m8tv-08, 09, 10 (see "Current state")
 
 ### M9 The frame: T-TABLE-* (7), T-HECKLE-01, T-END-01, T-PROLOGUE-01, T-FINALE-01
-- [ ] not started
+- [x] M9a The seven Tables (D-060): `TableRules`, `data/tables.json` (rules as validated keys), the rules in `DriveSim`, `RunState`, `RunGenerator` and `StopSim`; seven tests; T-DATA-01 breaks each rule key once; mutants in `tools/mutants/tables.py`
+- [x] M9b Heckles (D-061): `HeckleDirector`, `data/heckles.json` (30 records: the six Tables' and two per passenger), a Twist's stretch laid out by the generator and kept off the road until it is said, the shower, the Fib's ghost hand; T-HECKLE-01 (469 checks); T-DATA-01 breaks each record rule once; mutants in `tools/mutants/heckles.py`; a HUD row and the ghost hand on the wheel
+- [x] M9c Endings and persistence (D-062): `Save.ending_of`, `Save.apply_ending`, `Game.end_telling`; T-END-01 (161 checks); `tools/mutants/endings.py` 25 of 25 killed. The modes are earned; playing them is M9e
+- [x] M9d Prologue and finale (D-063): `PrologueSim` and `DriveSim.begin_prologue` (75 s to the tick, seven steps by the clock, the left hand keeping the lane, no cost, the cut to tonight with `narrator.start`), `FinaleSim` (eight claps, the walk, "Baba." at 20 s, over only when her hand is let go in front of the groom), `Game.wants_prologue`; T-PROLOGUE-01 (101 checks), T-FINALE-01 (35 checks); T-DATA-01 breaks their numbers; mutants in `tools/mutants/bookends.py`
+- [x] M9e The frame on screen (D-064): `scenes/title.tscn`, `scenes/wedding.tscn` (`WeddingView`: the room, the ending's card, the finale, the credits), `Game.go` and the DriveContext, the prologue's overlay (pulse, white-out, cards), solid left arm and props, the Wreck's black cut and the Table's objection, `Narration`, the Commute and Endless Night (`DriveSim.begin_commute`, `begin_endless`; T-END-01 checks them, 211 checks), 217 more lines (502), smoke runs for all of it, pictures `artifacts/m9_*.png`
+- [ ] Left open: no adversarial review of M9 (see NEEDS OWNER); the flow between the scenes is run by hand and by the smoke step only
 
 ### M10 Presentation and options: T-ONEHAND-01, T-SETTINGS-01, T-SMOKE-ALL
+- [x] T-SMOKE-ALL (57 checks): the four scenes, the wedding's states, and `drive.tscn` in each DriveContext kind, 600 frames each headless
+- [x] The settings of GDD 17.1 (D-065): `SettingsSpec` from tuning `settings`, `DriveSim.apply_settings`, Brake assist, Steady start, Game speed, shake visuals, the Numeric HUD, the Mirrored cabin (`shaders/mirror.gdshader`), `SettingsView` from the title and from a paused drive; T-SETTINGS-01 (190 checks); mutants in `tools/mutants/settings.py`
+- [x] T-ONEHAND-01 (167 checks; D-066): every ritual one of eight gestures at an anchor the pointer reaches, each gesture performed with the left button and nothing else, the brake the right, the pads only the Thumb keypad's, the pause the left button held on nothing (on the road, at a stall, at the officer's window, on the last street; the same night to the bit with it); and `tools/onehand_walk.gd`, a headless walk with mouse events only from the title through its options, a Table, a paused drive, an ending, the finale and the credits (27 steps); mutants in `tools/mutants/onehand.py`
 - [x] Generated audio (GDD 16.5; D-052): `SfxSynth`, `Audio`, `data/sfx.json`, the mix; `tools/audio_check.gd` is a step of `tools/check.sh`
 - [x] Post effects (GDD 16.4; D-053): `shaders/post_fx.gdshader`, `PostFxView`; `tools/post_fx_check.gd` is a step of `tools/check.sh`; pictures `artifacts/m10_postfx_*.png`
 - [x] Subtitles (GDD 16.6; D-054): `SubtitlesView`, `SubtitleQueue`, speaker lines, the two Subtitles settings' keys; `tools/subtitles_check.gd` is a step of `tools/check.sh`; pictures `artifacts/m10_subtitles_*.png`
 - [x] The three pieces meet M7 and M8: one place for Dawn's sun (`glare_position`), the ring's subtitle ends with the Call (`until`), the passengers' speakers have their lines, a late answer says nothing
 - [x] Review fixes of the three pieces (merged from `m10/<piece>-in-fix`); a sound for every tell of M7 and M8, the dust's tell, a tell's subtitle at once (D-058)
-- [ ] Settings of GDD 17.1 (eleven, each with its effect, saved and loaded, changed mid-Telling): waits for M9 (D-056). Only `subtitle_size` and `subtitle_background` exist.
-- [ ] Mouse-only menus (title, wedding room, pause and settings): waits for M9
-- [ ] T-ONEHAND-01, T-SETTINGS-01, T-SMOKE-ALL: wait for M9's scenes
+- [x] Mouse-only menus (title, wedding room, pause and settings)
+- [ ] Left open: no adversarial review of M10; GDD 17.2's tells for the milestones before M7
 
 ### M11 Balance: T-BOT-01, T-WALL-01
 - [ ] not started
@@ -177,6 +184,29 @@ Do not start a milestone until every test of the previous one passes (GDD 18).
 ## NEEDS OWNER
 
 Things a human must judge or supply. Nothing here blocks the build.
+
+- **M9 has had no review.** M1 to M8 each had an adversarial review by
+  other agents (GDD 1.4); M9 (Tables, heckles, endings, prologue, finale,
+  the scenes) was built alone on 2026-11-27 after the spend limit had ended
+  the workflows, and "ultracode" is off. Its rules are held by its eleven
+  tests and by 214 mutants (`tools/mutants/tables.py`, `heckles.py`,
+  `endings.py`, `bookends.py`), and its readings of the GDD are D-060 to
+  D-064. A review like `m8-review` would cost about what that one did; say
+  "use a workflow" to have one run.
+- **How M9 read the GDD where it had to choose** (each in DECISIONS):
+  heckles never *begin* during an encounter, and "an encounter" is the time
+  it is at him, not the whole leg (D-061); late beats the Call, and a
+  passenger carried to Basra late is a guest all the same (D-062); the
+  prologue runs on into the first Telling instead of stopping at the
+  wedding room, and letting go of Noor's hand on the way to the groom ends
+  nothing (D-063); a wrecked Commute does not count for the best (D-064).
+- **M10's settings and the pause have had no review either**, and two
+  readings are the owner's to confirm (D-065, D-066): the pointer's way to
+  the pause is the left button held for 1.2 s where the hand has nothing
+  to hold (someone who misses the wheel's rim and holds the button in the
+  air will meet the pause screen; the arc round the pointer is the
+  warning); Game speed is the engine's time scale, so a slowed night is a
+  slowed clock too.
 
 - **Name.** The project is called I-99 as briefed; the GDD text still says
   Single-Handed (D-002). Confirm, or change the line `title.game_name`.
@@ -272,3 +302,18 @@ Two lines per slice, newest last.
   M6: the third fix branch and 283 new checks merged (D-055); a Wreck in the tick he pulls in at a stall is a Wreck. Each test process keeps to a user folder of its own. The spend limit then ended six workflows.
 - 2026-11-27 What the stopped workflows had finished is in: the M8 rules fixes (D-059), the post effects review fixes, V-01 and V-05 of the M7 views lens. On the main line: the passengers' sounds, V-07, V-10, V-11, V-19.
   The review reports are kept in `docs/reviews/`; every mutant list applies again. Paused as asked: next is M9. 97 of 114.
+- 2026-11-27 M9a: the seven Tables (D-060). Each Table's rule is a validated key of its record; the Children's rewind returns him to the leg's start as it was; the Uncles' Patrol is one place per act on both branches;
+  Noor's road is nine named legs under one seed, with no fork to take, tea and repairs only, and the Student at Act 2's second stop. 104 of 114.
+- 2026-11-27 M9b: the heckles (D-061). One per leg in Act 1 and two after, each said at its place when the leg's encounter is not at him; two seconds of subtitle, then the Twist's stretch comes onto the road (laid out by the generator with the leg),
+  or the Dare, Doubt, Question or Order runs, or the Fib's ghost hand holds the lane. Guests bring two heckles each. 105 of 114.
+- 2026-11-27 M9c: endings and what persists (D-062). Late beats the Call; a win opens the next Table and the first one the Commute; the Call marks the Table told true, earns Endless Night and at Noor's Table starts the finale;
+  whoever is beside him when the key is turned is a wedding guest. The profile is written with no Telling to continue. 106 of 114.
+- 2026-11-27 M9d: the two bookends as simulations (D-063). The prologue is a mode of the drive: 75 s to the tick, seven steps by the clock, a left hand that keeps the lane, nothing that costs, and a cut into tonight's Telling with the narrator's first line.
+  The finale ends only when her hand is let go in front of the groom. Every Telling begins with `narrator.start`. 108 of 114: all of M9's tests pass; its scenes are M9e.
+- 2026-11-27 M9e: the frame on screen (D-064). `title.tscn` and `wedding.tscn` (the room of Tables, the ending's card, the finale, the credits), `Game.go` with a DriveContext, the prologue's pulse, left arm, white-out and cards, the Wreck's black cut and the Table's objection,
+  the narrator and the stalls between the heckles, the Commute and Endless Night, 217 more lines. The M9d commit by itself fails the subtitles step (two checks assumed a silent start to a night); this one fixes them. 108 of 114: M9 is built; the rest of M10 is next.
+- 2026-11-27 M10: T-SMOKE-ALL passes (109 of 114). The mutants that had lived were killed by the new checks (heckles 11 of 11, tables, bookends); ten entries of older lists that M9's edits had made stale were rewritten: 683 mutants in fourteen lists, all applying.
+- 2026-11-27 M10: the settings of GDD 17.1 (D-065): data, a screen, and each with its effect, changed mid-Telling. Brake assist slows the car when a crash is certain; Steady start (on by default) holds the wheel straight for 2 s after a stop;
+  the Mirrored cabin reverses the picture and the pointer; Game speed is the engine's time scale. T-SETTINGS-01 passes: 110 of 114.
+- 2026-11-27 M10: one hand, two buttons (D-066). The pointer's way to the pause is the left button held where the hand has nothing to hold: the game's gesture, not the simulation's, so it works at a stall, at the officer's window and on the last street,
+  where a pause on the ignition key (built first) broke T-STOP-01, T-LEG-07 and T-BOSS-03. A headless walk clicks from the title through a night's pause to the credits with mouse events only. T-ONEHAND-01 passes: 111 of 114. M10 is built; M11 is next.
