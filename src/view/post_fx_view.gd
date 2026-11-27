@@ -14,20 +14,34 @@ extends CanvasLayer
 ##   glare_position  the low sun
 ##   darkness        the night outside the pool of the headlights
 ##
-## What is of the glass is drawn only where he looks through glass, so the
-## cabin stays readable. The shader cannot see how far away a pixel is, so
-## the glass is found by geometry: the windows are rectangles in the cabin
-## frame (postfx_windscreen, postfx_window_left, postfx_window_right), and
-## what the cabin hangs before the windscreen (the nodes Mirror and Visor of
-## GDD 13.5) is taken out of them again.
+## What is of the glass and of the world outside is not drawn over the
+## cabin, so the cabin stays readable. The shader cannot see how far away a
+## pixel is, so it is shown the cabin by itself: a second camera, kept where
+## the eye is, draws what is under the Cabin node (the cabin, his arm, what
+## he carries, a passenger, the stall's tray and people; not what the car
+## carries before its windscreen) and nothing else into a picture of its
+## own, the shader's `cabin_mask`. Where that picture is solid the pixel is
+## of the cabin; everything else is the world, and the part of it he sees
+## through the windscreen is found by geometry (postfx_windscreen, a
+## rectangle in the cabin frame). While the rain blurs the glass the shader
+## is also shown that picture as the blur would smear it (`cabin_smear`),
+## so that the cabin's colours can be kept out of the smear.
 ##
 ## Each amount is eased toward what the snapshot says, and may not turn back
-## sooner than postfx_flash_hold after it last turned: whatever the
+## sooner than postfx_flash_hold after it last turned; a light that changes
+## place while its wash is up is moved there, not put there: whatever the
 ## simulation does, no effect flashes faster than three times a second.
 ## Reads the snapshot; changes nothing.
 
 const SHADER: Shader = preload("res://shaders/post_fx.gdshader")
+const CABIN_SHADER: Shader = preload("res://shaders/post_fx_cabin.gdshader")
 const SCREEN_NODE: String = "Screen"
+const MASK_NODE: String = "CabinMask"
+const SMEAR_NODE: String = "CabinSmear"
+## The visual layer on which the mask's camera sees the cabin and nothing
+## else: the last of the engine's twenty. What is of the cabin is drawn on
+## it besides its own layer, so the eye's camera sees it as before.
+const CABIN_LAYER: int = 1 << 19
 ## Where the light that dazzles him is, if the snapshot says: degrees right
 ## of straight ahead and degrees above the horizon (Vector2). No simulation
 ## gives this key yet; when one does, it is believed before all else.
@@ -41,30 +55,37 @@ const SUN_KEY: String = "sun"
 const SUN_SIDE_KEY: String = "sun_side"
 ## Below this a time is no time: nothing is divided by less.
 const MIN_TIME: float = 0.0001
-## The nodes of the Cabin (GDD 13.5) whose things hang before the windscreen,
-## and how many such things the shader takes (its MAX_BLINDS).
-const BLIND_NODES: PackedStringArray = ["Mirror", "Visor"]
-const MAX_BLINDS: int = 4
 
-## The amounts that are eased from frame to frame.
-enum Channel { TUNNEL, LIDS, BLINK, HAZE, RAIN_BLUR, CRACKS, GLARE, DARKNESS, RAIN, DUST, REACH, DARKER }
+## The amounts that are eased from frame to frame; the last two are where the
+## light is shown, in degrees right of straight ahead and above the horizon.
+enum Channel { TUNNEL, LIDS, BLINK, HAZE, RAIN_BLUR, CRACKS, GLARE, DARKNESS, RAIN, DUST, REACH, DARKER, LIGHT_RIGHT, LIGHT_UP }
 
 var _tuning: Tuning
 var _camera: Camera3D
 var _cabin: Node3D
 var _screen: ColorRect
 var _material: ShaderMaterial
+## The cabin's picture and the camera that takes it; the same picture as
+## the rain's blur needs it, and the shader that makes it (null with no cabin).
+var _mask: SubViewport
+var _mask_camera: Camera3D
+var _smear: SubViewport
+var _smear_material: ShaderMaterial
 var _serial: int = -1
 
 var _fade_rate: float = 0.0
 var _blink_rate: float = 0.0
 var _flash_hold: float = 0.0
+var _light_speed: float = 0.0
 var _night_darkness: float = 0.0
 var _low_beam: float = 1.0
 var _smoke: Color = Color.WHITE
 var _dust: Color = Color.WHITE
 var _glare_from: Vector2 = Vector2.ZERO
 var _sun_position: Vector2 = Vector2.ZERO
+## The windscreen in the cabin frame: left, bottom, right, top; its plane.
+var _windscreen: Vector4 = Vector4.ZERO
+var _windscreen_z: float = 0.0
 ## Where the light is, or last was: degrees right of straight ahead and
 ## above the horizon. A wash that is fading stays where its light was.
 var _light: Vector2 = Vector2.ZERO
@@ -77,7 +98,8 @@ var _since_turn: PackedFloat64Array = PackedFloat64Array()
 
 
 ## `camera` is the eye and `cabin` the node at the wheel hub: between them
-## they say where the glass is in the picture.
+## they say where the glass is in the picture, and what is drawn under
+## `cabin` is what the shader is shown as the cabin.
 func setup(data: GameData, camera: Camera3D, cabin: Node3D) -> void:
 	_tuning = data.tuning
 	_camera = camera
@@ -103,8 +125,25 @@ func setup(data: GameData, camera: Camera3D, cabin: Node3D) -> void:
 	_screen.material = _material
 	# Nothing to show yet: the screen is not even copied.
 	_screen.visible = false
+	_build_mask()
 	_configure()
 	_light = _glare_from
+	_put(Channel.LIGHT_RIGHT, _light.x)
+	_put(Channel.LIGHT_UP, _light.y)
+	if is_inside_tree():
+		_listen()
+
+
+func _enter_tree() -> void:
+	if _material != null:
+		_listen()
+		_mark_cabin()
+
+
+func _exit_tree() -> void:
+	var tree: SceneTree = get_tree()
+	if tree.node_added.is_connected(_on_node_added):
+		tree.node_added.disconnect(_on_node_added)
 
 
 func apply(snapshot: Dictionary, delta: float) -> void:
@@ -141,7 +180,15 @@ func apply(snapshot: Dictionary, delta: float) -> void:
 		_light = Vector2(sun_side * _sun_position.x, _sun_position.y)
 	elif glare_now > 0.0 or _values[Channel.GLARE] <= 0.0:
 		_light = _glare_from
-	var toward: Vector3 = eye.basis.inverse() * _direction(_light)
+	# While nothing of a wash is up the light is shown where it is. A light
+	# that changes place while its wash is up (the sun for a spotlight) is
+	# moved there at postfx_light_speed, and like every amount it may not
+	# turn back at once: the wash never jumps.
+	if _values[Channel.GLARE] <= 0.0:
+		_put(Channel.LIGHT_RIGHT, _light.x)
+		_put(Channel.LIGHT_UP, _light.y)
+	var shown_at: Vector2 = Vector2(_ease(Channel.LIGHT_RIGHT, _light.x, _light_speed, delta), _ease(Channel.LIGHT_UP, _light.y, _light_speed, delta))
+	var toward: Vector3 = eye.basis.inverse() * _direction(shown_at)
 	var light_uv: Vector2 = Vector2(0.5, 0.5)
 	if toward.z < 0.0:
 		light_uv = Vector2(0.5 + 0.5 * toward.x / (-toward.z * view_tan.x), 0.5 - 0.5 * toward.y / (-toward.z * view_tan.y))
@@ -187,10 +234,11 @@ func apply(snapshot: Dictionary, delta: float) -> void:
 	_material.set_shader_parameter(&"glare_position", light_uv)
 	_material.set_shader_parameter(&"darkness", darkness)
 
-	# With nothing to show the rectangle is not drawn, and the renderer does
-	# not copy the screen for it.
+	# With nothing to show the rectangle is not drawn: the renderer does not
+	# copy the screen for it, and the cabin's picture is not taken.
 	_screen.visible = tunnel > 0.0 or lids > 0.0 or blink > 0.0 or haze > 0.0 or rain_blur > 0.0 \
 			or cracks > 0.0 or glare > 0.0 or darkness > 0.0 or rain > 0.0
+	_aim_mask(_screen.visible and visible, rain_blur)
 	if not _screen.visible:
 		return
 	_material.set_shader_parameter(&"rain", rain)
@@ -201,7 +249,6 @@ func apply(snapshot: Dictionary, delta: float) -> void:
 	_material.set_shader_parameter(&"eye_basis", eye.basis)
 	_material.set_shader_parameter(&"eye_origin", eye.origin)
 	_material.set_shader_parameter(&"view_tan", view_tan)
-	_set_blinds(eye.origin)
 
 
 ## What the shader was last given for one of its uniforms (for tools).
@@ -230,6 +277,14 @@ func _ease(channel: Channel, target: float, rate: float, delta: float) -> float:
 	return value
 
 
+## Puts a channel where it belongs while nothing of it can be seen: it has
+## not moved, so it has not turned either.
+func _put(channel: Channel, value: float) -> void:
+	_values[channel] = value
+	_headings[channel] = 0.0
+	_since_turn[channel] = 0.0
+
+
 ## Reads the tuning constants and hands the shader those that do not change
 ## from frame to frame. Again whenever the tuning panel changes one.
 func _configure() -> void:
@@ -238,6 +293,7 @@ func _configure() -> void:
 	_fade_rate = 1.0 / maxf(tuning.f("postfx_fade_time"), MIN_TIME)
 	_blink_rate = 1.0 / maxf(tuning.f("postfx_blink_time"), MIN_TIME)
 	_flash_hold = tuning.f("postfx_flash_hold")
+	_light_speed = tuning.f("postfx_light_speed")
 	_night_darkness = tuning.f("postfx_night_darkness")
 	_low_beam = tuning.f("low_beam_cone")
 	_smoke = Color.html(tuning.s("postfx_haze_color"))
@@ -245,12 +301,15 @@ func _configure() -> void:
 	_glare_from = _pair(tuning, "postfx_glare_position")
 	_sun_position = _pair(tuning, "sun_position")
 
-	# The glass: three panes in the cabin frame.
-	_set_pane(tuning, "postfx_windscreen", &"windscreen_rect", &"windscreen_z")
-	_set_pane(tuning, "postfx_window_left", &"window_left_rect", &"window_left_x")
-	_set_pane(tuning, "postfx_window_right", &"window_right_rect", &"window_right_x")
+	# The cabin and the glass: what counts as solid, and the windscreen, a
+	# rectangle (two corners) in a plane of the cabin frame.
+	_windscreen = Vector4(tuning.fi("postfx_windscreen", 0), tuning.fi("postfx_windscreen", 1), tuning.fi("postfx_windscreen", 2), tuning.fi("postfx_windscreen", 3))
+	_windscreen_z = tuning.fi("postfx_windscreen", 4)
+	_material.set_shader_parameter(&"cabin_solid", _pair(tuning, "postfx_cabin_solid"))
+	_material.set_shader_parameter(&"windscreen_rect", _windscreen)
+	_material.set_shader_parameter(&"windscreen_z", _windscreen_z)
 	_material.set_shader_parameter(&"glass_feather", tuning.f("postfx_glass_feather"))
-	_material.set_shader_parameter(&"demist_strip", _pair(tuning, "postfx_demist_strip"))
+	_mark_cabin()
 
 	_material.set_shader_parameter(&"tunnel_color", Color.html(tuning.s("postfx_tunnel_color")))
 	_material.set_shader_parameter(&"tunnel_strength", tuning.f("postfx_tunnel_strength"))
@@ -265,14 +324,21 @@ func _configure() -> void:
 	_material.set_shader_parameter(&"haze_mottle", tuning.f("postfx_haze_mottle"))
 	_material.set_shader_parameter(&"haze_patch", tuning.f("postfx_haze_patch"))
 	_material.set_shader_parameter(&"haze_drift", tuning.f("postfx_haze_drift"))
+	_material.set_shader_parameter(&"haze_fine", _pair(tuning, "postfx_haze_fine"))
 
 	_material.set_shader_parameter(&"rain_blur_radius", tuning.f("postfx_rain_blur_radius"))
+	if _smear_material != null:
+		_smear_material.set_shader_parameter(&"rain_blur_radius", tuning.f("postfx_rain_blur_radius"))
+	_material.set_shader_parameter(&"rain_blur_center", tuning.f("postfx_rain_blur_center"))
 	_material.set_shader_parameter(&"rain_streak_color", Color.html(tuning.s("postfx_rain_streak_color")))
 	_material.set_shader_parameter(&"rain_streak_alpha", tuning.f("postfx_rain_streak_alpha"))
 	_material.set_shader_parameter(&"rain_streak_speed", tuning.f("postfx_rain_streak_speed"))
 	_material.set_shader_parameter(&"rain_streak_slant", tuning.f("postfx_rain_streak_slant"))
 	_material.set_shader_parameter(&"rain_streak_density", _pair(tuning, "postfx_rain_streak_density"))
 	_material.set_shader_parameter(&"rain_streak_width", tuning.f("postfx_rain_streak_width"))
+	_material.set_shader_parameter(&"rain_streak_share", tuning.f("postfx_rain_streak_share"))
+	_material.set_shader_parameter(&"rain_streak_taper", tuning.f("postfx_rain_streak_taper"))
+	_material.set_shader_parameter(&"rain_streak_far", tuning.f("postfx_rain_streak_far"))
 
 	_material.set_shader_parameter(&"crack_center", _pair(tuning, "postfx_crack_center"))
 	_material.set_shader_parameter(&"crack_color", Color.html(tuning.s("postfx_crack_color")))
@@ -299,58 +365,128 @@ func _configure() -> void:
 	_material.set_shader_parameter(&"beam_feather", tuning.f("postfx_beam_feather"))
 
 
-## What of the cabin hangs before the windscreen is not glass: the shader
-## is told where each such thing is, as the eye sees it, as a rectangle in a
-## plane across the car. Whatever is drawn now under the Cabin's Mirror and
-## Visor nodes counts: the mirror while it is drawn, the visor, the lowered
-## visor.
-func _set_blinds(eye: Vector3) -> void:
-	var rects: PackedVector4Array = PackedVector4Array()
-	var planes: PackedFloat32Array = PackedFloat32Array()
-	if _cabin != null:
-		var to_cabin: Transform3D = _cabin.global_transform.affine_inverse()
-		for node_name: String in BLIND_NODES:
-			var group: Node = _cabin.get_node_or_null(node_name)
-			if group != null:
-				_add_blinds(group, to_cabin, eye, rects, planes)
-	var count: int = mini(rects.size(), MAX_BLINDS)
-	rects.resize(MAX_BLINDS)
-	planes.resize(MAX_BLINDS)
-	_material.set_shader_parameter(&"blind_count", count)
-	_material.set_shader_parameter(&"blind_rect", rects)
-	_material.set_shader_parameter(&"blind_z", planes)
+## The cabin's picture, the shader's `cabin_mask`: a viewport as large as the
+## view, in which a camera of its own sees what is on the cabin's layer over
+## nothing. It shares the eye's world; it is drawn before the view is, in the
+## same frame, and only while there is something to show.
+##
+## And that picture once more as the rain's blur needs it, the shader's
+## `cabin_smear`: a second viewport, drawn after the first, in which the
+## first is copied and then read from the mipmap the blur reads the view
+## from (post_fx_cabin.gdshader). It is drawn only while the rain blurs.
+func _build_mask() -> void:
+	if _camera == null or _cabin == null:
+		return
+	_mask = _picture(MASK_NODE)
+	_mask.positional_shadow_atlas_size = 0
+	_mask_camera = Camera3D.new()
+	_mask_camera.cull_mask = CABIN_LAYER
+	# Whatever the sky does (its colour, an artist's glow) is not the cabin's.
+	_mask_camera.environment = Environment.new()
+	_mask.add_child(_mask_camera)
+	_mask_camera.current = true
+	_material.set_shader_parameter(&"cabin_mask", _mask.get_texture())
+
+	_smear = _picture(SMEAR_NODE)
+	_smear.disable_3d = true
+	# The copy: the cabin's picture as it is, colour and alpha.
+	var copy: TextureRect = TextureRect.new()
+	copy.texture = _mask.get_texture()
+	copy.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	copy.stretch_mode = TextureRect.STRETCH_SCALE
+	var as_it_is: CanvasItemMaterial = CanvasItemMaterial.new()
+	as_it_is.blend_mode = CanvasItemMaterial.BLEND_MODE_PREMULT_ALPHA
+	copy.material = as_it_is
+	_smear_material = ShaderMaterial.new()
+	_smear_material.shader = CABIN_SHADER
+	var smeared: ColorRect = ColorRect.new()
+	smeared.material = _smear_material
+	for layer: Control in [copy, smeared]:
+		layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_smear.add_child(layer)
+		layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_material.set_shader_parameter(&"cabin_smear", _smear.get_texture())
 
 
-func _add_blinds(node: Node, to_cabin: Transform3D, eye: Vector3, rects: PackedVector4Array, planes: PackedFloat32Array) -> void:
-	var thing: VisualInstance3D = node as VisualInstance3D
-	if thing != null and thing.is_visible_in_tree():
-		# The thing's box, seen from the eye, on the plane through its middle.
-		var box: AABB = thing.get_aabb()
-		var place: Transform3D = to_cabin * thing.global_transform
-		var plane: float = (place * box.get_center()).z
-		var low: Vector2 = Vector2(INF, INF)
-		var high: Vector2 = Vector2(-INF, -INF)
-		var ahead: bool = plane < eye.z
-		for index: int in 8:
-			var corner: Vector3 = place * box.get_endpoint(index)
-			if corner.z >= eye.z:
-				ahead = false
-				break
-			var seen: Vector2 = Vector2(eye.x, eye.y) + (Vector2(corner.x, corner.y) - Vector2(eye.x, eye.y)) * (plane - eye.z) / (corner.z - eye.z)
-			low = low.min(seen)
-			high = high.max(seen)
-		if ahead and high.x > low.x and high.y > low.y:
-			rects.append(Vector4(low.x, low.y, high.x, high.y))
-			planes.append(plane)
+## A picture of the view's own: a viewport with nothing behind what is drawn
+## in it, which takes no input and is not drawn until it is asked for.
+func _picture(node_name: String) -> SubViewport:
+	var picture: SubViewport = get_node_or_null(node_name) as SubViewport
+	if picture == null:
+		picture = SubViewport.new()
+		picture.name = node_name
+		add_child(picture)
+	picture.transparent_bg = true
+	picture.handle_input_locally = false
+	picture.gui_disable_input = true
+	picture.render_target_update_mode = SubViewport.UPDATE_DISABLED
+	return picture
+
+
+## Keeps the mask's camera where the eye is and the cabin's pictures as large
+## as the view's, and has them drawn this frame or not: the first while
+## there is something to show, the second while the rain blurs (`rain_blur`).
+func _aim_mask(wanted: bool, rain_blur: float) -> void:
+	if _mask == null:
+		return
+	_mask.render_target_update_mode = SubViewport.UPDATE_ALWAYS if wanted else SubViewport.UPDATE_DISABLED
+	_smear.render_target_update_mode = SubViewport.UPDATE_ALWAYS if wanted and rain_blur > 0.0 else SubViewport.UPDATE_DISABLED
+	if not wanted or not is_inside_tree() or not _camera.is_inside_tree():
+		return
+	_smear_material.set_shader_parameter(&"rain_blur", rain_blur)
+	var size: Vector2i = Vector2i(get_viewport().get_texture().get_size())
+	if size.x > 0 and size.y > 0 and _mask.size != size:
+		_mask.size = size
+		_smear.size = size
+	_mask_camera.global_transform = _camera.global_transform
+	_mask_camera.projection = _camera.projection
+	_mask_camera.keep_aspect = _camera.keep_aspect
+	_mask_camera.fov = _camera.fov
+	_mask_camera.near = _camera.near
+	_mask_camera.far = _camera.far
+	_mask_camera.h_offset = _camera.h_offset
+	_mask_camera.v_offset = _camera.v_offset
+
+
+## Hears of everything that is added to the scene: what is added under the
+## Cabin node (an item bought, what he carries, a passenger) is of the cabin.
+func _listen() -> void:
+	var tree: SceneTree = get_tree()
+	if not tree.node_added.is_connected(_on_node_added):
+		tree.node_added.connect(_on_node_added)
+
+
+func _on_node_added(node: Node) -> void:
+	if _mask != null and is_instance_valid(_cabin) and node is GeometryInstance3D and _cabin.is_ancestor_of(node):
+		_mark(node)
+
+
+## Puts what is drawn under the Cabin node on the cabin's layer.
+func _mark_cabin() -> void:
+	if _mask != null and is_instance_valid(_cabin):
+		_mark(_cabin)
+
+
+func _mark(node: Node) -> void:
+	var thing: GeometryInstance3D = node as GeometryInstance3D
+	if thing != null:
+		if _on_the_nose(thing):
+			thing.layers &= ~CABIN_LAYER
+		else:
+			thing.layers |= CABIN_LAYER
 	for child: Node in node.get_children():
-		_add_blinds(child, to_cabin, eye, rects, planes)
+		_mark(child)
 
 
-## A pane of glass is five numbers: its rectangle (two corners) and where
-## its plane lies.
-func _set_pane(tuning: Tuning, key: String, rect_uniform: StringName, plane_uniform: StringName) -> void:
-	_material.set_shader_parameter(rect_uniform, Vector4(tuning.fi(key, 0), tuning.fi(key, 1), tuning.fi(key, 2), tuning.fi(key, 3)))
-	_material.set_shader_parameter(plane_uniform, tuning.fi(key, 4))
+## What the car carries before its windscreen (the hood, a bull bar, fog
+## lamps) he sees through the glass, like the road: it is not of the cabin.
+## Such a thing stands where it is put, so where it is when it is added says
+## it. Who stands beside the car (a vendor, a hitcher) is not on its nose.
+func _on_the_nose(thing: GeometryInstance3D) -> bool:
+	if not thing.is_inside_tree() or not _cabin.is_inside_tree():
+		return false
+	var at: Vector3 = _cabin.global_transform.affine_inverse() * (thing.global_transform * thing.get_aabb().get_center())
+	return at.z < _windscreen_z and at.x > _windscreen.x and at.x < _windscreen.z
 
 
 func _pair(tuning: Tuning, key: String) -> Vector2:

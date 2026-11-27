@@ -42,6 +42,9 @@ const FILE_PREFIX: String = "m10_postfx_"
 const WARM_FRAMES: int = 240
 const SETTLE_FRAMES: int = 45
 const FRAMES_PER_SECOND: float = 60.0
+## A Telling is driven to one of its stops with nothing drawn, which takes a
+## minute; a stop that has not come after this many frames never will.
+const STOP_WAIT_FRAMES: int = 90000
 ## A boss's road is begun as the drive scene begins a leg: in third gear, the
 ## gear of par. Its seed is the tool's own.
 const BOSS_GEAR: int = 3
@@ -70,6 +73,10 @@ var _drive: Node
 ## keys by hand, else the scene's.
 var _fx: PostFxView
 var _by_hand: PostFxView
+## Stops still to come before the picture of a state whose backdrop is a
+## Telling, and whether he stood at one in the last frame.
+var _stops_left: int = 0
+var _was_stopped: bool = false
 var _failed: int = 0
 var _saved: int = 0
 
@@ -124,6 +131,10 @@ func _initialize() -> void:
 ## rituals.json, completed in the simulation's cabin; this serves for what
 ## the cabin does by itself, a sweep of the wipers or the visor, not for
 ## what the drive must hear of, like the Call). `hud` shows the numeric HUD.
+## Or it may have a Telling for its backdrop (`table`, `seed`), driven by the
+## scene's stand-in driver to the stop of that number (`stops`) with nothing
+## drawn on the way; the picture is taken as soon as the state has settled
+## there, before he drives on.
 func _states(data: GameData) -> Array[Dictionary]:
 	var tuning: Tuning = data.tuning
 	var lids_max: float = tuning.f("lids_max")
@@ -157,16 +168,18 @@ func _states(data: GameData) -> Array[Dictionary]:
 		{"name": "haze", "what": "Haze at haze_cap: the windscreen clouded with smoke", "set": {"haze": haze_cap}},
 		{"name": "haze_half", "extra": true, "what": "Haze at half of haze_cap", "set": {"haze": 0.5 * haze_cap}},
 		{"name": "haze_glance", "what": "Haze at haze_cap with things on the dash and the mirror, eyes toward the glovebox: the haze stays on the windscreen", "give": "seeds,breath_mints,beads,phone", "aim": "glovebox", "set": {"haze": haze_cap}},
+		{"name": "haze_reach", "extra": true, "what": "Haze at haze_cap with his hand at the visor: the arm before the glass is not veiled", "aim": "visor", "set": {"haze": haze_cap}},
 		{"name": "haze_dust", "extra": true, "what": "Haze at haze_cap in a dust haze: the veil is dust", "leg": "open_road,2,dust_haze", "set": {"haze": haze_cap}},
 		{"name": "rain_full", "extra": true, "what": "Rain, six seconds after the last sweep: fully blurred", "leg": "rain,1", "set": {"rain_blur": 1.0, "raining": true}},
 		{"name": "rain_wiped", "extra": true, "what": "Rain just after a sweep: streaks, no blur", "leg": "rain,1", "set": {"rain_blur": 0.0, "raining": true}},
-		{"name": "cracks", "what": "the cracked windscreen fault: a web over that share of the glass", "set": {"cracks": cracked}},
+		{"name": "rain_reach", "extra": true, "what": "Rain fully blurred with things on the dash and the mirror, his hand at the mirror: nothing of the cabin is blurred or rained on, and none of its colours run into the glass", "leg": "rain,1", "give": "seeds,breath_mints,beads,phone", "aim": "mirror", "set": {"rain_blur": 1.0, "raining": true}},
+		{"name": "cracks", "what": "the cracked windscreen fault: a web over that share of the glass, before his eyes", "set": {"cracks": cracked}},
 		{"name": "cracks_glance", "extra": true, "what": "the same with the eyes toward the gear lever: the web stays on the glass", "aim": "gear_lever", "set": {"cracks": cracked}},
 		{"name": "glare_spot", "extra": true, "what": "Glare of the motorcade's spotlight, straight ahead", "set": {"glare": spotlight}},
 		{"name": "glare_shades", "extra": true, "what": "the same through cracked sunglasses", "set": {"glare": shaded * spotlight}},
 		{"name": "glare_sun", "what": "Dawn just past its sunrise, by the simulation: Glare 60% from the low sun, ahead and to the left (GDD 10.4)", "boss": "dawn", "at_m": before_sunrise, "warm_s": into_the_sun, "hud": true},
 		{"name": "glare_visor", "what": "the same Dawn a moment later, the visor flipped down: the sun is still up and its wash is gone", "boss": "dawn", "at_m": before_sunrise, "warm_s": into_the_sun, "hud": true, "rituals": ["visor_photo"]},
-		{"name": "glare_reach", "extra": true, "what": "the same Dawn with his hand at the visor: the arm before the glass takes the glass's share of the wash", "boss": "dawn", "at_m": before_sunrise, "warm_s": into_the_sun, "aim": "visor", "hud": true},
+		{"name": "glare_reach", "extra": true, "what": "the same Dawn with his hand at the visor: the arm before the glass takes the cabin's share of the wash, not the glass's", "boss": "dawn", "at_m": before_sunrise, "warm_s": into_the_sun, "aim": "visor", "hud": true},
 		{"name": "glare_sun_keys", "extra": true, "what": "the low sun over a day's road, by the keys of Dawn set by hand", "set": {"glare": sun, PostFxView.SUN_KEY: sun, PostFxView.SUN_SIDE_KEY: sun_side}},
 		{"name": "glare_placed", "extra": true, "what": "Glare from a light whose place the snapshot gives outright: to the right and high", "set": {"glare": spotlight, PostFxView.GLARE_POSITION_KEY: Vector2(30.0, 12.0)}},
 		{"name": "darkness_low", "extra": true, "what": "a Night leg at low beam", "leg": "night,2", "set": {}},
@@ -175,6 +188,8 @@ func _states(data: GameData) -> Array[Dictionary]:
 		{"name": "darkness_tint", "what": "a Night leg behind sunglasses and tinted glass", "leg": "night,2", "set": {"night_darker": darker, "visibility": (1.0 - darker) * low_beam}},
 		{"name": "darkness_left", "extra": true, "what": "a Night leg, eyes toward the window crank: the driver's side glass", "leg": "night,2", "aim": "window_crank", "set": {}},
 		{"name": "darkness_right", "extra": true, "what": "a Night leg, eyes toward the passenger: the passenger's side glass", "leg": "night,2", "aim": "passenger_shoulder", "set": {}},
+		{"name": "darkness_reach", "what": "a Night leg with things on the dash and the mirror, his hand at the mirror: his arm, the beads, the clock and what stands on the dash keep the cabin's light where the night is behind them", "leg": "night,2", "give": "seeds,breath_mints,beads,phone", "aim": "mirror", "set": {}},
+		{"name": "night_stop", "what": "a stop at night, by the simulation (a Telling for the Drivers' Table, seed 1: the fuel station after the Night leg that opens Act 2), his hand at the tray's upper row: the tray, what is on it, the labels, his arm and the vendor keep the cabin's light", "table": "drivers", "seed": 1, "stops": 5, "aim": "offer_8", "hud": true},
 		{"name": "storm_thin", "extra": true, "what": "the Storm in thin dust, by the simulation, after three sweeps of the wipers: what they smear on the glass is dust", "boss": "storm", "hud": true, "rituals": sweeps},
 		{"name": "storm_thick", "what": "the Storm in thick dust, by the simulation, after three sweeps of the wipers", "boss": "storm", "warm_s": into_the_thick, "hud": true, "rituals": sweeps},
 		{"name": "storm_night_thin", "extra": true, "what": "a Night storm in thin dust, by the simulation: the headlights' pool is the low beam's and his view ends where the dust does", "boss": "storm,night_storm", "hud": true},
@@ -208,12 +223,28 @@ func _process(delta: float) -> bool:
 				_backdrop = backdrop
 				_build_backdrop(shot)
 				_wait = roundi(GameData.as_float(shot.get("warm_s")) * FRAMES_PER_SECOND) if shot.has("warm_s") else WARM_FRAMES
+				if _stops_left > 0:
+					_wait = STOP_WAIT_FRAMES
 				_phase = Phase.WARM
 			else:
 				_begin(shot)
 		Phase.WARM:
 			_wait -= 1
-			if _wait <= 0:
+			if _stops_left > 0:
+				# A Telling: until he has come to the stop the state names.
+				var stopped: bool = (_drive.get("sim") as DriveSim).stopped
+				if stopped and not _was_stopped:
+					_stops_left -= 1
+				_was_stopped = stopped
+				if _stops_left == 0:
+					if shot.has("aim"):
+						_drive.set("_aim_anchor", (_drive.get("sim") as DriveSim).hand.anchor_index(StringName(str(shot["aim"]))))
+					_begin(shot)
+				elif _wait <= 0:
+					push_error("post_fx_shots: state '%s' never came to its stop" % str(shot["name"]))
+					_stops_left = 0
+					_begin(shot)
+			elif _wait <= 0:
 				_begin(shot)
 		Phase.HOLD:
 			if _by_hand != null:
@@ -237,7 +268,7 @@ func _process(delta: float) -> bool:
 ## another on the same road, the later ones a little further along it.
 func _backdrop_of(shot: Dictionary) -> String:
 	var parts: PackedStringArray = []
-	for key: String in ["leg", "aim", "give", "boss", "at_m", "warm_s", "hud"]:
+	for key: String in ["leg", "aim", "give", "boss", "at_m", "warm_s", "hud", "table", "seed", "stops"]:
 		parts.append(str(shot.get(key, "")))
 	return "|".join(parts)
 
@@ -250,8 +281,11 @@ func _build_backdrop(shot: Dictionary) -> void:
 		_by_hand = null
 		_fx = null
 	var args: Dictionary = {"bot": "line", "seed": "1"}
-	for key: String in ["leg", "aim", "give"]:
-		if shot.has(key):
+	for key: String in ["leg", "aim", "give", "table", "seed"]:
+		# On the way to a stop of a Telling the hand is the stand-in's (the
+		# Checkpoint wants it for the papers): he looks where the state
+		# says once he stands there.
+		if shot.has(key) and not (key == "aim" and shot.has("stops")):
 			args[key] = str(shot[key])
 	if shot.has("hud"):
 		args["hud"] = true
@@ -259,6 +293,11 @@ func _build_backdrop(shot: Dictionary) -> void:
 	var scene: PackedScene = load(DRIVE_SCENE) as PackedScene
 	_drive = scene.instantiate()
 	root.add_child(_drive)
+	_stops_left = GameData.as_int(shot.get("stops"))
+	_was_stopped = false
+	if _stops_left > 0:
+		# The way to the stop is driven, not drawn.
+		RenderingServer.render_loop_enabled = false
 	if shot.has("boss"):
 		_begin_boss(shot)
 
@@ -286,6 +325,7 @@ func _begin_boss(shot: Dictionary) -> void:
 ## at the start of a drive. With none, the scene's own effects are what is
 ## shown. Then he does what the state names.
 func _begin(shot: Dictionary) -> void:
+	RenderingServer.render_loop_enabled = true
 	var own: PostFxView = _drive.get_node(POST_FX_NODE) as PostFxView
 	if _by_hand != null:
 		_by_hand.free()
