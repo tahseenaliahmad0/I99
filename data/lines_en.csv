@@ -277,3 +277,10 @@ hud.heckle.fib,,the Fib,false
 hud.heckle.lead,,being said,false
 hud.heckle.open,,running,false
 hud.ghost_hand,,A ghost left hand is on the wheel,false
+prologue.step.1,,Tune the radio to music.,true
+prologue.step.2,,Sip the tea.,true
+prologue.step.3,,Shift from second to third.,true
+prologue.step.4,,Honk at a friend passing.,true
+prologue.step.5,,It rains. Flick the wipers.,true
+prologue.step.6,,Tuck the new photo into the visor.,true
+finale.baba,Noor,Baba.,true

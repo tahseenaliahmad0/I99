@@ -111,6 +111,25 @@ func write_save(telling: Dictionary) -> bool:
 	return true
 
 
+## The prologue plays on first launch (GDD 10.1): until it has been seen,
+## unless the build was started with --skip-prologue (GDD 13.9). It can be
+## played again from the title at any time.
+func wants_prologue() -> bool:
+	return not GameData.as_bool(profile.get("prologue_seen")) and not args.has("skip-prologue")
+
+
+## Where the title leads (GDD 13.4): BOOT > TITLE > PROLOGUE (first launch)
+## > WEDDING.
+func after_title() -> AppState:
+	return AppState.PROLOGUE if wants_prologue() else AppState.WEDDING
+
+
+## The prologue has been played: it is not played by itself again.
+func prologue_played() -> void:
+	profile["prologue_seen"] = true
+	write_save(saved_telling)
+
+
 ## The Telling is over: he has parked (GDD 10.5). What its ending leaves
 ## behind goes into the profile (GDD 11.4, 11.5: Tables, told true, modes,
 ## the guest) and the save file, which has no Telling to continue any more.

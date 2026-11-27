@@ -65,7 +65,7 @@ MUTANTS = [
  (H, '\t\t\t\t\telif not twist.is_empty() or what == modifier_id or not allowed.has(what):', '\t\t\t\t\telif what == modifier_id or not allowed.has(what):', 'two stretches on one leg'),
  (H, '\t\t\t\t\telif not twist.is_empty() or what == modifier_id or not allowed.has(what):', '\t\t\t\t\telif not twist.is_empty() or what == modifier_id:', 'a Twist on a leg that takes no such modifier'),
  (H, '\t\t\t\t\t\tif rainy or shower:\n\t\t\t\t\t\t\tcontinue', '\t\t\t\t\t\tif shower:\n\t\t\t\t\t\t\tcontinue', 'a shower on a Rain leg'),
- (G, '\tif twist_at >= 0.0 and _in_zone(s - _tuning.f("calm_length"), s + ceilf(length) + _tuning.f("calm_length")):\n\t\treturn false\n', '', 'a Twist may lie on the leg\'s own stretch'),
+ (G, '\tif twist_at >= 0.0 and _in_zone(s - _tuning.f("calm_length"), s + ceilf(length) + _tuning.f("calm_length")):\n\t\treturn true\n', '', 'a Twist may lie on the leg\'s own stretch'),
  # The shower.
  (D, '\tif heckles.shower_begins > 0.0:\n\t\tleg.begin_shower(heckles.shower_begins)\n', '', 'the shower never rains'),
  (D, '\t\titems.raining = leg.raining\n\t\tcar.lat_tau_mult = _rain_response if leg.raining else 1.0\n\tnerves.add', '\t\titems.raining = leg.raining\n\tnerves.add', 'the shower does not wet the road'),

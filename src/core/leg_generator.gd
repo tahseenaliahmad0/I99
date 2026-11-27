@@ -1231,9 +1231,11 @@ func _reserve_zone(modifier: Dictionary, twist_at: float) -> bool:
 	var s: float = roundf(clampf(at * _beats_end + _random.randf_range(-60.0, 60.0),
 			_tuning.f("first_event_within") + _tuning.f("calm_length"), _beats_end - length - _tuning.f("calm_length")))
 	var zone: Dictionary = {"kind": kind, "s": s, "length": ceilf(length)}
-	# Two stretches (the leg's own and a Twist's) keep a CALM beat's length apart.
+	# Two stretches (the leg's own and a Twist's) keep a CALM beat's length
+	# apart. A Twist asked for where there is no such room is left out of
+	# this draw: the leg stands without it, and the plan names none.
 	if twist_at >= 0.0 and _in_zone(s - _tuning.f("calm_length"), s + ceilf(length) + _tuning.f("calm_length")):
-		return false
+		return true
 	_zones.append(zone)
 	if twist_at >= 0.0:
 		_twist_zone = zone

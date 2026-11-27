@@ -84,6 +84,7 @@ func test_data_01() -> void:
 	_check_broken_boss_rules()
 	_check_broken_table_rules()
 	_check_broken_heckle_rules()
+	_check_broken_bookends()
 
 
 # --- 1. Shipped data ----------------------------------------------------------
@@ -99,6 +100,44 @@ func _check_shipped_data() -> void:
 	check(data.has_line("narrator.start"), "a line of GDD 3.6 exists by id")
 	note("%d tuning constants, %d anchors, %d lines" % [
 		data.tuning.keys().size(), data.records("anchors").size(), data.line_ids().size()])
+
+
+# --- 12. The prologue and the finale (M9) ----------------------------------------
+
+## The numbers of the two bookends (GDD 10.1, 10.6): each broken once.
+func _check_broken_bookends() -> void:
+	_reset_fixture()
+	_structure()["prologue_step_s"] = [10, 10, 10, 10, 12, 12, 12]
+	_expect("E_RULE", "prologue_step_s", "seven steps that last 76 s in a prologue of 75")
+
+	_reset_fixture()
+	_structure()["prologue_step_s"] = [15, 15, 15, 15, 15]
+	_expect("E_RANGE", "prologue_step_s", "a prologue of five steps")
+
+	_reset_fixture()
+	_structure()["prologue_length"] = 60
+	_expect("E_RULE", "prologue_step_s", "a prologue shorter than its steps")
+
+	_reset_fixture()
+	var friend: Dictionary = _structure()["prologue_friend"]
+	friend["vehicle"] = "camel"
+	_expect("E_REF", "prologue_friend.vehicle", "a friend who drives nothing the road has")
+
+	_reset_fixture()
+	_structure()["finale_claps"] = 0
+	_expect("E_RANGE", "finale_claps", "a finale with no clap")
+
+	_reset_fixture()
+	_structure()["finale_clap_again_s"] = 15
+	_expect("E_RULE", "finale_clap_again_s", "the room clapping again before she has said \"Baba.\"")
+	_reset_fixture()
+
+
+## The "structure" group of the fixture's tuning, to break.
+func _structure() -> Dictionary:
+	var tuning_root: Dictionary = _roots["tuning"]
+	var structure: Dictionary = tuning_root["structure"]
+	return structure
 
 
 # --- 11. The heckles (M9) -------------------------------------------------------

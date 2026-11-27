@@ -33,6 +33,8 @@ const FAULT_HEADLIGHT: StringName = &"dead_headlight"
 const FAULT_MIRROR: StringName = &"cracked_mirror"
 const FLAG_HIGH_BEAM: StringName = &"high_beam"
 const FLAG_HAZARDS: StringName = &"hazards"
+## Set while the prologue plays: the new photo lies on the dash (GDD 10.1).
+const FLAG_PROLOGUE: StringName = &"prologue"
 const PULLED_OVER: StringName = &"pulled_over"
 const LAW: StringName = &"law"
 ## Statuses a set piece holds: the phone in his pocket rings (GDD 10.4); he
@@ -119,6 +121,13 @@ var rewinds_left: int = 0
 ## The Telling as it was when that leg or boss began ({} when no rewind is
 ## left to need it). It is kept in memory only: nothing is saved in a leg.
 var _leg_start: Dictionary = {}
+## The prologue's clock (GDD 10.1), while it plays.
+var prologue: PrologueSim = PrologueSim.new()
+## The Telling that begins when the prologue is over: tonight.
+var _prologue_table: String = ""
+var _prologue_seed: int = 0
+## The lane the left hand keeps the car in.
+var _prologue_lane: int = 0
 ## What the Table says while he tells it (GDD 11.3).
 var heckles: HeckleDirector = HeckleDirector.new()
 ## False: nobody heckles (a road told to no Table: the modes of GDD 11.5; a
@@ -315,6 +324,7 @@ func _build() -> void:
 	stop = StopSim.new()
 	passengers = PassengerSim.new()
 	heckles = HeckleDirector.new()
+	prologue = PrologueSim.new()
 	hand.configure(data, space)
 	wheel.configure(tuning)
 	gate.configure(tuning)
@@ -335,6 +345,7 @@ func _build() -> void:
 	stop.configure(data, items, faults, nerves, clock, rng)
 	passengers.configure(data, effects, nerves, items, faults)
 	heckles.configure(data, items)
+	prologue.configure(tuning)
 	_leg_twist = {}
 	_ahead_then = {}
 
@@ -431,6 +442,7 @@ func step(input: DriveInput) -> void:
 	suspicion.gain_mult = _suspicion_gain()
 	passengers.begin_tick()
 	heckles.begin_tick()
+	prologue.begin_tick()
 
 	# Focus (GDD 7.4): the road runs slower, the hand does not.
 	_road_dt = DT * effects.product(ROAD_SPEED)
@@ -494,8 +506,12 @@ func step(input: DriveInput) -> void:
 			wheel.grip()
 		elif not hand.gripping:
 			wheel.release()
-	wheel.locked = effects.has_own(ItemSim.HOOK_SET) or passengers.holds_wheel() or ghost_on_wheel()
-	if passengers.holds_straight():
+	wheel.locked = effects.has_own(ItemSim.HOOK_SET) or passengers.holds_wheel() or ghost_on_wheel() or left_hand_on_wheel()
+	if left_hand_on_wheel():
+		# The prologue (GDD 10.1): "A solid left arm holds the wheel and
+		# keeps the lane by itself."
+		wheel.hold_at(_lane_keeping_angle(_prologue_lane))
+	elif passengers.holds_straight():
 		# Held dead straight for him (GDD 8.2): against the road's crown and
 		# whatever else pulls steadily, so that on a straight the car keeps
 		# its line. A curve or a gust still carries it off.
@@ -565,7 +581,8 @@ func step(input: DriveInput) -> void:
 
 	# 7. Collisions and close calls.
 	var lamps_before: int = faults.lamps
-	if not _standing():
+	if not _standing() and not prologue.active:
+		# (The prologue cannot be failed, GDD 10.1: nothing is hit there.)
 		collision.step(_road_dt, car, traffic, gate.gear)
 		if boss.rear_end:
 			# What came out of the dust behind his standing car (GDD 10.3).
@@ -598,8 +615,12 @@ func step(input: DriveInput) -> void:
 		items.step(DT)
 		_step_heckles()
 		_step_passenger()
-		_feed_nerves()
-		nerves.step(DT)
+		if prologue.active:
+			# "Nothing it does has a cost" (GDD 10.1): he is as calm as he was.
+			nerves.set_value(0.0)
+		else:
+			_feed_nerves()
+			nerves.step(DT)
 	_report_nerves()
 	var snap_said: bool = nerves.snapped
 	_report_effects()
@@ -617,8 +638,10 @@ func step(input: DriveInput) -> void:
 
 	# 10. Clock: it runs while he drives, not while he stands (GDD 6.4),
 	# and it is read when the key is turned: not after.
-	if not _standing() and not parked:
+	if not _standing() and not parked and not prologue.active:
 		clock.step(DT)
+	# The prologue's own clock; when it runs out, tonight begins.
+	_step_prologue()
 
 	# 12. Leg progress: Exit, Fork, boss and ending transitions.
 	if run.active:
@@ -791,6 +814,28 @@ func _step_leg_road() -> void:
 ## car rolling in first gear toward the first fork with nobody at the wheel.
 func begin_telling(table_id: String, telling_seed: int) -> void:
 	_build()
+	_tell(table_id, telling_seed)
+
+
+## The prologue (GDD 10.1), and after its 75 s the Telling for `table_id`:
+## "Cut to tonight."
+func begin_prologue(table_id: String, telling_seed: int) -> void:
+	_build()
+	_prologue_table = table_id
+	_prologue_seed = telling_seed
+	reseed(telling_seed)
+	gate.reset(PrologueSim.GEAR_FROM)
+	car.reset(car.lanes / 2, PrologueSim.GEAR_FROM)
+	_lane = car.lane_of(car.x)
+	_prologue_lane = _lane
+	nerves.set_value(0.0)
+	# The new photo lies on the dash, to be tucked into the visor.
+	items.flags[FLAG_PROLOGUE] = true
+	_sync_anchors()
+	prologue.begin()
+
+
+func _tell(table_id: String, telling_seed: int) -> void:
 	table = TableRules.of(data, table_id)
 	# A Table whose road is fixed tells the same night every time.
 	var seed_told: int = table.seed if table.seed != TableRules.NO_SEED else telling_seed
@@ -799,6 +844,8 @@ func begin_telling(table_id: String, telling_seed: int) -> void:
 	run.begin(table_id, seed_told)
 	_lay_the_table()
 	_enter_approach()
+	# His first words to the Table (GDD 3.6, 10.1): the night begins.
+	_emit("line_requested", {"id": "narrator.start"})
 
 
 ## What a Table changes about how the night begins (GDD 11.2): when he
@@ -1960,7 +2007,7 @@ func snapshot() -> Dictionary:
 		"leg_time": leg.time,
 		"leg_par": leg.par,
 		"leg_length": leg.length,
-		"raining": leg.active and leg.raining,
+		"raining": (leg.active and leg.raining) or prologue.raining(),
 		"night": leg.active and leg.night,
 		"gust_tell": leg.gust_tell_left,
 		"gust_dir": leg.gust_tell_dir,
@@ -1993,6 +2040,15 @@ func snapshot() -> Dictionary:
 		"heckle_phase": heckles.phase_name(),
 		"heckle_left": heckles.window_left if heckles.phase == HeckleDirector.OPEN and heckles.window_left != INF else 0.0,
 		"heckle_progress": heckles.progress(),
+		# The prologue (GDD 10.1): the step that is on (0: it is not playing),
+		# the anchor that pulses, whether the step is done, how far the left
+		# hand has lifted off the wheel (and the screen whited out), and where
+		# the left hand is.
+		"prologue_step": prologue.step if prologue.active else 0,
+		"prologue_prompt": _prologue_prompt(),
+		"prologue_done": prologue.done,
+		"prologue_lift": prologue.lift(),
+		"left_hand": _left_hand_at(),
 		"ghost_hand": heckles.ghost_holds,
 		"ghost_on_wheel": ghost_on_wheel(),
 		"passenger_awake_left": passengers.awake_left,
@@ -2325,6 +2381,63 @@ func _plan_the_leg(branch: Dictionary) -> Dictionary:
 	return plan
 
 
+## The prologue's left hand has the wheel (GDD 10.1): whenever the right
+## one, which is all the player has, is not on it.
+func left_hand_on_wheel() -> bool:
+	return prologue.active and not hand.gripping
+
+
+## One tick of the prologue (GDD 10.1): what the right hand has done, the
+## step whose turn it is, what the left hand and the morning do by
+## themselves, and at the end of it the cut to tonight.
+func _step_prologue() -> void:
+	if not prologue.active:
+		return
+	prologue.see(items.radio == ItemSim.MUSIC, gate.gear)
+	prologue.step_clock(DT)
+	if prologue.began > 0 and prologue.began < PrologueSim.LIFT:
+		# "One short subtitle names the action."
+		_emit("line_requested", {"id": "prologue.step.%d" % prologue.began})
+	match prologue.began:
+		PrologueSim.HONK:
+			# "Honk at a friend passing": he comes up from behind, a lane over.
+			var friend: Dictionary = tuning.d("prologue_friend")
+			var beside: int = _prologue_lane - 1 if _prologue_lane > 0 else _prologue_lane + 1
+			traffic.spawn(StringName(GameData.as_string(friend.get("vehicle"))), beside,
+					car.s - GameData.as_float(friend.get("behind_m")), car.speed + GameData.as_float(friend.get("faster_kmh")))
+		PrologueSim.WIPERS:
+			# "It rains: flick the wipers. The left hand indicates and changes
+			# lane by itself."
+			items.raining = true
+			var way: int = 1 if _prologue_lane + 1 < car.lanes else -1
+			items.indicate(way)
+			_prologue_lane += way
+	if prologue.over:
+		# "Cut to tonight. 22:00."
+		begin_telling(_prologue_table, _prologue_seed)
+
+
+## The anchor the prologue's prompt pulses at ("" for none).
+func _prologue_prompt() -> String:
+	var anchor: String = prologue.prompt()
+	if anchor == PrologueSim.TEA_ANCHOR:
+		return items.anchor_of(items.in_reach(TEA)) if items.in_reach(TEA) != null else ""
+	return anchor
+
+
+## Where the prologue's left hand is: on the wheel, at the indicator while
+## it changes lane, lifting toward the window crank at the end; "" when he
+## has none.
+func _left_hand_at() -> String:
+	if not prologue.active:
+		return ""
+	if prologue.step == PrologueSim.LIFT:
+		return "window_crank"
+	if prologue.changes_lane() and items.indicator != 0:
+		return "indicator_stalk"
+	return "wheel"
+
+
 ## The Fib's ghost hand has the wheel: while it holds (GDD 11.3) and his own
 ## hand, or his wrist, does not.
 func ghost_on_wheel() -> bool:
@@ -2439,17 +2552,18 @@ func _use_control(ritual_id: String, direction: int) -> void:
 	var ritual: Dictionary = data.record("rituals", ritual_id)
 	items.complete(ritual, direction)
 	heckles.in_ritual = StringName(ritual_id)
+	prologue.ritual_done(ritual_id)
 	_emit("ritual_completed", {"ritual": ritual_id, "anchor": GameData.as_string(ritual.get("anchor")), "direction": direction, "keypad": true})
 
 
 ## The angle at which the wheel keeps the car in the middle of its lane on a
 ## straight: against whatever carries it sideways, and back toward the
 ## middle within hook_settle_time (GDD 7.8, Wheel ring + Spinner knob).
-func _lane_keeping_angle() -> float:
+func _lane_keeping_angle(to_lane: int = -1) -> float:
 	var authority: float = car.lat_authority()
 	if authority <= 0.0:
 		return wheel.angle
-	var lane: int = clampi(car.lane_of(car.x), 0, car.lanes - 1)
+	var lane: int = clampi(car.lane_of(car.x) if to_lane < 0 else to_lane, 0, car.lanes - 1)
 	var wanted: float = (car.lane_center(lane) - car.x) / tuning.f("hook_settle_time") - car.drift
 	return clampf(wanted / authority, -1.0, 1.0) * wheel.max_angle()
 
@@ -2769,6 +2883,7 @@ func _complete_ritual() -> void:
 		if ritual_id == ItemSim.UNSTOW:
 			items.unstow_to(String(hand.anchor_id(hand.at_index)))
 	heckles.in_ritual = StringName(ritual_id)
+	prologue.ritual_done(ritual_id)
 	_emit("ritual_completed", {
 		"ritual": ritual_id,
 		"anchor": String(hand.anchor_id(_active_anchor)),

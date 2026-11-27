@@ -177,6 +177,7 @@ func test_heckle_01() -> void:
 	_check_orders()
 	_check_the_fib()
 	_check_twists()
+	_check_twists_beside_a_modifier()
 	_check_the_shower()
 	_check_the_words()
 
@@ -251,6 +252,19 @@ func _check_the_pool() -> void:
 		check_eq(by_type.size(), rules.heckle_types().size(), "%s: and no other type is said there" % id)
 		var with_guest: Array[Dictionary] = HeckleDirector.pool(data, rules, PackedStringArray(["drummer"]), weight)
 		check_eq(with_guest.size(), pool.size() + 2, "%s: a wedding guest adds two heckles to the pool" % id)
+	# The weights are the rule, whatever the records list: a Table with no
+	# weights is silent, guests and all; a Table says only the types it has
+	# a weight for.
+	var silent: TableRules = TableRules.new()
+	silent.id = "drivers"
+	check(HeckleDirector.pool(data, silent, PackedStringArray(["drummer"]), weight).is_empty(), "a Table with no heckle weights says nothing, whoever sits at it")
+	var dares_only: TableRules = TableRules.of(data, "groom")
+	dares_only.heckle_weights = {"DARE": 100}
+	var other_types: int = 0
+	for entry: Dictionary in HeckleDirector.pool(data, dares_only, none, weight):
+		if GameData.as_string(GameData.as_dict(entry["record"]).get("type")) != "DARE":
+			other_types += 1
+	check_eq(other_types, 0, "a Table weighted for Dares alone has none of the Doubts and Orders its records list")
 	# Drawn by those weights: over many legs told to the Children, about four
 	# Twists to a Fib; to the Drivers, Dares only.
 	var counts: Dictionary = {}
@@ -903,7 +917,8 @@ func _check_twists() -> void:
 		# lead nothing of the Twist is on the road; then it is, and he meets
 		# it; when its stretch is behind him the heckle is over.
 		var guests: PackedStringArray = ["drummer"] if heckle_id.begins_with("guest_") else PackedStringArray()
-		for heard: bool in [true, false]:
+		for telling: String in ["heard", "late", "unsaid"]:
+			var heard: bool = telling != "unsaid"
 			_tell("children", 1, guests)
 			_into_next_quiet_leg()
 			var plan: Dictionary = LegGenerator.generate(data, QUIET, 1, 3, "", {"modifier": modifier, "at": 0.5})
@@ -922,6 +937,10 @@ func _check_twists() -> void:
 			_events = []
 			_said = []
 			_keep_lane = false
+			# Told late: the Table cannot get a word in until the car is well
+			# past the point where the first of the Twist would have shown.
+			var first_s: float = GameData.as_float(twist.get("first_s"))
+			_sim.heckling = telling != "late"
 			var before: int = 0
 			var in_lead: int = 0
 			var after: int = 0
@@ -933,6 +952,8 @@ func _check_twists() -> void:
 			while _sim.car.s < end_s + 200.0 and guard > 0:
 				guard -= 1
 				_sim.car.x = _checker.line_x(_sim.car.s)
+				if telling == "late" and _sim.car.s > first_s + 40.0:
+					_sim.heckling = true
 				_step()
 				hits += _count_events("hit")
 				_events = []
@@ -948,7 +969,13 @@ func _check_twists() -> void:
 				else:
 					after = maxi(after, things)
 			_keep_lane = true
-			if heard:
+			if telling == "late":
+				check(said_at > 0 and GameData.as_float(_last("heckle_started").get("tick")) > 0.0, "%s, said late: it is said when the Table can" % modifier)
+				check_eq(before + in_lead, 0, "%s, said late: still nothing of it before the subtitle and its 2 s" % modifier)
+				check_eq(live_at - said_at, lead, "%s, said late: then it comes onto the road" % modifier)
+				check(after > 0, "%s, said late: with what the plan has there by now, though its moment has passed (%d things)" % [modifier, after])
+				check_eq(hits, 0, "%s, said late: (and where the plan has it: the line still meets none of it)" % modifier)
+			elif heard:
 				check(said_at > 0, "%s: the heckle is said on the way" % modifier)
 				check_eq(before, 0, "%s: before it is said nothing of it is on the road" % modifier)
 				check_eq(in_lead, 0, "%s: nor for the 2 s after the subtitle" % modifier)
@@ -959,6 +986,57 @@ func _check_twists() -> void:
 			else:
 				check_eq(before + in_lead + after, 0, "%s: on the same leg with nobody to say it, none of it ever is" % modifier)
 				check(not _sim.leg.twist_live, "(the stretch stays as the story had it before: empty)")
+
+
+## A leg with a stretch of its own (its modifier's) takes a Twist's beside
+## it, a CALM beat's length apart; never the same thing twice, and never one
+## on top of the other.
+func _check_twists_beside_a_modifier() -> void:
+	var calm: float = tuning.f("calm_length")
+	_tell("children", 1)
+	for own: String in ["sheep", "melon_truck"]:
+		var asked: int = 0
+		var laid: int = 0
+		var same: int = 0
+		var too_near: int = 0
+		var problems: int = 0
+		for leg_seed: int in range(1, 41):
+			var twist: Dictionary = _sim.heckles.plan_leg(_sim.rng, _sim.table, PackedStringArray(), 2, QUIET, own)
+			if twist.is_empty():
+				continue
+			asked += 1
+			if GameData.as_string(twist.get("modifier")) == own:
+				same += 1
+			var plan: Dictionary = LegGenerator.generate(data, QUIET, 2, leg_seed, own, twist)
+			if not plan.has("twist"):
+				continue
+			laid += 1
+			problems += _checker.check(plan).size()
+			var zones: Array = GameData.as_array(plan.get("zones"))
+			if zones.size() == 2:
+				var first: Dictionary = zones[0] if GameData.as_float(GameData.as_dict(zones[0]).get("s")) < GameData.as_float(GameData.as_dict(zones[1]).get("s")) else zones[1]
+				var second: Dictionary = zones[1] if first == zones[0] else zones[0]
+				if GameData.as_float(second.get("s")) - (GameData.as_float(first.get("s")) + GameData.as_float(first.get("length"))) < calm - 0.001:
+					too_near += 1
+			else:
+				too_near += 1
+		check(asked > 5, "a leg with %s of its own, told to the Children: a Twist is thrown in on %d of 40" % [own, asked])
+		check_eq(same, 0, "%s: never the same thing again" % own)
+		check_eq(laid, asked, "%s: each is laid out beside the leg's own stretch" % own)
+		check_eq(too_near, 0, "%s: a CALM beat's length away from it, at the least" % own)
+		check_eq(problems, 0, "%s: with every rule of the generator kept" % own)
+	# Asked for on top of the leg's own stretch, the Twist is left out: the
+	# leg stands as it would without it.
+	var wedding_at: float = GameData.as_float(data.record("modifiers", "wedding").get("at"))
+	var on_top: int = 0
+	var broken: int = 0
+	for leg_seed: int in range(1, 13):
+		var plan: Dictionary = LegGenerator.generate(data, QUIET, 2, leg_seed, "wedding", {"modifier": "sheep", "at": wedding_at})
+		if plan.has("twist"):
+			on_top += 1
+		broken += _checker.check(plan).size()
+	check_eq(on_top, 0, "a Twist asked for where the leg's own stretch lies is left out of the leg")
+	check_eq(broken, 0, "(and the leg is a good leg without it)")
 
 
 func _check_the_shower() -> void:

@@ -2414,3 +2414,58 @@ This is how they were read.
   data, stays the fallback for a save that cannot be read, and a test
   holds the two equal.
 - **The modes** are earned here and played in M9e.
+
+## D-063 (M9, 2026-11-27) The two bookends as built
+
+**The prologue (GDD 10.1).**
+
+- It is the drive simulation in another mode, as GDD 13.4 has it ("one
+  scene used for the prologue, legs, bosses, stops and modes"):
+  `DriveSim.begin_prologue(table, seed)`, with `PrologueSim` as its clock.
+- **"It lasts 75 s."** To the tick. The seven steps take their turns by
+  the clock (`prologue_step_s`, which must add up to `prologue_length`),
+  done or not. A step he does stops pulsing; a step he leaves passes when
+  its time is up. So it "cannot be failed", and it cannot be hurried or
+  stalled either.
+- **What does a step.** The radio playing music; a sip of the tea; third
+  gear; the horn; the wipers; the photo carried from the dash to the visor
+  (a ritual of its own, `photo_tuck`, offered only while the prologue
+  plays). The seventh asks nothing: over its length the left hand lifts
+  toward the window crank and the screen goes white (`prologue_lift`).
+- **The left hand** holds the wheel at the lane-keeping angle whenever the
+  right hand is not on it (the Fib's ghost hand, D-061, is the same
+  holding). It keeps the lane to the end of the 75 s: the lifting of the
+  seventh step is shown, and the car is not let go under a white screen.
+  In step 5 it indicates and takes the car one lane over.
+- **"Nothing it does has a cost."** His Nerves stay at 0, the Clock of
+  tonight does not run, and nothing is hit: collisions are not asked
+  about, so no lamp can light and there is no Wreck.
+- **The friend** of step 4 is a taxi (he drove one then too) that comes up
+  from behind in the next lane (`prologue_friend`).
+- **"Cut to tonight."** In the tick the 75 s are over a Telling begins for
+  the Table the prologue was started for: 22:00, first gear, nobody at the
+  wheel, and the narrator says `narrator.start`. It is the same night, to
+  the bit, as that Telling begun by itself; every Telling now begins with
+  that line. GDD 13.4 draws PROLOGUE > WEDDING and GDD 10.1 cuts from the
+  title card straight into the car. Part III decides how a thing is built
+  and Part II what the rules are (GDD 1.5): the cut into the car is the
+  rule, so on first launch the prologue runs on into the first Telling at
+  the Table that is open from the start, and the wedding room is where
+  that Telling's ending leads. Replayed from the title it does the same.
+- **First launch.** `Game.wants_prologue()` is true until the profile has
+  `prologue_seen`, and never with `--skip-prologue` (GDD 13.9).
+
+**The finale (GDD 10.6).** `FinaleSim`, a pure class with no car in it.
+
+- A clap is the button going down with the pointer on her palm; a hand
+  held there is one clap.
+- "After 8 claps she takes his hand": the walk begins with the eighth, and
+  goes on while the button is down. Let go on the way, she holds her hand
+  out and waits; nothing ends and nothing is lost. GDD 18.1 has the finale
+  end "only when the grip input is released", and step 4 puts that moment
+  in front of the groom: letting go on the way there is not that moment.
+- The 20 s of "Baba." and the 90 s of the room's soft clapping are counted
+  from where the walk stopped: they are step 4's, "nothing happens until
+  the player releases the button".
+- Released in front of the groom it is over, whenever that is: at once, or
+  never. It asks for `finale.proverb` and nothing brings it back.

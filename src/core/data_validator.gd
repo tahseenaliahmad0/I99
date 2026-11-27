@@ -53,7 +53,7 @@ const HOME_ANCHOR: String = "@home"
 ## How the Call is taken at the pocket (GDD 10.4).
 const CALL_WAYS: PackedStringArray = ["alone", "passenger"]
 ## Cabin switches a "toggle:" op may flip and a "flag:" condition may read.
-const CABIN_FLAGS: PackedStringArray = ["hazards", "high_beam", "window_open", "glovebox_open", "passenger", "letter_aside"]
+const CABIN_FLAGS: PackedStringArray = ["hazards", "high_beam", "window_open", "glovebox_open", "passenger", "letter_aside", "prologue", "photo_tucked"]
 ## Conditions that are not effect ids.
 const CONDITION_WORDS: PackedStringArray = ["supply>0", "hot", "playing", "warbling", "ringing", "glovebox_room", "stowed"]
 ## The numbers a synergy rule works with (ItemSim reads them by these names):
@@ -907,6 +907,10 @@ func _tuning_schema() -> Dictionary:
 		"signal_time": pos, "late_signal_time": pos, "lane_change_time": pos,
 		"calm_length": pos, "first_event_within": pos, "heckle_lead": pos,
 		"heckles_per_leg": _list_n(_int(0.0), 3), "heckle_span": _list_n(_num(0.0, 1.0), 2),
+		# The bookends (M9)
+		"prologue_length": pos, "prologue_step_s": _list_n(pos, PrologueSim.STEPS),
+		"prologue_friend": _obj({"vehicle": _ref("vehicles"), "behind_m": pos, "faster_kmh": pos}),
+		"finale_claps": _int(1.0), "finale_walk_s": pos, "finale_baba_s": pos, "finale_clap_again_s": pos,
 		"guest_heckle_weight": pos,
 		"stop_minutes": _obj({"fuel": pos, "fitter": pos, "tea": pos, "find": pos, "hitcher": pos, "shady": pos}),
 		"stop_weights": _obj({"fuel": pos, "fitter": pos, "tea": pos, "find": pos, "hitcher": pos}),
@@ -1100,6 +1104,7 @@ func _check_cross_rules() -> void:
 			if _data.has_record("items", GameData.as_string(item_id)) and GameData.as_int(supply.get("uses")) <= 0:
 				_err("E_RULE", "tables.json", label + ".full_supplies", "'%s' has no supply to start full" % GameData.as_string(item_id))
 	_check_heckles()
+	_check_bookends()
 	for passenger: Dictionary in _data.records("passengers"):
 		var has_legs: bool = passenger.has("rides_legs")
 		var has_until: bool = passenger.has("rides_until")
@@ -1227,6 +1232,33 @@ func _check_required_records() -> void:
 		for id: Variant in required:
 			if not _data.has_record(set_id, str(id)):
 				_err("E_MISSING", "%s.json" % str(where[0]), "%s[%s]" % [str(where[1]), str(id)], "this row of the GDD is missing")
+
+
+## The prologue and the finale (GDD 10.1, 10.6): the seven steps fill the
+## prologue exactly, and the finale's moments come in their order.
+func _check_bookends() -> void:
+	var tuning: Tuning = _data.tuning
+	if tuning.has("prologue_length") and tuning.has("prologue_step_s") and tuning.raw("prologue_step_s") is Array \
+			and (tuning.raw("prologue_length") is float or tuning.raw("prologue_length") is int):
+		var total: float = 0.0
+		for seconds: Variant in tuning.a("prologue_step_s"):
+			total += GameData.as_float(seconds)
+		if absf(total - tuning.f("prologue_length")) > 0.000001:
+			_err("E_RULE", "tuning.json", "prologue_step_s", "the steps add up to %s s, and the prologue lasts prologue_length (%s s)" % [str(total), str(tuning.f("prologue_length"))])
+	var walk: float = _number_or(tuning, "finale_walk_s", 0.0)
+	var baba: float = _number_or(tuning, "finale_baba_s", INF)
+	var again: float = _number_or(tuning, "finale_clap_again_s", INF)
+	if baba >= again:
+		_err("E_RULE", "tuning.json", "finale_clap_again_s", "the room claps again after she has said \"Baba.\" (finale_baba_s)")
+	if walk <= 0.0 and tuning.has("finale_walk_s"):
+		_err("E_RANGE", "tuning.json", "finale_walk_s", "must be above 0")
+
+
+## A tuning constant if it is there and is a number, else `fallback`.
+func _number_or(tuning: Tuning, key: String, fallback: float) -> float:
+	if tuning.has(key) and (tuning.raw(key) is float or tuning.raw(key) is int):
+		return tuning.f(key)
+	return fallback
 
 
 ## Heckles (GDD 11.3, 11.5; D-061): each type says what its row needs and
