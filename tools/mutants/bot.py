@@ -30,4 +30,5 @@ MUTANTS = [
  (R, '\t\t\tfrom_one == 0, wrecks))', '\t\t\ttrue, wrecks))', 'Wrecks from one event are always within target'),
  (R, '\t\tcell["hand_off_share_act2"] = snappedf(float(GameData.as_int(cell["hand_off_act2"])) / maxf(float(GameData.as_int(cell["road_act2"])), 1.0), 0.001)', '\t\tcell["hand_off_share_act2"] = 0.3', 'the hand-off share is not measured'),
  (R, '\tvar bot: DriverBot = DriverBot.new(sim, _data, skill, Rng.derive(telling_seed, DriverBot.SEED_SALT))', '\tvar bot: DriverBot = DriverBot.new(sim, _data, skill, Time.get_ticks_usec())', 'the bot draws from the clock: no two Tellings alike'),
+ (B, '["flick", 6, 0.0, -1.0], ["up", 2]]', '["flick", 6, 0.0, 1.0], ["up", 2]]', 'it flicks the wiper stalk down and never clears the glass'),
 ]

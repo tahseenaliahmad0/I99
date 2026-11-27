@@ -360,4 +360,6 @@ Two lines per slice, newest last.
   784 mutants in nineteen lists apply to the code as it is. `tools/check.sh` prints CHECK OK on b6d43e8.
 - 2026-11-27 M1 and M2: what was left of the first two reviews (D-070; the owner: "Finish it"). The validator holds the controls to the table of GDD 4.6; a placeholder the code draws takes no scene; the pointer's ring is drawn where the pointer points.
   1,014 mutants in 22 lists apply to the code as it is. Two mutation lists for the first two milestones (the hand, wheel, gate and gestures: 108; the car, traffic, collisions and close calls: 105): 52 mutants lived, 45 got a check that kills them and 7 are equivalent and named. 381 checks added, none removed. The task list is empty.
+- 2026-11-27 The owner's first look (D-071): markers coloured by kind, a label under the pointer (name and gesture), feedback at a control when a ritual is begun, done or missed, the gate drawn while the hand is on the lever, the gear and "wedding 06:00" on the dash. The gear knob had never moved in the cabin view since M1 (it was put back at rest every frame): fixed.
+  The feedback showed the bot flicking the wipers the wrong way (every rain leg blind since D-068): fixed, held by T-BOT-01 (+15 checks) and a mutant. `hints_enabled` in tuning turns the labels, feedback and diagram off.
 

@@ -7,7 +7,7 @@
         0.034,
         0.034
       ],
-      "color": "#F2C230"
+      "color": "#8D99AE"
     },
     "scene": null
   },
@@ -137,7 +137,7 @@
         0.036,
         0.036
       ],
-      "color": "#F2C230"
+      "color": "#F4F1DE"
     },
     "scene": null
   },
@@ -209,7 +209,7 @@
         0.07,
         0.02
       ],
-      "color": "#F2C230"
+      "color": "#3C4A5E"
     },
     "scene": null
   },
@@ -221,7 +221,7 @@
         0.12,
         0.015
       ],
-      "color": "#F2C230"
+      "color": "#5B5F73"
     },
     "scene": null
   },
@@ -303,7 +303,7 @@
         26.0,
         26.0
       ],
-      "color": "#F2C230"
+      "color": "#7CFFB2"
     },
     "scene": null,
     "drawn_by_code": true
@@ -1848,5 +1848,315 @@
       "color": "#F5F0E6"
     },
     "scene": null
+  },
+  "marker_wipers": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.034,
+        0.034,
+        0.034
+      ],
+      "color": "#5AA9E6"
+    },
+    "scene": null
+  },
+  "marker_horn": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.034,
+        0.034,
+        0.034
+      ],
+      "color": "#E4572E"
+    },
+    "scene": null
+  },
+  "marker_hazards": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.034,
+        0.034,
+        0.034
+      ],
+      "color": "#FF3B30"
+    },
+    "scene": null
+  },
+  "marker_radio": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.034,
+        0.034,
+        0.034
+      ],
+      "color": "#2EC4B6"
+    },
+    "scene": null
+  },
+  "marker_tape": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.034,
+        0.034,
+        0.034
+      ],
+      "color": "#9B5DE5"
+    },
+    "scene": null
+  },
+  "marker_indicator": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.034,
+        0.034,
+        0.034
+      ],
+      "color": "#57CC99"
+    },
+    "scene": null
+  },
+  "marker_lights": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.034,
+        0.034,
+        0.034
+      ],
+      "color": "#FFE066"
+    },
+    "scene": null
+  },
+  "marker_window": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.034,
+        0.034,
+        0.034
+      ],
+      "color": "#48CAE4"
+    },
+    "scene": null
+  },
+  "marker_glovebox": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.034,
+        0.034,
+        0.034
+      ],
+      "color": "#D4A373"
+    },
+    "scene": null
+  },
+  "marker_passenger": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.034,
+        0.034,
+        0.034
+      ],
+      "color": "#B36AE2"
+    },
+    "scene": null
+  },
+  "marker_pocket": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.034,
+        0.034,
+        0.034
+      ],
+      "color": "#B08968"
+    },
+    "scene": null
+  },
+  "marker_cash": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.034,
+        0.034,
+        0.034
+      ],
+      "color": "#7FA36B"
+    },
+    "scene": null
+  },
+  "marker_offer": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.034,
+        0.034,
+        0.034
+      ],
+      "color": "#F4A261"
+    },
+    "scene": null
+  },
+  "marker_key": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.034,
+        0.034,
+        0.034
+      ],
+      "color": "#FFD166"
+    },
+    "scene": null
+  },
+  "marker_hook": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.034,
+        0.034,
+        0.034
+      ],
+      "color": "#ADB5BD"
+    },
+    "scene": null
+  },
+  "anchor_flash_ok": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.05,
+        0.05,
+        0.05
+      ],
+      "color": "#7CFFB2"
+    },
+    "scene": null
+  },
+  "anchor_flash_fail": {
+    "placeholder": {
+      "shape": "box",
+      "size": [
+        0.05,
+        0.05,
+        0.05
+      ],
+      "color": "#FF5A5A"
+    },
+    "scene": null
+  },
+  "cabin_gear_text": {
+    "placeholder": {
+      "shape": "label",
+      "size": [
+        0.0011
+      ],
+      "color": "#FFD166",
+      "text": "N"
+    },
+    "scene": null
+  },
+  "cabin_clock_due_text": {
+    "placeholder": {
+      "shape": "label",
+      "size": [
+        0.00055
+      ],
+      "color": "#5FBF8A",
+      "text": ""
+    },
+    "scene": null
+  },
+  "ui_hint_text": {
+    "placeholder": {
+      "shape": "quad",
+      "size": [
+        30.0,
+        23.0
+      ],
+      "color": "#FFFFFF"
+    },
+    "scene": null,
+    "drawn_by_code": true
+  },
+  "ui_hint_back": {
+    "placeholder": {
+      "shape": "quad",
+      "size": [
+        12.0,
+        7.0
+      ],
+      "color": "#101014"
+    },
+    "scene": null,
+    "drawn_by_code": true
+  },
+  "ui_feedback_ok": {
+    "placeholder": {
+      "shape": "quad",
+      "size": [
+        26.0,
+        26.0
+      ],
+      "color": "#7CFFB2"
+    },
+    "scene": null,
+    "drawn_by_code": true
+  },
+  "ui_feedback_fail": {
+    "placeholder": {
+      "shape": "quad",
+      "size": [
+        26.0,
+        26.0
+      ],
+      "color": "#FF5A5A"
+    },
+    "scene": null,
+    "drawn_by_code": true
+  },
+  "ui_gate_channel": {
+    "placeholder": {
+      "shape": "quad",
+      "size": [
+        70.0,
+        26.0
+      ],
+      "color": "#4A5263"
+    },
+    "scene": null,
+    "drawn_by_code": true
+  },
+  "ui_gate_slot": {
+    "placeholder": {
+      "shape": "quad",
+      "size": [
+        22.0,
+        22.0
+      ],
+      "color": "#C9CED6"
+    },
+    "scene": null,
+    "drawn_by_code": true
+  },
+  "ui_gate_lever": {
+    "placeholder": {
+      "shape": "quad",
+      "size": [
+        22.0,
+        22.0
+      ],
+      "color": "#FFFFFF"
+    },
+    "scene": null,
+    "drawn_by_code": true
   }
 }

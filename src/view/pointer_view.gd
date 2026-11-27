@@ -15,6 +15,10 @@ var _visible_pointer: bool = false
 var _at: Vector2 = Vector2.ZERO
 var _progress: float = 0.0
 var _progress_at: Vector2 = Vector2.ZERO
+## A press waits for the hand to arrive (D-071): the ring is filled, in the
+## colour of a thing done, so that a click on the way is seen to have counted.
+var _pending: bool = false
+var _pending_color: Color = Color.WHITE
 
 
 ## The Mirrored cabin setting (GDD 17.1).
@@ -32,6 +36,7 @@ func setup(data: GameData, factory: PlaceholderFactory) -> void:
 	_pointer_radius = factory.size_of("ui_pointer").x * 0.5
 	_progress_radius = factory.size_of("ui_progress").x * 0.5
 	_ring_width = data.tuning.f("pointer_ring_width")
+	_pending_color = factory.color_of("ui_feedback_ok")
 
 
 func apply(snapshot: Dictionary, camera: Camera3D, cabin: Node3D) -> void:
@@ -40,6 +45,7 @@ func apply(snapshot: Dictionary, camera: Camera3D, cabin: Node3D) -> void:
 	_visible_pointer = snapshot["pointer_visible"] and not camera.is_position_behind(world)
 	if _visible_pointer:
 		_at = camera.unproject_position(world)
+	_pending = snapshot["press_pending"]
 	_progress = snapshot["gesture_progress"]
 	var hand: Vector3 = snapshot["hand_pos"]
 	var hand_world: Vector3 = cabin.to_global(hand)
@@ -68,6 +74,8 @@ func shown() -> Vector2:
 
 
 func _draw() -> void:
+	if _visible_pointer and _pending:
+		draw_circle(shown_at(_at, size.x, mirrored), _pointer_radius, _pending_color)
 	if _visible_pointer:
 		draw_arc(shown_at(_at, size.x, mirrored), _pointer_radius, 0.0, TAU, 32, _pointer_color, _ring_width, true)
 	if _visible_pointer and pause_progress > 0.0:

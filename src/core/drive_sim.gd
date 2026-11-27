@@ -2040,6 +2040,8 @@ func snapshot() -> Dictionary:
 		"pointer": hand.pointer,
 		"pointer_point": pointer_point,
 		"pointer_visible": not hand.pinned,
+		# A press has been made and waits for the hand to get there.
+		"press_pending": hand.press_pending(),
 		"cam_yaw": hand.cam_yaw,
 		"cam_pitch": hand.cam_pitch,
 		"wheel_angle": wheel.angle,
@@ -2049,6 +2051,13 @@ func snapshot() -> Dictionary:
 		"gesture_kind": gesture.kind,
 		"gesture_progress": gesture.progress,
 		"gesture_anchor": hand.anchor_id(_active_anchor),
+		# For the label that names a control and says how it is worked: what
+		# a press where the pointer is would begin, and what is being made now.
+		"hint": hint_at(hand.snap_index),
+		"gesture_hint": _hint_in_hand(),
+		"has_fifth": gate.has_fifth,
+		"lever_locked": gate.lock_left > 0.0,
+		"sequential_shift": sequential_shift,
 		"carrying": _carried(),
 		"view_block": GameData.as_string(_active_ritual.get("blocks_view")) if gesture.is_active() else "",
 		"courage": courage(),
@@ -3108,6 +3117,49 @@ func _anchor_in_use(anchor: String) -> bool:
 	if _standing():
 		return not _ritual_at(anchor).is_empty()
 	return items.anchor_in_use(anchor)
+
+
+## What a press at an anchor would begin now, for the label that names it:
+## the ritual's id; its gesture as the player makes it ("GATE" is a FLICK up
+## or down while shifting is assisted); the ways a FLICK may go; the seconds
+## of a HOLD or the turns of a CRANK; the item it belongs to. {} where there
+## is nothing to do.
+func hint_at(anchor: int) -> Dictionary:
+	if anchor == HandSim.NO_ANCHOR:
+		return {}
+	return _hint_of(_ritual_at(String(hand.anchor_id(anchor))))
+
+
+func _hint_of(ritual: Dictionary) -> Dictionary:
+	if ritual.is_empty():
+		return {}
+	var made: String = GameData.as_string(ritual.get("gesture"))
+	var dirs: Array = GameData.as_array(ritual.get("flick_dirs")).duplicate()
+	if made == "GATE" and sequential_shift:
+		made = "FLICK"
+		dirs = ["up", "down"]
+	var amount: float = 0.0
+	if made == "HOLD":
+		amount = GameData.as_float(ritual.get("hold_s"))
+	elif made == "CRANK":
+		amount = GameData.as_float(ritual.get("turns"))
+	return {
+		"ritual": GameData.as_string(ritual.get("id")),
+		"gesture": made,
+		"dirs": dirs,
+		"amount": amount,
+		"item": GameData.as_string(ritual.get("item")),
+	}
+
+
+## The same for what his hand is busy with: the gesture being made, or the
+## gear lever while he holds it.
+func _hint_in_hand() -> Dictionary:
+	if _lever_in_hand:
+		return _hint_of(_ritual_at(String(hand.anchor_id(_lever_anchor))))
+	if gesture.is_active():
+		return _hint_of(_active_ritual)
+	return {}
 
 
 ## The gesture a press at an anchor would begin now: "TAP", "HOLD", "FLICK",
