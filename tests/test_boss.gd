@@ -2793,6 +2793,17 @@ func _check_last_checkpoint() -> void:
 		_run(3.0)
 		check_eq(_count_events("pulled_over"), 0, "(searched once, he drives on)")
 		check(_sim.car.speed > 0.0, "(the car moves again)")
+		# Once means once: too fast again between the same barriers, he is
+		# not stopped a second time.
+		var again: int = _ticks_in(20.0)
+		var between: int = 0
+		while _sim.car.s < at + corridor_length - 1.0 and again > 0:
+			again -= 1
+			_sim.car.speed = limit + 10.0
+			_tick()
+			between += 1
+		check(between > 0 and again > 0, "(he is still between the barriers, and faster than 70 again)")
+		check_eq(_count_events("pulled_over"), 0, "searched once at these barriers, he is not searched there again however he drives on")
 
 	# "Waves him through at 70 km/h between barriers" (GDD 10.4): between
 	# them, not only at their mouth. (The review of M7: the foot brake down
@@ -3126,6 +3137,7 @@ func test_call_01() -> void:
 	_check_the_end_of_the_talk()
 	_check_two_phones_ringing()
 	_check_no_anchor_while_he_cannot_reach()
+	_check_a_held_car_stands()
 
 
 ## "The real sun rises ahead" (GDD 10.4): on Dawn's road the sky is never
@@ -3154,6 +3166,23 @@ func _check_the_sun_rises_into_no_night_sky() -> void:
 	_begin_quiet_boss(DAWN)
 	var shot: Dictionary = _sim.snapshot()
 	check(GameData.as_int(shot["dawn_phase"]) > 0 and shot.has("leg_length") and shot.has("car_s") and shot.has("night_share"), "(the snapshot says where on Dawn's road he is)")
+
+
+## "The car is stopped for 30 s" (GDD 10.4): pulled over at a crawl (under
+## stopped_kmh, which counts as standing), the car that is held for the call
+## has no speed left on it, on the speedometer or after the call.
+func _check_a_held_car_stands() -> void:
+	var crawl: float = GameData.as_float(GameData.as_dict(_dawn().get("call")).get("stopped_kmh")) * 0.5
+	check(crawl > 0.0, "(a crawl that still counts as standing: %.2f km/h)" % crawl)
+	_to_the_call()
+	_stand_on_the_shoulder(true)
+	_answer_with_the_brake_held(crawl)
+	if not check_eq(GameData.as_string(_event("call_resolved").get("taken")), BossSim.TAKEN_PARKED, "at a crawl on the shoulder with his hazard lights on he has pulled over"):
+		return
+	_input.clear()
+	_ticks(3)
+	check_near(_sim.car.speed, 0.0, 0.000001, "held for the call, the car has no speed")
+	check_near(GameData.as_float(_sim.snapshot()["speed"]), 0.0, 0.000001, "(nor does the snapshot show any)")
 
 
 ## "He ... cannot reach anything" (GDD 10.4): while the hand can reach
