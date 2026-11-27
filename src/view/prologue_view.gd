@@ -20,6 +20,8 @@ var _pulse_radius: float = 0.0
 var _pulse_period: float = 1.0
 var _card_seconds: float = 0.0
 var _anchor_pos: Dictionary = {}
+## The Mirrored cabin setting (GDD 17.1).
+var mirrored: bool = false
 
 
 func setup(data: GameData, factory: PlaceholderFactory) -> void:
@@ -78,6 +80,6 @@ func _draw() -> void:
 	if _pulsing:
 		var beat: float = 0.5 + 0.5 * sin(TAU * _time / maxf(_pulse_period, 0.01))
 		var radius: float = _pulse_radius * size.y * (1.0 + 0.5 * beat)
-		draw_arc(_pulse_at, radius, 0.0, TAU, 48, Color(_pulse_color, 1.0 - 0.5 * beat), maxf(size.y * 0.005, 2.0), true)
+		draw_arc(PointerView.shown_at(_pulse_at, size.x, mirrored), radius, 0.0, TAU, 48, Color(_pulse_color, 1.0 - 0.5 * beat), maxf(size.y * 0.005, 2.0), true)
 	if _white > 0.0:
 		draw_rect(Rect2(Vector2.ZERO, size), Color(1.0, 1.0, 1.0, _white))

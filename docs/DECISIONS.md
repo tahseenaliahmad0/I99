@@ -2530,3 +2530,91 @@ This is how they were read.
   title through a night to the wedding has no automatic test of its own:
   each scene and each state is run by the smoke step, and the clicks
   between them are T-SMOKE-ALL's and T-ONEHAND-01's (M10).
+
+## D-065 (M10, 2026-11-27) The settings of GDD 17.1 as built
+
+- **Where.** The table of GDD 17.1 is data: `settings` in tuning.json, one
+  record per setting (`range` in percent, `choice`, `toggle`) with its
+  default. `SettingsSpec` reads it; the Settings autoload keeps the
+  player's values in `settings.json` and writes at every change;
+  `DriveSim.apply_settings(values)` takes what is the simulation's
+  (steering, grip mode, shifting, Brake assist, Steady start, the
+  Phantom), the drive scene the rest. Subtitles is two settings there,
+  size and background, as the GDD's row has two options. Nothing is read
+  once and kept: a change takes effect in the tick it is made (GDD 17.2).
+- **Game speed** is the engine's time scale: the simulation's ticks are
+  the same ticks (a replay is the same replay); fewer of them pass in a
+  second of the player's.
+- **Brake assist.** "Slows the car when a crash is certain": the brake is
+  on, for him, in any tick in which something the car's width overlaps is
+  ahead and, at the speed they are closing, less than `brake_assist_time`
+  (0.9 s) away. It slows; it does not promise to stop in time. What is in
+  the next lane is not certain, and is left alone.
+- **Steady start.** "The wheel holds itself for the first 2 s after each
+  stop": after a stall or a boss stop, while his hand is off the wheel, it
+  is held straight for `steady_start_s`. It is on by default (the GDD's
+  default), in the simulation too, so that tests and game drive the same
+  car. "After each stop" is read as the stops of GDD 9.6; a release by an
+  officer is not one.
+- **Tremor and shake visuals** scales what is drawn of the wheel's Tremor
+  (the wheel, and the hand on it) and the camera's roll with Sway. The
+  wheel that steers the car trembles as before ("the mechanical effect
+  stays").
+- **Mirrored cabin.** A layer after the post effects shows everything
+  under it reversed left to right (`shaders/mirror.gdshader`); the
+  pointer's sideways motion is reversed with it and the overlays draw
+  where the reversed picture has them. Subtitles and the HUD come after
+  that layer and read as always. The simulation knows nothing of it: "It
+  does not change the story."
+- **The screen.** `SettingsView`: a row for each setting; the left button
+  takes its next option, the right button the one before. It opens from
+  the title ("Options") and, with the night paused, from the drive (Esc
+  for now: a pointer's way to it is T-ONEHAND-01's).
+
+## D-066 (M10, 2026-11-27) One hand, two buttons: how the claim is held
+
+GDD 17.2: "Every function works with pointer motion and two buttons.
+Keyboard keys only duplicate." T-ONEHAND-01 has to establish it for "every
+menu and every in-game action".
+
+- **In the car.** Everything the hand does is a ritual at an anchor, done
+  with one of eight gestures (TAP, HOLD, FLICK, DRAG, DRAG_TO, CRANK, BEAD,
+  the gear gate), and every gesture is the left button and the pointer's
+  motion. The right button is the brake. The test lists the rituals of
+  rituals.json against that, and performs one of each gesture with a
+  `DriveInput` that has nothing else in it.
+- **The pads** (`pad_horn`, the middle button; `pad_wiper`, the wheel) are
+  the Thumb keypad's, an adaptation he may never own: each only repeats a
+  ritual the pointer can do (the horn's TAP, the wipers' FLICK).
+- **The pause.** GDD 13.1 gives `pause` one key, Esc. Its pointer's way is
+  **the left button held where the hand has nothing to hold**: the pointer
+  on no anchor and off the wheel's rim, nothing carried, no gesture begun,
+  for `pause_hold_s` (1.2 s; an arc goes round the pointer while it
+  fills). A press there does nothing in the car, so holding it can mean
+  this and nothing else, and it works wherever the car is. It costs what
+  everything costs in this cabin: the hand is off the wheel for it. The
+  press has to begin in the air and stay there, so the end of a FLICK or
+  a thing put down pauses nothing, and a bot's hand never does.
+  It is the game's, not the simulation's (`PauseHold` in `src/game`, asked
+  by the drive scene each tick with `DriveSim.hand_is_free()`): the
+  simulation knows nothing of pauses, and a night with the button held on
+  nothing is the same night to the bit (T-ONEHAND-01 compares the hashes).
+  *First built, and taken out again:* a `pause` ritual, a HOLD on the
+  ignition key. Three older rules each keep the hand to its business
+  where the night waits or ends, and their tests said so: at a stall the
+  hand has the vendor's tray and nothing of the cabin's (T-STOP-01), with
+  an officer at his window his licence and banknotes and nothing else
+  (T-LEG-07), and rolling up the last street the key is not for turning
+  (T-BOSS-03). A pause that is some anchor's business breaks one of them
+  or leaves the pointer without a pause there; the air is nobody's.
+  Esc does the same from anywhere. Both open the same screen: the
+  settings, "Drive on", and "Back to the wedding". The settings screen
+  says how (`settings.hint.pause`).
+- **The menus** are pressed with the left button (the settings' rows with
+  either). A tool, `tools/onehand_walk.gd`, walks them in a headless
+  build with mouse events and nothing else: the title, its options, the
+  wedding room and a Table, the pause in the car and the way back, an
+  ending's card, the finale, the proverb and the credits. The test runs
+  it and reads what it prints.
+- **The debug keys** (F1 to F8, GDD 13.9) are for whoever builds the game
+  and are no function of it.

@@ -37,6 +37,9 @@ var _shade: ColorRect
 var _back: Button
 var _subtitles: SubtitlesView
 var _pick_radius: float = 0.0
+## Where the pointer is, as its last motion said (in the viewport's own
+## coordinates).
+var _pointer: Vector2 = Vector2.ZERO
 var _scale: float = 1.0
 
 # --- The finale ----------------------------------------------------------------
@@ -427,8 +430,7 @@ func _on_palm() -> bool:
 	var at: Vector3 = _palm.global_position
 	if _camera.is_position_behind(at):
 		return false
-	var pointer: Vector2 = get_viewport().get_mouse_position()
-	return _camera.unproject_position(at).distance_to(pointer) <= _palm_radius * get_viewport().get_visible_rect().size.y
+	return _camera.unproject_position(at).distance_to(_pointer) <= _palm_radius * get_viewport().get_visible_rect().size.y
 
 
 func _physics_process(delta: float) -> void:
@@ -486,10 +488,16 @@ func _process(delta: float) -> void:
 		_proverb_shown += delta
 	if _mode != ROOM:
 		return
-	var hover: int = _place_under(get_viewport().get_mouse_position())
+	var hover: int = _place_under(_pointer)
 	if hover != _hover:
 		_hover = hover
 		_show_hover()
+
+
+func _input(event: InputEvent) -> void:
+	var motion: InputEventMouseMotion = event as InputEventMouseMotion
+	if motion != null:
+		_pointer = motion.position
 
 
 func _unhandled_input(event: InputEvent) -> void:

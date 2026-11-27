@@ -13,3 +13,4 @@ docs_api/
 
 # Agent worktrees
 .claude/
+__pycache__/

@@ -47,6 +47,8 @@ var state: AppState = AppState.BOOT
 var profile: Dictionary = Save.default_profile()
 ## The Telling of the save file, {} when there is none to continue.
 var saved_telling: Dictionary = {}
+## What the settings of GDD 17.1 are and may be.
+var settings_spec: SettingsSpec
 ## The DriveContext (GDD 13.4): what drive.tscn is to do when it is entered
 ## from the menus. { "prologue": true, "table", "seed" } plays the prologue
 ## and then that Telling; { "table", "seed" } begins a Telling; { "table",
@@ -79,15 +81,23 @@ func _ready() -> void:
 	for message: String in data_errors:
 		push_error("Data: %s" % message)
 
-	Settings.setup(user_dir, {
-		# Subtitles (GDD 17.1): size small, medium or large; background on or off.
-		"subtitle_size": "medium",
-		"subtitle_background": true,
-		# A font slot for each language (GDD 17.3): the path of a font of the
-		# project, "" for the theme's own.
-		"font_en": "",
-		"font_ar": "",
-	})
+	# The settings of GDD 17.1, as the data defines them, each at its default
+	# until the player's file says otherwise.
+	settings_spec = SettingsSpec.new(data.tuning)
+	var defaults: Dictionary = settings_spec.defaults()
+	# A font slot for each language (GDD 17.3): the path of a font of the
+	# project, "" for the theme's own.
+	defaults["font_en"] = ""
+	defaults["font_ar"] = ""
+	Settings.setup(user_dir, defaults)
+	for id: String in settings_spec.ids():
+		# A value the setting cannot have (a file from elsewhere) is its default.
+		var kept: Variant = Settings.get_value(id)
+		if not settings_spec.allows(id, kept):
+			Settings.set_value(id, settings_spec.default_of(id))
+	if not Settings.changed.is_connected(_on_setting_changed):
+		Settings.changed.connect(_on_setting_changed)
+	apply_settings()
 	Lines.setup(data)
 	Audio.setup(data)
 	read_save()
@@ -126,6 +136,33 @@ func write_save(telling: Dictionary) -> bool:
 		return false
 	file.store_string(Save.to_text(profile, telling))
 	return true
+
+
+# --- The settings (GDD 17.1) -------------------------------------------------------
+
+## Every setting of GDD 17.1 as it is now: id -> value.
+func setting_values() -> Dictionary:
+	var out: Dictionary = {}
+	for id: String in settings_spec.ids():
+		out[id] = Settings.get_value(id)
+	return out
+
+
+## What the settings mean to the whole game: Game speed is how fast its
+## clock runs (the simulation's ticks are the same; fewer of them pass in a
+## second of the player's).
+func apply_settings() -> void:
+	Engine.time_scale = game_speed(Settings.get_value(SettingsSpec.GAME_SPEED))
+
+
+## The engine's time scale for a Game speed setting (70 to 100).
+static func game_speed(percent: Variant) -> float:
+	return clampf(SettingsSpec.share(percent), 0.1, 1.0)
+
+
+func _on_setting_changed(key: String, _value: Variant) -> void:
+	if key == SettingsSpec.GAME_SPEED:
+		apply_settings()
 
 
 # --- The way through the game (GDD 13.4) --------------------------------------

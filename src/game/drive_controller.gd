@@ -40,6 +40,12 @@ var _in_prologue: bool = false
 ## Seconds until the scene is left for the wedding (0: it is not being left).
 var _leave_in: float = 0.0
 var _narration: Narration = Narration.new()
+## Mirrored cabin (GDD 17.1): the picture and the pointer's sideways motion
+## are reversed.
+var _mirrored: bool = false
+var _mirror: CanvasLayer
+## Tremor and shake visuals (GDD 17.1), 0 to 1.
+var _shake: float = 1.0
 var _prologue_view: PrologueView
 
 @onready var _camera: Camera3D = $Camera3D
@@ -73,11 +79,16 @@ func _ready() -> void:
 	_sky.setup(data, _factory)
 	_post_fx.setup(data, _camera, _cabin)
 	_pointer.setup(data, _factory)
+	_pause_hold = PauseHold.new(data.tuning.f("pause_hold_s"))
 	_subtitles.setup(data)
 	_narration.setup(data)
 	_prologue_view = PrologueView.new()
 	$Overlay.add_child(_prologue_view)
 	_prologue_view.setup(data, _factory)
+	_build_mirror()
+	if not Settings.changed.is_connected(_on_setting_changed):
+		Settings.changed.connect(_on_setting_changed)
+	_apply_settings()
 	_from_menu = not Game.context.is_empty()
 	_context = Game.context if _from_menu else Game.args
 	var seed_asked: int = int(str(_context.get("seed", "1")))
@@ -114,8 +125,6 @@ func _ready() -> void:
 				push_error("Drive: --give names an item that cannot be put in the cabin: '%s'" % item_id)
 	if Game.args.has("ride") and not sim.board(str(Game.args["ride"])):
 		push_error("Drive: --ride names nobody who can get in: '%s'" % str(Game.args["ride"]))
-	if Game.args.has("hud") and not _hud.visible:
-		_hud.toggle()
 	if Game.args.has("say"):
 		# `--say=<line id>[,<line id>...]`: lines to look at, asked for as the simulation asks.
 		for line_id: String in str(Game.args["say"]).split(",", false):
@@ -143,12 +152,11 @@ func _exit_tree() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	var motion: InputEventMouseMotion = event as InputEventMouseMotion
 	if motion != null:
-		_pending_motion += motion.relative
+		_pending_motion += PointerView.mirrored_motion(motion.relative, _mirrored)
 	elif event.is_action_pressed("debug_hud"):
 		_hud.toggle()
-	elif event.is_action_pressed("pause") and _from_menu and _leave_in <= 0.0:
-		# Back to the wedding: what the last stop saved is there to go on with.
-		Game.go(Game.AppState.WEDDING)
+	elif event.is_action_pressed("pause") and _leave_in <= 0.0:
+		_open_pause()
 
 
 func _physics_process(_delta: float) -> void:
@@ -170,6 +178,11 @@ func _physics_process(_delta: float) -> void:
 	if _bot != null:
 		_bot.drive(_input)
 	sim.step(_input)
+	# The pointer's way to the pause (D-066): the left button held where the
+	# hand has nothing to hold. (His own hand's: not a bot's.)
+	if _bot == null and _leave_in <= 0.0 and _pause_hold.step(DriveSim.DT, _input.lmb, sim.hand_is_free()):
+		_open_pause.call_deferred()
+	_pointer.pause_progress = _pause_hold.progress
 	if _in_prologue and not sim.prologue.active:
 		# The cut to tonight: the prologue has been seen.
 		_in_prologue = false
@@ -259,6 +272,83 @@ func _begin_mode() -> void:
 	print("[drive] mode %s, seed %d" % [mode, mode_seed])
 
 
+# --- The settings (GDD 17.1) -------------------------------------------------------
+
+var _pause: SettingsView = null
+var _pause_hold: PauseHold = null
+
+
+## The night waits (the tree is paused) and the settings are on the screen:
+## every one of them can be changed in the middle of a Telling (GDD 17.2).
+## From there he drives on, or goes back to the wedding, where what the
+## last stop saved is waiting.
+func _open_pause() -> void:
+	if _pause != null:
+		return
+	_pause = SettingsView.new()
+	$Overlay.add_child(_pause)
+	_pause.setup("settings.resume")
+	if _from_menu:
+		_pause.add_entry("settings.leave", "leave")
+	_pause.closed.connect(_close_pause)
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	get_tree().paused = true
+
+
+func _close_pause() -> void:
+	var leave: bool = _pause.answer == "leave"
+	_pause.queue_free()
+	_pause = null
+	get_tree().paused = false
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	# The press that closed it is no new hold.
+	_pause_hold.reset(Input.is_action_pressed("grip"))
+	if leave:
+		Game.go(Game.AppState.WEDDING)
+
+
+## The layer that shows the picture reversed (shaders/mirror.gdshader): after
+## the post effects, before the subtitles.
+func _build_mirror() -> void:
+	_mirror = CanvasLayer.new()
+	_mirror.name = "Mirror"
+	_mirror.layer = _post_fx.layer
+	var rect: ColorRect = ColorRect.new()
+	rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var material: ShaderMaterial = ShaderMaterial.new()
+	material.shader = load("res://shaders/mirror.gdshader") as Shader
+	rect.material = material
+	_mirror.add_child(rect)
+	_mirror.visible = false
+	add_child(_mirror)
+	move_child(_mirror, _post_fx.get_index() + 1)
+
+
+## Every setting, as it is now: the simulation's own, and what the views
+## draw. Called at the start and whenever one is changed (GDD 17.2: "Every
+## setting can be changed mid-Telling").
+func _apply_settings() -> void:
+	var values: Dictionary = Game.setting_values()
+	sim.apply_settings(values)
+	_shake = SettingsSpec.share(values[SettingsSpec.SHAKE_VISUALS])
+	_cabin.shake_visuals = _shake
+	_hand.shake_visuals = _shake
+	_mirrored = GameData.as_bool(values[SettingsSpec.MIRRORED])
+	_mirror.visible = _mirrored
+	_pointer.mirrored = _mirrored
+	_prologue_view.mirrored = _mirrored
+	_hud.visible = GameData.as_bool(values[SettingsSpec.NUMERIC_HUD]) or Game.args.has("hud")
+	print("[drive] settings: steering=%.2f grip=%s shifting=%s speed=%.2f assist=%s steady=%s phantom=%s shake=%.2f hud=%s mirrored=%s" % [
+		sim.steer_sensitivity, "toggle" if sim.grip_toggle else "hold", "sequential" if sim.sequential_shift else "gate", Engine.time_scale,
+		str(sim.brake_assist), str(sim.steady_start), str(sim.phantom_enabled), _shake, str(_hud.visible), str(_mirrored)])
+
+
+func _on_setting_changed(key: String, _value: Variant) -> void:
+	if Game.settings_spec.has(key):
+		_apply_settings()
+
+
 ## Whoever he has carried to Basra sits at the Tables from then on, and
 ## heckles with them (GDD 11.5).
 func _seat_the_guests() -> void:
@@ -275,7 +365,7 @@ func _process(delta: float) -> void:
 	# Yaw toward the passenger (+X) is a negative turn about +Y. Sway rocks
 	# the horizon (GDD 5.8): the camera rolls with the push.
 	var sway: float = snapshot["sway"]
-	_camera.rotation = Vector3(deg_to_rad(cam_pitch), -deg_to_rad(cam_yaw), deg_to_rad(sway * sim.tuning.f("sway_view_roll")))
+	_camera.rotation = Vector3(deg_to_rad(cam_pitch), -deg_to_rad(cam_yaw), deg_to_rad(sway * sim.tuning.f("sway_view_roll") * _shake))
 	_cabin.apply(snapshot)
 	_hand.apply(snapshot)
 	_road.apply(snapshot, delta)

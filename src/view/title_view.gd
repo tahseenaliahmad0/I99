@@ -7,6 +7,7 @@ extends Control
 ##   Begin / Continue   the prologue on first launch, else the wedding
 ##   The prologue       plays it again (GDD 10.1: "can be replayed from the
 ##                      title")
+##   Options            the settings of GDD 17.1
 ##   Quit
 
 var _entries: VBoxContainer
@@ -50,6 +51,7 @@ func _ready() -> void:
 	_add_entry("title.continue" if seen else "title.begin", Game.begin, scale_by)
 	if seen:
 		_add_entry("title.prologue", Game.play_prologue, scale_by)
+	_add_entry("title.options", _open_options, scale_by)
 	_add_entry("title.quit", _quit, scale_by)
 	print("[title] ready entries=%d first_launch=%s" % [_entries.get_child_count() - 3, str(not seen)])
 
@@ -62,6 +64,14 @@ func _add_entry(line_id: String, pressed: Callable, scale_by: float) -> void:
 	button.add_theme_font_size_override("font_size", roundi(Game.data.tuning.f("menu_font_size") * 1.3 * scale_by))
 	button.pressed.connect(pressed)
 	_entries.add_child(button)
+
+
+## The settings of GDD 17.1, over the title; closed, the title is back.
+func _open_options() -> void:
+	var options: SettingsView = SettingsView.new()
+	add_child(options)
+	options.setup()
+	options.closed.connect(options.queue_free)
 
 
 func _quit() -> void:

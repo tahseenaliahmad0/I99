@@ -312,6 +312,25 @@
     "visor_down_pos": [0.25, 0.52, -0.12]
   },
 
+  "settings": {
+    "settings": {
+      "steering_sensitivity": {"kind": "range", "min": 50, "max": 200, "step": 10, "default": 100},
+      "grip_mode": {"kind": "choice", "options": ["hold", "toggle"], "default": "hold"},
+      "shifting": {"kind": "choice", "options": ["gate", "sequential"], "default": "gate"},
+      "game_speed": {"kind": "range", "min": 70, "max": 100, "step": 5, "default": 100},
+      "brake_assist": {"kind": "toggle", "default": false},
+      "steady_start": {"kind": "toggle", "default": true},
+      "phantom": {"kind": "toggle", "default": true},
+      "shake_visuals": {"kind": "range", "min": 0, "max": 100, "step": 10, "default": 100},
+      "numeric_hud": {"kind": "toggle", "default": false},
+      "subtitle_size": {"kind": "choice", "options": ["small", "medium", "large"], "default": "medium"},
+      "subtitle_background": {"kind": "toggle", "default": true},
+      "mirrored_cabin": {"kind": "toggle", "default": false}
+    },
+    "steady_start_s": 2,
+    "brake_assist_time": 0.9,
+    "pause_hold_s": 1.2
+  },
   "subtitles_view": {
     "subtitle_line_chars": 42,
     "subtitle_max_lines": 2,
@@ -810,6 +829,10 @@
     "beat_lengths": "m, shortest and longest beat of each type (GDD 9.2)",
     "heckle_lead": "s",
     "heckles_per_leg": "heckles per leg, acts 1 to 3 (GDD 12.3)",
+    "settings": "the settings of GDD 17.1: each a range (percent, min to max by step), a choice of options, or a toggle, with its default",
+    "steady_start_s": "s after each stop for which the wheel holds itself (the Steady start setting)",
+    "brake_assist_time": "s to a certain crash at which Brake assist slows the car",
+    "pause_hold_s": "s the left button is held where the hand has nothing to hold, to pause (D-066)",
     "prologue_length": "s, the whole prologue (GDD 10.1)",
     "prologue_clock": "clock, what the dash shows in the prologue: dawn, 22 years ago",
     "prologue_step_s": "s, each of the prologue's seven steps in turn; they add up to prologue_length",

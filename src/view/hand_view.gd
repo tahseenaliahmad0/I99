@@ -29,6 +29,8 @@ var _ghost_arm: MeshInstance3D
 var _ghost_arm_mesh: CapsuleMesh
 var _ghost_hand: Node3D
 var _ghost_from: Vector3 = Vector3.ZERO
+## Tremor and shake visuals (GDD 17.1), 0 to 1: see CabinView.
+var shake_visuals: float = 1.0
 ## Nine o'clock on the wheel's rim: where the Fib's ghost hand holds it.
 var _wheel_left: Vector3 = Vector3.ZERO
 ## The prologue's left arm (GDD 10.1: "a solid left arm holds the wheel").
@@ -103,7 +105,7 @@ func apply(snapshot: Dictionary) -> void:
 	# Lag (GDD 5.8): the hand trails the wheel. It is drawn where the wheel
 	# was when the car last answered it.
 	if snapshot["hand_gripping"]:
-		var wheel_angle: float = snapshot["wheel_angle"]
+		var wheel_angle: float = CabinView.drawn_wheel_angle(GameData.as_float(snapshot["wheel_angle"]), GameData.as_float(snapshot["wheel_tremor"]), shake_visuals)
 		var steer_angle: float = snapshot["steer_angle"]
 		hand = hand.rotated(Vector3.BACK, deg_to_rad(wheel_angle - steer_angle))
 	var solved: Dictionary = solve(_shoulder, hand, _upper_length, _forearm_length, _slide_max, _pole)

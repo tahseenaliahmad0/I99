@@ -501,3 +501,32 @@ noor.call.4,Abu Noor,"It is the radio. Sleep, my heart.",true
 noor.call.5,Noor,I wish you were coming. I know. I know.,true
 finale.noor.palm,Noor,"Come, Baba. Like when I was small.",true
 finale.groom,Groom,Uncle.,true
+settings.heading,,Options,true
+title.options,,Options,true
+settings.back,,Back,true
+settings.resume,,Drive on,true
+settings.leave,,Back to the wedding,true
+settings.hint,,Left button: next. Right button: back.,true
+settings.hint.pause,,"To pause on the road: Esc, or hold the left button with the hand on nothing.",true
+settings.steering_sensitivity.name,,Steering sensitivity,true
+settings.grip_mode.name,,Grip mode,true
+settings.shifting.name,,Shifting,true
+settings.game_speed.name,,Game speed,true
+settings.brake_assist.name,,Brake assist,true
+settings.steady_start.name,,Steady start,true
+settings.phantom.name,,The Phantom,true
+settings.shake_visuals.name,,Tremor and shake visuals,true
+settings.numeric_hud.name,,Numeric HUD,true
+settings.subtitle_size.name,,Subtitles: size,true
+settings.subtitle_background.name,,Subtitles: background,true
+settings.mirrored_cabin.name,,Mirrored cabin,true
+settings.value.percent,,%s%%,true
+settings.value.on,,On,true
+settings.value.off,,Off,true
+settings.value.hold,,Hold,true
+settings.value.toggle,,"Click to grip, click to release",true
+settings.value.gate,,Gate,true
+settings.value.sequential,,Sequential flicks,true
+settings.value.small,,Small,true
+settings.value.medium,,Medium,true
+settings.value.large,,Large,true

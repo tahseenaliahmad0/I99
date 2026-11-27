@@ -172,6 +172,15 @@ var steer_sensitivity: float = 1.0
 var sequential_shift: bool = false
 ## The Phantom setting (GDD 17.1): off, there is no flinch and no cramp.
 var phantom_enabled: bool = true
+## Brake assist (GDD 17.1): "Slows the car when a crash is certain."
+var brake_assist: bool = false
+## Steady start (GDD 17.1): "The wheel holds itself for the first 2 s after
+## each stop."
+var steady_start: bool = true
+## Seconds of that hold which are left.
+var _steady_left: float = 0.0
+## True in a tick in which Brake assist is on the brake for him.
+var assisted_brake: bool = false
 ## Grip mode: false = hold, true = click to grip, click to release.
 var grip_toggle: bool = false:
 	set(value):
@@ -355,6 +364,8 @@ func _build() -> void:
 	passengers.configure(data, effects, nerves, items, faults)
 	heckles.configure(data, items)
 	prologue.configure(tuning)
+	_steady_left = 0.0
+	assisted_brake = false
 	mode = ""
 	mode_over = false
 	_mode_behind = 0.0
@@ -519,8 +530,13 @@ func step(input: DriveInput) -> void:
 			wheel.grip()
 		elif not hand.gripping:
 			wheel.release()
-	wheel.locked = effects.has_own(ItemSim.HOOK_SET) or passengers.holds_wheel() or ghost_on_wheel() or left_hand_on_wheel()
-	if left_hand_on_wheel():
+	if _steady_left > 0.0 and not _standing():
+		_steady_left = maxf(_steady_left - DT, 0.0)
+	wheel.locked = effects.has_own(ItemSim.HOOK_SET) or passengers.holds_wheel() or ghost_on_wheel() or left_hand_on_wheel() or steady_holds()
+	if steady_holds():
+		# Steady start (GDD 17.1): the wheel holds itself, straight.
+		wheel.hold_at(_straight_angle())
+	elif left_hand_on_wheel():
 		# The prologue (GDD 10.1): "A solid left arm holds the wheel and
 		# keeps the lane by itself."
 		wheel.hold_at(_lane_keeping_angle(_prologue_lane))
@@ -553,7 +569,8 @@ func step(input: DriveInput) -> void:
 	if gate.ground:
 		nerves.add(_grind_nerves)
 		_emit("sfx_requested", {"id": "grind"})
-	_braking = input.rmb
+	assisted_brake = brake_assist and not input.rmb and _crash_is_certain()
+	_braking = input.rmb or assisted_brake
 	_car_s_then = car.s
 	var walls: Vector2 = boss.walls(car.s, car.x)
 	car.wall_left = walls.x
@@ -1136,6 +1153,8 @@ func _hitcher_here() -> String:
 ## The car stands; the road is gone until he leaves.
 func _park() -> void:
 	stopped = true
+	# (What was left of a Steady start is over where he stops again.)
+	_steady_left = 0.0
 	car.speed = 0.0
 	car.v_lat = 0.0
 	traffic.remove_all()
@@ -1170,6 +1189,8 @@ func _leave_stop() -> void:
 	cash = stop.leave(cash)
 	stopped = false
 	_leave_grip = 0.0
+	# Steady start: for a moment after a stop the wheel holds itself.
+	_steady_left = tuning.f("steady_start_s")
 	gate.reset(tuning.i("start_gear"))
 	if run.stage == RunState.Stage.BOSS_STOP:
 		run.leave_boss_stop()
@@ -1711,6 +1732,8 @@ func state() -> Array:
 		car.s, car.x, car.speed, car.v_lat, car.drift, wheel.angle, _let_go_angle, _catch_left, _road_from, gate.gear, gate.lever,
 		hand.pos, hand.target, hand.pointer, hand.gripping, nerves.value, nerves.snap_left,
 		collision.chain, collision.immunity_left, leg.time, clock.minutes, suspicion.value, cash,
+		_steady_left, heckles.phase, heckles.said, heckles.lead_left, heckles.window_left,
+		prologue.step, prologue.time, mode, _mode_behind, _mode_legs,
 	]
 
 
@@ -2162,6 +2185,12 @@ func snapshot() -> Dictionary:
 		"prologue_done": prologue.done,
 		"prologue_lift": prologue.lift(),
 		"left_hand": _left_hand_at(),
+		# The wheel's part of the Tremor (GDD 17.1: its visuals can be turned
+		# down; "the mechanical effect stays"), and the settings' own hands.
+		"wheel_tremor": wheel.tremor,
+		"steady_holds": steady_holds(),
+		"hand_free": hand_is_free(),
+		"assisted_brake": assisted_brake,
 		"ghost_hand": heckles.ghost_holds,
 		"ghost_on_wheel": ghost_on_wheel(),
 		"passenger_awake_left": passengers.awake_left,
@@ -2497,6 +2526,49 @@ func _plan_the_leg(branch: Dictionary) -> Dictionary:
 	var plan: Dictionary = RunGenerator.plan(data, branch, run.act, _leg_twist)
 	heckles.begin_leg(plan)
 	return plan
+
+
+## Steady start has the wheel (GDD 17.1): in the first seconds after a stop,
+## while the setting is on and his own hand is not on it.
+func steady_holds() -> bool:
+	return steady_start and _steady_left > 0.0 and not hand.gripping
+
+
+## Brake assist (GDD 17.1): a crash is certain when something the car's
+## width overlaps is ahead of it, and at the speed they are closing there is
+## less than brake_assist_time to it.
+func _crash_is_certain() -> bool:
+	var within: float = tuning.f("brake_assist_time")
+	var front: float = car.s + car.length() * 0.5
+	for vehicle: TrafficSim.Vehicle in traffic.vehicles:
+		if absf(vehicle.x - car.x) >= vehicle.half_width + car.half_width():
+			continue
+		var gap: float = vehicle.s - vehicle.half_length - front
+		if gap < 0.0:
+			continue
+		var closing: float = (car.speed - float(vehicle.direction) * vehicle.speed) / 3.6
+		if closing > 0.0 and gap < closing * within:
+			return true
+	return false
+
+
+## What the settings of GDD 17.1 mean to the simulation; the rest of them
+## are the views'. `values` maps a setting's id to its value (SettingsSpec);
+## what it does not hold stays as it is. Every one can be changed at any
+## tick (GDD 17.2).
+func apply_settings(values: Dictionary) -> void:
+	if values.has(SettingsSpec.STEERING):
+		steer_sensitivity = SettingsSpec.share(values[SettingsSpec.STEERING])
+	if values.has(SettingsSpec.GRIP_MODE):
+		grip_toggle = GameData.as_string(values[SettingsSpec.GRIP_MODE]) == SettingsSpec.GRIP_TOGGLE
+	if values.has(SettingsSpec.SHIFTING):
+		sequential_shift = GameData.as_string(values[SettingsSpec.SHIFTING]) == SettingsSpec.SHIFT_SEQUENTIAL
+	if values.has(SettingsSpec.BRAKE_ASSIST):
+		brake_assist = GameData.as_bool(values[SettingsSpec.BRAKE_ASSIST])
+	if values.has(SettingsSpec.STEADY_START):
+		steady_start = GameData.as_bool(values[SettingsSpec.STEADY_START])
+	if values.has(SettingsSpec.PHANTOM):
+		phantom_enabled = GameData.as_bool(values[SettingsSpec.PHANTOM])
 
 
 ## The prologue's left hand has the wheel (GDD 10.1): whenever the right
@@ -3030,6 +3102,15 @@ func _anchor_in_use(anchor: String) -> bool:
 	if _standing():
 		return not _ritual_at(anchor).is_empty()
 	return items.anchor_in_use(anchor)
+
+
+## True while a press of the left button would take hold of nothing: the
+## pointer on no anchor and off the wheel's rim, nothing carried, nothing
+## held, no gesture begun. (A view's question: the game takes the button
+## held there for its pause, D-066. Nothing in the simulation asks it.)
+func hand_is_free() -> bool:
+	return hand.snap_index == HandSim.NO_ANCHOR and not hand.gripping and not hand.pinned and not hand.carrying \
+			and not gesture.is_active() and not _lever_in_hand and not space.pointer_on_rim(hand.pointer)
 
 
 ## The hand snaps only to anchors where something can be done now.
