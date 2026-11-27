@@ -2055,6 +2055,8 @@ func snapshot() -> Dictionary:
 		# a press where the pointer is would begin, and what is being made now.
 		"hint": hint_at(hand.snap_index),
 		"gesture_hint": _hint_in_hand(),
+		# The pointer is on the wheel's rim, with nothing else under it.
+		"on_rim": not hand.pinned and hand.snap_index == HandSim.NO_ANCHOR and space.pointer_on_rim(hand.pointer),
 		"has_fifth": gate.has_fifth,
 		"lever_locked": gate.lock_left > 0.0,
 		"sequential_shift": sequential_shift,
@@ -2081,6 +2083,9 @@ func snapshot() -> Dictionary:
 		"dawn_phase": boss.phase if boss.kind == BossSim.DAWN else 0,
 		"checkpoint_phase": boss.phase if boss.kind == BossSim.CHECKPOINT else 0,
 		"stow_left": boss.stow_left,
+		# The vehicles of the queue still ahead of him in his lane.
+		"queue_ahead": boss.queue_length(clampi(car.lane_of(car.x), 0, car.lanes - 1)) if boss.kind == BossSim.CHECKPOINT else 0,
+		"boss_now": boss.kind if boss.active else "",
 		"wanted": boss.wanted,
 		"papers_delay": boss.delay,
 		"bar_at": boss.bar_at,
@@ -3127,7 +3132,16 @@ func _anchor_in_use(anchor: String) -> bool:
 func hint_at(anchor: int) -> Dictionary:
 	if anchor == HandSim.NO_ANCHOR:
 		return {}
-	return _hint_of(_ritual_at(String(hand.anchor_id(anchor))))
+	var at: String = String(hand.anchor_id(anchor))
+	var ritual: Dictionary = _ritual_at(at)
+	if ritual.is_empty():
+		# Nothing to do there now, but something may sit there that works by
+		# itself (a keepsake): it is named all the same.
+		for candidate: ItemSim.Item in items.items:
+			if items.anchor_of(candidate) == at and not items.is_stowed(candidate):
+				return {"ritual": "", "gesture": "", "dirs": [], "amount": 0.0, "item": String(candidate.id)}
+		return {}
+	return _hint_of(ritual)
 
 
 func _hint_of(ritual: Dictionary) -> Dictionary:

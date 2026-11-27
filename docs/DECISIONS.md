@@ -3013,3 +3013,51 @@ GDD 4.1 (the Touch column), 17.4, and D-016.
   at pixels: the views were checked by eye, in pictures and a recording
   made under Xvfb (`--write-movie`).
 
+## D-072 (the owner, 2026-11-27) What each thing does, what to do now, and one gearbox
+
+- **Context.** The owner, after playing with D-071's labels: "more guidance
+  needed still, the effects of each item is not clear and i do not know how
+  i am supposed to stop at the checkpoint. also the gearbox ui is different
+  for the prologue and the game". Same standing as D-071: for the stage
+  with placeholder art, and off with `hints_enabled`.
+- **What each item does.** A line `item.<id>.effect` for each of the 32
+  items, written from GDD 7.4 to 7.7 in plain words with the numbers a
+  tester wants (what it gives, what it takes). The label under the pointer
+  shows it: on an item in the cabin, also one that works by itself and has
+  no ritual (`DriveSim.hint_at` now names the item that sits at an anchor);
+  and on what a stop offers ("Buy this", then "Turbo: ...").
+- **What to do now** (`Guide`, shown by `HintView` at the top of the view).
+  From the snapshot alone, one to three rows:
+  - the prologue's step (`prologue.step.N`: these lines existed and were
+    never shown; the prologue had only its pulsing ring);
+  - a checkpoint: the queue ("first gear, the right button is the brake");
+    "You are next. Stop at the bar: hold the brake until the car stands
+    still just before it" once nobody of the queue is ahead (the soldier
+    sets off only for a car standing within the bar's stop zone, which
+    nothing said); the soldier's walk with its seconds and what to hide
+    and where (the glovebox must be open first); the paper he wants, where
+    it is, and the one next step (the window's crank, the glovebox, the
+    letter, carrying it to the window), with the banknotes as the other
+    way out; the wave through;
+  - pulled over by a Patrol; at a stop (how to buy, how to leave); the
+    street of the Arrival and its key; the phone ringing at Dawn; a
+    passenger leaning across the lever.
+  The pointer on the wheel's rim is labelled too (grip, steer, brake).
+- **One gearbox.** The gate and its diagram were the same in the prologue
+  and the night; what differed is the task. The prologue begins in second
+  and asks for third, which is a dog-leg (up to neutral, across, up), and
+  nothing drew that; the night begins in third, where every shift a player
+  first tries is straight. The diagram now shows the gear the moment asks
+  for (`Guide.gear_wanted`: third in the prologue's step, first in a
+  checkpoint's queue): its slot ringed and beating, and the way there
+  drawn along the slots from where the lever is.
+- **Tests.** T-DATA-01 holds that every ritual, gesture, FLICK way and
+  item has its words and every prologue step its instruction (+158
+  checks). T-BOT-01 drives a checkpoint with the bot and holds the guide's
+  order (queue, bar, soldier, paper, through), that every row is a line,
+  and that first gear is asked for in the queue (+5).
+- **Not done.** No guidance for the Storm, the fork's two roads, the Exit
+  or a Tailgater (signs, sounds and the mirror say those; say so if they
+  do not). The Arabic table has the new ids with no text, as every line
+  has until a writer fills it.
+

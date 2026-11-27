@@ -87,6 +87,7 @@ func test_data_01() -> void:
 	_check_broken_bookends()
 	_check_broken_controls()
 	_check_drawn_by_code()
+	_check_the_words_for_things()
 
 
 # --- 1. Shipped data ----------------------------------------------------------
@@ -1446,3 +1447,28 @@ func _control_ritual(from: GameData, anchor: String, gesture: String) -> Diction
 		if GameData.as_string(ritual.get("anchor")) == anchor and not ritual.has("item") and GameData.as_string(ritual.get("gesture")) == gesture:
 			return ritual
 	return {}
+
+
+# --- 14. Names and effects (D-071, D-072) ----------------------------------------
+
+## While the art is boxes the screen says what a thing is and does: every
+## ritual of rituals.json and of a stop has a name, every gesture its
+## words, every item what it does. In both line tables.
+func _check_the_words_for_things() -> void:
+	for ritual: Dictionary in data.records("rituals"):
+		var id: String = GameData.as_string(ritual.get("id"))
+		check(data.has_line("hint.ritual." + id), "the ritual %s has a name for the label under the pointer" % id)
+		var gesture: String = GameData.as_string(ritual.get("gesture")).to_lower()
+		check(data.has_line("hint.gesture." + gesture), "the gesture of %s (%s) has its words" % [id, gesture])
+	for stop_ritual: String in [StopSim.BUY, StopSim.PLACE, StopSim.BOARD]:
+		check(data.has_line("hint.ritual." + stop_ritual), "a stop's %s has a name" % stop_ritual)
+	for dir: String in DataValidator.FLICK_DIRS:
+		check(data.has_line("hint.dir." + dir), "the way '%s' of a FLICK has its word" % dir)
+	for item: Dictionary in data.records("items"):
+		var id: String = GameData.as_string(item.get("id"))
+		check(data.has_line("item.%s.effect" % id), "the item %s says what it does" % id)
+		check(data.has_line("item.%s.name" % id), "and has a name")
+	for step: int in range(1, PrologueSim.LIFT):
+		check(data.has_line("prologue.step.%d" % step), "the prologue's step %d says what to do" % step)
+	check(data.has_line("hint.wheel") and data.has_line("hint.wheel.how"), "the wheel has its name and its words")
+

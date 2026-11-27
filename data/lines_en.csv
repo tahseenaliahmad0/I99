@@ -592,3 +592,62 @@ hint.gear.neutral,,Neutral,true
 hint.gear.grind,,Grind! Release nearer the end of a slot,true
 hint.gear.locked,,Wait,true
 dash.clock.due,,wedding %s,true
+item.cigarettes.effect,,"Lit for 25 s: steady hand, awake, calmer (-10 Nerves). Smoke builds up in the cabin. Flick the ash off once while it burns, and expect a craving if you stop.",true
+item.tea_glass.effect,,A hot sip calms a lot (-12 Nerves) and keeps you awake 40 s. Three sips; it goes cold after 40 s and then does little. Spills in a crash.,true
+item.beads.effect,,Each bead counted calms a little (-2 Nerves). Costs only the hand. Too calm and you grow heavy and sleepy.,true
+item.seeds.effect,,"Chewing for 20 s: awake, and honks, tailgaters and doubters do not rattle you. Needs a reach every 20 s.",true
+item.phone.effect,,Rings every 25 to 40 s; answer with three presses. The dispatcher pays 10; one call in four is Um Noor and calms you. Takes your eyes off the road; a missed call rattles you; police dislike it.,true
+item.energy_drink.effect,,"Focus for 30 s (the road runs slower, your hand does not) and awake 60 s. Jolts your Nerves at once and shakes your hand for 20 s after.",true
+item.painkillers.effect,,Halves the hand tremor for 60 s and quiets the phantom arm for the leg. Makes you heavier and sleepier for the rest of the leg; your hand covers part of the view while you take one.,true
+item.mixtape.effect,,Music that never drifts to static: steadily calming. Flip it every 60 s or it warbles and frays you.,true
+item.tissue_box.effect,,One wipe across the glass clears all the smoke and haze. Costs only the hand.,true
+item.breath_mints.effect,,For 60 s the police do not notice drink on you. Does nothing else.,true
+item.arak_flask.effect,,"Forbidden. Each sip calms a little and adds Courage for 45 s (up to 3): close calls pay half as much again and little rattles you, but the car sways and answers late.",true
+item.charm.effect,,The first scrape of each leg lights no warning lamp.,true
+item.air_freshener.effect,,Smoke and haze clear twice as fast.,true
+item.thermos.effect,,"Refills the tea, hot, while driving: a far reach and a hold. Four refills.",true
+item.duct_tape.effect,,The first fault of each act repairs itself after 10 s.,true
+item.lucky_note.effect,,One more cash for every close call.,true
+item.sunglasses.effect,,Sun glare cut by 70%. Night legs are a little darker.,true
+item.taxi_sign.effect,,Phone calls pay 5 more and come twice as often.,true
+item.crossover_stalk.effect,,Moves the indicator to the right of the wheel: a short reach instead of a reach across. Takes a bay.,true
+item.window_switch.effect,,Opens the window with one short hold near the lever instead of a reach across and three turns. Takes a bay.,true
+item.spinner_knob.effect,,The wheel turns 40% faster. It returns to centre half as fast.,true
+item.wheel_ring.effect,,"A hook at the wheel: press it to hold the wheel at its angle for up to 4 s, then 6 s to recover. It holds the angle, not the lane. Takes a bay.",true
+item.thumb_keypad.effect,,"Horn and wipers without letting go of the wheel: middle click and scroll, or a second finger. Takes a bay.",true
+item.fifth_gear.effect,,Unlocks fifth gear. Costs nothing but temptation.,true
+item.loud_horn.effect,,"Every vehicle moves over for the horn, and it calms you more. Police mind it more.",true
+item.bull_bar.effect,,One more warning lamp before a wreck. The car moves sideways 15% slower.,true
+item.fog_lamps.effect,,"See 40% further in rain, dust and at night. Oncoming drivers flash back, which frays you a little.",true
+item.wide_mirror.effect,,What comes up behind you shows 5 s earlier. The mirror covers more of the windscreen.,true
+item.forged_papers.effect,,Forbidden until used. Passes the next checkpoint without showing papers.,true
+item.tinted_glass.effect,,"Police suspicion grows half as fast. One warning lamp fewer, and night legs are darker.",true
+item.turbo.effect,,"Fourth and fifth gear are 15 km/h faster and close calls pay half as much again. One warning lamp fewer, and the brake is 30% weaker.",true
+item.good_stuff.effect,,"Courage can stack to 5. The car answers the wheel a little late, for good.",true
+hint.wheel,,Steering wheel,true
+hint.wheel.how,,Press and hold on the rim to grip; move left and right to steer. Right button: brake.,true
+hint.price,,%s cash,true
+hint.free,,free,true
+guide.prologue.done,,Done.,true
+guide.checkpoint.queue,,Checkpoint ahead. Shift down to first and creep up behind the queue. The right button is the brake. Do not touch the barriers.,true
+guide.checkpoint.bar,,You are next. Stop at the bar: hold the brake until the car stands still just before it.,true
+guide.checkpoint.stow,,The soldier is walking to your window: %s s.,true
+guide.checkpoint.stow.clean,,Nothing to hide; wait.,true
+guide.checkpoint.licence,,He wants your licence. It is the paper on the dash.,true
+guide.checkpoint.id,,"He wants your identity card. It is in your pocket, low in front of you.",true
+guide.checkpoint.registration.closed,,He wants the registration. It is in the glovebox: press the glovebox to open it.,true
+guide.checkpoint.registration.letter,,He wants the registration. It lies under the letter: press and hold on the glovebox to move the letter aside.,true
+guide.checkpoint.registration,,He wants the registration. It is in the open glovebox.,true
+guide.checkpoint.window,,"First open your window: the crank low on your far left, press and circle three times.",true
+guide.checkpoint.hand,,"Press on it, carry it to your open window on the left, and release.",true
+guide.checkpoint.bribe,,Or carry the banknotes from the dash to the window (%s cash) and he asks nothing.,true
+guide.checkpoint.through,,He waves you through. Drive on.,true
+guide.pulled_over,,"Pulled over. Carry your licence from the dash to your window to take the fine, or the banknotes to pay him off.",true
+guide.stop,,"A stop: the clock waits. Press an offer on the right to buy it. To drive on, hold the wheel.",true
+guide.arrival,,The end of the road. Stop inside the painted bay.,true
+guide.arrival.key,,"You are in the bay. Turn the key, by the wheel.",true
+guide.call,,"Your phone rings. Press your pocket to answer, carry it to your passenger, or let it ring.",true
+guide.lever.blocked,,Your passenger is leaning across the gear lever.,true
+guide.checkpoint.stow.open,,Something forbidden is in view (tagged pink). Press the glovebox to open it first.,true
+guide.checkpoint.stow.carry,,"Press on what is forbidden (tagged pink), carry it into the open glovebox, release.",true
+hint.item.effect,,%s: %s,true

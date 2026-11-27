@@ -62,6 +62,7 @@ func test_bot_01() -> void:
 	_check_the_policy()
 	_check_one_telling_twice()
 	_check_what_it_begins_it_finishes()
+	_check_the_guide_at_a_checkpoint()
 	_check_the_report()
 	_check_the_run()
 
@@ -350,6 +351,57 @@ func _check_what_it_begins_it_finishes() -> void:
 			if leg == "rain":
 				check(wipes >= 3, "%s sweeps the wipers (%d sweeps in 45 s)" % [what, wipes])
 				check(float(blind_ticks) * DT < 3.0, "%s is not left behind a blind windscreen (%s s at full blur)" % [what, str(snappedf(float(blind_ticks) * DT, 0.1))])
+
+
+## What the screen tells a player to do at a checkpoint (Guide, D-072), with
+## the bot driving one: the queue, then the bar, then the soldier's walk,
+## then the paper he wants, then the wave through, in that order; every row
+## a line that exists; and first gear asked for while he queues.
+func _check_the_guide_at_a_checkpoint() -> void:
+	_sim = DriveSim.new(data)
+	_sim.heckling = false
+	_sim.rng.reseed(SEED)
+	_sim.gate.reset(3)
+	_sim.begin_boss(BossSim.CHECKPOINT, "", SEED)
+	_bot = DriverBot.new(_sim, data, "competent", SEED)
+	_input = DriveInput.new()
+	var bribe: float = tuning.f("checkpoint_bribe")
+	var said: PackedStringArray = []
+	var missing: PackedStringArray = []
+	var first_gear_asked: bool = false
+	var stood_at_the_bar: bool = false
+	for index: int in roundi(120.0 / DT):
+		_tick()
+		_sim.drain_events()
+		if index % 12 != 0:
+			continue
+		var snapshot: Dictionary = _sim.snapshot()
+		var rows: Array[Array] = Guide.rows(snapshot, bribe)
+		if rows.is_empty():
+			continue
+		for row: Array in rows:
+			if not data.has_line(GameData.as_string(row[0])) and not missing.has(GameData.as_string(row[0])):
+				missing.append(GameData.as_string(row[0]))
+		var head: String = GameData.as_string(rows[0][0])
+		if said.is_empty() or said[said.size() - 1] != head:
+			said.append(head)
+		if GameData.as_int(snapshot["checkpoint_phase"]) == BossSim.QUEUE:
+			first_gear_asked = first_gear_asked or Guide.gear_wanted(snapshot) == 1
+		if head == "guide.checkpoint.bar" and _sim.car.speed <= 0.0:
+			stood_at_the_bar = true
+		if head == "guide.checkpoint.through":
+			break
+	check(missing.is_empty(), "every row the guide shows at a checkpoint is a line (missing: %s)" % ", ".join(missing))
+	var order: PackedStringArray = []
+	for head: String in said:
+		var stage: String = "paper" if head.begins_with("guide.checkpoint.licence") or head.begins_with("guide.checkpoint.id") or head.begins_with("guide.checkpoint.registration") else head
+		if order.is_empty() or order[order.size() - 1] != stage:
+			order.append(stage)
+	check_eq(",".join(order), "guide.checkpoint.queue,guide.checkpoint.bar,guide.checkpoint.stow,paper,guide.checkpoint.through",
+			"the guide goes: the queue, the bar, the soldier's walk, the paper, through")
+	check(first_gear_asked, "in the queue the gate's diagram is asked to show the way to first")
+	check(stood_at_the_bar, "the bar is named while he stands at it (he is next)")
+	check(Guide.rows(_sim.snapshot(), bribe).size() <= 1, "let through, at most one row is left")
 
 
 ## The same Telling by the same bot is the same Telling.

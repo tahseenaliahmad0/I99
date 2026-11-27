@@ -456,7 +456,7 @@ func _process(delta: float) -> void:
 	_sky.apply(snapshot)
 	_post_fx.apply(snapshot, delta)
 	_pointer.apply(snapshot, _camera, _cabin)
-	_hints.apply(snapshot, _feedback, _camera, _cabin, _pointer.shown())
+	_hints.apply(snapshot, _feedback, _camera, _cabin, _pointer.shown(), delta)
 	_touch_view.dpi = _dpi()
 	_hud.apply(snapshot)
 	_prologue_view.apply(snapshot, _camera, _cabin, delta)
