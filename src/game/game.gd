@@ -85,7 +85,7 @@ func save_path() -> String:
 ## Reads the save file if there is one. A file that cannot be read leaves a
 ## new player's profile and no Telling.
 func read_save() -> void:
-	profile = Save.default_profile()
+	profile = Save.new_profile(data) if data != null else Save.default_profile()
 	saved_telling = {}
 	if not FileAccess.file_exists(save_path()):
 		return
@@ -109,6 +109,16 @@ func write_save(telling: Dictionary) -> bool:
 		return false
 	file.store_string(Save.to_text(profile, telling))
 	return true
+
+
+## The Telling is over: he has parked (GDD 10.5). What its ending leaves
+## behind goes into the profile (GDD 11.4, 11.5: Tables, told true, modes,
+## the guest) and the save file, which has no Telling to continue any more.
+## Returns what is new (Save.apply_ending).
+func end_telling(arrived: Dictionary) -> Dictionary:
+	var result: Dictionary = Save.apply_ending(data, profile, arrived)
+	write_save({})
+	return result
 
 
 ## A passenger carried to Basra sits at a Table from then on (GDD 11.5).

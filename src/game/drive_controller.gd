@@ -162,14 +162,18 @@ func _physics_process(_delta: float) -> void:
 			Game.write_save({})
 		if type == "arrived":
 			print("[drive] arrived at %s (frame %d)" % [sim.clock.text(), _frames])
-			# Whoever he carried all the way is a wedding guest from now on (GDD 11.5).
-			if Game.add_guest(GameData.as_string(event.get("guest"))):
-				print("[drive] a new guest: %s" % GameData.as_string(event.get("guest")))
-				if not _boss_spec.is_empty():
+			if not _boss_spec.is_empty():
+				# A set piece by itself: whoever he carried all the way is a
+				# wedding guest from now on (GDD 11.5).
+				if Game.add_guest(GameData.as_string(event.get("guest"))):
+					print("[drive] a new guest: %s" % GameData.as_string(event.get("guest")))
 					Game.write_save(Game.saved_telling)
 		if type == "arrived" and _boss_spec.is_empty():
+			# The ending (GDD 11.4): what it leaves behind is in the profile
+			# and on disk.
+			var ending: Dictionary = Game.end_telling(event)
+			print("[drive] ending: %s" % JSON.stringify(ending))
 			# Until the wedding room exists (M9) the night simply begins again.
-			Game.write_save({})
 			_subtitles.clear()
 			_seat_the_guests()
 			sim.begin_telling(sim.run.table, sim.run.seed + 1)

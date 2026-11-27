@@ -277,11 +277,26 @@ func _check_the_pool() -> void:
 
 # --- How many, and when --------------------------------------------------------------
 
+## The leg's encounter is at him (D-061), read from what the encounter shows
+## and not from what it says of itself: the Patrol's blue lights or its
+## watching, the Tailgater from his tell until he is gone, the Motorcade's
+## spotlight.
+func _at_him() -> bool:
+	var encounter: EncounterSim = _sim.encounter
+	if encounter.police_lights or _sim.suspicion.watching:
+		return true
+	if encounter.tail_phase >= EncounterSim.TAIL_TELL and encounter.tail_phase < EncounterSim.TAIL_GONE:
+		return true
+	return encounter.glare > 0.0
+
+
 ## Drives one leg of a Telling as the generator's line has it, past its
 ## Exit, and says what the Table did: { "said", "pressed" (ticks the leg's
 ## encounter was at him), "in_encounter" (heckles begun in such a tick),
 ## "open_at_end", "hits" }.
-func _drive_a_leg(table_id: String, act: int, leg_id: String, telling_seed: int, crowd_the_motorcade: bool = false) -> Dictionary:
+## With `spring`, the leg's own heckles are dropped and that one falls due in
+## the tick the Patrol's lights come on.
+func _drive_a_leg(table_id: String, act: int, leg_id: String, telling_seed: int, crowd_the_motorcade: bool = false, spring: String = "") -> Dictionary:
 	_tell(table_id, telling_seed)
 	if act > 1:
 		_drive_on_to_act(act)
@@ -298,7 +313,8 @@ func _drive_a_leg(table_id: String, act: int, leg_id: String, telling_seed: int,
 	_input.clear()
 	_keep_lane = false
 	var out: Dictionary = {"said": 0, "pressed": 0, "in_encounter": 0, "open_at_end": false, "hits": 0, "types": [], "after_exit": 0,
-			"early": 0, "out_of_span": 0, "late_m": 0.0}
+			"early": 0, "out_of_span": 0, "late_m": 0.0, "pressed_last": 0, "said_tick": 0}
+	var sprung: bool = false
 	var due: PackedFloat64Array = PackedFloat64Array()
 	var span_from: float = tuning.fi("heckle_span", 0)
 	var span_to: float = tuning.fi("heckle_span", 1)
@@ -328,6 +344,8 @@ func _drive_a_leg(table_id: String, act: int, leg_id: String, telling_seed: int,
 					if not on_leg:
 						on_leg = true
 						_checker.load_plan(_sim.leg.plan)
+						if not spring.is_empty():
+							_sim.heckles.end_leg()
 						# Where the Table means to speak: each place inside the
 						# span of the leg's beats (a Twist's goes by its stretch).
 						var beats_end: float = GameData.as_float(_sim.leg.plan.get("beats_end"))
@@ -343,8 +361,13 @@ func _drive_a_leg(table_id: String, act: int, leg_id: String, telling_seed: int,
 		_events = []
 		if not on_leg:
 			continue
-		if _sim.encounter.pressing():
+		if _at_him():
 			out["pressed"] = GameData.as_int(out["pressed"]) + 1
+			out["pressed_last"] = _sim.tick
+		if not spring.is_empty() and not sprung and _sim.encounter.police_lights:
+			# The Patrol's lights have just come on: a heckle falls due now.
+			sprung = true
+			_plan(spring)
 		for index: int in range(seen, _said.size()):
 			var event: Dictionary = _said[index]
 			if GameData.as_string(event.get("type")) == "heckle_started":
@@ -358,7 +381,8 @@ func _drive_a_leg(table_id: String, act: int, leg_id: String, telling_seed: int,
 						out["late_m"] = _sim.car.s - due[nth]
 				out["said"] = nth + 1
 				GameData.as_array(out["types"]).append(GameData.as_string(event.get("heckle")))
-				if _sim.encounter.pressing() or _sim.boss.active or _sim.run.stage != RunState.Stage.LEG:
+				out["said_tick"] = _sim.tick
+				if _at_him() or _sim.boss.active or _sim.run.stage != RunState.Stage.LEG:
 					out["in_encounter"] = GameData.as_int(out["in_encounter"]) + 1
 				if s_before >= exit_at:
 					out["after_exit"] = GameData.as_int(out["after_exit"]) + 1
@@ -421,6 +445,14 @@ func _check_never_in_an_encounter() -> void:
 	check(GameData.as_int(watched["pressed"]) > _ticks_in(20.0), "(the Patrol is at him for %d s)" % roundi(float(GameData.as_int(watched["pressed"])) * DT))
 	check_eq(GameData.as_int(watched["in_encounter"]), 0, "no heckle begins while the Patrol is behind him")
 	check_eq(GameData.as_int(watched["said"]), 2, "and both of Act 2's are said, before it and after")
+	# One that falls due as the blue lights come on waits out the lights and
+	# the watching, and is said as the Patrol leaves.
+	var sprung: Dictionary = _drive_a_leg("uncles", 2, "patrol", 3, false, "doubt_all_night")
+	check_eq(GameData.as_int(sprung["said"]), 1, "(a heckle due in the tick the Patrol's lights come on is said once)")
+	check_eq(GameData.as_int(sprung["in_encounter"]), 0, "not under its lights, nor while it watches")
+	check(GameData.as_int(sprung["pressed"]) > _ticks_in(20.0), "(it was at him for %d s)" % roundi(float(GameData.as_int(sprung["pressed"])) * DT))
+	var waited: int = GameData.as_int(sprung["said_tick"]) - GameData.as_int(sprung["pressed_last"])
+	check(waited >= 1 and waited <= 2, "but in the tick after it has left (%d)" % waited)
 	# The Exit's stretch is the Exit's: a heckle due just before the slip
 	# lane opens is said; one due in it is not.
 	var exit_at: float = tuning.f("leg_length") - tuning.f("leg_tail")

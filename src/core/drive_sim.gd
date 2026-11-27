@@ -2332,11 +2332,11 @@ func ghost_on_wheel() -> bool:
 
 
 ## A heckle may begin now (GDD 11.3: "Never during an encounter or a
-## boss"): on a leg of a Telling, before its Exit opens, while the leg's
-## encounter is not at him (D-061).
+## boss"): on a leg of a Telling before its Exit opens (an Exit lies ahead
+## on a Telling's leg and nowhere else: not on the road to a fork, not in a
+## boss), while the leg's encounter is not at him (D-061).
 func _heckle_free() -> bool:
-	return heckling and run.active and run.stage == RunState.Stage.LEG and leg.active and not boss.active \
-			and _exit == EXIT_AHEAD and not wrecked and not pulled_over and not encounter.pressing()
+	return heckling and _exit == EXIT_AHEAD and not wrecked and not pulled_over and not encounter.pressing()
 
 
 ## One tick of the Table (GDD 13.3, step 11), before the Nerves are stepped:

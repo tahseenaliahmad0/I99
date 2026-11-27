@@ -2385,3 +2385,32 @@ This is how they were read.
   night told to the Drivers with a night told to nobody, to the bit, and
   the Drivers' Dares are the one difference that comparison is not about.
   Every other test runs with the Table talking.
+
+## D-062 (M9, 2026-11-27) Endings and what persists
+
+- **Where.** `Save.ending_of(arrived)` reads the ending from the Telling's
+  `arrived` event (the Clock is read when the key is turned, GDD 10.5);
+  `Save.apply_ending(data, profile, arrived)` writes what it leaves behind
+  into the profile and returns what is new, for the ending's scene to
+  show; `Game.end_telling(arrived)` does that and writes the save file
+  with no Telling in it. A Wreck is no ending and touches nothing.
+- **Late beats the Call.** GDD 11.4 gives the Call's condition as
+  "Answered the Call and parked by 06:00": a father who answered and came
+  late is Late. "Nothing unlocks": no Table, no mode, not told true, no
+  finale at Noor's Table.
+- **A win** is On time or the Call: both open the next Table, and the
+  first of either earns the Commute ("the first win"). The Call also marks
+  the Table told true and earns Endless Night ("any Call ending").
+- **The finale** follows the Call at the Table whose win opens no other:
+  the end of the chain, which the data says is Noor's.
+- **Guests.** "Each passenger carried to Basra sits at a Table from then
+  on": whoever is beside him when the key is turned, on time or late. A
+  late night unlocks nothing, but he did carry them there, and a guest is
+  not an unlock. (Only the Drummer and the Apprentice ride "until Basra"
+  by their records; the others are guests if their ride happens to end
+  there.)
+- **A new player's profile** has the Tables whose `unlock` is `start`
+  (`Save.new_profile(data)`); `Save.default_profile()`, which needs no
+  data, stays the fallback for a save that cannot be read, and a test
+  holds the two equal.
+- **The modes** are earned here and played in M9e.

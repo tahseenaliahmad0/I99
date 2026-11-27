@@ -14,6 +14,15 @@ const FILE_NAME: String = "save.json"
 ## Whole numbers up to this size survive JSON, which knows only doubles.
 const JSON_INT_LIMIT: int = 9007199254740992
 
+## How a Telling he has parked ended (GDD 11.4). A Wreck is no ending: the
+## Telling is told again.
+const LATE: String = "late"
+const ON_TIME: String = "on_time"
+const THE_CALL: String = "call"
+## The modes that persist once earned (GDD 11.5).
+const COMMUTE: String = "commute"
+const ENDLESS_NIGHT: String = "endless_night"
+
 
 ## What a player who has never played has.
 static func default_profile() -> Dictionary:
@@ -24,6 +33,71 @@ static func default_profile() -> Dictionary:
 		"modes": [],
 		"prologue_seen": false,
 	}
+
+
+## A new player's profile as the data has it: the Tables open from the start.
+static func new_profile(data: GameData) -> Dictionary:
+	var profile: Dictionary = default_profile()
+	var open: Array = []
+	for table_id: String in TableRules.open_at_start(data):
+		open.append(table_id)
+	if not open.is_empty():
+		profile["tables_unlocked"] = open
+	return profile
+
+
+## The ending of a Telling, from its "arrived" event (GDD 11.4): Late when
+## the key was turned after the deadline, whatever else he did; the Call
+## when he answered it and parked by the deadline; else on time.
+static func ending_of(arrived: Dictionary) -> String:
+	if GameData.as_bool(arrived.get("late")):
+		return LATE
+	return THE_CALL if GameData.as_bool(arrived.get("call")) else ON_TIME
+
+
+## What an ending leaves behind (GDD 11.4, 11.5): written into `profile`.
+## Returns what is new in it:
+##   { "ending":    LATE, ON_TIME or THE_CALL,
+##     "tables":    the Tables this win opened,
+##     "told_true": the Table is marked told true, and was not before,
+##     "modes":     the modes this ending earned,
+##     "guest":     the passenger who is a wedding guest from now on, or "",
+##     "finale":    the finale follows (the Call, at the last Table) }
+static func apply_ending(data: GameData, profile: Dictionary, arrived: Dictionary) -> Dictionary:
+	var ending: String = ending_of(arrived)
+	var table_id: String = GameData.as_string(arrived.get("table"))
+	var out: Dictionary = {"ending": ending, "tables": PackedStringArray(), "told_true": false, "modes": PackedStringArray(), "guest": "", "finale": false}
+	# Whoever he carried to Basra sits at the wedding, whenever he got there.
+	var guest: String = GameData.as_string(arrived.get("guest"))
+	if not guest.is_empty() and _add(profile, "guests", guest):
+		out["guest"] = guest
+	if ending == LATE or table_id.is_empty():
+		# "Nothing unlocks."
+		return out
+	# A win: the next Table, and with the first win the Commute.
+	out["tables"] = TableRules.win(data, profile, table_id)
+	var modes: PackedStringArray = []
+	if _add(profile, "modes", COMMUTE):
+		modes.append(COMMUTE)
+	if ending == THE_CALL:
+		out["told_true"] = _add(profile, "told_true", table_id)
+		if _add(profile, "modes", ENDLESS_NIGHT):
+			modes.append(ENDLESS_NIGHT)
+		# "At Noor's Table it starts the finale": the Table at the end of the
+		# chain, whose win opens no other.
+		out["finale"] = data.has_record("tables", table_id) and TableRules.opened_by(data, table_id).is_empty()
+	out["modes"] = modes
+	return out
+
+
+## Adds `value` to a list of the profile. False when it was there already.
+static func _add(profile: Dictionary, key: String, value: String) -> bool:
+	var list: Array = GameData.as_array(profile.get(key)).duplicate()
+	if list.has(value):
+		return false
+	list.append(value)
+	profile[key] = list
+	return true
 
 
 ## The file's text. `telling` is {} when no Telling is under way.
