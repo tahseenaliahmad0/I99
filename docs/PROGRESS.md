@@ -23,6 +23,8 @@ Useful commands:
 | Some tests, verbose | `... run_tests.gd -- --only=T-HAND,T-GATE --verbose` |
 | Mark newly passing tests | `... run_tests.gd -- --promote` |
 | One scene, 10 s of game time | `godot --headless --path . --fixed-fps 60 res://scenes/boot.tscn --quit-after 600` |
+| A night with the bot at the wheel | `godot --headless --path . --fixed-fps 60 res://scenes/drive.tscn --quit-after 6000 -- --table=drivers --seed=3 --bot=expert --hud` |
+| The balance report (GDD 12.5) | `tools/run_balance.sh [seeds per skill per Table] [jobs]`, or a look: `godot --headless --path . --script res://tools/run_balance.gd -- --cells=drivers/expert --seeds=4 --verbose --out=/tmp/b.json` |
 | Screenshot (no GPU here, see D-015) | `xvfb-run -a godot --path . --rendering-method gl_compatibility --rendering-driver opengl3 --audio-driver Dummy ...` |
 
 ## Current state
@@ -172,12 +174,12 @@ Do not start a milestone until every test of the previous one passes (GDD 18).
 - [ ] Left open: no adversarial review of M10; GDD 17.2's tells for the milestones before M7
 
 ### M11 Balance: T-BOT-01, T-WALL-01
-- [x] T-WALL-01 (153 checks, about two minutes; D-067): `tests/support/ideal_driver.gd` (third gear, the plan's line, eyes shut) over every leg type in each act and with each modifier (46 legs), Tailgater legs until he has gone by, each kind of Twist, Dawn three times and once slowly, the Commute, four failure cases
-- [x] The Tailgater keeps off the road the leg needs (`EncounterSim`: swerves in behind when his lane is blocked, hangs back once left, passes only into a clear window off the plan's line, falls behind after his stab); T-LEG-06 has the cases among traffic (77 checks)
+- [x] T-WALL-01 (158 checks, about two minutes; D-067): `tests/support/ideal_driver.gd` (third gear, the plan's line, eyes shut) over every leg type in each act and with each modifier (46 legs), Tailgater legs until he has gone by, each kind of Twist, Dawn three times and once slowly, the Commute, four failure cases
+- [x] The Tailgater keeps off the road the leg needs (`EncounterSim`: swerves in behind when his lane is blocked, hangs back once left, passes only into a clear window off the plan's line, falls behind after his stab); T-LEG-06 has the cases among traffic (87 checks)
 - [x] DAWN-01: Dawn's traffic keeps his pace from the checkpoint's sign until he is back at par (`BossSim.traffic_pace`)
-- [x] Mutants: `tools/mutants/wall.py`
+- [x] Mutants: `tools/mutants/wall.py` (17, all killed)
 - [x] The DriverBot (GDD 13.8, D-068): `src/game/driver_bot.gd` in place of `stand_in_bot.gd`; three skills from tuning `bot_*`; `--bot=<skill>` and F7 in the drive scene
-- [x] The balance runner (`src/game/balance_run.gd`, `tools/run_balance.gd`, `tools/run_balance.sh [seeds] [jobs]`) and its report, `artifacts/balance.json`; T-BOT-01 (shape, arithmetic, two Tellings by the tool itself); mutants in `tools/mutants/bot.py`
+- [x] The balance runner (`src/game/balance_run.gd`, `tools/run_balance.gd`, `tools/run_balance.sh [seeds] [jobs]`) and its report, `artifacts/balance.json`; T-BOT-01 (145 checks: the skills, reaction, lane keeping, the hand at the lever, the policy, following, one Telling twice, the report's arithmetic, two Tellings by the tool itself); mutants in `tools/mutants/bot.py` (20, all killed)
 - [x] A tuning pass, of the bot only: gestures take what GDD 7.4 gives them, eyes that shut, sight that haze, rain and glare shorten, a sense of the Clock (D-068). The numbers of GDD 15 were not touched: see NEEDS OWNER
 - [ ] Left open: the bot does not smoke, sip, answer the phone or a heckle, carry a passenger, or take the Motorcade's side road; a run of 100 seeds per skill per Table (some hours) has not been made
 
@@ -185,7 +187,7 @@ Do not start a milestone until every test of the previous one passes (GDD 18).
 - [x] Touch (GDD 4.1, 17.4; D-069): `src/game/touch_input.gd` (the thumb is the hand, a TAP performs when the hand arrives, the other gestures need the thumb, the pedal zone, 9 mm targets), `src/view/touch_view.gd`, the drive scene hears `InputEventScreenTouch` and `InputEventScreenDrag`
 - [x] The pause's hotspot of GDD 4.1 (top-left corner), for a finger and for the game's own pointer
 - [x] `export_presets.cfg`: Windows Desktop, Linux, macOS, iOS (D-016); landscape only
-- [x] T-TOUCH-01 (98 checks), with `tools/touch_walk.gd` (the headless drive scene given screen touches); mutants in `tools/mutants/touch.py`
+- [x] T-TOUCH-01 (100 checks), with `tools/touch_walk.gd` (the headless drive scene given screen touches); mutants in `tools/mutants/touch.py` (19, all killed)
 - [ ] Left open: no export was made (no export templates here); nobody has put a finger on it; the menus work by touch only through the engine's emulated mouse
 
 ## Known debts (builder)
@@ -354,3 +356,5 @@ Two lines per slice, newest last.
   It found two things in the game: on Dawn's waiting road the brake did not open a gap (fixed, D-067), and nothing else. Report of 84 Tellings in `artifacts/balance.json`: wins well above GDD 12.5's targets, the hand off the wheel 10% of the time where 25% to 40% is wanted. T-BOT-01 passes: 113 of 114.
 - 2026-11-27 M12: touch and export (D-069). The thumb is the hand; a TAP performs when the hand arrives, the other gestures need the thumb; a pedal zone at the bottom left; targets 9 mm across; the pause's hotspot of GDD 4.1 in the top-left corner, for a finger and for the pointer; four export presets.
   A headless drive scene is played with screen touches. T-TOUCH-01 passes: 114 of 114. Every milestone of GDD 18 is built.
+- 2026-11-27 M11, M12: mutation runs on the three new lists (wall 17, bot 20, touch 19): eleven mutants lived at first and each got a check that kills it (the Tailgater among traffic, the brake on Dawn's waiting road, the bot's following distance and standing traffic, a late night's outcome, the far crank by touch); two were equivalent and are noted in their lists.
+  784 mutants in nineteen lists apply to the code as it is. `tools/check.sh` prints CHECK OK on b6d43e8.
