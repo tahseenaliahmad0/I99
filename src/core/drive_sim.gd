@@ -1747,6 +1747,11 @@ func snapshot() -> Dictionary:
 		"glow_side": boss.glow_side,
 		"corridor": boss.corridor(),
 		"corridor_gap": boss.corridor_gap(),
+		# The road's own limits across it: what ends it on the left (the
+		# median barrier, or the rail beyond the oncoming lane) and the
+		# guardrail on the right. A checkpoint's outermost barriers close in
+		# from them, and the bay of the Arrival lies between them.
+		"road_limits": Vector2(car.left_limit_x(), car.guardrail_x()),
 		"bay": Vector2(boss.bay_from, boss.bay_to),
 		"in_bay": boss.in_bay,
 		"call_taps": items.call_taps,

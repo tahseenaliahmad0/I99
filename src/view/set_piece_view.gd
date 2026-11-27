@@ -36,6 +36,9 @@ var _half_length: Dictionary = {}
 var _lanes: int = 0
 var _corridor: Vector3 = NO_CORRIDOR
 var _gap: float = 0.0
+## The road's own limits across it, as the snapshot gives them: the x of
+## what ends it on the left, and of the guardrail.
+var _limits: Vector2 = Vector2.ZERO
 var _barriers: Node3D
 var _bars: Node3D
 var _bar_pivots: Array[Node3D] = []
@@ -89,10 +92,13 @@ func apply(snapshot: Dictionary, lanes: int, delta: float) -> void:
 	var car_x: float = snapshot["car_x"]
 	var corridor: Vector3 = snapshot["corridor"]
 	var gap: float = snapshot["corridor_gap"]
-	if corridor != _corridor or gap != _gap or lanes != _lanes:
+	var limits: Vector2 = snapshot["road_limits"]
+	var other_road: bool = limits != _limits or lanes != _lanes
+	if corridor != _corridor or gap != _gap or other_road:
 		_corridor = corridor
 		_gap = gap
 		_lanes = lanes
+		_limits = limits
 		_build_barriers()
 	if _barriers != null:
 		_barriers.position = Vector3(0.0, 0.0, -(_corridor.x - car_s))
@@ -120,10 +126,13 @@ static func lane_at(x: float, lane_width: float, lanes: int) -> int:
 
 # --- Barriers ----------------------------------------------------------------
 
-## A checkpoint's barriers (GDD 10.2, 10.4): every lane has a corridor of its
-## own. From _corridor.x the barriers close in from the lane's own lines, at
-## _corridor.y they are _gap apart, and so they stay to _corridor.z. Built
-## with its start at this node's z = 0.
+## A checkpoint's barriers (GDD 10.2, 10.4), where the simulation has them
+## (BossSim.walls): every lane has a corridor of its own. From _corridor.x
+## the barriers close in, between two lanes from the line between them and
+## the outermost two from the road's own limits (the shoulder is closed off
+## by a barrier that runs in from the guardrail); at _corridor.y they are
+## _gap apart, and so they stay to _corridor.z. Built with its start at this
+## node's z = 0.
 func _build_barriers() -> void:
 	if _barriers != null:
 		_barriers.queue_free()
@@ -155,9 +164,14 @@ func _build_barriers() -> void:
 		var middle: float = _lane_width * (float(lane) + 0.5)
 		for side: float in [-1.0, 1.0]:
 			var from_x: float = middle + side * _lane_width * 0.5
+			if lane == 0 and side < 0.0:
+				from_x = _limits.x
+			elif lane == _lanes - 1 and side > 0.0:
+				from_x = _limits.y
 			var to_x: float = middle + side * _gap * 0.5
-			# The face toward the lane runs from the lane's line to the
-			# corridor's mouth; the wall itself lies outside that face.
+			# The face toward the lane runs from the lane's line (or the
+			# road's limit) to the corridor's mouth; the wall itself lies
+			# outside that face.
 			var length: float = Vector2(to_x - from_x, taper).length()
 			var at: Vector3 = Vector3((from_x + to_x) * 0.5 + side * size.x * 0.5, size.y * 0.5, -taper * 0.5)
 			var turn: float = atan2(from_x - to_x, taper)

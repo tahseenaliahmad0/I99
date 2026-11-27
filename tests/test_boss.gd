@@ -61,6 +61,7 @@ func test_boss_01() -> void:
 	_check_review_room_between_barriers()
 	_check_checkpoint_rows()
 	_check_views_bar_never_more_open()
+	_check_views_barriers_from_the_limits(CHECKPOINT)
 
 
 ## The road, its numbers, and who is watching.
@@ -2369,6 +2370,7 @@ func test_boss_03() -> void:
 	_check_review_bay_line()
 	_check_review_dawn_layout()
 	_check_review_street()
+	_check_views_barriers_from_the_limits(DAWN)
 
 
 ## False dawn, sunrise, the Call: by where he is along the 3,333 m.
@@ -4528,3 +4530,112 @@ func _check_views_bar_never_more_open() -> void:
 	_begin_quiet_boss(STORM)
 	_tick()
 	check(not SetPieceView.bars_wanted(_sim.snapshot(), _sim.car.lanes, lane_width, half_lengths, settle).has(true), "(on a road with no bar none is wanted up)")
+
+
+## A road with a checkpoint's barriers on it and nothing else: the Checkpoint
+## without its queue, or Dawn's road without its traffic.
+func _views_begin_barriers(boss_id: String) -> void:
+	if boss_id == CHECKPOINT:
+		_begin_checkpoint("", 1, false)
+	else:
+		_begin_quiet_boss(boss_id)
+
+
+## V-05. A checkpoint's barriers close in from the road's own limits: over
+## the taper the right barrier of the last lane runs from the guardrail to
+## that lane's corridor, and the left barrier of the first lane from the
+## road's left limit; between two lanes they close in from the line between
+## them, as before. So a car on the shoulder where the taper begins is
+## inside the outermost corridor and is squeezed in over the taper's length.
+## (The shoulder beside the barriers was a wall that nothing showed: a car
+## there was moved 3.2 m sideways in one tick.)
+func _check_views_barriers_from_the_limits(boss_id: String) -> void:
+	var where: String = "the Checkpoint" if boss_id == CHECKPOINT else "Dawn's last checkpoint"
+	_views_begin_barriers(boss_id)
+	var car: CarSim = _sim.car
+	var corridor: Vector3 = _sim.boss.corridor()
+	var gap: float = _sim.boss.corridor_gap()
+	var mouth: float = corridor.x
+	var taper: float = corridor.y - corridor.x
+	var last: int = car.lanes - 1
+	var half_width: float = car.half_width()
+	var lane_half: float = car.lane_width() * 0.5
+	var pushback: float = tuning.f("hit_pushback")
+	var second_ms: float = tuning.fi("gear_speeds", 1) * KMH_TO_MS
+	var shoulder_x: float = (car.road_right() + tuning.f("rumble_strip_width") + car.guardrail_x()) * 0.5
+	check(taper > 0.0 and last >= 2, "(%s: barriers that close in over a taper, on a road of three lanes)" % where)
+	check(shoulder_x - half_width > car.road_right() + tuning.f("rumble_strip_width") and shoulder_x + half_width < car.guardrail_x(), "(a car in the middle of the shoulder is wholly on it)")
+
+	# Where the barriers are, by the simulation.
+	var rightmost: Vector2 = _sim.boss.walls(mouth, car.lane_center(last))
+	check_near(rightmost.y, car.guardrail_x(), 0.000001, "%s: where the taper begins the right barrier of the last lane stands at the guardrail" % where)
+	check_near(rightmost.x, car.lane_center(last) - lane_half, 0.000001, "(and its left one at the lane's own line)")
+	var leftmost: Vector2 = _sim.boss.walls(mouth, car.lane_center(0))
+	check_near(leftmost.x, car.left_limit_x(), 0.000001, "the left barrier of the first lane stands at the road's left limit")
+	check_near(leftmost.y, car.lane_center(0) + lane_half, 0.000001, "(and its right one at the lane's own line)")
+	for lane: int in range(1, last):
+		check_eq(_sim.boss.walls(mouth, car.lane_center(lane)), Vector2(car.lane_center(lane) - lane_half, car.lane_center(lane) + lane_half), "lane %d: between two lanes the barriers begin at the lane's lines, as they did" % lane)
+	var half_way: Vector2 = _sim.boss.walls(mouth + taper * 0.5, car.lane_center(last))
+	check_near(half_way.y, (car.guardrail_x() + car.lane_center(last) + gap * 0.5) * 0.5, 0.000001, "from the guardrail the barrier closes in evenly")
+	check_near(_sim.boss.walls(mouth + taper * 0.5, car.lane_center(0)).x, (car.left_limit_x() + car.lane_center(0) - gap * 0.5) * 0.5, 0.000001, "(and from the left limit)")
+	for lane: int in car.lanes:
+		check_eq(_sim.boss.walls(corridor.y, car.lane_center(lane)), Vector2(car.lane_center(lane) - gap * 0.5, car.lane_center(lane) + gap * 0.5), "lane %d: at the narrowest point its barriers are corridor_gap apart about the lane's middle" % lane)
+	var beside: Vector2 = _sim.boss.walls(mouth, shoulder_x)
+	check(shoulder_x - half_width > beside.x and shoulder_x + half_width < beside.y, "a car on the shoulder where the taper begins is between the last lane's barriers: none stands where it is")
+	check_eq(_sim.boss.walls(mouth - 1.0, shoulder_x), Vector2(-INF, INF), "(before the taper there is none)")
+
+	# Through the mouth in second gear, on the shoulder and along the left
+	# limit, with nobody steering from a metre short of it.
+	for side: int in [1, -1]:
+		_views_begin_barriers(boss_id)
+		car = _sim.car
+		var lane: int = last if side > 0 else 0
+		var edge: String = "on the shoulder" if side > 0 else "along the left limit"
+		# Along the left limit: a tenth of a push-back clear of it.
+		var along: float = shoulder_x if side > 0 else car.left_limit_x() + half_width + pushback * 0.1
+		var limit: float = car.guardrail_x() if side > 0 else car.left_limit_x()
+		var inner: float = car.lane_center(lane) + float(side) * gap * 0.5
+		# What a tick may move him sideways: the push-back of a touch, what
+		# the slanted barrier comes in while he drives a tick's length, and
+		# the road's crown.
+		var per_tick: float = pushback + absf(limit - inner) / taper * second_ms * DT + tuning.f("crown_drift") * DT
+		_cruise(2, lane)
+		_keep_lane = false
+		car.s = mouth - taper * 0.5
+		car.x = along
+		_events = []
+		var most: float = 0.0
+		var touches: int = 0
+		var guard: int = _ticks_in(30.0)
+		while car.s < corridor.y and guard > 0:
+			guard -= 1
+			if car.s < mouth - 1.0:
+				car.x = along
+			var x_before: float = car.x
+			_tick()
+			most = maxf(most, absf(car.x - x_before))
+			if car.wall_touched:
+				touches += 1
+		_keep_lane = true
+		check(guard > 0, "(%s, %s: he comes to the narrowest point)" % [where, edge])
+		check(most <= per_tick + 0.000001, "%s, %s: driven through the taper's mouth with nobody steering he is at no tick moved sideways by more than a push-back and what the barrier closes in (%.3f m at the most; %.3f m allowed)" % [where, edge, most, per_tick])
+		check(touches > 0, "%s: the slanted barrier touches him" % edge)
+		var first_hit: Dictionary = _event_of(_events, "hit")
+		check(GameData.as_int(first_hit.get("kind")) == Collision.Hit.SCRAPE and GameData.as_int(first_hit.get("vehicle")) == 0, "which is a scrape of a barrier")
+		check(absf(car.x - car.lane_center(lane)) <= gap * 0.5 - half_width + 0.000001, "and at the narrowest point he is between the barriers of the %s lane (%.2f m off its middle)" % ["last" if side > 0 else "first", absf(car.x - car.lane_center(lane))])
+		if boss_id == CHECKPOINT:
+			check_near(_sim.suspicion.value, minf(_checkpoint_number("barrier_suspicion") * float(_count_events("hit")), _sim.suspicion.maximum()), 0.000001, "(at the Checkpoint each scrape of it is a touch of a barrier: +25, %d times)" % _count_events("hit"))
+
+	# In the middle of a lane he meets nothing new.
+	for lane: int in car.lanes:
+		_views_begin_barriers(boss_id)
+		_cruise(2, lane)
+		_sim.car.s = mouth - taper * 0.5
+		_events = []
+		var touched: bool = false
+		var guard: int = _ticks_in(30.0)
+		while _sim.car.s < corridor.y + taper * 0.5 and guard > 0:
+			guard -= 1
+			_tick()
+			touched = touched or _sim.car.wall_touched or _sim.car.edge_touched != CarSim.EDGE_NONE
+		check(guard > 0 and not touched and _count_events("hit") == 0, "%s, lane %d: in the middle of his lane he drives through the taper and in between the barriers and meets nothing" % [where, lane])
