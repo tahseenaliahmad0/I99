@@ -258,7 +258,8 @@
       ],
       "color": "#C68642"
     },
-    "scene": null
+    "scene": null,
+    "drawn_by_code": true
   },
   "arm_upper": {
     "placeholder": {
@@ -269,7 +270,8 @@
       ],
       "color": "#C68642"
     },
-    "scene": null
+    "scene": null,
+    "drawn_by_code": true
   },
   "left_sleeve": {
     "placeholder": {
@@ -291,7 +293,8 @@
       ],
       "color": "#FFFFFF"
     },
-    "scene": null
+    "scene": null,
+    "drawn_by_code": true
   },
   "ui_progress": {
     "placeholder": {
@@ -302,7 +305,8 @@
       ],
       "color": "#F2C230"
     },
-    "scene": null
+    "scene": null,
+    "drawn_by_code": true
   },
   "veh_car": {
     "placeholder": {
@@ -441,7 +445,8 @@
       ],
       "color": "#3B3B40"
     },
-    "scene": null
+    "scene": null,
+    "drawn_by_code": true
   },
   "road_shoulder": {
     "placeholder": {
@@ -452,7 +457,8 @@
       ],
       "color": "#6B6258"
     },
-    "scene": null
+    "scene": null,
+    "drawn_by_code": true
   },
   "road_rumble": {
     "placeholder": {
@@ -463,7 +469,8 @@
       ],
       "color": "#8A8A8A"
     },
-    "scene": null
+    "scene": null,
+    "drawn_by_code": true
   },
   "road_line": {
     "placeholder": {
@@ -474,7 +481,8 @@
       ],
       "color": "#E8E8E0"
     },
-    "scene": null
+    "scene": null,
+    "drawn_by_code": true
   },
   "road_dash": {
     "placeholder": {
@@ -486,7 +494,8 @@
       ],
       "color": "#E8E8E0"
     },
-    "scene": null
+    "scene": null,
+    "drawn_by_code": true
   },
   "road_rail": {
     "placeholder": {
@@ -498,7 +507,8 @@
       ],
       "color": "#A8ADB3"
     },
-    "scene": null
+    "scene": null,
+    "drawn_by_code": true
   },
   "road_barrier": {
     "placeholder": {
@@ -510,7 +520,8 @@
       ],
       "color": "#8C8C86"
     },
-    "scene": null
+    "scene": null,
+    "drawn_by_code": true
   },
   "road_post": {
     "placeholder": {
@@ -522,7 +533,8 @@
       ],
       "color": "#D8D8D0"
     },
-    "scene": null
+    "scene": null,
+    "drawn_by_code": true
   },
   "cabin_lamp_off": {
     "placeholder": {
@@ -953,7 +965,8 @@
       ],
       "color": "#B5B2A8"
     },
-    "scene": null
+    "scene": null,
+    "drawn_by_code": true
   },
   "road_checkpoint_cap": {
     "placeholder": {
@@ -965,7 +978,8 @@
       ],
       "color": "#DEDBD0"
     },
-    "scene": null
+    "scene": null,
+    "drawn_by_code": true
   },
   "road_checkpoint_bar": {
     "placeholder": {
@@ -977,7 +991,8 @@
       ],
       "color": "#D64541"
     },
-    "scene": null
+    "scene": null,
+    "drawn_by_code": true
   },
   "road_soldier": {
     "placeholder": {
@@ -1010,7 +1025,8 @@
       ],
       "color": "#4A5670"
     },
-    "scene": null
+    "scene": null,
+    "drawn_by_code": true
   },
   "road_street_end": {
     "placeholder": {
@@ -1500,7 +1516,8 @@
       ],
       "color": "#DDE6F2"
     },
-    "scene": null
+    "scene": null,
+    "drawn_by_code": true
   },
   "fit_spinner_knob": {
     "placeholder": {
@@ -1591,7 +1608,8 @@
       ],
       "color": "#FFFFFF"
     },
-    "scene": null
+    "scene": null,
+    "drawn_by_code": true
   },
   "prologue_left_arm": {
     "placeholder": {
@@ -1602,7 +1620,8 @@
       ],
       "color": "#C68642"
     },
-    "scene": null
+    "scene": null,
+    "drawn_by_code": true
   },
   "prologue_left_hand": {
     "placeholder": {

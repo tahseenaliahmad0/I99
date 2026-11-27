@@ -28,6 +28,8 @@ func test_gest_01() -> void:
 	_check_bead()
 	_check_pipeline()
 	_check_drag_to_pipeline()
+	_check_limits_to_the_tick()
+	_check_drag()
 
 
 func _check_tap() -> void:
@@ -467,6 +469,114 @@ func _check_drag_to_pipeline() -> void:
 	check(sim.hand.gripping and sim.wheel.gripped, "DRAG_TO: once it has let go, it can")
 	input.lmb = false
 	_steps(sim, input, 5)
+
+
+# --- What the M1 review asked for (2026-11-17), put as checks ------------------
+
+## The time limits to the tick, and the lean a FLICK allows, from both sides
+## (M1 review: "loose brackets on timing limits", "FLICK time and direction
+## limits", "CRANK angle-not-distance").
+func _check_limits_to_the_tick() -> void:
+	# TAP: the release must come within tap_max_time.
+	var tap_ticks: int = roundi(_tap_max / DT)
+	_gesture.begin(Gesture.Kind.TAP)
+	for _tick: int in tap_ticks - 1:
+		_gesture.step(DT, true, Vector2.ZERO)
+	_gesture.step(DT, false, Vector2.ZERO)
+	check_eq(_gesture.phase, Gesture.Phase.DONE, "TAP: released at tap_max_time exactly, it is a TAP")
+	_gesture.begin(Gesture.Kind.TAP)
+	for _tick: int in tap_ticks:
+		_gesture.step(DT, true, Vector2.ZERO)
+	check_eq(_gesture.phase, Gesture.Phase.ACTIVE, "TAP: down for tap_max_time, it is still open")
+	_gesture.step(DT, false, Vector2.ZERO)
+	check_eq(_gesture.phase, Gesture.Phase.CANCELLED, "TAP: released one tick after tap_max_time, it is not a TAP")
+
+	# FLICK: the distance must be made within flick_max_time.
+	var flick_ticks: int = roundi(_flick_max / DT)
+	var dirs: Dictionary = {
+		Gesture.DIR_UP: Vector2(0.0, -1.0),
+		Gesture.DIR_DOWN: Vector2(0.0, 1.0),
+		Gesture.DIR_LEFT: Vector2(-1.0, 0.0),
+		Gesture.DIR_RIGHT: Vector2(1.0, 0.0),
+	}
+	for dir: int in dirs:
+		var along: Vector2 = dirs[dir]
+		# The last pixel on the last tick allowed, and on the tick after it.
+		_gesture.begin(Gesture.Kind.FLICK, 0.0, dir)
+		_move(along * (_flick_px - 2.0), flick_ticks - 1)
+		check_eq(_gesture.phase, Gesture.Phase.ACTIVE, "FLICK %d: two pixels short, it is still open" % dir)
+		_gesture.step(DT, true, along * 3.0)
+		check_eq(_gesture.phase, Gesture.Phase.DONE, "FLICK %d: the distance made on the last tick of flick_max_time counts" % dir)
+		_gesture.begin(Gesture.Kind.FLICK, 0.0, dir)
+		_move(along * (_flick_px - 2.0), flick_ticks)
+		_gesture.step(DT, true, along * 3.0)
+		check_eq(_gesture.phase, Gesture.Phase.CANCELLED, "FLICK %d: made one tick later, it does not" % dir)
+		# Well inside and well outside the limit (a fifth either way).
+		_gesture.begin(Gesture.Kind.FLICK, 0.0, dir)
+		_move(along * (_flick_px - 2.0), roundi(float(flick_ticks) * 0.85))
+		_gesture.step(DT, true, along * 3.0)
+		check_eq(_gesture.phase, Gesture.Phase.DONE, "FLICK %d: made at 85%% of flick_max_time, it counts" % dir)
+		_gesture.begin(Gesture.Kind.FLICK, 0.0, dir)
+		_move(along * (_flick_px - 2.0), roundi(float(flick_ticks) * 1.1))
+		_gesture.step(DT, true, along * 3.0)
+		check_eq(_gesture.phase, Gesture.Phase.CANCELLED, "FLICK %d: made at 110%% of it, it does not" % dir)
+		# The lean: more its own way than across it, by a little.
+		var across: Vector2 = Vector2(-along.y, along.x)
+		for side: float in [-1.0, 1.0]:
+			_gesture.begin(Gesture.Kind.FLICK, 0.0, dir)
+			_move(along * (_flick_px + 2.0) + across * side * (_flick_px + 2.0) * 0.8, 10)
+			check_eq(_gesture.phase, Gesture.Phase.DONE, "FLICK %d: a swipe that goes 0.8 as far across as along is this flick" % dir)
+			check_eq(_gesture.direction, dir, "FLICK %d: and reports its direction" % dir)
+			_gesture.begin(Gesture.Kind.FLICK, 0.0, dir)
+			_move(along * (_flick_px + 2.0) + across * side * (_flick_px + 2.0) * 1.25, 10)
+			_run(_flick_max, true)
+			check_eq(_gesture.phase, Gesture.Phase.CANCELLED, "FLICK %d: one that goes 1.25 as far across as along is not" % dir)
+
+	# CRANK counts angle, not distance: a circle three times as wide and one
+	# a third as wide need the same three turns, no fewer and no more.
+	for radius: float in [10.0, 30.0, 90.0]:
+		_gesture.begin(Gesture.Kind.CRANK, 3.0)
+		var angle: float = _circle(radius, deg_to_rad(12.0), 2.8, 1.0, 0.0)
+		check_eq(_gesture.phase, Gesture.Phase.ACTIVE, "CRANK: 2.8 turns of a circle of radius %s are not three" % str(radius))
+		_circle(radius, deg_to_rad(12.0), 0.3, 1.0, angle)
+		check_eq(_gesture.phase, Gesture.Phase.DONE, "CRANK: 3.1 turns of it are")
+	# A slow hand that rests a tick between every two moves turns the crank
+	# as far as one that does not (a tick with no motion is no heading).
+	_gesture.begin(Gesture.Kind.CRANK, 3.0)
+	var slow: float = 0.0
+	var steps: int = roundi(3.1 * TAU / deg_to_rad(12.0))
+	var short_of: int = roundi(2.8 * TAU / deg_to_rad(12.0))
+	for step: int in steps:
+		var before: Vector2 = Vector2(cos(slow), sin(slow)) * 30.0
+		slow += deg_to_rad(12.0)
+		_gesture.step(DT, true, Vector2(cos(slow), sin(slow)) * 30.0 - before)
+		_gesture.step(DT, true, Vector2.ZERO)
+		if step == short_of:
+			check_eq(_gesture.phase, Gesture.Phase.ACTIVE, "CRANK with rests: not complete at 2.8 turns")
+	check_eq(_gesture.phase, Gesture.Phase.DONE, "CRANK with rests: complete at 3.1 turns")
+
+
+## DRAG (a dial, D-021): one step per `amount` pixels of sideways travel,
+## either way, while the button is down; it ends on release.
+func _check_drag() -> void:
+	var amount: float = 30.0
+	_gesture.begin(Gesture.Kind.DRAG, amount)
+	_move(Vector2(amount * 3.0 + 5.0, 0.0), 12)
+	check_eq(_gesture.phase, Gesture.Phase.ACTIVE, "DRAG: it goes on while the button is down")
+	check_eq(_gesture.take_drag_steps(), 3, "DRAG: 95 px to the right at 30 px a step are three steps")
+	check_eq(_gesture.take_drag_steps(), 0, "DRAG: taken once, the steps are not there again")
+	_move(Vector2(-(amount * 2.0 + 10.0), 0.0), 12)
+	check_eq(_gesture.take_drag_steps(), -2, "DRAG: 70 px back are two steps the other way (the 5 px left over from before count against them)")
+	_move(Vector2(-(amount - 6.0), 0.0), 6)
+	check_eq(_gesture.take_drag_steps(), 0, "DRAG: a pixel short of a step is no step")
+	_move(Vector2(-2.0, 0.0), 1)
+	check_eq(_gesture.take_drag_steps(), -1, "DRAG: the next two pixels make it")
+	_move(Vector2(0.0, amount * 4.0), 8)
+	check_eq(_gesture.take_drag_steps(), 0, "DRAG: up and down turns nothing")
+	_run(1.0, true)
+	check_eq(_gesture.phase, Gesture.Phase.ACTIVE, "DRAG: there is no time limit")
+	_run(DT, false)
+	check_eq(_gesture.phase, Gesture.Phase.DONE, "DRAG: it ends when the button comes up")
 
 
 # --- Helpers ------------------------------------------------------------------

@@ -2022,7 +2022,11 @@ func drain_events() -> Array[Dictionary]:
 ## Everything a view needs to draw this instant. Views never keep references
 ## into the simulation; they read this.
 func snapshot() -> Dictionary:
-	var pointer_point: Vector3 = hand.target
+	# Where the pointer points, for the ring that shows it: the anchor it has
+	# snapped to, or the spot under it. Not the hand's target, which is kept
+	# inside the box the free hand can roam: the ring would stop at the edge
+	# of the box while the pointer went on.
+	var pointer_point: Vector3 = space.pointed_at(hand.pointer)
 	if hand.snap_index != HandSim.NO_ANCHOR:
 		pointer_point = hand.anchor_position(hand.snap_index)
 	return {
