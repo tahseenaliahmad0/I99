@@ -604,9 +604,11 @@ func step(input: DriveInput) -> void:
 	if free_traffic_per_km > 0.0:
 		_step_free_traffic()
 	if not stopped:
-		leg.step_traffic(_road_dt)
-		traffic.step(_road_dt, car.s, car.x, car.speed)
-		boss.step_traffic(_road_dt)
+		# (At Dawn's last checkpoint the road waits for him: D-067.)
+		var pace: float = boss.traffic_pace()
+		leg.step_traffic(_road_dt * pace)
+		traffic.step(_road_dt, car.s, car.x, car.speed, pace)
+		boss.step_traffic(_road_dt * pace)
 		_step_oncoming()
 
 	# 7. Collisions and close calls.
@@ -3102,6 +3104,18 @@ func _anchor_in_use(anchor: String) -> bool:
 	if _standing():
 		return not _ritual_at(anchor).is_empty()
 	return items.anchor_in_use(anchor)
+
+
+## The gesture a press at an anchor would begin now: "TAP", "HOLD", "FLICK",
+## "DRAG", "DRAG_TO", "CRANK", "BEAD", "GATE" for the gear lever, "" where
+## there is nothing to do. (For touch, GDD 17.4: a TAP performs by itself
+## when the hand arrives; the others need the thumb.)
+func gesture_at(anchor: int) -> String:
+	if anchor == HandSim.NO_ANCHOR:
+		return ""
+	if anchor == _lever_anchor and not sequential_shift:
+		return "GATE"
+	return GameData.as_string(_ritual_at(String(hand.anchor_id(anchor))).get("gesture"))
 
 
 ## True while a press of the left button would take hold of nothing: the

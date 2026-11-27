@@ -77,7 +77,7 @@ FOCUS = [
  (D, 'encounter.step(_road_dt, _braking, gate.gear)', 'encounter.step(DT, _braking, gate.gear)', 'Focus: the encounter keeps his time'),
  (D, 'collision.step(_road_dt, car, traffic, gate.gear)', 'collision.step(DT, car, traffic, gate.gear)', 'Focus: collisions\' timers keep his time'),
  (D, 'leg.step_hazards(_road_dt)', 'leg.step_hazards(DT)', 'Focus: the potholes\' cooldown keeps his time'),
- (D, 'leg.step_traffic(_road_dt)', 'leg.step_traffic(DT)', 'Focus: what moves on the road keeps his time'),
+ (D, 'leg.step_traffic(_road_dt * pace)', 'leg.step_traffic(DT * pace)', 'Focus: what moves on the road keeps his time'),
  (D, 'leg.step_road(_road_dt, DT)', 'leg.step_road(DT, DT)', 'Focus: a gust\'s tell keeps his time'),
  (D, '\t\titems.step(DT)\n', '\t\titems.step(_road_dt)\n', 'Focus: the things in the cabin slow with the road'),
  (D, '\t\tnerves.step(DT)\n', '\t\tnerves.step(_road_dt)\n', 'Focus: his Nerves slow with the road'),

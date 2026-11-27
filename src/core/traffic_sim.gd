@@ -211,14 +211,23 @@ func _between_walls(vehicle: Vehicle, seconds: float) -> bool:
 	return maxf(to, to + travel) >= walled.x and minf(from, from + travel) <= walled.y
 
 
-func step(dt: float, player_s: float, player_x: float, player_speed: float) -> void:
+## `pace` is the share of its own pace the traffic moves at (1 but at Dawn's
+## last checkpoint, where the road waits for him: D-067). What he is close
+## behind in his own lane does not wait below his own speed, though: a
+## driver who brakes behind a vehicle must find the gap open, there too.
+func step(dt: float, player_s: float, player_x: float, player_speed: float, pace: float = 1.0) -> void:
 	_rank()
 	var index: int = 0
 	while index < vehicles.size():
 		var vehicle: Vehicle = vehicles[index]
 		_step_speed(vehicle, player_s, player_x, player_speed)
-		vehicle.s += vehicle.velocity() * KMH_TO_MS * dt
-		_step_lane_change(vehicle, dt)
+		var own: float = pace
+		if pace < 1.0 and vehicle.direction > 0 and vehicle.speed > 0.0 and absf(vehicle.x - player_x) < vehicle.half_width + _car_half_width:
+			var ahead: float = (vehicle.s - vehicle.half_length) - (player_s + _car_half_length)
+			if ahead >= 0.0 and ahead < _follow_gap:
+				own = maxf(pace, minf(vehicle.speed, player_speed) / vehicle.speed)
+		vehicle.s += vehicle.velocity() * KMH_TO_MS * dt * own
+		_step_lane_change(vehicle, dt * own)
 		if vehicle.s + vehicle.half_length < player_s - _despawn_behind:
 			vehicle.off_road = true
 			vehicles.remove_at(index)

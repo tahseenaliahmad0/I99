@@ -29,7 +29,7 @@ var _boss_spec: String = ""
 ## `--bot=`: until the DriverBot of GDD 13.8 is built (M11), any value puts a
 ## stand-in at the wheel, which is enough to look at a leg, a set piece or a
 ## whole Telling (null: the player drives).
-var _bot: StandInBot = null
+var _bot: DriverBot = null
 ## What this scene is to do (GDD 13.4): Game.context when it was entered
 ## from the menus, else the command line's arguments.
 var _context: Dictionary = {}
@@ -80,6 +80,10 @@ func _ready() -> void:
 	_post_fx.setup(data, _camera, _cabin)
 	_pointer.setup(data, _factory)
 	_pause_hold = PauseHold.new(data.tuning.f("pause_hold_s"))
+	_touch = TouchInput.new(data.tuning)
+	_touch_view = TouchView.new()
+	$Overlay.add_child(_touch_view)
+	_touch_view.setup(_factory, _touch)
 	_subtitles.setup(data)
 	_narration.setup(data)
 	_prologue_view = PrologueView.new()
@@ -94,7 +98,7 @@ func _ready() -> void:
 	var seed_asked: int = int(str(_context.get("seed", "1")))
 	sim.rng.reseed(seed_asked)
 	if Game.args.has("bot"):
-		_bot = StandInBot.new(sim, data)
+		_take_the_wheel(GameData.as_string(Game.args.get("bot")))
 	_seat_the_guests()
 	if _context.has("continue") and not Game.saved_telling.is_empty() and sim.restore(Game.saved_telling):
 		print("[drive] continuing the Telling of %s" % sim.run.table)
@@ -150,13 +154,64 @@ func _exit_tree() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	# Fingers (GDD 4.1, 17.4): the thumb is the hand, the pedal zone the brake.
+	var touch: InputEventScreenTouch = event as InputEventScreenTouch
+	if touch != null:
+		if touch.pressed:
+			_touch.finger_down(touch.index, touch.position, _pointer_under(touch.position), _view_size(), _dpi())
+		else:
+			_touch.finger_up(touch.index)
+		return
+	var drag: InputEventScreenDrag = event as InputEventScreenDrag
+	if drag != null:
+		_touch.finger_moved(drag.index, drag.position, _pointer_under(drag.position),
+				sim.space.to_reference(PointerView.mirrored_motion(drag.relative, _mirrored), _view_size().y))
+		return
+	if _touch.active and event is InputEventMouse and event.device == InputEvent.DEVICE_ID_EMULATION:
+		# The mouse the engine makes up for a finger: the finger is heard already.
+		return
 	var motion: InputEventMouseMotion = event as InputEventMouseMotion
 	if motion != null:
 		_pending_motion += PointerView.mirrored_motion(motion.relative, _mirrored)
 	elif event.is_action_pressed("debug_hud"):
 		_hud.toggle()
+	elif event.is_action_pressed("debug_bot"):
+		# F7 (GDD 13.9): the bot at the wheel, or off it again.
+		if _bot == null:
+			_take_the_wheel(DriverBot.SKILLS[DriverBot.SKILLS.size() - 1])
+		else:
+			_bot = null
+		print("[drive] the bot is %s the wheel" % ("at" if _bot != null else "off"))
 	elif event.is_action_pressed("pause") and _leave_in <= 0.0:
 		_open_pause()
+
+
+func _view_size() -> Vector2:
+	return get_viewport().get_visible_rect().size
+
+
+## Dots per inch of the glass, as far as the view's pixels go (a view drawn
+## larger or smaller than the screen has that many fewer or more).
+func _dpi() -> float:
+	var window: Vector2 = Vector2(get_window().size)
+	var scale: float = _view_size().y / maxf(window.y, 1.0)
+	return float(DisplayServer.screen_get_dpi()) * scale
+
+
+## The place in the cabin under a point of the glass, in the pointer's own
+## coordinates: what a thumb there points at.
+func _pointer_under(at: Vector2) -> Vector2:
+	var seen: Vector2 = PointerView.shown_at(at, _view_size().x, _mirrored)
+	var direction: Vector3 = _camera.project_ray_normal(seen)
+	return sim.space.direction_to_pointer(_cabin.global_transform.basis.inverse() * direction)
+
+
+## The DriverBot takes the wheel (GDD 13.8): `--bot=novice`, `competent` or
+## `expert`. Any other word is the smoke runs' driver: the competent bot,
+## pulling in at every stop so that a short run sees one.
+func _take_the_wheel(skill: String) -> void:
+	_bot = DriverBot.new(sim, Game.data, skill, Rng.derive(sim.run.seed, DriverBot.SEED_SALT))
+	_bot.every_stop = not DriverBot.SKILLS.has(skill)
 
 
 func _physics_process(_delta: float) -> void:
@@ -175,6 +230,16 @@ func _physics_process(_delta: float) -> void:
 		_begin_leg()
 	if not _boss_spec.is_empty() and not sim.leg.active:
 		_begin_boss()
+	if _touch.active and _bot == null:
+		# A thumb's target is 9 mm across, also where the pointer's is less.
+		sim.hand.set_snap_radius(_touch.snap_radius(_view_size(), _dpi()))
+		_touch.apply(sim, _input)
+	var to_the_pause: bool = _touch.take_pause()
+	if not _touch.active and Input.is_action_just_pressed("grip") and _touch.hotspot(_view_size(), _dpi()).has_point(_pointer.shown()):
+		# GDD 4.1: "Esc, or click the hotspot in the top-left corner."
+		to_the_pause = true
+	if to_the_pause and _leave_in <= 0.0:
+		_open_pause.call_deferred()
 	if _bot != null:
 		_bot.drive(_input)
 	sim.step(_input)
@@ -276,6 +341,9 @@ func _begin_mode() -> void:
 
 var _pause: SettingsView = null
 var _pause_hold: PauseHold = null
+## Fingers on the glass (GDD 4.1, 17.4), and what is drawn for them.
+var _touch: TouchInput = null
+var _touch_view: TouchView = null
 
 
 ## The night waits (the tree is paused) and the settings are on the screen:
@@ -373,6 +441,7 @@ func _process(delta: float) -> void:
 	_sky.apply(snapshot)
 	_post_fx.apply(snapshot, delta)
 	_pointer.apply(snapshot, _camera, _cabin)
+	_touch_view.dpi = _dpi()
 	_hud.apply(snapshot)
 	_prologue_view.apply(snapshot, _camera, _cabin, delta)
 	Audio.apply(snapshot)
