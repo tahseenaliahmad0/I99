@@ -21,10 +21,16 @@ enum AppState { BOOT, TITLE, PROLOGUE, WEDDING, TELLING, WRECK_CUT, ENDING, FINA
 ## `--ride=<passenger id>` puts a passenger in the seat (GDD 8).
 ## `--say=<line id>[,<line id>...]` asks for those lines when the drive scene
 ## starts, one after the other (to look at the subtitles).
-const VALUE_ARGS: PackedStringArray = ["table", "seed", "leg", "boss", "bot", "user-dir", "aim", "shot", "shot-frame", "give", "ride", "say"]
+## `--mode=commute` or `--mode=endless_night` plays a mode in the drive scene
+## (GDD 11.5).
+## `--ending=late|on_time|call` with `--table=` shows that ending's card in
+## the wedding scene; `--ending=finale` its finale; `--ending=credits` the
+## credits (to look at them without driving a night).
+const VALUE_ARGS: PackedStringArray = ["table", "seed", "leg", "boss", "bot", "user-dir", "aim", "shot", "shot-frame", "give", "ride", "say", "mode", "ending"]
 ## `--continue` goes on from the save file (until the title screen offers it).
 ## `--hud` starts with the numeric HUD showing.
-const FLAG_ARGS: PackedStringArray = ["skip-prologue", "continue", "hud"]
+## `--prologue` plays the prologue in the drive scene, then `--table=`'s Telling.
+const FLAG_ARGS: PackedStringArray = ["skip-prologue", "continue", "hud", "prologue"]
 
 ## Tools and tests started with `--script` never touch the player's files:
 ## each such process writes under a folder of its own, named after its process
@@ -41,6 +47,17 @@ var state: AppState = AppState.BOOT
 var profile: Dictionary = Save.default_profile()
 ## The Telling of the save file, {} when there is none to continue.
 var saved_telling: Dictionary = {}
+## The DriveContext (GDD 13.4): what drive.tscn is to do when it is entered
+## from the menus. { "prologue": true, "table", "seed" } plays the prologue
+## and then that Telling; { "table", "seed" } begins a Telling; { "table",
+## "continue": true } goes on with the saved one; { "mode", "seed" } plays a
+## mode. Empty when the scene was started by itself: the command line's
+## arguments say what it does then (GDD 13.9).
+var context: Dictionary = {}
+## What he has just come back to the wedding with, for its card: an
+## ending (Save.apply_ending's result, with "table" and "clock") or a
+## mode's run (Save.apply_mode's result). {} for nothing.
+var last_ending: Dictionary = {}
 
 
 func _ready() -> void:
@@ -109,6 +126,104 @@ func write_save(telling: Dictionary) -> bool:
 		return false
 	file.store_string(Save.to_text(profile, telling))
 	return true
+
+
+# --- The way through the game (GDD 13.4) --------------------------------------
+
+## Frames drawn in a menu scene, for `--shot=` there (the drive scene takes
+## its own pictures).
+var _menu_frames: int = 0
+
+
+func _process(_delta: float) -> void:
+	if not args.has("shot") or get_tree().current_scene == null or get_tree().current_scene.scene_file_path == DRIVE_SCENE:
+		return
+	_menu_frames += 1
+	var at: int = maxi(str(args.get("shot-frame", "30")).split(",")[0].to_int(), 1)
+	if _menu_frames != at:
+		return
+	var texture: ViewportTexture = get_viewport().get_texture()
+	var image: Image = texture.get_image() if texture != null else null
+	if image == null or image.is_empty():
+		print("[game] no image to save: this renderer draws nothing")
+	else:
+		print("[game] shot %s (%s)" % [str(args["shot"]), error_string(image.save_png(str(args["shot"])))])
+	get_tree().quit()
+
+
+const TITLE_SCENE: String = "res://scenes/title.tscn"
+const WEDDING_SCENE: String = "res://scenes/wedding.tscn"
+const DRIVE_SCENE: String = "res://scenes/drive.tscn"
+
+
+## Enters a state: its scene, with the DriveContext for the drive.
+func go(next: AppState, drive_context: Dictionary = {}) -> void:
+	state = next
+	context = drive_context
+	var scene: String = WEDDING_SCENE
+	match next:
+		AppState.BOOT, AppState.TITLE:
+			scene = TITLE_SCENE
+		AppState.PROLOGUE, AppState.TELLING, AppState.WRECK_CUT:
+			scene = DRIVE_SCENE
+	print("[game] %s" % state_name())
+	get_tree().change_scene_to_file.call_deferred(scene)
+
+
+func state_name() -> String:
+	return str(AppState.keys()[state]).to_lower()
+
+
+## The title's first entry: the prologue on first launch, else the wedding.
+func begin() -> void:
+	if after_title() == AppState.PROLOGUE:
+		play_prologue()
+	else:
+		go(AppState.WEDDING)
+
+
+## The prologue, and after it tonight at the Table that is open from the
+## start (GDD 10.1, D-063).
+func play_prologue() -> void:
+	var first: PackedStringArray = TableRules.open_at_start(data)
+	go(AppState.PROLOGUE, {"prologue": true, "table": first[0] if not first.is_empty() else "", "seed": new_seed()})
+
+
+## He sits down at a Table (GDD 3.2): the Telling he left at its last stop
+## goes on, or a new one begins.
+func sit_at(table_id: String) -> void:
+	if not saved_telling.is_empty() and GameData.as_string(saved_telling.get("table")) == table_id:
+		go(AppState.TELLING, {"table": table_id, "continue": true})
+	else:
+		go(AppState.TELLING, {"table": table_id, "seed": new_seed()})
+
+
+## A mode (GDD 11.5): the Commute has the day's seed, Endless Night its own.
+func play_mode(mode: String) -> void:
+	go(AppState.TELLING, {"mode": mode, "seed": daily_seed() if mode == Save.COMMUTE else new_seed()})
+
+
+## A seed for a night nobody has driven: `--seed=` when the build was
+## started with one, else from the clock on the wall.
+func new_seed() -> int:
+	if args.has("seed"):
+		return int(str(args["seed"]))
+	return int(Time.get_unix_time_from_system()) % 1000000 * 1000 + Time.get_ticks_usec() % 1000
+
+
+## The Commute's seed (GDD 11.5: "a daily seed"): today's date.
+func daily_seed() -> int:
+	if args.has("seed"):
+		return int(str(args["seed"]))
+	var today: Dictionary = Time.get_date_dict_from_system()
+	return GameData.as_int(today.get("year")) * 10000 + GameData.as_int(today.get("month")) * 100 + GameData.as_int(today.get("day"))
+
+
+## A mode's run is over: its score is kept (GDD 11.5: statistics, always).
+func end_mode(mode: String, score: float, finished: bool) -> Dictionary:
+	var result: Dictionary = Save.apply_mode(profile, mode, score, finished)
+	write_save(saved_telling)
+	return result
 
 
 ## The prologue plays on first launch (GDD 10.1): until it has been seen,

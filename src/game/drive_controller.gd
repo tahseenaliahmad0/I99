@@ -30,6 +30,17 @@ var _boss_spec: String = ""
 ## stand-in at the wheel, which is enough to look at a leg, a set piece or a
 ## whole Telling (null: the player drives).
 var _bot: StandInBot = null
+## What this scene is to do (GDD 13.4): Game.context when it was entered
+## from the menus, else the command line's arguments.
+var _context: Dictionary = {}
+## Entered from the menus: when the night is over the wedding is next.
+var _from_menu: bool = false
+## The prologue was playing a tick ago.
+var _in_prologue: bool = false
+## Seconds until the scene is left for the wedding (0: it is not being left).
+var _leave_in: float = 0.0
+var _narration: Narration = Narration.new()
+var _prologue_view: PrologueView
 
 @onready var _camera: Camera3D = $Camera3D
 @onready var _cabin: CabinView = $Cabin
@@ -63,15 +74,30 @@ func _ready() -> void:
 	_post_fx.setup(data, _camera, _cabin)
 	_pointer.setup(data, _factory)
 	_subtitles.setup(data)
-	sim.rng.reseed(int(str(Game.args.get("seed", "1"))))
+	_narration.setup(data)
+	_prologue_view = PrologueView.new()
+	$Overlay.add_child(_prologue_view)
+	_prologue_view.setup(data, _factory)
+	_from_menu = not Game.context.is_empty()
+	_context = Game.context if _from_menu else Game.args
+	var seed_asked: int = int(str(_context.get("seed", "1")))
+	sim.rng.reseed(seed_asked)
 	if Game.args.has("bot"):
 		_bot = StandInBot.new(sim, data)
 	_seat_the_guests()
-	if Game.args.has("continue") and not Game.saved_telling.is_empty() and sim.restore(Game.saved_telling):
+	if _context.has("continue") and not Game.saved_telling.is_empty() and sim.restore(Game.saved_telling):
 		print("[drive] continuing the Telling of %s" % sim.run.table)
-	elif Game.args.has("table"):
+	elif _context.has("prologue"):
+		# "Two Hands" (GDD 10.1), and then tonight.
+		sim.begin_prologue(str(_context.get("table", "children")), seed_asked)
+		_in_prologue = true
+		Game.state = Game.AppState.PROLOGUE
+		print("[drive] the prologue, then a Telling for %s, seed %d" % [str(_context.get("table", "children")), seed_asked])
+	elif _context.has("mode"):
+		_begin_mode()
+	elif _context.has("table"):
 		# A Telling (GDD 11.1), from Baghdad.
-		sim.begin_telling(str(Game.args["table"]), int(str(Game.args.get("seed", "1"))))
+		sim.begin_telling(str(_context["table"]), seed_asked)
 		print("[drive] a Telling for %s, seed %d" % [sim.run.table, sim.run.seed])
 	elif Game.args.has("leg"):
 		_leg_spec = str(Game.args["leg"])
@@ -120,6 +146,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		_pending_motion += motion.relative
 	elif event.is_action_pressed("debug_hud"):
 		_hud.toggle()
+	elif event.is_action_pressed("pause") and _from_menu and _leave_in <= 0.0:
+		# Back to the wedding: what the last stop saved is there to go on with.
+		Game.go(Game.AppState.WEDDING)
 
 
 func _physics_process(_delta: float) -> void:
@@ -141,9 +170,21 @@ func _physics_process(_delta: float) -> void:
 	if _bot != null:
 		_bot.drive(_input)
 	sim.step(_input)
+	if _in_prologue and not sim.prologue.active:
+		# The cut to tonight: the prologue has been seen.
+		_in_prologue = false
+		Game.prologue_played()
+		Game.state = Game.AppState.TELLING
+		_narration.reset()
+		print("[drive] the prologue is over: tonight (frame %d)" % _frames)
 	for event: Dictionary in sim.drain_events():
 		var type: String = GameData.as_string(event.get("type"))
 		Events.emit_event(type, event)
+		if not _in_prologue:
+			# What he, the Table and the stalls say to it.
+			var said: String = _narration.on_event(type, event, sim.seconds(), sim.run.table)
+			if not said.is_empty():
+				Events.emit_event("line_requested", {"id": said})
 		if type == "stop_entered":
 			# The game saves at every stop and after every boss (GDD 11.1).
 			Game.write_save(sim.checkpoint)
@@ -168,15 +209,54 @@ func _physics_process(_delta: float) -> void:
 				if Game.add_guest(GameData.as_string(event.get("guest"))):
 					print("[drive] a new guest: %s" % GameData.as_string(event.get("guest")))
 					Game.write_save(Game.saved_telling)
-		if type == "arrived" and _boss_spec.is_empty():
+		if type == "arrived" and _boss_spec.is_empty() and sim.mode.is_empty():
 			# The ending (GDD 11.4): what it leaves behind is in the profile
 			# and on disk.
 			var ending: Dictionary = Game.end_telling(event)
+			ending["table"] = GameData.as_string(event.get("table"))
+			ending["clock"] = GameData.as_string(event.get("clock"))
 			print("[drive] ending: %s" % JSON.stringify(ending))
-			# Until the wedding room exists (M9) the night simply begins again.
-			_subtitles.clear()
-			_seat_the_guests()
-			sim.begin_telling(sim.run.table, sim.run.seed + 1)
+			if _from_menu:
+				# "A short scene follows per ending, then the party" (GDD 10.5).
+				Game.last_ending = ending
+				_leave_in = sim.tuning.f("ending_leave_s")
+			else:
+				# Started from the command line, the night simply begins again.
+				_subtitles.clear()
+				_narration.reset()
+				_seat_the_guests()
+				sim.begin_telling(sim.run.table, sim.run.seed + 1)
+	if sim.mode_over and _leave_in <= 0.0 and not sim.mode.is_empty():
+		# A mode's run is over (GDD 11.5): its score is kept.
+		var run: Dictionary = Game.end_mode(sim.mode, sim.mode_score(), not sim.wrecked)
+		print("[drive] mode over: %s" % JSON.stringify(run))
+		if _from_menu:
+			Game.last_ending = run
+			_leave_in = sim.tuning.f("ending_leave_s")
+		else:
+			_context["seed"] = int(str(_context.get("seed", "1"))) + 1
+			_begin_mode()
+	if _leave_in > 0.0:
+		_leave_in -= 1.0 / float(Engine.physics_ticks_per_second)
+		if _leave_in <= 0.0:
+			Game.go(Game.AppState.ENDING)
+
+
+## Starts the mode the context names (GDD 11.5).
+func _begin_mode() -> void:
+	var mode: String = str(_context.get("mode", ""))
+	var mode_seed: int = int(str(_context.get("seed", "1")))
+	sim.heckling = false
+	_narration.reset()
+	match mode:
+		Save.COMMUTE:
+			sim.begin_commute(mode_seed)
+		Save.ENDLESS_NIGHT:
+			sim.begin_endless(mode_seed)
+		_:
+			push_error("Drive: unknown mode '%s'" % mode)
+			return
+	print("[drive] mode %s, seed %d" % [mode, mode_seed])
 
 
 ## Whoever he has carried to Basra sits at the Tables from then on, and
@@ -204,7 +284,13 @@ func _process(delta: float) -> void:
 	_post_fx.apply(snapshot, delta)
 	_pointer.apply(snapshot, _camera, _cabin)
 	_hud.apply(snapshot)
+	_prologue_view.apply(snapshot, _camera, _cabin, delta)
 	Audio.apply(snapshot)
+	if not _in_prologue:
+		# The radio, and Noor on the phone, in their own time.
+		var aloud: String = _narration.on_time(sim.seconds(), str(snapshot["radio"]), str(snapshot["heckle"]) != "", GameData.as_bool(snapshot["call_talking"]))
+		if not aloud.is_empty():
+			Events.emit_event("line_requested", {"id": aloud})
 
 	_frames += 1
 	if not _shot_path.is_empty() and _shot_frames.has(_frames):

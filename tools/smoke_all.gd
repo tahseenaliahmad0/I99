@@ -28,6 +28,17 @@ const WITH_ARGUMENTS: Array = [
 	# Somebody in the seat (GDD 8): the figure, the drum, the HUD's row.
 	["res://scenes/drive.tscn", ["--leg=open_road,1", "--bot=line", "--hud", "--ride=drummer"], 900],
 	["res://scenes/drive.tscn", ["--leg=rain,1", "--bot=line", "--hud", "--ride=conscript"], 900],
+	# The frame (M9). The prologue through its 75 s and the cut to tonight;
+	# a night told to the Children, who heckle with Twists; the two modes;
+	# and in the wedding room an ending's card, the finale and the credits.
+	["res://scenes/drive.tscn", ["--prologue", "--table=children", "--seed=3", "--bot=line", "--hud"], 5400],
+	["res://scenes/drive.tscn", ["--table=children", "--seed=3", "--bot=line", "--hud"], 3600],
+	["res://scenes/drive.tscn", ["--mode=commute", "--seed=5", "--bot=line", "--hud"], 2400],
+	["res://scenes/drive.tscn", ["--mode=endless_night", "--seed=5", "--bot=line", "--hud"], 2400],
+	["res://scenes/wedding.tscn", ["--ending=call", "--table=noor"]],
+	["res://scenes/wedding.tscn", ["--ending=late", "--table=children"]],
+	["res://scenes/wedding.tscn", ["--ending=finale"]],
+	["res://scenes/wedding.tscn", ["--ending=credits"]],
 ]
 
 

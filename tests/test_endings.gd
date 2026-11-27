@@ -75,6 +75,8 @@ func test_end_01() -> void:
 	_check_the_chain()
 	_check_guests()
 	_check_the_save_file()
+	_check_the_objection()
+	_check_the_modes()
 
 
 ## What a new player has: the first Table, and nothing else.
@@ -282,3 +284,161 @@ func _check_the_save_file() -> void:
 	check(GameData.as_dict(read.get("telling")).is_empty() and Game.saved_telling.is_empty(), "and no Telling to continue: it is over")
 	Game.profile = kept_profile
 	Game.saved_telling = kept_telling
+
+
+## Wrecks the car where it is, and returns the line the Table objects with.
+func _wreck_for_a_line() -> String:
+	_input.clear()
+	_events = []
+	var guard: int = _ticks_in(90.0)
+	while not _sim.wrecked and guard > 0:
+		guard -= 1
+		_sim.car.x = _sim.car.guardrail_x()
+		_sim.car.s = clampf(_sim.car.s, 50.0, _sim.leg.length - 400.0)
+		_sim.step(_input)
+		for event: Dictionary in _sim.drain_events():
+			_events.append(event)
+	var said: String = ""
+	var after_wreck: bool = false
+	for event: Dictionary in _events:
+		if GameData.as_string(event.get("type")) == "wreck":
+			after_wreck = true
+		elif after_wreck and GameData.as_string(event.get("type")) == "line_requested" and said.is_empty():
+			said = GameData.as_string(event.get("id"))
+			check(GameData.as_bool(event.get("tell")), "(the objection takes the screen at once)")
+	guard = _ticks_in(10.0)
+	while _sim.wrecked and guard > 0:
+		guard -= 1
+		_sim.step(_input)
+	_sim.drain_events()
+	return said
+
+
+## "The Table objects, he corrects himself" (GDD 11.4): at a Wreck the
+## Table he is telling it to says a line of its own, and another the next
+## time.
+func _check_the_objection() -> void:
+	for table: Dictionary in data.records("tables"):
+		var id: String = GameData.as_string(table.get("id"))
+		check(data.has_line("wreck.%s.1" % id) and data.has_line("wreck.%s.2" % id), "the %s Table has its objections" % id)
+	_tell("drivers", 3)
+	var said: PackedStringArray = []
+	for _wreck: int in 3:
+		_into_next_quiet_leg()
+		said.append(_wreck_for_a_line())
+	check(said[0].begins_with("wreck.drivers.") and data.has_line(said[0]), "a Wreck told to the Drivers: one of them objects (%s)" % said[0])
+	check(said[0] != said[1] and said[1] != said[2], "the next Wreck, another objection (%s, %s)" % [said[1], said[2]])
+	check_eq(said[0], "wreck.drivers.1", "(the first is the line of GDD 3.6)")
+	_tell("noor", 3)
+	_into_next_quiet_leg()
+	check(_wreck_for_a_line().begins_with("wreck.noor."), "at Noor's Table it is she who says it")
+	# The Children's free rewind has its own word.
+	_tell("children", 3)
+	_into_next_quiet_leg()
+	check(_wreck_for_a_line().begins_with("rewind.children."), "the Children's rewind: \"Not like that!\"")
+	# (He is back at the start of that leg; the next Wreck, on it, is a Wreck.)
+	check(_sim.run.active and not _sim.wrecked and _sim.rewinds_left == 0, "(the rewind is spent)")
+	var second: String = _wreck_for_a_line()
+	check(second.begins_with("wreck.children."), "(the Wreck after it is a Wreck: %s)" % second)
+
+
+## The two modes that endings earn (GDD 11.5): "Commute mode: one seeded
+## 5 km leg scored on cash. Endless Night mode: legs without end, scored on
+## distance."
+func _check_the_modes() -> void:
+	check_near(tuning.f("commute_length"), 5000.0, 0.000001, "GDD 11.5: the Commute is one leg of 5 km")
+	var checker: LegChecker = LegChecker.new(data)
+	var texts: PackedStringArray = []
+	var scores: PackedFloat64Array = []
+	for commute_seed: int in [20261127, 20261127, 20261128]:
+		_sim = DriveSim.new(fresh_data())
+		_sim.begin_commute(commute_seed)
+		texts.append(LegGenerator.to_text(_sim.leg.plan))
+		check_eq(_sim.mode, Save.COMMUTE, "(the Commute)") if scores.is_empty() else true
+		check_near(_sim.leg.length, 5000.0, 0.000001, "(its road is 5 km)") if scores.is_empty() else true
+		check(not _sim.run.active and not _sim.heckles.planned.size() > 0, "(told to no Table: no fork, no heckle)") if scores.is_empty() else true
+		check_near(_sim.cash, 0.0, 0.000001, "(he starts it with an empty band)") if scores.is_empty() else true
+		# Driven on the line the generator found, at par.
+		checker.load_plan(_sim.leg.plan)
+		_sim.gate.reset(3)
+		_sim.car.speed = tuning.fi("gear_speeds", 2)
+		_input.clear()
+		_events = []
+		var guard: int = _ticks_in(400.0)
+		while not _sim.mode_over and guard > 0:
+			guard -= 1
+			_sim.car.x = checker.line_x(_sim.car.s)
+			_sim.step(_input)
+			for event: Dictionary in _sim.drain_events():
+				_events.append(event)
+		scores.append(_sim.mode_score())
+		if scores.size() == 1:
+			check(_sim.mode_over and not _sim.wrecked, "at the end of its 5 km the Commute is over")
+			var arrived: Dictionary = _event("arrived")
+			check_eq(GameData.as_string(arrived.get("mode")), Save.COMMUTE, "he has arrived")
+			check_near(GameData.as_float(arrived.get("score")), _sim.cash, 0.000001, "scored on cash: what is in his band")
+			check(_sim.cash >= tuning.f("clean_leg_bonus"), "(a clean road pays its bonus: %d cash)" % roundi(_sim.cash))
+			check_eq(_count_events("fork_taken") + _count_events("stop_entered") + _count_events("boss_started"), 0, "one leg: no fork, no stall, no boss")
+	check_eq(texts[0], texts[1], "the same seed is the same Commute")
+	check(texts[0] != texts[2], "another day's seed is another road")
+	check_near(scores[0], scores[1], 0.000001, "(and, driven the same, the same score)")
+
+	# Endless Night: one leg after another until a Wreck.
+	_sim = DriveSim.new(fresh_data())
+	_sim.begin_endless(7)
+	check_eq(_sim.mode, Save.ENDLESS_NIGHT, "(Endless Night)")
+	_input.clear()
+	_sim.drain_events()
+	_events = []
+	var legs: int = 1
+	var behind: float = 0.0
+	var acts: Dictionary = {}
+	var guard: int = _ticks_in(120.0)
+	while legs < 12 and guard > 0:
+		guard -= 1
+		var length: float = _sim.leg.length
+		if _sim.car.s < length - 2.0:
+			_sim.car.s = length - 1.0
+		_sim.car.x = _sim.car.lane_center(1 if _sim.car.lanes > 1 else 0)
+		_sim.step(_input)
+		for event: Dictionary in _sim.drain_events():
+			if GameData.as_string(event.get("type")) == "leg_started":
+				legs += 1
+				behind += length
+				acts[_sim.act] = true
+	check_eq(legs, 12, "legs without end: the eleventh leg's end begins the twelfth")
+	check(not _sim.mode_over and _sim.leg.active, "(and it is not over)")
+	check_near(_sim.mode_score(), behind + _sim.car.s, 0.01, "scored on distance: the legs behind him and how far he is into this one")
+	check_eq(acts.size(), 3, "its roads grow harder: those of all three acts by the twelfth leg")
+	check_eq(_count_events("stop_entered") + _count_events("fork_taken"), 0, "(no stall and no fork between them)")
+	var distance: float = _sim.mode_score()
+	_sim.car.s = 100.0
+	guard = _ticks_in(90.0)
+	while not _sim.wrecked and guard > 0:
+		guard -= 1
+		_sim.car.x = _sim.car.guardrail_x()
+		_sim.car.s = clampf(_sim.car.s, 50.0, _sim.leg.length - 400.0)
+		_sim.step(_input)
+	check(_sim.wrecked and _sim.mode_over, "a Wreck ends Endless Night")
+	var tick: int = _sim.tick
+	_ticks(_ticks_in(5.0))
+	check(_sim.wrecked and _sim.mode_over and not _sim.run.active, "and nobody tells it again: it stays over")
+	check(_sim.mode_score() > distance - 2600.0, "(its score is the distance he got to)")
+
+	# What the game keeps of a mode's run.
+	var profile: Dictionary = Save.new_profile(data)
+	var first: Dictionary = Save.apply_mode(profile, Save.COMMUTE, 40.0, true)
+	check(GameData.as_bool(first["best"]), "a first Commute is the best so far")
+	check(not GameData.as_bool(Save.apply_mode(profile, Save.COMMUTE, 25.0, true)["best"]), "a poorer one is not")
+	check(not GameData.as_bool(Save.apply_mode(profile, Save.COMMUTE, 90.0, false)["best"]), "nor one that ended in a Wreck, whatever was in his band")
+	check(GameData.as_bool(Save.apply_mode(profile, Save.ENDLESS_NIGHT, 7400.0, false)["best"]), "Endless Night always ends in a Wreck: its distance counts")
+	var stats: Dictionary = GameData.as_dict(profile.get("stats"))
+	check_near(GameData.as_float(stats.get("commute_best")), 40.0, 0.000001, "the profile's statistics hold the best Commute")
+	check_eq(GameData.as_int(stats.get("commute_runs")), 3, "and how many were driven")
+	var read: Dictionary = Save.from_text(Save.to_text(profile, {}))
+	var kept: Dictionary = GameData.as_dict(GameData.as_dict(read.get("profile")).get("stats"))
+	var same: bool = kept.size() == stats.size()
+	for key: Variant in stats:
+		same = same and is_equal_approx(GameData.as_float(kept.get(key), -1.0), GameData.as_float(stats[key]))
+	check(same, "they survive the save file")
+	check(tick > 0, "(done)")

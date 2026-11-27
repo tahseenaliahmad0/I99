@@ -121,6 +121,15 @@ var rewinds_left: int = 0
 ## The Telling as it was when that leg or boss began ({} when no rewind is
 ## left to need it). It is kept in memory only: nothing is saved in a leg.
 var _leg_start: Dictionary = {}
+## The mode he is driving (GDD 11.5): Save.COMMUTE, Save.ENDLESS_NIGHT, or
+## "" for a Telling and everything else.
+var mode: String = ""
+## The mode's road has ended: he arrived at the Commute's end, or wrecked.
+var mode_over: bool = false
+## Metres of Endless Night that are behind him in the legs he has finished.
+var _mode_behind: float = 0.0
+var _mode_seed: int = 0
+var _mode_legs: int = 0
 ## The prologue's clock (GDD 10.1), while it plays.
 var prologue: PrologueSim = PrologueSim.new()
 ## The Telling that begins when the prologue is over: tonight.
@@ -346,6 +355,10 @@ func _build() -> void:
 	passengers.configure(data, effects, nerves, items, faults)
 	heckles.configure(data, items)
 	prologue.configure(tuning)
+	mode = ""
+	mode_over = false
+	_mode_behind = 0.0
+	_mode_legs = 0
 	_leg_twist = {}
 	_ahead_then = {}
 
@@ -653,6 +666,7 @@ func step(input: DriveInput) -> void:
 			_clear_weather()
 		else:
 			_end_leg()
+			_mode_leg_done()
 	# What leg progress brought after this tick's reports is said in the tick
 	# it happened: the end of what a leg held to its end, at the gore, and a
 	# Snap that a missed Exit took him to.
@@ -815,6 +829,99 @@ func _step_leg_road() -> void:
 func begin_telling(table_id: String, telling_seed: int) -> void:
 	_build()
 	_tell(table_id, telling_seed)
+
+
+## The Commute (GDD 11.5): "One seeded 5 km leg scored on cash." One road
+## of commute_length, laid out like the leg tuning names (commute_leg), from
+## a standing start with an empty band; where it ends he has arrived.
+func begin_commute(commute_seed: int) -> void:
+	_build()
+	mode = Save.COMMUTE
+	_mode_seed = commute_seed
+	reseed(commute_seed)
+	cash = 0.0
+	var road: Dictionary = data.record("legs", tuning.s("commute_leg")).duplicate(true)
+	var length: float = tuning.f("commute_length")
+	# Par for its length, at the pace the leg's own par asks for.
+	road["par_s"] = GameData.as_float(road.get("par_s")) * length / tuning.f("leg_length")
+	road["length_m"] = length
+	road["special"] = null
+	begin_leg(LegGenerator.generate_road(data, road, 1, Rng.derive(commute_seed, 1)))
+
+
+## Endless Night (GDD 11.5): "Legs without end, scored on distance." One
+## leg after another with no fork, stall or boss between them, of any kind,
+## harder as the acts of a Telling are (endless_legs_per_act legs to an
+## act), until a Wreck.
+func begin_endless(endless_seed: int) -> void:
+	_build()
+	mode = Save.ENDLESS_NIGHT
+	_mode_seed = endless_seed
+	reseed(endless_seed)
+	begin_leg(_endless_leg())
+
+
+## The next leg of Endless Night.
+func _endless_leg() -> Dictionary:
+	var of_act: int = mini(1 + _mode_legs / maxi(tuning.i("endless_legs_per_act"), 1), RunGenerator.ACTS)
+	var kinds: PackedStringArray = []
+	for record: Dictionary in data.records("legs"):
+		if GameData.as_array(record.get("acts")).has(float(of_act)) or GameData.as_array(record.get("acts")).has(of_act):
+			kinds.append(GameData.as_string(record.get("id")))
+	var leg_id: String = kinds[rng.range_i(Rng.ROAD, 0, kinds.size() - 1)]
+	var allowed: Array = GameData.as_array(data.record("legs", leg_id).get("modifiers_allowed"))
+	var modifier: String = ""
+	var roll: float = rng.unit(Rng.ROAD)
+	var which: int = rng.range_i(Rng.ROAD, 0, maxi(allowed.size() - 1, 0))
+	if roll < tuning.fi("modifier_chance", of_act - 1) and not allowed.is_empty():
+		modifier = GameData.as_string(allowed[which])
+	_mode_legs += 1
+	return LegGenerator.generate(data, leg_id, of_act, Rng.derive(_mode_seed, _mode_legs), modifier)
+
+
+## A leg of a mode has ended: the Commute is over; Endless Night goes on.
+func _mode_leg_done() -> void:
+	match mode:
+		Save.COMMUTE:
+			mode_over = true
+			leg.stop()
+			parked = true
+			car.speed = 0.0
+			car.v_lat = 0.0
+			_emit("arrived", {"table": "", "mode": mode, "score": mode_score(), "clock": clock.text(), "late": false, "call": false, "guest": ""})
+		Save.ENDLESS_NIGHT:
+			_mode_behind += leg.length
+			var plan: Dictionary = _endless_leg()
+			_roll_into(plan)
+			_announce_leg(plan)
+
+
+## What the mode is scored on (GDD 11.5): the Commute on cash, Endless
+## Night on distance, in metres. 0 outside a mode.
+func mode_score() -> float:
+	match mode:
+		Save.COMMUTE:
+			return cash
+		Save.ENDLESS_NIGHT:
+			return _mode_behind + (car.s if leg.active else 0.0)
+	return 0.0
+
+
+## "A guest objects, he answers" (GDD 3.2, 11.4): the Table's line at a
+## Wreck, each of its lines in turn; at a rewind the line of that.
+func _say_the_objection() -> void:
+	if not run.active or run.table.is_empty():
+		return
+	var family: String = "rewind.%s" % run.table if _can_rewind() else "wreck.%s" % run.table
+	var count: int = 0
+	while data.has_line("%s.%d" % [family, count + 1]):
+		count += 1
+	if count == 0 and family.begins_with("rewind."):
+		family = "wreck.%s" % run.table
+		while data.has_line("%s.%d" % [family, count + 1]):
+			count += 1
+	if count > 0:
+		_emit("line_requested", {"id": "%s.%d" % [family, 1 + run.retellings % count], "tell": true})
 
 
 ## The prologue (GDD 10.1), and after its 75 s the Telling for `table_id`:
@@ -1929,6 +2036,7 @@ func snapshot() -> Dictionary:
 		"mount_caller": String(items.caller),
 		"mount_ring_left": items.ring_left,
 		"call": boss.call,
+		"call_talking": boss.talking(),
 		"call_left": boss.call_left,
 		"call_taken": boss.call_taken,
 		"at_ear": hand.at_ear,
@@ -1995,7 +2103,8 @@ func snapshot() -> Dictionary:
 		"headlight_cone": headlight_cone(),
 		"mirror_delay": faults.param(FAULT_MIRROR, "mirror_tell_delay_s", 0.0),
 		"cash": cash,
-		"clock": clock.text(),
+		# (The morning of the prologue has its own hour on the dash.)
+		"clock": tuning.s("prologue_clock") if prologue.active else clock.text(),
 		"clock_minutes": clock.minutes,
 		"night_share": clock.night_share(),
 		"late": clock.late(),
@@ -2044,6 +2153,10 @@ func snapshot() -> Dictionary:
 		# the anchor that pulses, whether the step is done, how far the left
 		# hand has lifted off the wheel (and the screen whited out), and where
 		# the left hand is.
+		# A mode (GDD 11.5): which, whether it is over, and its score so far.
+		"mode": mode,
+		"mode_over": mode_over,
+		"mode_score": mode_score(),
 		"prologue_step": prologue.step if prologue.active else 0,
 		"prologue_prompt": _prologue_prompt(),
 		"prologue_done": prologue.done,
@@ -2280,7 +2393,12 @@ func _apply_collisions() -> void:
 		if faults.is_wrecked() and not wrecked:
 			wrecked = true
 			_wreck_left = tuning.f("wreck_to_wheel")
-			_emit("wreck", {"table": run.table, "act": run.act, "retellings": run.retellings, "rewind": run.active and _can_rewind()})
+			_emit("wreck", {"table": run.table, "act": run.act, "retellings": run.retellings, "rewind": run.active and _can_rewind(),
+					"mode": mode, "score": mode_score()})
+			_say_the_objection()
+			if not mode.is_empty():
+				# A mode has no Table to tell it again to: it is over.
+				mode_over = true
 	# A vehicle passed closely honks (a taxi), close call or not (GDD 5.5).
 	if not collision.honk_vehicle_ids.is_empty():
 		nerves.add(collision.honk_nerves - collision.honk_frights)

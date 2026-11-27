@@ -95,7 +95,7 @@
     { "id": "door_left",     "placeholder": "cabin_door",      "pos": [-0.60, -0.05, 0.25] },
     { "id": "door_right",    "placeholder": "cabin_door",      "pos": [1.15, -0.05, 0.25] },
     { "id": "hood",          "placeholder": "cabin_hood",      "pos": [0.275, -0.10, -1.05] },
-    { "id": "left_sleeve",   "placeholder": "left_sleeve",     "pos": [-0.27, 0.03, 0.10] },
+    { "id": "left_sleeve",   "placeholder": "left_sleeve",     "pos": [-0.27, 0.03, 0.10], "flags": ["!prologue"] },
     { "id": "floor",         "placeholder": "cabin_floor",     "pos": [0.275, -0.45, 0.20] },
     { "id": "mirror_glass",  "placeholder": "cabin_mirror_glass", "pos": [0.42, 0.50, -0.212] },
     { "id": "licence",       "placeholder": "cabin_licence",   "pos": [0.45, 0.20, -0.36] },
@@ -105,6 +105,10 @@
     { "id": "glovebox_open", "placeholder": "cabin_glovebox_door", "pos": [0.92, -0.165, -0.105], "rot": [90.0, 0.0, 0.0], "flags": ["glovebox_open"] },
     { "id": "registration",  "placeholder": "cabin_registration", "pos": [1.00, -0.157, -0.105], "flags": ["glovebox_open"] },
     { "id": "letter",        "placeholder": "cabin_letter",    "pos": [1.00, -0.153, -0.105], "flags": ["glovebox_open", "!letter_aside"] },
-    { "id": "letter_aside",  "placeholder": "cabin_letter",    "pos": [1.00, -0.105, -0.168], "rot": [80.0, 0.0, 0.0], "flags": ["glovebox_open", "letter_aside"] }
+    { "id": "letter_aside",  "placeholder": "cabin_letter",    "pos": [1.00, -0.105, -0.168], "rot": [80.0, 0.0, 0.0], "flags": ["glovebox_open", "letter_aside"] },
+    { "id": "new_photo",     "placeholder": "prologue_photo",  "pos": [0.45, 0.215, -0.33], "flags": ["prologue", "!photo_tucked"] },
+    { "id": "tucked_photo",  "placeholder": "prologue_photo",  "pos": [0.05, 0.56, -0.115], "rot": [80.0, 0.0, 0.0], "flags": ["prologue", "photo_tucked"] },
+    { "id": "her_mother",    "placeholder": "cabin_passenger", "pos": [0.80, 0.02, 0.56], "flags": ["prologue"] },
+    { "id": "bundle",        "placeholder": "prologue_bundle", "pos": [0.80, -0.12, 0.36], "rot": [0.0, 0.0, 90.0], "flags": ["prologue"] }
   ]
 }

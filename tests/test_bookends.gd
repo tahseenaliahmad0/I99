@@ -271,6 +271,7 @@ func _check_the_left_hand() -> void:
 	check(worst < 0.3, "twenty seconds of reaching, nobody steering: the car keeps its lane (%.2f m off at most)" % worst)
 	check_eq(_sim.car.lane_of(_sim.car.x), lane, "(the lane it began in)")
 	check_near(_sim.nerves.value, nerves, 0.000001, "and his Nerves are where they were: no reach has a cost")
+	check_near(_sim.clock.minutes, 0.0, 0.000001, "tonight's Clock does not run in that morning")
 	check_eq(_sim.faults.lamps, 0, "(no lamp)")
 	# The same twenty seconds tonight, with one hand: the car is gone.
 	_new_sim()

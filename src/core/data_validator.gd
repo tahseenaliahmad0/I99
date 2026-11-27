@@ -911,6 +911,9 @@ func _tuning_schema() -> Dictionary:
 		"prologue_length": pos, "prologue_step_s": _list_n(pos, PrologueSim.STEPS),
 		"prologue_friend": _obj({"vehicle": _ref("vehicles"), "behind_m": pos, "faster_kmh": pos}),
 		"finale_claps": _int(1.0), "finale_walk_s": pos, "finale_baba_s": pos, "finale_clap_again_s": pos,
+		# The modes and the narration (M9)
+		"commute_leg": _ref("legs"), "commute_length": above, "endless_legs_per_act": _int(1.0),
+		"narration_gap": pos, "narration_close_gap": pos, "narration_radio_every": above, "narration_call_every": above,
 		"guest_heckle_weight": pos,
 		"stop_minutes": _obj({"fuel": pos, "fitter": pos, "tea": pos, "find": pos, "hitcher": pos, "shady": pos}),
 		"stop_weights": _obj({"fuel": pos, "fitter": pos, "tea": pos, "find": pos, "hitcher": pos}),

@@ -2469,3 +2469,64 @@ This is how they were read.
   the player releases the button".
 - Released in front of the groom it is over, whenever that is: at once, or
   never. It asks for `finale.proverb` and nothing brings it back.
+
+## D-064 (M9, 2026-11-27) The frame on screen: scenes, flow, modes, lines
+
+- **Scenes.** GDD 13.2 names four: `boot`, `title`, `wedding`, `drive`.
+  The states of GDD 13.4 are spread over them: BOOT and TITLE (`boot` goes
+  straight on to `title`); PROLOGUE, TELLING and the Wreck's cut in
+  `drive`; WEDDING, ENDING, FINALE and CREDITS in `wedding`, which is one
+  room seen four ways. `Game.go(state, context)` changes scene.
+- **DriveContext** (GDD 13.4) is `Game.context`: `{prologue, table, seed}`,
+  `{table, seed}`, `{table, continue}` or `{mode, seed}`. `drive.tscn`
+  reads it when it was entered from the menus, and the command line's
+  arguments (GDD 13.9) when it was started by itself; only a night begun
+  from the menus leads back to the wedding. Started by itself it begins
+  again, as before, so that a picture or a smoke run can be asked for.
+  New arguments for looking at things: `--prologue`, `--mode=`, and in
+  `wedding.tscn` `--ending=late|on_time|call|finale|credits`.
+- **The wedding room.** Each Table's record has its place in the room
+  (`room_pos`). The pointer is at the place nearest to it on the screen
+  within `wedding_pick_radius`; a press of the left button sits him down
+  there. A Table whose Telling is in the save file goes on with it; any
+  other begins a new night (a seed from the clock on the wall, or
+  `--seed=`). A Table that is not open says which win opens it. The two
+  modes are doors in the back wall. Everything is the pointer and the left
+  button (GDD 17.4); Esc goes back as well, and a button does the same.
+- **"A short scene follows per ending, then the party"** (GDD 10.5) is a
+  card over the room: the ending, the hour he parked, what it opened, and
+  three spoken lines (how he parked, the Table's answer, the guest he
+  carried). A press goes on: to the finale after the Call at Noor's Table,
+  else into the room.
+- **The Wreck's cut.** "The screen cuts to black one frame before impact":
+  the frame drawn after the tick of the Wreck is black, and stays so for
+  the 3 s the Table objects; the impact itself is never drawn. The Table's
+  objection is asked for by the simulation, as a tell, in the tick of the
+  Wreck: the Table's own lines in turn (`wreck.<table>.<n>`), and for the
+  Children's rewind `rewind.children.1`.
+- **The modes** (GDD 11.5). *The Commute*: one road of `commute_length`
+  (5 km) laid out like the leg `commute_leg` (Rush), from a seed that is
+  today's date; his band starts empty and what is in it at the end is the
+  score. A Wreck ends it and the run does not count for the best: he did
+  not arrive. *Endless Night*: any leg after any leg, with no fork, stall
+  or boss, harder as a Telling's acts are (three legs to an act); the score
+  is the distance, and a Wreck is its end. Neither has a Table, so nobody
+  heckles and nothing is told again. The best of each is kept in the
+  profile's `stats` (GDD 11.5: "statistics: always").
+- **Narration.** `src/view/narration.gd` asks for the lines the simulation
+  does not: what he says as a leg, an act, a stop or a set piece begins,
+  now and then about a scrape, a close call, a new lamp; a vendor's word;
+  the Table's answer to a heckle met or missed; the radio; the rest of
+  Noor's call. It listens to the events, takes turns through its lines
+  (no chance) and keeps `narration_gap` between two lines that mark no
+  moment. It is presentation only: the simulation does not know it.
+- **Lines.** 217 lines were added (164 of them spoken): 502 in all, 226
+  with a speaker, every spoken one `needs_writer`. GDD 3.6 asks for "about
+  250 placeholder lines"; the remaining voices (a second line for each
+  heckle, more of the radio) are an Iraqi writer's to add with the rest.
+- **Not built, and owed.** The prologue's "bundle makes small sounds" has
+  no sound (GDD 16.5 has no row for it; the bundle is drawn). The title
+  has no options entry yet: the settings are M10's. The flow from the
+  title through a night to the wedding has no automatic test of its own:
+  each scene and each state is run by the smoke step, and the clicks
+  between them are T-SMOKE-ALL's and T-ONEHAND-01's (M10).

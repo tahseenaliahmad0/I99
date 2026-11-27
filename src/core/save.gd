@@ -32,7 +32,24 @@ static func default_profile() -> Dictionary:
 		"guests": [],
 		"modes": [],
 		"prologue_seen": false,
+		# Statistics (GDD 11.5: kept always): the best of each mode, and counts.
+		"stats": {},
 	}
+
+
+## A mode's run is over (GDD 11.5): its score goes into the profile's
+## statistics. `finished` is false when it ended in a Wreck; a Commute that
+## did not arrive does not count for the best. Returns { "mode", "score",
+## "finished", "best": this is the best so far }.
+static func apply_mode(profile: Dictionary, mode: String, score: float, finished: bool) -> Dictionary:
+	var stats: Dictionary = GameData.as_dict(profile.get("stats")).duplicate()
+	stats["%s_runs" % mode] = GameData.as_int(stats.get("%s_runs" % mode)) + 1
+	var counts: bool = finished or mode == ENDLESS_NIGHT
+	var best: bool = counts and score > GameData.as_float(stats.get("%s_best" % mode), -1.0)
+	if best:
+		stats["%s_best" % mode] = score
+	profile["stats"] = stats
+	return {"mode": mode, "score": score, "finished": finished, "best": best}
 
 
 ## A new player's profile as the data has it: the Tables open from the start.
