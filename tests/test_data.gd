@@ -85,6 +85,8 @@ func test_data_01() -> void:
 	_check_broken_table_rules()
 	_check_broken_heckle_rules()
 	_check_broken_bookends()
+	_check_broken_controls()
+	_check_drawn_by_code()
 
 
 # --- 1. Shipped data ----------------------------------------------------------
@@ -1323,3 +1325,124 @@ func _write(path: String, text: String) -> void:
 		fail("cannot write %s" % path)
 		return
 	file.store_string(text)
+
+
+# --- 13. The controls always in the car (GDD 4.6; M1 review) ---------------------
+
+## The table of GDD 4.6, worked out here from the GDD's text and not taken
+## from the validator: anchor, reach, cross, gesture, what the gesture needs.
+const GDD_CONTROLS: Array[Array] = [
+	["horn", 0.13, false, "TAP", []],
+	["wiper_stalk", 0.10, false, "FLICK", ["up"]],
+	["hazard_button", 0.16, false, "TAP", []],
+	["radio", 0.21, false, "DRAG", []],
+	["gear_lever", 0.23, false, "GATE", []],
+	["visor", 0.32, false, "FLICK", ["down"]],
+	["face", 0.26, false, "TAP", []],
+	["passenger_shoulder", 0.53, false, "TAP", []],
+	["glovebox", 0.57, false, "TAP", []],
+	["indicator_stalk", 0.41, true, "FLICK", ["up", "down"]],
+	["headlight_knob", 0.53, true, "TAP", []],
+	["window_crank", 0.70, true, "CRANK", []],
+]
+
+
+## rituals.json and anchors.json are held to the table of GDD 4.6: every
+## control is there, at its reach, and worked by its gesture.
+func _check_broken_controls() -> void:
+	check_eq(GDD_CONTROLS.size(), 12, "GDD 4.6 lists twelve controls")
+	for row: Array in GDD_CONTROLS:
+		var anchor: String = GameData.as_string(row[0])
+		var gesture: String = GameData.as_string(row[3])
+		var dirs: Array = GameData.as_array(row[4])
+		# The shipped data, read here without the validator.
+		var record: Dictionary = data.record("anchors", anchor)
+		check_near(GameData.as_float(record.get("time_s")), GameData.as_float(row[1]), 0.0005, "GDD 4.6: the reach to %s" % anchor)
+		check_eq(GameData.as_bool(record.get("via_w")), GameData.as_bool(row[2]), "GDD 4.6: whether the reach to %s crosses the hub" % anchor)
+		var own: Dictionary = _control_ritual(data, anchor, gesture)
+		check(not own.is_empty(), "GDD 4.6: %s is worked by %s" % [anchor, gesture])
+		if not dirs.is_empty():
+			var has: Array = GameData.as_array(own.get("flick_dirs"))
+			check(has.size() == dirs.size() and dirs.all(func(dir: Variant) -> bool: return has.has(dir)), "GDD 4.6: %s is flicked %s" % [anchor, " or ".join(PackedStringArray(dirs))])
+
+		# Broken four ways: another reach, the other side of the hub, another
+		# gesture, and no ritual of the car's own at all.
+		_reset_fixture()
+		_record("anchors", anchor)["time_s"] = GameData.as_float(row[1]) + 0.01
+		_expect("E_RULE", "anchors[%s].time_s" % anchor, "a reach to %s that is not the table's" % anchor)
+
+		_reset_fixture()
+		_record("anchors", anchor)["via_w"] = not GameData.as_bool(row[2])
+		_expect("E_RULE", "anchors[%s].via_w" % anchor, "%s on the wrong side of the hub" % anchor)
+
+		_reset_fixture()
+		var fixture: GameData = GameData.from_parts(_roots, _lines)
+		var ritual: Dictionary = _control_ritual(fixture, anchor, gesture)
+		ritual["gesture"] = "HOLD" if gesture != "HOLD" else "TAP"
+		ritual["hold_s"] = 0.5
+		_expect("E_MISSING", "controls[%s]" % anchor, "%s worked by another gesture" % anchor)
+
+		_reset_fixture()
+		fixture = GameData.from_parts(_roots, _lines)
+		_control_ritual(fixture, anchor, gesture)["item"] = "cigarettes"
+		_expect("E_MISSING", "controls[%s]" % anchor, "%s left to an item's ritual" % anchor)
+
+	# What a gesture needs is part of the table.
+	_reset_fixture()
+	_record("rituals", "wipers")["flick_dirs"] = ["down"]
+	_expect("E_MISSING", "controls[wiper_stalk]", "wipers flicked down")
+	_reset_fixture()
+	_record("rituals", "visor_photo")["flick_dirs"] = ["up"]
+	_expect("E_MISSING", "controls[visor]", "a visor flicked up")
+	_reset_fixture()
+	_record("rituals", "indicator")["flick_dirs"] = ["up"]
+	_expect("E_MISSING", "controls[indicator_stalk]", "an indicator that signals one way only")
+	_reset_fixture()
+	_record("rituals", "indicator")["flick_dirs"] = ["up", "down", "left"]
+	_expect("E_MISSING", "controls[indicator_stalk]", "an indicator with a third way")
+	_reset_fixture()
+	_record("rituals", "window_crank")["turns"] = 2
+	_expect("E_MISSING", "controls[window_crank]", "a window opened by two turns")
+	check_near(GameData.as_float(data.record("rituals", "window_crank").get("turns")), 3.0, 0.000001, "GDD 4.6: the window is CRANK(3)")
+
+	# And the shoulder is a control the car always has.
+	_reset_fixture()
+	_list("anchors", "anchors").erase(_record("anchors", "passenger_shoulder"))
+	_expect("E_MISSING", "anchors[passenger_shoulder]", "a car with no passenger's shoulder")
+
+
+## What the code draws itself from a size and a colour takes no scene (M2
+## review: a scene on a road strip, the arm or the pointer was ignored
+## without a word).
+func _check_drawn_by_code() -> void:
+	var registry: Dictionary = data.root("placeholders")
+	for id: String in ["road_asphalt", "road_rumble", "road_shoulder", "road_line", "road_barrier", "road_rail", "road_dash", "road_post",
+			"road_bay", "road_checkpoint_barrier", "road_checkpoint_cap", "road_checkpoint_bar",
+			"arm_upper", "arm_forearm", "ghost_arm", "prologue_left_arm", "ui_pointer", "ui_progress", "prologue_pulse"]:
+		check(GameData.as_bool(GameData.as_dict(registry.get(id)).get("drawn_by_code")), "%s is marked as drawn by the code" % id)
+		_reset_fixture()
+		var entry: Dictionary = GameData.as_dict(GameData.as_dict(_roots["placeholders"]).get(id))
+		entry["scene"] = "res://scenes/drive.tscn"
+		_expect("E_RULE", "%s.scene" % id, "a scene on %s, which the code draws itself" % id)
+	# Anything else takes a scene, and the mark itself is a yes or a no.
+	_reset_fixture()
+	var truck: Dictionary = GameData.as_dict(GameData.as_dict(_roots["placeholders"]).get("veh_truck"))
+	truck["scene"] = "res://scenes/drive.tscn"
+	check(not _has(_validate(), "E_RULE", "veh_truck.scene"), "a scene on a placeholder that is made as a node is taken")
+	_reset_fixture()
+	truck = GameData.as_dict(GameData.as_dict(_roots["placeholders"]).get("veh_truck"))
+	truck["drawn_by_code"] = "yes"
+	_expect("E_TYPE", "veh_truck.drawn_by_code", "a word where the mark belongs")
+	_reset_fixture()
+	truck = GameData.as_dict(GameData.as_dict(_roots["placeholders"]).get("veh_truck"))
+	truck["drawn_by_code"] = false
+	truck["scene"] = "res://scenes/drive.tscn"
+	check(not _has(_validate(), "E_RULE", "veh_truck.scene"), "marked as not drawn by the code, it takes a scene")
+
+
+## The ritual of the car's own (it names no item) at an anchor, with a gesture.
+func _control_ritual(from: GameData, anchor: String, gesture: String) -> Dictionary:
+	for ritual: Dictionary in from.records("rituals"):
+		if GameData.as_string(ritual.get("anchor")) == anchor and not ritual.has("item") and GameData.as_string(ritual.get("gesture")) == gesture:
+			return ritual
+	return {}

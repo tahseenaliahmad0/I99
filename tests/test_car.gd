@@ -208,6 +208,8 @@ func test_car_05() -> void:
 	_check_drifts()
 	_check_curve_in_sim()
 	_check_drift_at_low_speed()
+	_check_cruise_is_never_passed()
+	_check_multipliers()
 
 
 func _check_speed_changes() -> void:
@@ -663,6 +665,83 @@ func _check_drift_at_low_speed() -> void:
 
 
 # --- Through the whole simulation, with real input -------------------------------
+
+## The speed lands on the gear's cruise speed and never passes it, not for a
+## tick, from below or from above (M2 review: only the end was looked at).
+func _check_cruise_is_never_passed() -> void:
+	var third: float = tuning.fi("gear_speeds", 2)
+	var fourth: float = tuning.fi("gear_speeds", 3)
+	_car.reset(1, 3)
+	_car.speed = third - 7.03
+	var highest: float = 0.0
+	for _tick: int in int(2.0 / DT):
+		_car.step(DT, 0.0, 3, false, 0.0)
+		_car.x = _car.lane_center(1)
+		highest = maxf(highest, _car.speed)
+	check_eq(highest, third, "climbing back to cruise, the speed never passes it")
+	check_eq(_car.speed, third, "and it rests on it")
+	_car.reset(1, 4)
+	_car.speed = fourth - 0.07
+	var lowest: float = INF
+	for _tick: int in int(3.0 / DT):
+		_car.step(DT, 0.0, 3, false, 0.0)
+		_car.x = _car.lane_center(1)
+		lowest = minf(lowest, _car.speed)
+	check_eq(lowest, third, "slowing after a downshift, the speed never falls below the new cruise speed")
+	check_eq(_car.speed, third, "and it rests on that")
+
+
+## What the cabin may change about the car (GDD 7.6: Turbo, Bull bar; rain;
+## a pulling fault): each reaches the car as its number says, and nothing else.
+func _check_multipliers() -> void:
+	var third: float = tuning.fi("gear_speeds", 2)
+	var full: float = tuning.f("lat_per_kmh") * third
+	var crown: float = tuning.f("crown_drift")
+	var gears: int = tuning.floats("gear_speeds").size()
+
+	# Added speed for gears 4 and 5 only.
+	_car.high_gear_bonus = 20.0
+	for gear: int in range(1, gears + 1):
+		var bonus: float = 20.0 if gear >= 4 else 0.0
+		check_near(_car.cruise_speed(gear), tuning.fi("gear_speeds", gear - 1) + bonus, 0.000001, "with 20 km/h added to the high gears, gear %d cruises %s faster" % [gear, str(bonus)])
+	check_eq(_car.cruise_speed(CarSim.NEUTRAL), 0.0, "and neutral still has no cruise speed")
+	_car.high_gear_bonus = 0.0
+
+	# Sideways speed at a given lock.
+	_car.reset(1, 3)
+	_car.lat_speed_mult = 1.5
+	check_near(_car.lat_authority(), full * 1.5, 0.000001, "with sideways speed x 1.5, full lock commands 7.5 m/s in third")
+	for _tick: int in int(1.5 / DT):
+		_car.step(DT, -1.0, 3, false, 0.0)
+		_car.x = _car.lane_center(1)
+	check_near(_car.v_lat, -full * 1.5, 0.001, "and the car settles at it")
+	_car.lat_speed_mult = 1.0
+	check_near(_car.lat_authority(), full, 0.000001, "without it, 5.0 m/s")
+
+	# The time the car takes to answer.
+	var tau: float = tuning.f("lat_follow_tau")
+	_car.reset(1, 3)
+	_car.lat_tau_mult = 2.0
+	var worst: float = 0.0
+	for tick: int in roundi(4.0 * tau / DT):
+		_car.step(DT, 1.0, 3, false, 0.0)
+		_car.x = _car.lane_center(1)
+		worst = maxf(worst, absf(_car.v_lat - full * (1.0 - exp(-float(tick + 1) * DT / (tau * 2.0)))))
+	check_near(worst, 0.0, 0.000001, "with the answer twice as slow, the sideways speed follows its command with twice lat_follow_tau")
+	_car.lat_tau_mult = 1.0
+
+	# The push that is always there: the crown and whatever pulls, as the car
+	# feels them at its speed.
+	var fade: float = tuning.f("drift_fade_speed")
+	_car.reset(1, 3)
+	check_near(_car.steady_drift(0.0), crown, 0.000001, "at cruise the steady drift is the crown")
+	check_near(_car.steady_drift(0.3), crown + 0.3, 0.000001, "plus what pulls to the right")
+	check_near(_car.steady_drift(-0.3), crown - 0.3, 0.000001, "or less what pulls to the left")
+	_car.speed = fade * 0.5
+	check_near(_car.steady_drift(0.3), (crown + 0.3) * 0.5, 0.000001, "at half of drift_fade_speed, half of both")
+	_car.speed = 0.0
+	check_eq(_car.steady_drift(0.3), 0.0, "and at rest nothing")
+
 
 ## Steering with the mouse (GDD 4.1, 4.3, 5.3): hold the left button with the
 ## hand on the rim (it starts there), then move left and right.

@@ -88,6 +88,30 @@ func test_hand_02() -> void:
 	var back_left: float = _cruise_speed(_hand.anchor_position(_hand.anchor_index(&"indicator_stalk")), _hand.anchor_index(&"horn"))
 	check_near(back_left, normal * left_mult, 0.0001, "coming back, the stretch left of the hub is slow too")
 
+	# The slow side begins at the hub: the first tick out of W toward a
+	# control on the left is slow already (M1 review).
+	_hand.place_at(_space.waypoint)
+	_aim_at(_hand.anchor_index(&"indicator_stalk"))
+	var from_w: Vector3 = _hand.pos
+	_hand.step(DT, _input, 0.0, 1.0)
+	check_near(_hand.pos.distance_to(from_w) / DT, normal * left_mult, 0.0001, "the first tick from W to the left is at hand_left_side_mult already")
+
+	# What slows the hand (Pound, GDD 4.2) slows it on both sides alike.
+	for mult: float in [0.5, 0.8]:
+		_hand.place_at(_space.grip_reference)
+		_aim_at(_hand.anchor_index(&"glovebox"))
+		_hand.step(DT, _input, 0.0, mult)
+		var start: Vector3 = _hand.pos
+		_hand.step(DT, _input, 0.0, mult)
+		check_near(_hand.pos.distance_to(start) / DT, normal * mult, 0.0001, "a hand slowed to %s moves at that share of hand_speed" % str(mult))
+		_hand.place_at(_space.waypoint)
+		_aim_at(_hand.anchor_index(&"window_crank"))
+		_hand.step(DT, _input, 0.0, mult)
+		start = _hand.pos
+		_hand.step(DT, _input, 0.0, mult)
+		check_near(_hand.pos.distance_to(start) / DT, normal * left_mult * mult, 0.0001, "and left of the hub at that share of the slow speed")
+	_input.clear()
+
 
 ## T-HAND-03: pointer snap, free target, input buffer, fly-and-grip, glance.
 func test_hand_03() -> void:
@@ -102,6 +126,12 @@ func test_hand_03() -> void:
 	_check_cannot_reach()
 	_check_glance()
 	_check_eyes_down_ritual()
+	_check_free_box()
+	_check_pointer_point()
+	_check_grip_on_a_turned_wheel()
+	_check_press_dropped_for_good()
+	_check_latch_leaves_with_the_pointer()
+	_check_eyes_follow_the_hand()
 
 
 ## The pointer map, pinned with numbers worked out here from GDD 16.2 (not
@@ -388,11 +418,14 @@ func _check_cannot_reach() -> void:
 
 ## An eyes-down ritual forces the pitch while it is performed (GDD 4.7).
 func _check_eyes_down_ritual() -> void:
-	var cabin: GameData = fresh_data()
-	var ritual: Dictionary = cabin.record("rituals", "glovebox_toggle")
-	ritual["gesture"] = "HOLD"
-	ritual["hold_s"] = 1.5
-	ritual["eyes_down"] = true
+	# The glovebox itself stays the TAP of GDD 4.6 (the validator holds the
+	# data to that table since the M1 review's findings were applied): the
+	# HOLD is a ritual of its own there, offered before the toggle.
+	var loaded: GameData = fresh_data()
+	var rituals: Array = GameData.as_array(GameData.as_dict(loaded.roots["rituals"]).get("rituals"))
+	rituals.append({"id": "glovebox_look", "anchor": "glovebox", "gesture": "HOLD", "hold_s": 1.5, "eyes_down": true,
+			"over_items": true, "requires": [], "on_complete": ["toggle:glovebox_open"]})
+	var cabin: GameData = GameData.from_parts(loaded.roots, loaded.lines)
 	if not check(DataValidator.validate(cabin).is_empty(), "a HOLD ritual with eyes_down validates"):
 		return
 	var sim: DriveSim = DriveSim.new(cabin)
@@ -643,6 +676,202 @@ func _check_glance() -> void:
 	check_near(_hand.cam_pitch, -tuning.f("eyes_down_pitch"), 0.01, "an eyes-down ritual forces the pitch to eyes_down_pitch")
 	_hand.eyes_down = false
 	_hand.unpin()
+
+
+# --- What the M1 review asked for (2026-11-17), put as checks ------------------
+
+## With no anchor in range the hand is kept inside its box (GDD 4.2 gives the
+## plane; hand_free_bounds the box): where the pointer looks past an edge,
+## the hand stops at the edge.
+func _check_free_box() -> void:
+	var low: Vector2 = Vector2(tuning.fi("hand_free_bounds_min", 0), tuning.fi("hand_free_bounds_min", 1))
+	var high: Vector2 = Vector2(tuning.fi("hand_free_bounds_max", 0), tuning.fi("hand_free_bounds_max", 1))
+	var plane: float = tuning.f("hand_plane_distance")
+	for index: int in _hand.anchor_count():
+		_hand.set_anchor_active(index, false)
+	_hand.place_at(_space.grip_reference)
+	# Each case: where the pointer goes, which coordinate is stopped, where.
+	var cases: Array[Array] = [
+		[_space.clamp_pointer(Vector2(100000.0, _space.center.y)), 0, high.x, "far to the right"],
+		[_space.clamp_pointer(Vector2(-100000.0, _space.center.y)), 0, low.x, "far to the left"],
+		[_space.clamp_pointer(Vector2(_space.center.x, -100000.0)), 1, high.y, "at the top"],
+		[_space.clamp_pointer(Vector2(_space.center.x, 100000.0)), 1, low.y, "at the bottom"],
+	]
+	for case: Array in cases:
+		var pointer: Vector2 = case[0]
+		var axis: int = GameData.as_int(case[1])
+		var edge: float = GameData.as_float(case[2])
+		# Where the ray meets the plane, worked out here: it is beyond the box.
+		var ray: Vector3 = _space.pointer_to_direction(pointer)
+		var beyond: bool = true
+		if -ray.z > 0.05:
+			var met: Vector3 = _space.eye + ray * (plane / -ray.z)
+			beyond = met[axis] > high[axis] if edge == high[axis] else met[axis] < low[axis]
+		if not check(beyond, "the pointer %s looks past the hand's box" % case[3]):
+			continue
+		_point(pointer)
+		check_eq(_hand.snap_index, HandSim.NO_ANCHOR, "with no anchor active nothing is snapped to")
+		check_near(_hand.target[axis], edge, 0.000001, "pointing %s, the free hand stops at the edge of its box" % case[3])
+		check_near(_hand.target.z, _space.eye.z - plane, 0.000001, "and stays on its plane")
+		check(_hand.target.x >= low.x - 0.000001 and _hand.target.x <= high.x + 0.000001 and _hand.target.y >= low.y - 0.000001 and _hand.target.y <= high.y + 0.000001,
+				"pointing %s, the target is inside the box both ways" % case[3])
+	for index: int in _hand.anchor_count():
+		_hand.set_anchor_active(index, true)
+	_input.clear()
+
+
+## The ring that shows the pointer is where the pointer points (M2 review:
+## it was drawn at the hand's target, which stops at the edge of the box).
+func _check_pointer_point() -> void:
+	var sim: DriveSim = DriveSim.new(fresh_data())
+	var input: DriveInput = DriveInput.new()
+	input.pointer_is_absolute = true
+	for index: int in sim.hand.anchor_count():
+		sim.hand.set_anchor_active(index, false)
+	var spots: Array[Vector2] = [
+		sim.space.center + Vector2(-150.0, -40.0),
+		sim.space.clamp_pointer(Vector2(100000.0, sim.space.center.y)) - Vector2(40.0, 0.0),
+		sim.space.clamp_pointer(Vector2(sim.space.center.x, 100000.0)) - Vector2(0.0, 40.0),
+		sim.space.center + Vector2(-900.0, 300.0),
+	]
+	for spot: Vector2 in spots:
+		input.pointer = spot
+		_step_in_lane(sim, input)
+		var point: Vector3 = sim.snapshot()["pointer_point"]
+		var seen: Vector3 = (point - sim.space.eye).normalized()
+		check_near(seen.dot(sim.space.pointer_to_direction(spot)), 1.0, 0.000001, "the snapshot's pointer point lies where the pointer points (%s)" % str(spot))
+		check(sim.space.point_to_pointer(point).distance_to(spot) < 0.01, "and maps back to the pointer")
+	for index: int in sim.hand.anchor_count():
+		sim.hand.set_anchor_active(index, true)
+	var lever: int = sim.hand.anchor_index(&"gear_lever")
+	input.pointer = sim.hand.anchor_pointer(lever) + Vector2(12.0, -9.0)
+	_step_in_lane(sim, input)
+	var snapped: Vector3 = sim.snapshot()["pointer_point"]
+	check(snapped.is_equal_approx(sim.hand.anchor_position(lever)), "snapped to an anchor, the pointer point is the anchor")
+
+
+## The hand takes a wheel that is turned where it finds it, and rides it from
+## there (M1 review: grip and ride were only tried on a centred wheel).
+func _check_grip_on_a_turned_wheel() -> void:
+	# The rim under G (G itself is a millimetre outside the rim's centre line).
+	var grip: Vector3 = _space.rim_point(_space.point_to_pointer(_space.grip_reference))
+	for turned: float in [40.0, -65.0]:
+		_hand.place_at(_hand.anchor_position(_hand.anchor_index(&"glovebox")))
+		_input.clear()
+		_input.pointer_is_absolute = true
+		_input.pointer = _space.point_to_pointer(grip)
+		_input.lmb = true
+		for _tick: int in int(MAX_TRAVEL_S / DT):
+			_hand.step(DT, _input, turned, 1.0)
+			if _hand.gripping:
+				break
+		if not check(_hand.gripping, "the hand grips a wheel turned %s degrees" % str(turned)):
+			continue
+		check(_hand.pos.is_equal_approx(grip), "it takes the rim where the pointer was, whatever the wheel's angle")
+		_hand.step(DT, _input, turned, 1.0)
+		check(_hand.pos.is_equal_approx(grip), "and while the wheel does not move, neither does the hand (wheel at %s)" % str(turned))
+		_hand.step(DT, _input, turned + 30.0, 1.0)
+		check(_hand.pos.is_equal_approx(_clockwise(grip, 30.0)), "30 degrees more to the right carry the hand 30 degrees clockwise (from %s)" % str(turned))
+		_hand.step(DT, _input, turned - 20.0, 1.0)
+		check(_hand.pos.is_equal_approx(_clockwise(grip, -20.0)), "and 20 degrees back past where it took hold, 20 the other way")
+		_input.lmb = false
+		_hand.step(DT, _input, turned, 1.0)
+	# The same for a drive that begins with the hand on a turned wheel.
+	_hand.start_gripping(50.0)
+	_input.clear()
+	_input.lmb = true
+	_hand.step(DT, _input, 50.0, 1.0)
+	check(_hand.pos.is_equal_approx(grip), "starting on a wheel turned 50 degrees, the hand is on the rim at G")
+	_hand.step(DT, _input, 80.0, 1.0)
+	check(_hand.pos.is_equal_approx(_clockwise(grip, 30.0)), "and rides it from there")
+	_input.clear()
+	_hand.step(DT, _input, 80.0, 1.0)
+
+
+## A press meant for an anchor is dropped when the pointer leaves the anchor,
+## and coming back in time does not bring it back.
+func _check_press_dropped_for_good() -> void:
+	var anchor: int = _hand.anchor_index(&"dash_2")
+	var other: int = _hand.anchor_index(&"dash_1")
+	var arrival: int = roundi(_travel_time(_space.grip_reference, anchor) / DT) - 1
+	var press: int = arrival - 10
+	_hand.place_at(_space.grip_reference)
+	_aim_at(anchor)
+	var applied: bool = false
+	var arrived_at: int = -1
+	for tick: int in arrival + 30:
+		_input.lmb = tick >= press and tick < press + 4
+		_input.pointer = _hand.anchor_pointer(other if tick == press + 1 or tick == press + 2 else anchor)
+		_hand.step(DT, _input, 0.0, 1.0)
+		applied = applied or _hand.press_applied
+		if _hand.at_index == anchor and arrived_at == -1:
+			arrived_at = tick
+	check(arrived_at != -1 and float(arrived_at - press) * DT < tuning.f("input_buffer"), "the hand still arrives within input_buffer of the press")
+	check(not applied, "a press whose pointer left the anchor for two ticks is not applied when the hand arrives after all")
+	_input.clear()
+
+
+## Toggle mode: a click on the rim is good while the pointer stays on the
+## rim. Taken off it before the hand has arrived, the click is forgotten.
+func _check_latch_leaves_with_the_pointer() -> void:
+	var rim: Vector2 = _space.point_to_pointer(_space.grip_reference)
+	var away: Vector2 = _space.center + Vector2(-150.0, -40.0)
+	check(not _space.pointer_on_rim(away), "the spot on the windscreen is off the rim")
+	_hand.grip_toggle = true
+	_hand.place_at(_hand.anchor_position(_hand.anchor_index(&"glovebox")))
+	_input.clear()
+	_input.pointer_is_absolute = true
+	for tick: int in int(MAX_TRAVEL_S / DT):
+		_input.lmb = tick < 4
+		_input.pointer = away if tick >= 10 and tick < 20 else rim
+		_hand.step(DT, _input, 0.0, 1.0)
+	check(not _hand.gripping, "toggle: a click on the rim, the pointer taken away and brought back: no grip without another click")
+	# And with the pointer left on the rim the same click does grip.
+	_hand.place_at(_hand.anchor_position(_hand.anchor_index(&"glovebox")))
+	for tick: int in int(MAX_TRAVEL_S / DT):
+		_input.lmb = tick < 4
+		_input.pointer = rim
+		_hand.step(DT, _input, 0.0, 1.0)
+	check(_hand.gripping, "toggle: left on the rim, the click grips")
+	_input.lmb = true
+	_hand.step(DT, _input, 0.0, 1.0)
+	_hand.grip_toggle = false
+	_input.clear()
+	_hand.step(DT, _input, 0.0, 1.0)
+
+
+## The eyes follow the hand where it is, tick by tick, not where it is going
+## (GDD 4.7: "the eyes partly follow the hand").
+func _check_eyes_follow_the_hand() -> void:
+	var tau: float = tuning.f("glance_smoothing") * 0.001
+	var blend: float = 1.0 - exp(-DT / tau)
+	var glovebox: int = _hand.anchor_index(&"glovebox")
+	_hand.place_at(_space.grip_reference)
+	_aim_at(glovebox)
+	var yaw: float = _hand.cam_yaw
+	var pitch: float = _hand.cam_pitch
+	var worst: float = 0.0
+	var apart: float = 0.0
+	var goal: Vector2 = _space.glance_for(_hand.anchor_position(glovebox))
+	for _tick: int in int(1.0 / DT):
+		_hand.step(DT, _input, 0.0, 1.0)
+		var want: Vector2 = _space.glance_for(_hand.pos)
+		apart = maxf(apart, absf(want.x - goal.x))
+		yaw += (want.x - yaw) * blend
+		pitch += (want.y - pitch) * blend
+		worst = maxf(worst, maxf(absf(_hand.cam_yaw - yaw), absf(_hand.cam_pitch - pitch)))
+	check(apart > 5.0, "on the way to the glovebox the glance at the hand is not yet the glance at the glovebox")
+	check(worst < 0.0001, "every tick of a reach the camera moves toward the glance at where the hand is (worst %s degrees)" % str(worst))
+	check_eq(_hand.at_index, glovebox, "and the hand has arrived")
+	check_near(_hand.cam_yaw, goal.x, 0.5, "by when the eyes are nearly at the glovebox's glance")
+	_input.clear()
+
+
+## A point of the wheel's plane carried `degrees` clockwise round the hub, as
+## the driver sees it.
+func _clockwise(point: Vector3, degrees: float) -> Vector3:
+	var turn: float = deg_to_rad(degrees)
+	return Vector3(point.x * cos(turn) + point.y * sin(turn), -point.x * sin(turn) + point.y * cos(turn), point.z)
 
 
 # --- Helpers ------------------------------------------------------------------

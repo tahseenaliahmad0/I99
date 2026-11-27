@@ -7,6 +7,11 @@ extends RefCounted
 ## instead of the primitive, so an artist replaces any placeholder by editing
 ## the registry, with no code change (GDD 1.1).
 ##
+## A few entries the views build themselves from the size and the colour (a
+## strip of road that bends, an arm that stretches, a ring drawn on the
+## screen). They are marked "drawn_by_code" in the registry, and the
+## validator refuses a scene on them: it would be ignored (D-070).
+##
 ## Sizes: box [x, y, z]; cylinder and capsule [radius, height]; sphere [radius];
 ## quad [width, height]; label [pixel size] with a "text" key.
 

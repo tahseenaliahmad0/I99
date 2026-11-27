@@ -170,6 +170,18 @@ func _check_the_hand_shifts() -> void:
 	check(float(off_wheel) * DT > tuning.f("bot_shift_s") + 0.2, "the hand is off the wheel for the shift and the way there and back (%.2f s)" % (float(off_wheel) * DT))
 	check(drifted > 0.01, "and meanwhile the car goes where the road takes it (%.2f m)" % drifted)
 	check_eq(GameData.as_int(_bot.rituals.get("gear_shift")), 1, "it counts one change of gear")
+	# "Gesture completion" is the lever put in its slot while it is in the
+	# hand: without a hand on it, nothing.
+	var gate: GearGate = GearGate.new()
+	gate.configure(tuning)
+	gate.reset(2)
+	gate.place_held(3)
+	check_eq(gate.gear, 2, "a lever nobody holds is put in no gear")
+	gate.press()
+	gate.place_held(3)
+	check_eq(gate.gear, 3, "held, it is put in third")
+	gate.release()
+	check(gate.gear == 3 and not gate.held, "and let go, it stays there")
 	check(_bot.hand_off_ticks >= off_wheel - 2 and _bot.road_ticks > _bot.hand_off_ticks, "and the ticks its hand was off the wheel (%d of %d)" % [_bot.hand_off_ticks, _bot.road_ticks])
 
 
@@ -177,6 +189,7 @@ func _check_the_hand_shifts() -> void:
 ## lane when time to collision falls below 3 s; behind a wall of vehicles,
 ## the brake; the wheel let go only with time for it.
 func _check_the_policy() -> void:
+	var following: PackedFloat64Array = []
 	for skill: String in DriverBot.SKILLS:
 		# A slow truck ahead in its lane, the lanes beside it free.
 		_on_an_empty_road(skill)
@@ -208,7 +221,53 @@ func _check_the_policy() -> void:
 			nearest = minf(nearest, (wall[1].s - wall[1].half_length) - (_sim.car.s + _sim.car.length() * 0.5))
 		check(hits == 0 and nearest > 1.0, "%s: three trucks abreast at 60 km/h: it brakes and stays behind them (never nearer than %.1f m)" % [skill, nearest])
 		check(_sim.car.speed < 75.0 and _sim.car.s < wall[1].s, "%s: at their pace (%d km/h)" % [skill, roundi(_sim.car.speed)])
+		# And keeps its distance there: bot_keep_gap_m and bot_headway_s of its
+		# speed, steadily, for as long as it follows.
+		var least: float = INF
+		var most: float = 0.0
+		for _index: int in roundi(15.0 / DT):
+			_tick()
+			hits += _hits()
+			var gap: float = (wall[1].s - wall[1].half_length) - (_sim.car.s + _sim.car.length() * 0.5)
+			least = minf(least, gap)
+			most = maxf(most, gap)
+		var keeps: float = tuning.f("bot_keep_gap_m") + wall[1].speed * KMH_TO_MS * tuning.fi("bot_headway_s", DriverBot.SKILLS.find(skill))
+		check(hits == 0 and least > keeps - 2.0 and most < keeps + 3.0, "%s: it follows %.0f m behind them, give or take (between %.1f and %.1f m over 15 s)" % [skill, keeps, least, most])
+		following.append((least + most) * 0.5)
 
+	check(following[0] > following[1] and following[1] > following[2], "the novice follows furthest back, the expert nearest (%.0f, %.0f, %.0f m)" % [following[0], following[1], following[2]])
+	# Trucks that stand: it brakes in time for what it comes up on fast, the
+	# expert too, who leaves it latest.
+	for skill: String in DriverBot.SKILLS:
+		_on_an_empty_road(skill)
+		_run(2.0)
+		var standing: Array[TrafficSim.Vehicle] = []
+		for lane: int in 3:
+			standing.append(_sim.traffic.spawn(&"truck", lane, _sim.car.s + 200.0, 0.0))
+		var jam_hits: int = 0
+		var jam_nearest: float = INF
+		for _index: int in roundi(15.0 / DT):
+			_tick()
+			jam_hits += _hits()
+			jam_nearest = minf(jam_nearest, (standing[1].s - standing[1].half_length) - (_sim.car.s + _sim.car.length() * 0.5))
+		check(jam_hits == 0 and jam_nearest > 1.0, "%s: three trucks standing across the road, come up on at 100 km/h: it stops short of them (%.1f m)" % [skill, jam_nearest])
+		check(_sim.car.speed < 5.0, "%s: (and stands)" % skill)
+	# Somebody close in front at its own speed (a car that cut in): it opens
+	# the gap to its distance, though nothing is closing.
+	_on_an_empty_road("competent")
+	_run(2.0)
+	var cut_in: Array[TrafficSim.Vehicle] = []
+	for lane: int in 3:
+		cut_in.append(_sim.traffic.spawn(&"pickup", lane, _sim.car.s + _sim.car.length() * 0.5 + 6.0 + 2.5, _sim.car.speed))
+	var gap_then: float = (cut_in[1].s - cut_in[1].half_length) - (_sim.car.s + _sim.car.length() * 0.5)
+	_run(5.0)
+	var gap_soon: float = (cut_in[1].s - cut_in[1].half_length) - (_sim.car.s + _sim.car.length() * 0.5)
+	_run(15.0)
+	var gap_now: float = (cut_in[1].s - cut_in[1].half_length) - (_sim.car.s + _sim.car.length() * 0.5)
+	var distance: float = tuning.f("bot_keep_gap_m") + _sim.car.speed * KMH_TO_MS * tuning.fi("bot_headway_s", 1)
+	check(gap_then < distance * 0.5, "(three pickups %.0f m in front of it, at its own speed)" % gap_then)
+	check(gap_soon > gap_then + 3.0, "five seconds on it has dropped back (%.1f m)" % gap_soon)
+	check(gap_now > distance - 3.0, "and twenty seconds on it is at its distance (%.1f m; it keeps %.0f)" % [gap_now, distance])
 	# Letting go: with a gear to change it lets go on an empty road, and not
 	# with something coming up in its lane.
 	_on_an_empty_road("competent")
@@ -252,6 +311,9 @@ func _check_one_telling_twice() -> void:
 	var again: Dictionary = runner.tell("drivers", "competent", SEED, true, 90.0)
 	var other: Dictionary = runner.tell("drivers", "competent", SEED + 1, true, 90.0)
 	check_eq(GameData.as_string(first["outcome"]), BalanceRun.TIMED_OUT, "(a Telling cut short after 90 s counts as timed out)")
+	check_eq(BalanceRun.outcome_of({"late": false, "call": false}), BalanceRun.WON, "a night that arrives on time is won")
+	check_eq(BalanceRun.outcome_of({"late": false, "call": true}), BalanceRun.WON, "so is one that ends in the Call")
+	check_eq(BalanceRun.outcome_of({"late": true, "call": true}), BalanceRun.LATE, "a late night is late, and no win")
 	check_eq(GameData.as_string(again["state"]), GameData.as_string(first["state"]), "the same Table, skill and seed twice: the same night to the bit")
 	check_eq(GameData.as_int(again["road_ticks"]), GameData.as_int(first["road_ticks"]), "(and the same count of ticks on the road)")
 	check(GameData.as_string(other["state"]) != GameData.as_string(first["state"]), "another seed is another night")
@@ -304,7 +366,7 @@ func _check_the_report() -> void:
 	check_eq(GameData.as_int(measures["expert_drivers"]["sample"]), 10, "(of ten Tellings)")
 	check_near(GameData.as_float(measures["competent_drivers"]["measured"]), 0.2, 0.0001, "two wins in ten are 20%: a late night is no win")
 	check(GameData.as_bool(measures["competent_drivers"]["within"]), "within 15% to 30%")
-	check_near(GameData.as_float(measures["hand_off_share"]["measured"]), 0.3, 0.0001, "the hand off the wheel for 300 of 1,000 ticks of Act 2's legs is 30%")
+	check_near(GameData.as_float(measures["hand_off_share"]["measured"]), 0.35, 0.0001, "the hand off the wheel for 35 of every 100 ticks of Act 2's legs is 35%")
 	check(GameData.as_bool(measures["hand_off_share"]["within"]), "within 25% to 40%")
 	check(measures["novice_children"]["measured"] == null and not GameData.as_bool(measures["novice_children"]["within"]) and GameData.as_int(measures["novice_children"]["sample"]) == 0,
 			"what was not run is not measured, and is not called within")
@@ -336,7 +398,7 @@ func _telling(table: String, skill: String, index: int, outcome: String, one_hit
 		"table": table, "skill": skill, "seed": index, "outcome": outcome, "ending": Save.ON_TIME if outcome == BalanceRun.WON else (Save.LATE if outcome == BalanceRun.LATE else ""),
 		"act": 3, "stage": "ended", "reached_checkpoint": true, "seconds": 1200.0, "clock_minutes": 400.0, "hits": 5 if outcome == BalanceRun.WRECKED else 1,
 		"lamps": 5 if outcome == BalanceRun.WRECKED else 1, "close_calls": 3, "nerves_peak": 60.0, "pulled_over": 0, "snaps": 0, "road_ticks": 1000, "hand_off_ticks": 200,
-		"road_act2": 100, "hand_off_act2": 30, "stops": 3, "bought": 1, "rituals": {}, "blind_ticks": 0,
+		"road_act2": 100, "hand_off_act2": 35, "stops": 3, "bought": 1, "rituals": {}, "blind_ticks": 0,
 		"last_hits": [{"kind": 1, "lamps": 1, "lamps_before": 0 if one_hit else 4, "act": 3, "stage": "leg", "leg": "rush", "boss": "", "seconds": 1000.0, "gripping": true, "speed": 80, "task": ""}],
 		"wreck_from_one_event": outcome == BalanceRun.WRECKED and one_hit,
 	}

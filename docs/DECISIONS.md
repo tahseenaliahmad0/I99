@@ -2877,3 +2877,73 @@ GDD 4.1 (the Touch column), 17.4, and D-016.
   puts them first. Moving the game toward the targets (a harder road, a
   hungrier cabin, a shorter night) is a change to the spec and the
   owner's to ask for.
+
+## D-070 (M1 and M2 reviews, 2026-11-27) What was left of the first two reviews
+
+- **Context.** The reviews of M1 and M2 (2026-11-17) were stopped before
+  their findings were all applied (PROGRESS listed them under "M1 and M2").
+  The reports themselves are gone with the scratch folder; what was open
+  was taken up from that list, and the test findings were found again by
+  mutation: two new lists, `m1_hand.py` (108) and `m2_car.py` (105).
+- **The controls of GDD 4.6 are held by the validator.** `DataValidator`
+  carries the table ("Controls always in the car"): for each of the twelve
+  controls the anchor, the reach from the wheel, whether the reach crosses
+  the hub, the gesture and what it needs (a FLICK its directions, CRANK its
+  three turns). `anchors.json` must give that reach (`time_s`) and that
+  side (`via_w`); `rituals.json` must hold, at that anchor, a ritual that
+  belongs to no item and is that gesture. The passenger's shoulder joins
+  the anchors that cannot be missing. A fixture of T-HAND-03 that turned
+  the glovebox's own TAP into a HOLD was no longer valid data: its HOLD is
+  now a ritual of its own at the glovebox (the checks are unchanged).
+- **What the code draws takes no scene.** Nineteen entries of
+  `placeholders.json` are built by the views from their size and colour:
+  the road's strips, lines, dashes, posts, rails and barriers (they bend
+  with the road), the bay and the checkpoint's barriers, caps and bar
+  (V-13 of the M7 review), the arm's capsules (they stretch), the pointer
+  and its arcs (drawn on the screen). They are marked `"drawn_by_code":
+  true`, and the validator refuses a `scene` on a marked entry: before, a
+  scene put there was ignored without a word, against GDD 1.1. Every other
+  entry is made as a node and takes a scene.
+- **The pointer's ring is drawn where the pointer points.** The snapshot's
+  `pointer_point` was the hand's target, which is kept inside the box the
+  free hand roams: beyond the box the ring stood still while the mouse
+  moved on. It is now the anchor the pointer has snapped to, or else a
+  point on the pointer's own ray from the eye (`CabinSpace.pointed_at`).
+- **The hand on the gear knob** follows the lever in `HandView` (it did
+  by the time this was taken up; a probe confirmed it).
+- **The arm is drawn to where the hand is, however far.** GDD 16.1: upper
+  arm and forearm 0.30 m each, the shoulder sliding up to 0.25 m. Thirteen
+  anchors of GDD 16.2 lie further than that 0.85 m from the shoulder (the
+  glovebox 1.05 m, `dash_2` 0.95 m, the mirror and `dash_1` 0.89 m, the
+  visor 0.87 m and others by less). The positions are the GDD's and the
+  hand must be seen where the simulation has it (it is what the player
+  aims), so beyond 0.85 m the arm is a straight line and the forearm is
+  drawn as long as it takes: 0.50 m at the glovebox, the worst case.
+  Shortening the reach or moving the shoulder would change GDD 16.2's
+  travel times or its points; the arm's lengths are a placeholder's.
+- **Tests.** No test was removed or weakened. Added: T-DATA-01 (+136
+  checks: the table, each control broken four ways, the marked
+  placeholders), T-HAND-02 and -03 (+55: the free hand's box, the pointer
+  point, grip and ride on a turned wheel, a press dropped for good, the
+  toggle's latch, the eyes tick by tick, the slow side from W, a slowed
+  hand), T-WHEEL-02 (+5: a shaking hand's grip, the stop), T-GATE-01 and
+  -02 (+22: a jerk round the corner both ways, nothing below fifth, the
+  grind band's upper edge in a gate where it shows, a push forgiven, the
+  tick the wall is met), T-GEST-01 (+64: TAP and FLICK limits to the tick,
+  the lean of a FLICK from both sides, CRANK by angle at three sizes and
+  with rests, DRAG), T-CAR-05 (+19: cruise never passed, the cabin's
+  multipliers), T-COL-03 (+26) and T-CC-01 (+54) on the bare rules: the
+  class of a hit by a faster vehicle, `strike`, a corridor's barriers, the
+  least air of a whole pass, the gap and the chain window at their edges,
+  honks, an oncoming close call at a crawl, lane changes that are not
+  interrupted, the horn's quick move, the following gap bumper to bumper,
+  what traffic does not follow, `lane_is_free`.
+- **Equivalent mutants**, each named in its list with the reason: six of
+  M1 (a buffered press "at any anchor", `_let_go`'s target, a release
+  between columns, the assist from neutral, the push kept over a release,
+  `PUSH_SHARE`) and one of M2 (the chain window's `<=`: 480 ticks sum to a
+  hair under 4 s).
+- **Why.** GDD 1.4 (tests are the acceptance of a milestone; a review's
+  finding is a test that should have failed) and GDD 1.1 (the registry is
+  how an artist replaces a placeholder: it must not swallow one).
+

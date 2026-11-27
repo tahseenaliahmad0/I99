@@ -126,6 +126,30 @@ func _check_grip_does_not_snap() -> void:
 		_wheel.step(DT, 0.0, 1.0)
 	check_near(_wheel.angle, angle_before, 0.000001, "a gripped wheel does not return to centre")
 
+	# A shaking hand takes the wheel where it is too (GDD 5.8: the Tremor is
+	# added to the gripped wheel): the wheel does not jump by the shake, and
+	# the shake never carries it past its stop (M1 review).
+	var max_angle: float = tuning.f("wheel_max_angle")
+	_wheel.reset(20.0)
+	_wheel.tremor = 3.0
+	_wheel.grip()
+	check_eq(_wheel.angle, 20.0, "a shaking hand's grip does not move the wheel")
+	for _tick: int in 60:
+		_wheel.step(DT, 0.0, 1.0)
+	check_near(_wheel.angle, 20.0, 0.000001, "nor does it creep off afterwards by the shake")
+	_wheel.tremor = -3.0
+	for _tick: int in 60:
+		_wheel.step(DT, 0.0, 1.0)
+	check_near(_wheel.angle, 14.0, 0.000001, "the shake moves the wheel about the angle the hand holds")
+	_wheel.tremor = 3.0
+	_wheel.step(DT, 100000.0, 1.0)
+	for _tick: int in int(1.0 / DT):
+		_wheel.step(DT, 0.0, 1.0)
+	check_near(_wheel.angle, max_angle, 0.000001, "at full lock the shake does not carry the wheel past its stop")
+	check(_wheel.steer() <= 1.0 + 0.000001, "and the car is never steered by more than full lock")
+	_wheel.tremor = 0.0
+	_wheel.release()
+
 
 func _check_steering_rate() -> void:
 	var per_px: float = tuning.f("steer_deg_per_px")

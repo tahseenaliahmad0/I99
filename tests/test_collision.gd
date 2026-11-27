@@ -263,6 +263,8 @@ func test_col_03() -> void:
 			order.append(type)
 	check_eq(",".join(order), "hit,hit,wreck,hit", "and it is announced with the hit that lit the last lamp")
 
+	_check_bare_hits()
+
 
 ## T-CC-01: a close call is a pass with under close_call_gap of sideways gap
 ## and at least close_call_min_closing, without contact, judged when the two
@@ -434,6 +436,8 @@ func test_cc_01() -> void:
 	_check_removal()
 	_check_follow_rule()
 	_check_sandbox_seeds()
+	_check_bare_close_calls()
+	_check_traffic_leftovers()
 
 
 ## T-CC-02: chained close calls multiply by 1.25 steps and cap at 3.
@@ -1353,3 +1357,356 @@ func _sum(values: Array[float]) -> float:
 	for value: float in values:
 		total += value
 	return total
+
+
+# --- What was left of the M2 review's test findings (2026-11-17) -----------------
+#
+# These go at the rules with nothing else of the simulation round them: a
+# car, a road's traffic and the collision rules, stepped by hand. The car
+# goes straight on where it is put.
+
+var _bare_car: CarSim
+var _bare_traffic: TrafficSim
+var _bare: Collision
+
+
+func _bare_start(gear: int, lane: int, lanes: int = 3, divided: bool = true) -> void:
+	_bare_car = CarSim.new()
+	_bare_car.configure(tuning)
+	_bare_car.set_road(lanes, divided)
+	_bare_car.reset(lane, gear)
+	_bare_traffic = TrafficSim.new()
+	_bare_traffic.configure(data)
+	_bare = Collision.new()
+	_bare.configure(tuning)
+	_bare.reset()
+
+
+## One tick: the car moves on at the speed it has, the traffic moves, the
+## rules judge. (The order DriveSim steps them in.)
+func _bare_tick(gear: int) -> void:
+	_bare_car.s += _bare_car.speed * KMH_TO_MS * DT
+	_bare_traffic.step(DT, _bare_car.s, _bare_car.x, _bare_car.speed)
+	_bare.step(DT, _bare_car, _bare_traffic, gear)
+
+
+## A vehicle the car has just left behind, with `min_gap` as the least air
+## there was between them: the next tick judges the pass.
+func _bare_passed(type: StringName, min_gap: float, speed: float, direction: int = 1) -> TrafficSim.Vehicle:
+	var lane: int = 2 if direction > 0 else -1
+	var vehicle: TrafficSim.Vehicle = _bare_traffic.spawn(type, lane, _bare_car.s - 20.0, speed, direction)
+	vehicle.cc_overlap = true
+	vehicle.cc_min_gap = min_gap
+	return vehicle
+
+
+## Passes `vehicle` from 30 m behind it at `gap` metres of air, straight on.
+## `after_level` is the gap from the moment the car's middle is past the
+## vehicle's (NAN: the same). Returns the close calls counted on the way.
+func _bare_pass(vehicle: TrafficSim.Vehicle, gear: int, gap: float, after_level: float = NAN) -> int:
+	var side: float = -1.0 if vehicle.direction > 0 else 1.0
+	var counted: int = 0
+	_bare_car.x = vehicle.x + side * (vehicle.half_width + _bare_car.half_width() + gap)
+	for _tick: int in int(MAX_SECONDS / DT):
+		if not is_nan(after_level) and _bare_car.s > vehicle.s:
+			_bare_car.x = vehicle.x + side * (vehicle.half_width + _bare_car.half_width() + after_level)
+		_bare_tick(gear)
+		counted += _bare.close_calls
+		if _bare_car.s > vehicle.s + 30.0:
+			break
+	return counted
+
+
+func _check_bare_hits() -> void:
+	var first: float = tuning.fi("gear_speeds", 0)
+	var third: float = tuning.fi("gear_speeds", 2)
+	var immunity: float = tuning.f("hit_immunity")
+	var pushback: float = tuning.f("hit_pushback")
+
+	# It is the closing speed that classes a hit, whoever is the faster: a
+	# car doing 50 km/h more than he is, touched on its side as it goes by,
+	# is a crash; one doing 90 more, the worst kind.
+	for case: Array in [[50.0, Collision.Hit.CRASH, 1], [90.0, Collision.Hit.HEAD_ON, 2], [20.0, Collision.Hit.SCRAPE, 0]]:
+		var faster: float = GameData.as_float(case[0])
+		_bare_start(1, 1)
+		var quick: TrafficSim.Vehicle = _bare_traffic.spawn(&"car", 2, -30.0, first + faster)
+		var kind: Collision.Hit = Collision.Hit.NONE
+		var lamps: int = 0
+		for _tick: int in int(10.0 / DT):
+			if absf(quick.s - _bare_car.s) < 1.0:
+				_bare_car.x = quick.x - (quick.half_width + _bare_car.half_width()) + TOUCH_DEPTH
+			_bare_tick(1)
+			if _bare.hit != Collision.Hit.NONE:
+				kind = _bare.hit
+				lamps = _bare.hit_lamps
+				break
+		check_eq(kind, GameData.as_int(case[1]), "touched by a car going %s km/h faster than he is: the class of a closing speed of %s" % [str(faster), str(faster)])
+		check_eq(lamps, int(tuning.fi("hit_lamps", GameData.as_int(case[2]))), "and its lamps")
+
+	# A hit from outside the traffic (Collision.strike): once a tick, and
+	# not while he cannot be hit.
+	_bare_start(3, 1)
+	_bare_tick(3)
+	check(not _bare.strike(Collision.Hit.NONE), "a strike of no kind is no hit")
+	check(_bare.strike(Collision.Hit.CRASH), "a strike lands on a car that can be hit")
+	check_eq(_bare.hit, Collision.Hit.CRASH, "as the hit it is")
+	check_eq(_bare.hit_lamps, int(tuning.fi("hit_lamps", 1)), "with a crash's lamps")
+	check(_bare.hit_forces_gear, "forcing the lever")
+	check_near(_bare.immunity_left, immunity, 0.000001, "and beginning hit_immunity")
+	check(not _bare.strike(Collision.Hit.HEAD_ON), "a second strike on the same tick does not land")
+	check_eq(_bare.hit, Collision.Hit.CRASH, "and changes nothing")
+	var immune_ticks: int = roundi(immunity / DT)
+	var landed: int = 0
+	for _tick: int in immune_ticks - 1:
+		_bare_tick(3)
+		landed += 1 if _bare.strike(Collision.Hit.SCRAPE) else 0
+	check_eq(landed, 0, "no strike lands during hit_immunity")
+	_bare_tick(3)
+	check(_bare.strike(Collision.Hit.SCRAPE), "the tick it is over, one does")
+	check_eq(_bare.hit_lamps, int(tuning.fi("hit_lamps", 0)), "a scrape: one lamp")
+
+	# Between a corridor's barriers there is no room beside anything: a
+	# sideswipe there is undone along the road, not into the barrier.
+	_bare_start(3, 1)
+	var room: float = 0.3
+	_bare_car.wall_left = _bare_car.x - _bare_car.half_width() - room
+	_bare_car.wall_right = _bare_car.x + _bare_car.half_width() + room
+	var beside: TrafficSim.Vehicle = _bare_traffic.spawn(&"car", 1, _bare_car.s + 1.0, third)
+	beside.x = _bare_car.x - (beside.half_width + _bare_car.half_width()) + TOUCH_DEPTH
+	var x_before: float = _bare_car.x
+	_bare_tick(3)
+	check(_bare.hit != Collision.Hit.NONE, "(a car overlapping his side between the barriers is a hit)")
+	check_eq(_bare_car.x, x_before, "between barriers a hit does not push him sideways")
+	check(_bare_car.x + _bare_car.half_width() < _bare_car.wall_right and _bare_car.x - _bare_car.half_width() > _bare_car.wall_left, "he is inside the corridor still")
+	check_near(beside.s - _bare_car.s, beside.half_length + _bare_car.length() * 0.5 + pushback, 0.000001, "he is put hit_pushback behind it instead")
+	# The same touch with no barriers pushes him sideways.
+	_bare_start(3, 1)
+	beside = _bare_traffic.spawn(&"car", 1, _bare_car.s + 1.0, third)
+	beside.x = _bare_car.x - (beside.half_width + _bare_car.half_width()) + TOUCH_DEPTH
+	x_before = _bare_car.x
+	_bare_tick(3)
+	check_near(_bare_car.x - x_before, TOUCH_DEPTH + pushback, 0.000001, "with no barriers the same hit pushes him hit_pushback clear, sideways")
+
+	# "Behind a vehicle going his way he is no faster than it is": going his
+	# way. Undone out of an oncoming truck while he cannot be hit, he keeps
+	# the speed he has.
+	_bare_start(3, 0, 1, false)
+	_bare_car.x = _bare_car.lane_center(-1)
+	_bare.immunity_left = immunity
+	var lorry: TrafficSim.Vehicle = _bare_traffic.spawn(&"truck", -1, _bare_car.s + _lorry_reach(), _type_speed(&"truck", 0.0), -1)
+	_bare_tick(3)
+	check_eq(_bare.hit, Collision.Hit.NONE, "(immune, the oncoming truck he is inside is no hit)")
+	check(absf(lorry.s - _bare_car.s) >= lorry.half_length + _bare_car.length() * 0.5 - TOUCHING, "he is moved out of it")
+	check_near(_bare_car.speed, third, 0.000001, "and is not held to the speed of a vehicle coming the other way")
+	# Out of one going his way, slower than he is, he is.
+	_bare_start(3, 1)
+	_bare.immunity_left = immunity
+	var slowpoke: TrafficSim.Vehicle = _bare_traffic.spawn(&"truck", 1, _bare_car.s + _lorry_reach(), _type_speed(&"truck", 0.0))
+	_bare_tick(3)
+	check_near(_bare_car.speed, slowpoke.speed, 0.000001, "behind a truck going his way he is held to its speed")
+
+
+## How far ahead of him a truck's middle is when its rear end is 0.3 m
+## inside his nose.
+func _lorry_reach() -> float:
+	return GameData.as_float(data.record("vehicles", "truck").get("length")) * 0.5 + tuning.f("car_length") * 0.5 - 0.3
+
+
+func _check_bare_close_calls() -> void:
+	var third: float = tuning.fi("gear_speeds", 2)
+	var gap: float = tuning.f("close_call_gap")
+	var base: float = tuning.f("close_call_base_cash")
+	var gear_mult: float = tuning.fi("gear_cash_mult", 2)
+	var slow: float = _type_speed(&"truck", 0.0)
+
+	# It is the least air of the whole pass that is judged: close beside the
+	# tail, wide by the time he is clear of the nose, is a close call.
+	_bare_start(3, 1)
+	var truck: TrafficSim.Vehicle = _bare_traffic.spawn(&"truck", 2, 30.0, slow)
+	check_eq(_bare_pass(truck, 3, gap * 0.5, gap * 2.0), 1, "close at first and wide at the end of the pass: a close call")
+	_bare_start(3, 1)
+	truck = _bare_traffic.spawn(&"truck", 2, 30.0, slow)
+	check_eq(_bare_pass(truck, 3, gap * 2.0, gap * 0.5), 1, "wide at first and close at the end: a close call too")
+	_bare_start(3, 1)
+	truck = _bare_traffic.spawn(&"truck", 2, 30.0, slow)
+	check_eq(_bare_pass(truck, 3, gap * 2.0), 0, "wide all the way: none")
+
+	# "Under 0.6 m": at close_call_gap exactly it is not one.
+	_bare_start(3, 1)
+	_bare_passed(&"truck", gap, slow)
+	_bare_tick(3)
+	check_eq(_bare.close_calls, 0, "a pass with exactly close_call_gap of air is not a close call")
+	_bare_start(3, 1)
+	_bare_passed(&"truck", gap - 0.000001, slow)
+	_bare_tick(3)
+	check_eq(_bare.close_calls, 1, "a hair under it is")
+	check_near(_bare.close_call_cash, base * gear_mult, 0.000001, "and pays close_call_base_cash x the gear")
+
+	# A contact spoils the pass it was made in, not the next one.
+	_bare_start(3, 1)
+	truck = _bare_traffic.spawn(&"truck", 2, 30.0, slow)
+	_bare.immunity_left = 1000.0
+	check_eq(_bare_pass(truck, 3, -TOUCH_DEPTH), 0, "a pass in which he touched the truck is no close call")
+	_bare_car.s = truck.s - 30.0
+	_bare.immunity_left = 0.0
+	check_eq(_bare_pass(truck, 3, gap * 0.5), 1, "passing it again without a touch is one")
+
+	# A vehicle that honks at a close pass: an angry honk frays him, a happy
+	# one does not, and neither is changed by the other.
+	for honk: float in [5.0, -4.0]:
+		_bare_start(3, 1)
+		var honker: TrafficSim.Vehicle = _bare_passed(&"car", gap * 0.5, slow)
+		honker.honk_nerves = honk
+		_bare_tick(3)
+		check_near(_bare.honk_nerves, honk, 0.000001, "a honk of %s Nerves is owed as that" % str(honk))
+		check_near(_bare.honk_frights, maxf(honk, 0.0), 0.000001, "and frays him by %s" % str(maxf(honk, 0.0)))
+		check_eq(_bare.honk_vehicle_ids.size(), 1, "it is one honk")
+
+	# The chain: a close call within chain_window of the last is a link, one
+	# tick later it is not. (480 ticks are 4 s.)
+	var window_ticks: int = roundi(tuning.f("chain_window") / DT)
+	for case: Array in [[window_ticks, 1], [window_ticks + 1, 0], [window_ticks - 1, 1], [roundi(float(window_ticks) * 1.1), 0]]:
+		_bare_start(3, 1)
+		_bare_passed(&"truck", gap * 0.5, slow)
+		_bare_tick(3)
+		check_eq(_bare.close_calls, 1, "(a first close call)")
+		for _tick: int in GameData.as_int(case[0]) - 1:
+			_bare_tick(3)
+		_bare_passed(&"truck", gap * 0.5, slow)
+		_bare_tick(3)
+		check_eq(_bare.close_calls, 1, "(a second, %d ticks after the first)" % GameData.as_int(case[0]))
+		check_eq(_bare.chain, GameData.as_int(case[1]), "a close call %d ticks after the last: chain %d" % [GameData.as_int(case[0]), GameData.as_int(case[1])])
+		check_near(_bare.close_call_mult, 1.0 + tuning.f("chain_step") * float(GameData.as_int(case[1])), 0.000001, "and its multiplier")
+
+	# What the cabin may add (GDD 7): a share of the pay, and a note on top
+	# of each close call, which the share does not touch.
+	_bare_start(3, 1)
+	_bare.cash_mult = 2.0
+	_bare.cash_bonus = 5.0
+	_bare_passed(&"truck", gap * 0.5, slow)
+	_bare_tick(3)
+	check_near(_bare.close_call_cash, base * gear_mult * 2.0 + 5.0, 0.000001, "close-call cash x 2 and 5 more a close call: twice the pay, plus 5")
+
+	# An oncoming vehicle closes at his speed and its own together: crawling
+	# at 20 km/h past one that comes at 60 is a close call, and pays double.
+	_bare_start(1, 0, 1, false)
+	_bare_car.speed = 20.0
+	var coming: TrafficSim.Vehicle = _bare_traffic.spawn(&"car", -1, 40.0, 60.0, -1)
+	_bare_car.x = coming.x + coming.half_width + _bare_car.half_width() + gap * 0.5
+	var counted: int = 0
+	var paid: float = 0.0
+	for _tick: int in int(10.0 / DT):
+		_bare_tick(1)
+		counted += _bare.close_calls
+		paid += _bare.close_call_cash
+	check(20.0 < tuning.f("close_call_min_closing") and 80.0 >= tuning.f("close_call_min_closing"), "(20 km/h alone is under close_call_min_closing; 80 is not)")
+	check_eq(counted, 1, "an oncoming car passed closely at 20 km/h is a close call")
+	check_near(paid, base * tuning.fi("gear_cash_mult", 0) * tuning.f("close_call_oncoming_mult"), 0.000001, "paid for first gear, doubled for an oncoming vehicle")
+
+
+func _check_traffic_leftovers() -> void:
+	var follow_gap: float = tuning.f("traffic_follow_gap")
+	var signal_ticks: int = roundi(tuning.f("signal_time") / DT)
+	var move_ticks: int = roundi(tuning.f("lane_change_time") / DT)
+	var slow: float = _type_speed(&"truck", 0.0)
+	var fast: float = _type_speed(&"taxi", 1.0)
+
+	# A lane change that has begun is finished before another can begin.
+	for interrupt_at: int in [signal_ticks / 2, signal_ticks + move_ticks / 2]:
+		var traffic: TrafficSim = TrafficSim.new()
+		traffic.configure(data)
+		var mover: TrafficSim.Vehicle = traffic.spawn(&"car", 1, 0.0, fast)
+		traffic.begin_lane_change(mover, 2, tuning.f("signal_time"))
+		var done_tick: int = -1
+		for tick: int in signal_ticks + move_ticks + 240:
+			if tick == interrupt_at:
+				traffic.begin_lane_change(mover, 0, tuning.f("signal_time"))
+			traffic.step(DT, -2000.0, -100.0, 0.0)
+			if done_tick < 0 and mover.signalling == 0:
+				done_tick = tick
+		check_eq(done_tick + 1, signal_ticks + move_ticks, "a lane change asked for %d ticks into another does not delay it" % interrupt_at)
+		check_eq(mover.lane, 2, "nor turn it round")
+		check_near(mover.x, traffic.lane_center(2), 0.000001, "the vehicle ends in the lane it set out for")
+
+	# The horn's quicker move: no signal, and the time that was asked for.
+	var road: TrafficSim = TrafficSim.new()
+	road.configure(data)
+	var yielding: TrafficSim.Vehicle = road.spawn(&"car", 1, 0.0, fast)
+	road.begin_lane_change(yielding, 2, 0.0, 0.5)
+	var ticks: int = 0
+	for _tick: int in move_ticks * 2:
+		road.step(DT, -2000.0, -100.0, 0.0)
+		ticks += 1
+		if yielding.signalling == 0:
+			break
+	check_eq(ticks, roundi(0.5 / DT), "a lane change asked to take 0.5 s with no signal takes 0.5 s")
+	check_eq(yielding.lane, 2, "and ends in the new lane")
+
+	# The gap at which a vehicle takes the speed of the one ahead is
+	# traffic_follow_gap, bumper to bumper, whatever their lengths.
+	for leader: StringName in [&"truck", &"tuk_tuk"]:
+		road = TrafficSim.new()
+		road.configure(data)
+		var ahead: TrafficSim.Vehicle = road.spawn(leader, 1, 500.0, slow * 0.5)
+		var chaser: TrafficSim.Vehicle = road.spawn(&"taxi", 1, 400.0, fast)
+		var closing: float = (fast - slow * 0.5) * KMH_TO_MS * DT
+		var gap_when_slowed: float = INF
+		for _tick: int in int(30.0 / DT):
+			road.step(DT, -2000.0, -100.0, 0.0)
+			if chaser.speed < fast:
+				gap_when_slowed = (ahead.s - ahead.half_length) - (chaser.s + chaser.half_length)
+				break
+		check(gap_when_slowed < follow_gap and gap_when_slowed > follow_gap - closing * 2.0,
+				"behind a %s a taxi slows when the air between them falls under traffic_follow_gap (at %s m)" % [leader, str(gap_when_slowed)])
+
+	# It follows what is ahead and going its way: not a vehicle it overlaps,
+	# and not one coming the other way.
+	road = TrafficSim.new()
+	road.configure(data)
+	var through: TrafficSim.Vehicle = road.spawn(&"taxi", 1, 98.0, fast)
+	road.spawn(&"truck", 1, 100.0, slow)
+	road.step(DT, -2000.0, -100.0, 0.0)
+	check_near(through.speed, fast, 0.000001, "a vehicle that overlaps another in its lane does not take its speed")
+	road = TrafficSim.new()
+	road.configure(data)
+	var overtaker: TrafficSim.Vehicle = road.spawn(&"taxi", -1, 0.0, fast)
+	var coming: TrafficSim.Vehicle = road.spawn(&"truck", -1, 0.0, slow, -1)
+	coming.s = overtaker.half_length + coming.half_length + follow_gap * 0.5
+	road.step(DT, -2000.0, -100.0, 0.0)
+	check_near(overtaker.speed, fast, 0.000001, "a vehicle in the oncoming lane does not follow a truck coming at it")
+	check_near(coming.speed, slow, 0.000001, "nor the truck it")
+
+	# An oncoming vehicle that has gone by the standing player keeps going.
+	road = TrafficSim.new()
+	road.configure(data)
+	var gone_by: TrafficSim.Vehicle = road.spawn(&"car", -1, 0.0, _type_speed(&"car", 0.0), -1)
+	gone_by.s = -(tuning.f("car_length") * 0.5 + gone_by.half_length + follow_gap * 0.5)
+	road.step(DT, 0.0, road.lane_center(-1), 0.0)
+	check_near(gone_by.speed, _type_speed(&"car", 0.0), 0.000001, "an oncoming car just past the player standing in its lane does not stop for him")
+
+	# An oncoming vehicle's planned lane change begins where it was planned,
+	# counted along its own way.
+	road = TrafficSim.new()
+	road.configure(data)
+	var planner: TrafficSim.Vehicle = road.spawn(&"car", -1, 100.0, 60.0, -1)
+	road.plan_lane_change(planner, 50.0, 0)
+	var began_at: float = INF
+	var before: float = planner.s
+	for _tick: int in int(10.0 / DT):
+		before = planner.s
+		road.step(DT, -2000.0, -100.0, 0.0)
+		if planner.signalling != 0:
+			began_at = planner.s
+			break
+	check(before > 50.0 and began_at <= 50.0, "an oncoming vehicle's planned change begins as it reaches the place (it began at %s m)" % str(began_at))
+
+	# A lane is free of a vehicle from its bumpers, not from its middle.
+	road = TrafficSim.new()
+	road.configure(data)
+	var long: TrafficSim.Vehicle = road.spawn(&"truck", 2, 100.0, slow)
+	var clearance: float = 5.0
+	check(not road.lane_is_free(2, 100.0 + long.half_length + clearance - 0.5, clearance, null), "a lane is not free within the clearance of a truck's bumper")
+	check(road.lane_is_free(2, 100.0 + long.half_length + clearance + 0.5, clearance, null), "it is free beyond it")
+	check(not road.lane_is_free(2, 100.0 - long.half_length - clearance + 0.5, clearance, null), "the same behind the truck")
+	check(road.lane_is_free(2, 100.0, clearance, long), "a vehicle is not in its own way")
+	check(road.lane_is_free(1, 100.0, clearance, null), "and the next lane is free of it")

@@ -23,6 +23,8 @@ Useful commands:
 | Some tests, verbose | `... run_tests.gd -- --only=T-HAND,T-GATE --verbose` |
 | Mark newly passing tests | `... run_tests.gd -- --promote` |
 | One scene, 10 s of game time | `godot --headless --path . --fixed-fps 60 res://scenes/boot.tscn --quit-after 600` |
+| A night with the bot at the wheel | `godot --headless --path . --fixed-fps 60 res://scenes/drive.tscn --quit-after 6000 -- --table=drivers --seed=3 --bot=expert --hud` |
+| The balance report (GDD 12.5) | `tools/run_balance.sh [seeds per skill per Table] [jobs]`, or a look: `godot --headless --path . --script res://tools/run_balance.gd -- --cells=drivers/expert --seeds=4 --verbose --out=/tmp/b.json` |
 | Screenshot (no GPU here, see D-015) | `xvfb-run -a godot --path . --rendering-method gl_compatibility --rendering-driver opengl3 --audio-driver Dummy ...` |
 
 ## Current state
@@ -32,13 +34,13 @@ Useful commands:
 - **How the last session ended.** On 2026-11-20 the account's monthly spend limit stopped six workflows in mid-run. What their agents had finished was taken in by hand on 2026-11-27: the M8 rules fixes (`m8fix/rules`, complete), the M6 test gaps (`m6fix/tests`, complete), the post effects review fixes (uncommitted in the agent's worktree; committed, merged, pictures retaken and looked at), and of the M7 views fixes V-01 and V-05. **What never ran and is still owed, if the owner wants it:** a skeptic's check of the fixes themselves. The fixes of D-055, D-057, D-058 and D-059, and the post effects fixes, are held by their own tests and mutants and by nothing else: no second agent tried to break them. The workflows' local branches (`m6fix/*`, `m7fix/views`, `m8fix/rules`, `m10/*-in-fix`) hold nothing that is not merged; they are not pushed and need not be.
 - **The reviews' reports** are in `docs/reviews/` (one JSON per lens, with the GDD sentence, evidence and proposed fix of each finding). The probes they name are gone with the scratch folder.
 - **Open findings, by milestone** (ids as in the reports):
-  - *M7, the views lens* (`m7_review_views.json`): V-04, the verdicts are said in a line, but being turned back is still an uncut jump of 346 m and half an hour (a short cut through the post effects on `pulled_over` with minutes would do); V-11 (b), standing in the bay shows nothing in the forward view (the key's marker is below the frame: move the `key` anchor of anchors.json into it); V-13, the bar, the barriers, their caps and the bay's paint are built from the registry's size and colour and cannot be replaced by an artist's scene; V-14, numbers in view and game code (`_mirror_proud * 1.5`, `LIFT_PAINT`, `LIFT_LINE`, the gust's `_tell * 0.5`, the stand-in bot's 17 constants); V-15, the numeric HUD prints a nameless Leg row in a set piece and raw ids (`alone`, `parked`, what is carried); V-16, `--boss=` drops arguments it cannot use without a word, and after a Wreck every further round of a set piece begins wrecked; V-17, the stand-in leaves the window and the glovebox open after the Checkpoint (60% Haze in every Storm of a whole stand-in Telling) and takes every Exit; V-18, no smoke run puts the mirror's lights, the Patrol's blue, the phone at his ear or a searched Checkpoint on screen (the agent's unfinished `tools/views_check.gd` was not kept).
+  - *M7, the views lens* (`m7_review_views.json`): V-04, the verdicts are said in a line, but being turned back is still an uncut jump of 346 m and half an hour (a short cut through the post effects on `pulled_over` with minutes would do); V-11 (b), standing in the bay shows nothing in the forward view (the key's marker is below the frame: move the `key` anchor of anchors.json into it); V-13 (the bar, the barriers, their caps and the bay's paint are built from the registry's size and colour) is answered by D-070: such entries are marked `drawn_by_code` and the validator refuses a scene on them; V-14, numbers in view and game code (`_mirror_proud * 1.5`, `LIFT_PAINT`, `LIFT_LINE`, the gust's `_tell * 0.5`, the stand-in bot's 17 constants); V-15, the numeric HUD prints a nameless Leg row in a set piece and raw ids (`alone`, `parked`, what is carried); V-16, `--boss=` drops arguments it cannot use without a word, and after a Wreck every further round of a set piece begins wrecked; V-17, the stand-in leaves the window and the glovebox open after the Checkpoint (60% Haze in every Storm of a whole stand-in Telling) and takes every Exit; V-18, no smoke run puts the mirror's lights, the Patrol's blue, the phone at his ear or a searched Checkpoint on screen (the agent's unfinished `tools/views_check.gd` was not kept).
   - *M7, the rules* (D-057): DAWN-01 is closed (D-067); DAWN-11, a car across a lane line where the barriers begin is put into the lane its middle is in, up to half a car's width in one tick (the shoulder's 3.2 m jump is fixed, V-05); STORM-5, Night storm changes nothing a driver with two headlights can measure (NEEDS OWNER). Of the tests lens, cases named and not written: a standing car 5 cm short of wholly off the lanes; the 30 s of the Call timed in the three cases where he does not pull over; the generator's plan driven through Dawn's barriers; a Telling whose Checkpoint has a modifier.
   - *M8* (D-059): the test gaps m8tv-08, m8tv-09 (c to g) and m8tv-10 (seventeen clauses of GDD 8 and D-051 with no check; the build is right in each today). RULES-13 is the owner's (below).
   - *M6* (D-055): the fix branches were never reviewed. Seen by their agents and left: an item's `params` and its `lapse` are not checked by the validator; a phone taken out of the cabin while it rings ends its call without `call_resolved`; the stand-in at the wheel hands a Patrol's officer nothing and waits there for ever; `DriveSim._use_control` announces a keypad ritual without asking whether it ran; a stop reorders the cabin's list.
   - *M11* (D-067): whoever follows in the car's tracks (the Patrol's car, the Tailgater closing up or hanging back) can be drawn inside a vehicle the car has just cut in front of; behind the car, seen in the mirror only.
   - *M10*: GDD 17.2 was gone through for the tells of M7 and M8 only (D-058); the earlier milestones' tells (a curve's sign has no sound, the yawns and the Phantom's hum no picture) belong to the rest of M10. The post effects fixes have had no review of their own.
-  - *M1 and M2* (reviews of 2026-11-17, never finished): (a) M2 views: pointer ring drawn at the hand's clamped target; the hand does not follow the gear knob; forearm stretches beyond 0.30 m for five far anchors (decision not recorded); `scene` in placeholders ignored for road strips, arm and pointer. (b) M1 test honesty (18): no test moves the pointer with relative motion; T-WHEEL-01 never releases a turned wheel; grip and ride on an off-centre wheel; gate engage radius and grind band probed from one side; FLICK time and direction limits; CRANK angle-not-distance; gate channel width; camera pitch and glance following the hand; pointer pixels to screen; steering sensitivity wiring; loose brackets on timing limits; literals standing in for tuning values. (c) M1 gesture: rituals.json is not checked against the table of GDD 4.6. (d) M2 test honesty leftovers (see D-028 and D-029 for what was done). M3, M4 and M5 have not been reviewed.
+  - *M1 and M2* (reviews of 2026-11-17): closed on 2026-11-27 (D-070): the validator holds rituals.json and anchors.json to the table of GDD 4.6; what the code draws itself takes no scene (this also answers V-13 of the M7 views); the pointer's ring is where the pointer points; the forearm's stretch is recorded; 213 mutants of the hand, wheel, gate, gestures, car, traffic and collisions are all killed (52 lived at first). M3, M4 and M5 have not been reviewed.
 - **Next step:**
   1. `tools/check.sh` must print `CHECK OK`.
   2. Nothing is next in GDD 18's order. What can be taken up, each with a check that fails first: the open findings below; the bot's missing habits (D-068: it does not smoke, sip, answer the phone or a heckle, carry a passenger, take the Motorcade's side road), which stand between its numbers and GDD 12.5's; a balance run of 100 seeds (`tools/run_balance.sh`, some hours); the tells of GDD 17.2 for the milestones before M7 (D-058); V-04 of the M7 views; the menus by touch without the engine's emulated mouse.
@@ -70,7 +72,7 @@ Do not start a milestone until every test of the previous one passes (GDD 18).
 - [x] The eight M1 tests written and passing (not yet promoted)
 - [x] Cabin sandbox: `scenes/drive.tscn`, `drive_controller.gd`, `CabinView`, `HandView` (analytic arm), `PointerView`, `DebugHud` (F1); screenshots in `artifacts/m1_*.png`
 - [x] Tests promoted (the registry must match what passes; review findings are applied on top)
-- [ ] Adversarial review of the M1 core and tests (workflow `m1-review`, running on a snapshot of commit a7c3d8a): apply confirmed findings, strengthen tests where a mutation survived
+- [x] Adversarial review of the M1 core and tests (workflow `m1-review`, on a snapshot of commit a7c3d8a): findings applied (D-030, and what was left on 2026-11-27: D-070); tests strengthened where a mutation survived (`tools/mutants/m1_hand.py`, 108 mutants, all killed)
 
 ### M2 Driving: T-CAR-01..05, T-COL-01..03, T-CC-01..02
 - [x] `Rng` (road, shop, heckle, bot streams), `CarSim`, `TrafficSim`, `Collision`, thin `NervesSim` and `FaultSim`
@@ -79,7 +81,7 @@ Do not start a milestone until every test of the previous one passes (GDD 18).
 - [x] The ten M2 tests written, passing and promoted
 - [x] Road view: uniform strips plus recycled dashes and posts; `world_bend.gdshader`; pooled vehicle views; flat sky
 - [x] Sandbox traffic so the scene can be driven; `artifacts/m2_road.png`
-- [ ] Review of the M2 core, tests and views (workflow `m2-review`, running on a snapshot of commit e197006): apply confirmed findings
+- [x] Review of the M2 core, tests and views (workflow `m2-review`, on a snapshot of commit e197006): findings applied (D-028, D-029, and what was left on 2026-11-27: D-070; `tools/mutants/m2_car.py`, 105 mutants, all killed)
 
 ### M3 Nerves and the base cabin: T-NERVES-01..04, T-FAULT-01..02, T-ITEM-BASE
 - [x] `EffectSystem` (timed statuses, stacks, holds, implications from the effect registry in `items.json`)
@@ -141,7 +143,7 @@ Do not start a milestone until every test of the previous one passes (GDD 18).
 - [x] Mutation runs: the Storm 38 of 38; the Checkpoint 46 of 54, the eight closed by new checks; Dawn 40 of the first 43, two closed, one equivalent
 - [x] Adversarial review of M7 (workflow `m7-review`): four lenses applied (D-057)
 - [x] The views lens of that review: V-01, V-02, V-05, V-06, V-07, V-08, V-09, V-10, V-11 (the paint), V-12, V-19 and the sounds of V-03 (D-058)
-- [ ] Left open: V-04's cut, V-11's marker, V-13 to V-18; DAWN-01, DAWN-11, STORM-5; four unwritten test cases (see "Current state")
+- [ ] Left open: V-04's cut, V-11's marker, V-14 to V-18 (V-13: D-070); DAWN-01, DAWN-11, STORM-5; four unwritten test cases (see "Current state")
 
 ### M8 Passengers: T-PASS-* (5)
 - [x] `PassengerSim` and passengers.json (D-051): hitchers at the roadside, the passenger door, the seat and the back seat, rides counted at stalls, fares, guests at arrival, the save
@@ -172,12 +174,12 @@ Do not start a milestone until every test of the previous one passes (GDD 18).
 - [ ] Left open: no adversarial review of M10; GDD 17.2's tells for the milestones before M7
 
 ### M11 Balance: T-BOT-01, T-WALL-01
-- [x] T-WALL-01 (153 checks, about two minutes; D-067): `tests/support/ideal_driver.gd` (third gear, the plan's line, eyes shut) over every leg type in each act and with each modifier (46 legs), Tailgater legs until he has gone by, each kind of Twist, Dawn three times and once slowly, the Commute, four failure cases
-- [x] The Tailgater keeps off the road the leg needs (`EncounterSim`: swerves in behind when his lane is blocked, hangs back once left, passes only into a clear window off the plan's line, falls behind after his stab); T-LEG-06 has the cases among traffic (77 checks)
+- [x] T-WALL-01 (158 checks, about two minutes; D-067): `tests/support/ideal_driver.gd` (third gear, the plan's line, eyes shut) over every leg type in each act and with each modifier (46 legs), Tailgater legs until he has gone by, each kind of Twist, Dawn three times and once slowly, the Commute, four failure cases
+- [x] The Tailgater keeps off the road the leg needs (`EncounterSim`: swerves in behind when his lane is blocked, hangs back once left, passes only into a clear window off the plan's line, falls behind after his stab); T-LEG-06 has the cases among traffic (87 checks)
 - [x] DAWN-01: Dawn's traffic keeps his pace from the checkpoint's sign until he is back at par (`BossSim.traffic_pace`)
-- [x] Mutants: `tools/mutants/wall.py`
+- [x] Mutants: `tools/mutants/wall.py` (17, all killed)
 - [x] The DriverBot (GDD 13.8, D-068): `src/game/driver_bot.gd` in place of `stand_in_bot.gd`; three skills from tuning `bot_*`; `--bot=<skill>` and F7 in the drive scene
-- [x] The balance runner (`src/game/balance_run.gd`, `tools/run_balance.gd`, `tools/run_balance.sh [seeds] [jobs]`) and its report, `artifacts/balance.json`; T-BOT-01 (shape, arithmetic, two Tellings by the tool itself); mutants in `tools/mutants/bot.py`
+- [x] The balance runner (`src/game/balance_run.gd`, `tools/run_balance.gd`, `tools/run_balance.sh [seeds] [jobs]`) and its report, `artifacts/balance.json`; T-BOT-01 (145 checks: the skills, reaction, lane keeping, the hand at the lever, the policy, following, one Telling twice, the report's arithmetic, two Tellings by the tool itself); mutants in `tools/mutants/bot.py` (20, all killed)
 - [x] A tuning pass, of the bot only: gestures take what GDD 7.4 gives them, eyes that shut, sight that haze, rain and glare shorten, a sense of the Clock (D-068). The numbers of GDD 15 were not touched: see NEEDS OWNER
 - [ ] Left open: the bot does not smoke, sip, answer the phone or a heckle, carry a passenger, or take the Motorcade's side road; a run of 100 seeds per skill per Table (some hours) has not been made
 
@@ -185,7 +187,7 @@ Do not start a milestone until every test of the previous one passes (GDD 18).
 - [x] Touch (GDD 4.1, 17.4; D-069): `src/game/touch_input.gd` (the thumb is the hand, a TAP performs when the hand arrives, the other gestures need the thumb, the pedal zone, 9 mm targets), `src/view/touch_view.gd`, the drive scene hears `InputEventScreenTouch` and `InputEventScreenDrag`
 - [x] The pause's hotspot of GDD 4.1 (top-left corner), for a finger and for the game's own pointer
 - [x] `export_presets.cfg`: Windows Desktop, Linux, macOS, iOS (D-016); landscape only
-- [x] T-TOUCH-01 (98 checks), with `tools/touch_walk.gd` (the headless drive scene given screen touches); mutants in `tools/mutants/touch.py`
+- [x] T-TOUCH-01 (100 checks), with `tools/touch_walk.gd` (the headless drive scene given screen touches); mutants in `tools/mutants/touch.py` (19, all killed)
 - [ ] Left open: no export was made (no export templates here); nobody has put a finger on it; the menus work by touch only through the engine's emulated mouse
 
 ## Known debts (builder)
@@ -354,3 +356,8 @@ Two lines per slice, newest last.
   It found two things in the game: on Dawn's waiting road the brake did not open a gap (fixed, D-067), and nothing else. Report of 84 Tellings in `artifacts/balance.json`: wins well above GDD 12.5's targets, the hand off the wheel 10% of the time where 25% to 40% is wanted. T-BOT-01 passes: 113 of 114.
 - 2026-11-27 M12: touch and export (D-069). The thumb is the hand; a TAP performs when the hand arrives, the other gestures need the thumb; a pedal zone at the bottom left; targets 9 mm across; the pause's hotspot of GDD 4.1 in the top-left corner, for a finger and for the pointer; four export presets.
   A headless drive scene is played with screen touches. T-TOUCH-01 passes: 114 of 114. Every milestone of GDD 18 is built.
+- 2026-11-27 M11, M12: mutation runs on the three new lists (wall 17, bot 20, touch 19): eleven mutants lived at first and each got a check that kills it (the Tailgater among traffic, the brake on Dawn's waiting road, the bot's following distance and standing traffic, a late night's outcome, the far crank by touch); two were equivalent and are noted in their lists.
+  784 mutants in nineteen lists apply to the code as it is. `tools/check.sh` prints CHECK OK on b6d43e8.
+- 2026-11-27 M1 and M2: what was left of the first two reviews (D-070; the owner: "Finish it"). The validator holds the controls to the table of GDD 4.6; a placeholder the code draws takes no scene; the pointer's ring is drawn where the pointer points.
+  1,014 mutants in 22 lists apply to the code as it is. Two mutation lists for the first two milestones (the hand, wheel, gate and gestures: 108; the car, traffic, collisions and close calls: 105): 52 mutants lived, 45 got a check that kills them and 7 are equivalent and named. 381 checks added, none removed. The task list is empty.
+

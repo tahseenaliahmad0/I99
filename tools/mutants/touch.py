@@ -1,12 +1,16 @@
 """Mutants of touch (GDD 4.1, 17.4, D-069) for T-TOUCH-01.
     python3 tools/mutants.py T-TOUCH tools/mutants/touch.py
+
+Not in the list: a tap that waits is dropped when the pointer is no longer
+on its anchor. A new touch drops it already (finger_down); the line is for
+an anchor that stops being one while the hand is on its way, which no test
+arranges.
 """
 C = 'src/game/drive_controller.gd'
 T = 'src/game/touch_input.gd'
 MUTANTS = [
  (T, '\t\tif snap != HandSim.NO_ANCHOR and sim.gesture_at(snap) == "TAP":\n\t\t\t_tap_at = snap', '\t\tif false:\n\t\t\t_tap_at = snap', 'a TAP does not perform by itself: it needs the thumb'),
  (T, '\t\tif snap != HandSim.NO_ANCHOR and sim.gesture_at(snap) == "TAP":\n\t\t\t_tap_at = snap', '\t\tif snap != HandSim.NO_ANCHOR:\n\t\t\t_tap_at = snap', 'every ritual performs by itself, a HOLD and a CRANK too'),
- (T, '\t\tif snap != _tap_at:\n\t\t\t_tap_at = HandSim.NO_ANCHOR\n\t\telif', '\t\tif false:\n\t\t\t_tap_at = HandSim.NO_ANCHOR\n\t\telif', 'a tap is still owed after the thumb has gone on to something else'),
  (T, '\t\t\t_tap_ticks = _ticks(_tuning.f("touch_tap_s"))\n\t\t\tinput.lmb = true\n\t\t\treturn', '\t\t\tinput.lmb = true\n\t\t\treturn', 'the press of a TAP never ends'),
  (T, '\t\tinput.lmb = _down\n\t\tif not _down:\n\t\t\t_pressed_at = HandSim.NO_ANCHOR\n\t\treturn', '\t\tinput.lmb = true\n\t\treturn', 'lifting the thumb does not let go'),
  (T, '\tif not _down:\n\t\t_pressed_at = HandSim.NO_ANCHOR\n\t\tinput.lmb = false\n\t\treturn', '\tif false:\n\t\treturn', 'a HOLD goes on after the thumb has lifted'),

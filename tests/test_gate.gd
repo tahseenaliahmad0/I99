@@ -167,6 +167,49 @@ func test_gate_01() -> void:
 	_gate.reset(GearGate.NEUTRAL)
 	check(_gate.shift_sequential(-1) and _gate.gear == 1, "from neutral a flick finds first")
 
+	# The stronger part of a stroke goes first, so a jerk turns the corner it
+	# leans into (M1 review: no stroke tried depended on it). One jerk from
+	# neutral, a little more forward than sideways: the lever is in the
+	# column, not stuck beside it.
+	var jerk_half: float = tuning.f("gate_channel_half_width")
+	_gate.reset(GearGate.NEUTRAL)
+	_gate.press()
+	_gate.begin_tick()
+	_gate.step(DT, Vector2(-(jerk_half + 0.03) * _unit, -(jerk_half + 0.05) * _unit), 1.0)
+	check_near(_gate.lever.y, jerk_half + 0.05, 0.000001, "a jerk that leans forward goes up the column")
+	check_near(_gate.lever.x, -jerk_half, 0.000001, "and stops at the column's wall")
+	_drag(Vector2(0.0, 0.7))
+	_gate.begin_tick()
+	_gate.release()
+	check_eq(_gate.gear, 3, "pushed on, it is third")
+	check_eq(_gate.grinds, 0, "with no grind")
+	# The same jerk leaning sideways stays in the neutral channel and goes on
+	# to the first column.
+	_gate.reset(GearGate.NEUTRAL)
+	_gate.press()
+	_gate.begin_tick()
+	_gate.step(DT, Vector2(-(jerk_half + 0.05) * _unit, -(jerk_half + 0.03) * _unit), 1.0)
+	check_near(_gate.lever.x, -(jerk_half + 0.05), 0.000001, "a jerk that leans sideways goes along the neutral channel")
+	check_near(_gate.lever.y, jerk_half, 0.000001, "and stops at the channel's wall")
+	_drag(Vector2(-(1.0 - jerk_half - 0.05), 0.0))
+	_drag(Vector2(0.0, 1.0))
+	_gate.begin_tick()
+	_gate.release()
+	check_eq(_gate.gear, 1, "pushed on to the left and forward, it is first")
+	check_eq(_gate.grinds, 0, "with no grind either")
+
+	# There is nothing below fifth: its column only goes forward.
+	_gate.reset(GearGate.NEUTRAL)
+	_gate.has_fifth = true
+	_gate.press()
+	_drag(Vector2(1.0, 0.0))
+	_drag(Vector2(0.0, -0.9))
+	check_near(_gate.lever.y, -jerk_half, 0.000001, "below fifth the lever stops at the neutral channel's wall")
+	_gate.begin_tick()
+	_gate.release()
+	check_eq(_gate.gear, GearGate.NEUTRAL, "and engages nothing there")
+	_gate.has_fifth = false
+
 
 ## T-GATE-02: a release mid-channel and a push into a wall each produce one grind.
 func test_gate_02() -> void:
@@ -351,6 +394,55 @@ func test_gate_02() -> void:
 			_gate.release()
 			check_eq(_gate.grinds, 0, "%s: a release %s along does not grind" % [name, str(along)])
 	_gate.has_fifth = false
+
+	# The upper edge of the grind band (M1 review: with the shipped numbers
+	# it is hidden behind the engage radius, 0.8 = 1 - 0.2). In a gate whose
+	# gears engage only from 0.9 on, a release between the two neither
+	# grinds nor engages.
+	var loose: GameData = fresh_data()
+	loose.tuning.set_value("gate_engage_radius", 0.1)
+	var shipped: GearGate = _gate
+	_gate = GearGate.new()
+	_gate.configure(loose.tuning)
+	for case: Array in [[grind_max - 0.05, 1, 0], [grind_max + 0.05, 0, 0], [0.95, 0, 3]]:
+		_gate.reset(GearGate.NEUTRAL)
+		_gate.press()
+		_drag(Vector2(0.0, GameData.as_float(case[0])))
+		_gate.begin_tick()
+		_gate.release()
+		check_eq(_gate.grinds, GameData.as_int(case[1]), "engage radius 0.1: a release %s along grinds %d times" % [str(case[0]), GameData.as_int(case[1])])
+		check_eq(_gate.gear, GameData.as_int(case[2]), "engage radius 0.1: and leaves gear %d" % GameData.as_int(case[2]))
+	_gate = shipped
+
+	# A push into a wall is forgiven by what the lever then travels: 0.6 into
+	# the wall, away and back, 0.6 again is no grind.
+	_gate.reset(GearGate.NEUTRAL)
+	_gate.press()
+	_drag(Vector2(half_width + 0.6, 0.0))
+	_drag(Vector2(-1.0, 0.0))
+	_drag(Vector2(1.0, 0.0))
+	check_near(_gate.lever.x, half_width, 0.000001, "the lever is back at the wall")
+	_drag(Vector2(0.6, 0.0))
+	check_eq(_gate.grinds, 0, "two pushes of 0.6 with a unit of travel between them do not add up to a grind")
+	_drag(Vector2(0.6, 0.0))
+	check_eq(_gate.grinds, 1, "but 1.2 without a break does")
+
+	# What the lever still travels on the tick it meets the wall is not
+	# pushing: 0.02 of travel and 0.08 into the wall, then 0.91: 0.99 in all.
+	_gate.reset(GearGate.NEUTRAL)
+	_gate.press()
+	_gate.begin_tick()
+	_gate.step(DT, Vector2((half_width - 0.02) * _unit, 0.0), 1.0)
+	_gate.begin_tick()
+	_gate.step(DT, Vector2(0.1 * _unit, 0.0), 1.0)
+	check_near(_gate.lever.x, half_width, 0.000001, "the lever has met the wall")
+	for _tick: int in 7:
+		_gate.begin_tick()
+		_gate.step(DT, Vector2(0.13 * _unit, 0.0), 1.0)
+	check_eq(_gate.grinds, 0, "0.99 swallowed by the wall is not yet gate_wall_push")
+	_gate.begin_tick()
+	_gate.step(DT, Vector2(0.03 * _unit, 0.0), 1.0)
+	check_eq(_gate.grinds, 1, "0.03 more is")
 
 	# The grind is heard and felt: through the whole simulation it is a sound
 	# and gate_grind_nerves.

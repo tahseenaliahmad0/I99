@@ -248,6 +248,30 @@ func _check_the_gestures_need_the_thumb() -> void:
 		_touch_tick()
 	check(_sim.items.flag(ItemSim.FLAG_WINDOW), "the thumb held on it and led round: the window is down")
 	_thumb_up()
+	# From across the cabin, further than a mouse's press is kept for: the
+	# press is made when the hand gets there, because the thumb is still down.
+	_by_touch()
+	_sim.hand.place_at(_sim.hand.anchor_position(_sim.hand.anchor_index(&"glovebox")))
+	_touch_tick()
+	var from_tick: int = _sim.tick
+	_thumb_down_on("window_crank")
+	guard = _ticks_in(4.0)
+	while _sim.hand.at_id() != &"window_crank" and guard > 0:
+		guard -= 1
+		_touch_tick()
+	var way: float = float(_sim.tick - from_tick) * DT
+	check(way > tuning.f("input_buffer") + 0.1, "(from the glovebox the crank is %.2f s away: more than the %.2f s a press is kept for)" % [way, tuning.f("input_buffer")])
+	_touch_ticks(0.05)
+	crank_at = _sim.hand.anchor_pointer(_sim.hand.anchor_index(&"window_crank"))
+	heading = 0.0
+	guard = _ticks_in(4.0)
+	while not _sim.items.flag(ItemSim.FLAG_WINDOW) and guard > 0:
+		guard -= 1
+		heading += deg_to_rad(12.0)
+		_touch.finger_moved(THUMB, _on_the_glass(), crank_at, Vector2(cos(heading), sin(heading)) * 6.5)
+		_touch_tick()
+	check(_sim.items.flag(ItemSim.FLAG_WINDOW), "the thumb down all the way there: the hand takes the crank when it arrives, and winds")
+	_thumb_up()
 
 
 ## GDD 17.4: "The brake is a pedal zone at the bottom left for the left thumb."

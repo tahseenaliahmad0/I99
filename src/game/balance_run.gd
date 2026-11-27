@@ -91,7 +91,7 @@ func tell(table: String, skill: String, telling_seed: int, buys: bool, max_secon
 					done = true
 				"arrived":
 					out["ending"] = Save.ending_of(event)
-					out["outcome"] = LATE if GameData.as_string(out["ending"]) == Save.LATE else WON
+					out["outcome"] = outcome_of(event)
 					done = true
 	out["act"] = sim.run.act
 	out["stage"] = sim.run.stage_name()
@@ -114,6 +114,12 @@ func tell(table: String, skill: String, telling_seed: int, buys: bool, max_secon
 	if on_telling.is_valid():
 		on_telling.call(out)
 	return out
+
+
+## How a night that arrived counts: won, unless he was late (GDD 11.4: Late
+## is an ending, and no win).
+static func outcome_of(arrived: Dictionary) -> String:
+	return LATE if Save.ending_of(arrived) == Save.LATE else WON
 
 
 ## Seconds until the car's edge reaches the lane line: from lane centre, on

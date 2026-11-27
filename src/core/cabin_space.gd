@@ -127,6 +127,13 @@ func free_target(pointer: Vector2) -> Vector3:
 	return Vector3(x, y, hand_plane_z)
 
 
+## A point of the cabin the pointer points at: on its ray from the eye, as
+## far out as the plane the free hand moves in is ahead. Unlike free_target
+## it is not kept in the hand's box, and it exists for every direction.
+func pointed_at(pointer: Vector2) -> Vector3:
+	return eye + pointer_to_direction(pointer) * (eye.z - hand_plane_z)
+
+
 ## The point under the pointer on the plane of the wheel (z = 0).
 ## Returns Vector3.INF when the pointer does not look at that plane.
 func wheel_plane_point(pointer: Vector2) -> Vector3:

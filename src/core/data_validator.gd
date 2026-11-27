@@ -87,8 +87,29 @@ const REQUIRED_RECORDS: Dictionary = {
 	"tables": ["children", "drivers", "uncles", "inlaws", "aunts", "groom", "noor"],
 	"boss_modifiers": ["long_queue", "thorough", "crosswind", "night_storm", "market_day", "early_sun"],
 	# The controls that are always in the car (GDD 4.6) and that the code names.
-	"anchors": ["gear_lever", "horn", "wiper_stalk", "indicator_stalk", "headlight_knob", "hazard_button", "radio", "window_crank", "glovebox", "visor", "face"],
+	"anchors": ["gear_lever", "horn", "wiper_stalk", "indicator_stalk", "headlight_knob", "hazard_button", "radio", "window_crank", "glovebox", "visor", "face", "passenger_shoulder"],
 }
+## The table of GDD 4.6, "Controls always in the car": the anchor, the reach
+## from the wheel in seconds, whether the reach crosses the hub, the gesture
+## and what it needs (a FLICK its directions, a CRANK its turns). The
+## control's own ritual is one at that anchor that belongs to no item.
+const CONTROLS: Array[Dictionary] = [
+	{"anchor": "horn", "reach_s": 0.13, "cross": false, "gesture": "TAP"},
+	{"anchor": "wiper_stalk", "reach_s": 0.10, "cross": false, "gesture": "FLICK", "flick_dirs": ["up"]},
+	{"anchor": "hazard_button", "reach_s": 0.16, "cross": false, "gesture": "TAP"},
+	{"anchor": "radio", "reach_s": 0.21, "cross": false, "gesture": "DRAG"},
+	{"anchor": "gear_lever", "reach_s": 0.23, "cross": false, "gesture": "GATE"},
+	{"anchor": "visor", "reach_s": 0.32, "cross": false, "gesture": "FLICK", "flick_dirs": ["down"]},
+	{"anchor": "face", "reach_s": 0.26, "cross": false, "gesture": "TAP"},
+	{"anchor": "passenger_shoulder", "reach_s": 0.53, "cross": false, "gesture": "TAP"},
+	{"anchor": "glovebox", "reach_s": 0.57, "cross": false, "gesture": "TAP"},
+	{"anchor": "indicator_stalk", "reach_s": 0.41, "cross": true, "gesture": "FLICK", "flick_dirs": ["down", "up"]},
+	{"anchor": "headlight_knob", "reach_s": 0.53, "cross": true, "gesture": "TAP"},
+	{"anchor": "window_crank", "reach_s": 0.70, "cross": true, "gesture": "CRANK", "turns": 3},
+]
+## How far a reach in anchors.json may be from the table's (they are the
+## same numbers; this is rounding).
+const REACH_EPSILON: float = 0.0005
 const BEAT_TYPES: PackedStringArray = ["CALM", "CLUSTER", "SLOWPOKE", "MERGE", "CURVE", "GUST", "HAZARD", "SPECIAL"]
 const STOP_SERVICES: PackedStringArray = ["shop", "repair", "tea", "find", "passenger", "deals", "boss"]
 ## The stops of GDD 9.6 and the names GDD 15 gives their minutes and weights.
@@ -833,6 +854,10 @@ func _placeholder_schema() -> Dictionary:
 			"color": _t("color"),
 		}, true),
 		"scene": _nullable(_t("res")),
+		# The code builds this one itself from its size and colour (a strip of
+		# road that bends, an arm that stretches, a ring drawn on the screen):
+		# no scene can stand in for it.
+		"drawn_by_code": _opt(_bool()),
 	})
 
 
@@ -1081,6 +1106,8 @@ func _check_record_set(set_name: String, schema: Dictionary) -> void:
 ## Rules that span fields or files.
 func _check_cross_rules() -> void:
 	_check_required_records()
+	_check_controls()
+	_check_drawn_by_code()
 	_check_beats()
 	for table: Dictionary in _data.records("tables"):
 		var unlock: String = GameData.as_string(table.get("unlock"))
@@ -1235,6 +1262,70 @@ func _check_required_records() -> void:
 		for id: Variant in required:
 			if not _data.has_record(set_id, str(id)):
 				_err("E_MISSING", "%s.json" % str(where[0]), "%s[%s]" % [str(where[1]), str(id)], "this row of the GDD is missing")
+
+
+## The controls that are always in the car are those of GDD 4.6: each at its
+## anchor, at the table's reach from the wheel, across the hub or not, and
+## worked by the table's gesture.
+func _check_controls() -> void:
+	if _data.records("anchors").is_empty() or _data.records("rituals").is_empty():
+		return
+	for control: Dictionary in CONTROLS:
+		var anchor_id: String = GameData.as_string(control.get("anchor"))
+		if not _data.has_record("anchors", anchor_id):
+			continue
+		var anchor: Dictionary = _data.record("anchors", anchor_id)
+		var label: String = "anchors[%s]" % anchor_id
+		var reach: float = GameData.as_float(control.get("reach_s"))
+		if anchor.has("time_s") and absf(GameData.as_float(anchor.get("time_s")) - reach) > REACH_EPSILON:
+			_err("E_RULE", "anchors.json", label + ".time_s", "GDD 4.6 gives this control a reach of %s s from the wheel" % str(reach))
+		var cross: bool = GameData.as_bool(control.get("cross"))
+		if GameData.as_bool(anchor.get("via_w")) != cross:
+			_err("E_RULE", "anchors.json", label + ".via_w",
+					"GDD 4.6: the reach to this control %s the hub" % ("crosses" if cross else "does not cross"))
+		var gesture: String = GameData.as_string(control.get("gesture"))
+		var found: bool = false
+		for ritual: Dictionary in _data.records("rituals"):
+			if GameData.as_string(ritual.get("anchor")) != anchor_id or ritual.has("item"):
+				continue
+			if GameData.as_string(ritual.get("gesture")) != gesture:
+				continue
+			if control.has("flick_dirs") and not _same_words(GameData.as_array(ritual.get("flick_dirs")), GameData.as_array(control.get("flick_dirs"))):
+				continue
+			if control.has("turns") and not is_equal_approx(GameData.as_float(ritual.get("turns")), GameData.as_float(control.get("turns"))):
+				continue
+			found = true
+			break
+		if not found:
+			var needs: String = gesture
+			if control.has("flick_dirs"):
+				needs += " " + " or ".join(PackedStringArray(GameData.as_array(control.get("flick_dirs"))))
+			if control.has("turns"):
+				needs += "(%d)" % GameData.as_int(control.get("turns"))
+			_err("E_MISSING", "rituals.json", "controls[%s]" % anchor_id, "GDD 4.6: this control is worked by %s; no ritual of the car's own at this anchor is that" % needs)
+
+
+## A placeholder the code draws itself takes no scene: it would be ignored,
+## and an artist who put one there would see nothing change (GDD 1.1).
+func _check_drawn_by_code() -> void:
+	if not _data.roots.has("placeholders"):
+		return
+	var registry: Dictionary = _data.root("placeholders")
+	for key: Variant in registry:
+		var entry: Dictionary = GameData.as_dict(registry[key])
+		if GameData.as_bool(entry.get("drawn_by_code")) and entry.get("scene") != null:
+			_err("E_RULE", "placeholders.json", "%s.scene" % str(key),
+					"this placeholder is drawn by the code from its size and colour: it takes no scene")
+
+
+## True when two lists hold the same words, in any order.
+func _same_words(a: Array, b: Array) -> bool:
+	if a.size() != b.size():
+		return false
+	for word: Variant in a:
+		if not b.has(word):
+			return false
+	return true
 
 
 ## The prologue and the finale (GDD 10.1, 10.6): the seven steps fill the
