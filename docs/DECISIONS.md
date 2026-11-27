@@ -3001,7 +3001,12 @@ GDD 4.1 (the Touch column), 17.4, and D-016.
   on a rain, a night and an open leg completes its ritual, that it sweeps,
   and that it is not left blind (+15 checks; one mutant more in
   `tools/mutants/bot.py`). `artifacts/balance.json` was made again with
-  the bot that can see (below).
+  the bot that can see (84 Tellings, `tools/run_balance.sh 4`): 39 nights
+  won, 44 late, 1 wrecked (it was 42, 39 and 3). Against GDD 12.5 nothing
+  changes side: hands-off time 3.41 s, the hand off the wheel 8% (it was
+  10%: a sweep that works is made once), expert at the Drivers' Table 75%,
+  competent 100%, novice at the Children's Table to the Checkpoint every
+  night, no Wreck from one event. D-068's reading of the numbers stands.
 - **Not done here.** The lamps, the cash and the mirror have no captions
   (nobody asked; GDD 16.3 says what they are). The label names what a
   press would do now, not everything a control can ever do. No test looks

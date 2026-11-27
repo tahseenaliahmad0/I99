@@ -199,7 +199,7 @@ Do not start a milestone until every test of the previous one passes (GDD 18).
 Things a human must judge or supply. Nothing here blocks the build.
 
 - **The balance numbers are the owner's to act on** (D-068, `artifacts/balance.json`;
-  four seeds per skill per Table, 84 Tellings, 2026-11-27: hands-off time 3.41 s (target 3.4: within); hand off the wheel 10% of the competent bot's Act 2 legs (25% to 40%: outside); expert at the Drivers' Table, no purchases, 3 of 4 won (40% to 60%: outside, on four nights); competent, buying, 4 of 4 (15% to 30%: outside); novice at the Children's Table reaches the Checkpoint 4 of 4 (50% or more: within); Wrecks from one event 0 of 3 (0%: within). Of 84 nights 3 were wrecked (Dawn twice, Roadworks once) and 39 were late; nobody won at Noor's Table). GDD 12.5 says "A human tunes by feel. The bot gives the
+  four seeds per skill per Table, 84 Tellings, 2026-11-27: hands-off time 3.41 s (target 3.4: within); hand off the wheel 8% (10% before the wipers were fixed, D-071) of the competent bot's Act 2 legs (25% to 40%: outside); expert at the Drivers' Table, no purchases, 3 of 4 won (40% to 60%: outside, on four nights); competent, buying, 4 of 4 (15% to 30%: outside); novice at the Children's Table reaches the Checkpoint 4 of 4 (50% or more: within); Wrecks from one event 0 of 3 (0%: within). Of 84 nights 3 were wrecked (Dawn twice, Roadworks once) and 39 were late; nobody won at Noor's Table). GDD 12.5 says "A human tunes by feel. The bot gives the
   builder numbers before a human plays." The numbers are in; nobody has
   played. They say the road is easier on a bot than GDD 12.5 wants and the
   cabin asks less of its hand. Two things stand between them and a verdict.
@@ -362,4 +362,5 @@ Two lines per slice, newest last.
   1,014 mutants in 22 lists apply to the code as it is. Two mutation lists for the first two milestones (the hand, wheel, gate and gestures: 108; the car, traffic, collisions and close calls: 105): 52 mutants lived, 45 got a check that kills them and 7 are equivalent and named. 381 checks added, none removed. The task list is empty.
 - 2026-11-27 The owner's first look (D-071): markers coloured by kind, a label under the pointer (name and gesture), feedback at a control when a ritual is begun, done or missed, the gate drawn while the hand is on the lever, the gear and "wedding 06:00" on the dash. The gear knob had never moved in the cabin view since M1 (it was put back at rest every frame): fixed.
   The feedback showed the bot flicking the wipers the wrong way (every rain leg blind since D-068): fixed, held by T-BOT-01 (+15 checks) and a mutant. `hints_enabled` in tuning turns the labels, feedback and diagram off.
+  `artifacts/balance.json` made again with the fixed bot: 39 won, 44 late, 1 wrecked; every measure of GDD 12.5 on the side it was. `tools/check.sh` gives each step an hour (a tool that did not compile hung the check for ever) and prints CHECK OK on f40699d.
 
