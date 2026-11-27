@@ -21,11 +21,16 @@ const TAIL_WAITING: int = 0
 ## Closing up, headlights flashing: the tell.
 const TAIL_TELL: int = 1
 const TAIL_ON_BUMPER: int = 2
+## Left behind by a lane change that was held: off the bumper, a little
+## further back in the car's tracks, until there is room to go by.
+const TAIL_HANGING_BACK: int = 3
 ## He has had enough of waiting: past him, in front of him, and a stab at the brake.
-const TAIL_PASSING: int = 3
-const TAIL_CUTTING_IN: int = 4
-const TAIL_BRAKING: int = 5
-const TAIL_GONE: int = 6
+const TAIL_PASSING: int = 4
+const TAIL_CUTTING_IN: int = 5
+const TAIL_BRAKING: int = 6
+## He has had his say: back into the lane he passed in, where he falls behind.
+const TAIL_LEAVING: int = 7
+const TAIL_GONE: int = 8
 ## The car's tracks are kept this far back, a sample every TRAIL_STEP metres.
 const TRAIL_LENGTH: float = 150.0
 const TRAIL_STEP: float = 0.5
@@ -100,6 +105,20 @@ var _tail_outrun: float = 0.0
 var _tail_since: float = 0.0
 var _tail_from_x: float = 0.0
 var _tail_speed: float = 0.0
+## Where across the road the lane he passes in is.
+var _tail_pass_x: float = 0.0
+## The lane the car went to when it left him (-1: it has not), and how far
+## behind the car's middle his own is while he is in its tracks.
+var _tail_left_for: int = -1
+var _tail_behind: float = 0.0
+## When he swerved in behind the car again, and from where across the road.
+var _tail_rejoin_at: float = -INF
+var _tail_rejoin_from: float = 0.0
+## Where the plan's line moves over (GDD 9.2 rule 3: the way the generator
+## kept open): he does not pass where the road ahead is about to need it.
+var _line_changes: PackedFloat64Array = PackedFloat64Array()
+var _follow_gap: float = 0.0
+var _change_length: float = 0.0
 var _ram_ready: float = 0.0
 var _was_braking: bool = false
 var _leg: LegSim
@@ -127,6 +146,8 @@ func configure(data: GameData, car: CarSim, traffic: TrafficSim, leg: LegSim) ->
 	_traffic = traffic
 	_leg = leg
 	_car_half_length = _tuning.f("car_length") * 0.5
+	_follow_gap = _tuning.f("traffic_follow_gap")
+	_change_length = _tuning.f("gen_lane_change")
 	# A little inside what TrafficSim keeps behind the car, so that it is this
 	# class that takes the motorcade's cars off the road and puts them back.
 	_keep_behind = _tuning.f("despawn_behind") - ROAD_MARGIN
@@ -148,10 +169,16 @@ func begin(plan: Dictionary) -> void:
 	_tail = null
 	_tail_away = 0.0
 	_tail_outrun = 0.0
+	_tail_rejoin_at = -INF
+	_tail_left_for = -1
 	_ram_ready = 0.0
 	_was_braking = false
 	_trail_s = PackedFloat64Array()
 	_trail_x = PackedFloat64Array()
+	_line_changes = PackedFloat64Array()
+	var path: Array = GameData.as_array(plan.get("path"))
+	for index: int in range(1, path.size()):
+		_line_changes.append(GameData.as_float(GameData.as_array(path[index])[0]))
 	glare = 0.0
 	side_road = SIDE_ROAD_AHEAD
 	_convoy = []
@@ -377,15 +404,26 @@ func _step_tailgater(dt: float, braking: bool, gear: int) -> void:
 			if time >= at:
 				tail_phase = TAIL_ON_BUMPER
 				_tail_lane = driver.lane
+				_tail_left_for = -1
 				_tail_away = 0.0
 				_tail_outrun = 0.0
 		TAIL_ON_BUMPER:
 			_tail_on_bumper(dt, driver, car_lane, braking, gear)
+		TAIL_HANGING_BACK:
+			_tail_hang_back(dt, driver, car_lane)
 		TAIL_PASSING:
 			# Past him in the lane he left, to brake_gap_m in front of his bumper.
 			var front: float = _car_half_length + GameData.as_float(_special.get("brake_gap_m")) + driver.half_length
-			_tail_ahead = minf(_tail_ahead + GameData.as_float(_special.get("pass_speed_kmh")) * KMH_TO_MS * dt, front)
-			_tail_hold(driver, _traffic.lane_center(_tail_lane))
+			# Out from behind the car first, if that is where he was; then by.
+			var out: float = clampf((time - _tail_since) / maxf(GameData.as_float(_special.get("merge_s")), 0.001), 0.0, 1.0)
+			if out >= 1.0:
+				_tail_ahead = minf(_tail_ahead + GameData.as_float(_special.get("pass_speed_kmh")) * KMH_TO_MS * dt, front)
+			_tail_hold(driver, lerpf(_tail_from_x, _tail_pass_x, out))
+			if _tail_room(driver) < _follow_gap:
+				# Somebody is in his way after all (the car did not do what
+				# he counted on): he gives it up.
+				_tail_falls_back(driver, maxf(_car.speed - GameData.as_float(_special.get("pass_speed_kmh")), 0.0))
+				return
 			if _tail_ahead >= front:
 				tail_phase = TAIL_CUTTING_IN
 				_tail_since = time
@@ -400,12 +438,21 @@ func _step_tailgater(dt: float, braking: bool, gear: int) -> void:
 				_tail_speed = _car.speed
 				cut_off = true
 		TAIL_BRAKING:
-			# A stab at the brake, then away.
+			# A stab at the brake, then out of his way: back into the lane
+			# he passed in, still slow, where the car goes by him. He does
+			# not stay in front: what is ahead of the car in its lane is the
+			# generator's to say (GDD 9.2 rule 3), and he would be one more.
 			var since: float = time - _tail_since
 			var brake_time: float = GameData.as_float(_special.get("brake_s"))
 			var drop: float = GameData.as_float(_special.get("brake_drop_kmh"))
 			var speed: float = _tail_speed - drop * clampf(since / maxf(brake_time, 0.001), 0.0, 1.0)
 			if since > brake_time:
+				if _tail_slot_free(driver.s, _tail_pass_x, driver):
+					tail_phase = TAIL_LEAVING
+					_tail_since = time
+					_tail_from_x = driver.x
+					return
+				# Somebody is beside him now: he gets away forwards instead.
 				speed += GameData.as_float(_special.get("recover_kmh_per_s")) * (since - brake_time)
 			driver.cruise = maxf(speed, 0.0)
 			driver.speed = driver.cruise
@@ -413,12 +460,24 @@ func _step_tailgater(dt: float, braking: bool, gear: int) -> void:
 				driver.role = &""
 				_tail = null
 				_tail_gone()
+		TAIL_LEAVING:
+			var share: float = clampf((time - _tail_since) / maxf(GameData.as_float(_special.get("merge_s")), 0.001), 0.0, 1.0)
+			driver.x = lerpf(_tail_from_x, _tail_pass_x, share)
+			driver.lane = clampi(_car.lane_of(driver.x), 0, _car.lanes - 1)
+			if share >= 1.0:
+				_tail_falls_back(driver, driver.speed)
 
 
 func _tail_on_bumper(dt: float, driver: TrafficSim.Vehicle, car_lane: int, braking: bool, gear: int) -> void:
 	var at: float = GameData.as_float(_special.get("at_s"))
 	if car_lane == _tail_lane:
-		_tail_away = 0.0
+		if _tail_left_for == car_lane:
+			# He came after the car into the lane it changed to, and the car
+			# is still holding it.
+			_tail_away += dt
+		else:
+			_tail_away = 0.0
+			_tail_left_for = -1
 		tail_nerves_rate = GameData.as_float(_special.get("nerves_per_s"))
 		nerves_rate += tail_nerves_rate
 		if braking and not _was_braking and time >= _ram_ready:
@@ -430,24 +489,85 @@ func _tail_on_bumper(dt: float, driver: TrafficSim.Vehicle, car_lane: int, braki
 			_ram_ready = time + _tuning.f("hit_immunity") + RAM_PAUSE
 			return
 		_shadow(driver, _tail_place(driver))
+		_tail_come_across(driver)
 	else:
 		# He has left the lane: the driver keeps his own, level with where he was.
+		if _tail_left_for != car_lane:
+			_tail_left_for = car_lane
+			_tail_away = 0.0
 		_tail_away += dt
 		_tail_ahead = -_tail_place(driver)
 		_tail_hold(driver, _traffic.lane_center(_tail_lane))
-		if _tail_away >= GameData.as_float(_special.get("lane_hold_s")):
-			tail_phase = TAIL_PASSING
+		if _tail_away < GameData.as_float(_special.get("lane_hold_s")) and _tail_room(driver) < _follow_gap:
+			# He cannot keep level in a lane that is not clear: whatever made
+			# the car leave it is in front of him now. He swerves in behind
+			# the car, where the road is the car's own tracks. (With
+			# somebody already there, he is lost.)
+			if _tail_slot_free(_car.s - _tail_place(driver), _car.x, driver):
+				_tail_lane = car_lane
+				_tail_rejoin_from = driver.x
+				_tail_rejoin_at = time
+			else:
+				_tail_falls_back(driver, maxf(_car.speed - GameData.as_float(_special.get("pass_speed_kmh")), 0.0))
 			return
+	if _tail_away >= GameData.as_float(_special.get("lane_hold_s")):
+		# The lane change was held (GDD 9.3): he is off the bumper for good.
+		_tail_is_left(driver, car_lane)
+		return
 	if gear >= GameData.as_int(_special.get("gear")):
 		_tail_outrun += dt
 	else:
 		_tail_outrun = 0.0
 	if _tail_outrun >= GameData.as_float(_special.get("gear_hold_s")) or time >= at + GameData.as_float(_special.get("duration_s")):
 		# Lost, or out of patience: he falls back.
-		driver.role = &""
-		driver.cruise = maxf(_car.speed - GameData.as_float(_special.get("pass_speed_kmh")), 0.0)
-		_tail = null
-		_tail_gone()
+		_tail_falls_back(driver, maxf(_car.speed - GameData.as_float(_special.get("pass_speed_kmh")), 0.0))
+
+
+## The car changed lane and held it. He passes at once if he is beside the
+## car's tracks with room to; otherwise he drops into its tracks and hangs
+## back there until there is.
+func _tail_is_left(driver: TrafficSim.Vehicle, car_lane: int) -> void:
+	var level: bool = car_lane != _tail_lane
+	if level:
+		if _tail_can_pass(driver, car_lane, _tail_lane, _tail_place(driver), false):
+			_tail_pull_out(driver, _tail_lane, false)
+			return
+		if not _tail_slot_free(_car.s - _tail_place(driver), _car.x, driver):
+			_tail_falls_back(driver, maxf(_car.speed - GameData.as_float(_special.get("pass_speed_kmh")), 0.0))
+			return
+		_tail_lane = car_lane
+		_tail_rejoin_from = driver.x
+		_tail_rejoin_at = time
+	_tail_behind = _tail_place(driver)
+	tail_phase = TAIL_HANGING_BACK
+
+
+## Off the bumper, in the car's tracks, traffic_follow_gap behind it: no
+## Nerves, no ramming. He goes by as soon as a lane beside the car has room
+## for it, and falls back when his patience is over.
+func _tail_hang_back(dt: float, driver: TrafficSim.Vehicle, car_lane: int) -> void:
+	var far: float = _car_half_length + _follow_gap + driver.half_length
+	_tail_behind = minf(_tail_behind + GameData.as_float(_special.get("pass_speed_kmh")) * KMH_TO_MS * dt, far)
+	_shadow(driver, _tail_behind)
+	_tail_lane = car_lane
+	if _tail_come_across(driver):
+		for side: int in [-1, 1]:
+			var lane: int = car_lane + side
+			if lane >= 0 and lane < _car.lanes and _tail_can_pass(driver, car_lane, lane, _tail_behind, true):
+				_tail_pull_out(driver, lane, true)
+				return
+	if time >= GameData.as_float(_special.get("at_s")) + GameData.as_float(_special.get("duration_s")):
+		_tail_falls_back(driver, maxf(_car.speed - GameData.as_float(_special.get("pass_speed_kmh")), 0.0))
+
+
+## While he is still on his way across from the lane he was in, puts him
+## where he has got to. True once he is in the car's tracks.
+func _tail_come_across(driver: TrafficSim.Vehicle) -> bool:
+	var across: float = (time - _tail_rejoin_at) / maxf(GameData.as_float(_special.get("merge_s")), 0.001)
+	if across >= 1.0:
+		return true
+	driver.x = lerpf(_tail_rejoin_from, driver.x, clampf(across, 0.0, 1.0))
+	return false
 
 
 ## Metres between the car's middle and the Tailgater's when he is on the bumper.
@@ -469,6 +589,114 @@ func _tail_hold(driver: TrafficSim.Vehicle, x: float) -> void:
 func _tail_gone() -> void:
 	tail_phase = TAIL_GONE
 	active = false
+
+
+## He pulls out to pass in `lane`: from where he is beside the car's tracks,
+## or (`from_behind`) from behind the car, across into the lane first.
+func _tail_pull_out(driver: TrafficSim.Vehicle, lane: int, from_behind: bool) -> void:
+	tail_phase = TAIL_PASSING
+	_tail_pass_x = _traffic.lane_center(lane)
+	_tail_from_x = driver.x
+	_tail_ahead = driver.s - _car.s
+	_tail_since = time if from_behind else time - GameData.as_float(_special.get("merge_s"))
+
+
+## He is ordinary traffic from here, at `cruise`: slower than the car, so
+## that he falls behind it.
+func _tail_falls_back(driver: TrafficSim.Vehicle, cruise: float) -> void:
+	driver.role = &""
+	driver.cruise = cruise
+	driver.speed = minf(driver.speed, cruise)
+	_tail = null
+	_tail_gone()
+
+
+## Metres of clear road ahead of him where he is (INF: nothing ahead).
+func _tail_room(driver: TrafficSim.Vehicle) -> float:
+	var room: float = INF
+	for other: TrafficSim.Vehicle in _traffic.vehicles:
+		if other == driver or other.off_road or other.direction <= 0 or other.s <= driver.s:
+			continue
+		if absf(other.x - driver.x) >= other.half_width + driver.half_width:
+			continue
+		room = minf(room, (other.s - other.half_length) - (driver.s + driver.half_length))
+	return room
+
+
+## Seconds his pass takes, from `behind` metres behind the car's middle to
+## being behind the car again:
+## past it, in front of it, the stab at the brake, and back out of its lane
+## until the car has gone by him.
+func _tail_pass_time(driver: TrafficSim.Vehicle, behind: float, from_behind: bool) -> float:
+	var front: float = _car_half_length + GameData.as_float(_special.get("brake_gap_m")) + driver.half_length
+	var pass_ms: float = maxf(GameData.as_float(_special.get("pass_speed_kmh")) * KMH_TO_MS, 0.001)
+	var drop_ms: float = maxf(GameData.as_float(_special.get("brake_drop_kmh")) * KMH_TO_MS, 0.001)
+	var merge: float = GameData.as_float(_special.get("merge_s"))
+	return (merge if from_behind else 0.0) + (front + behind) / pass_ms + merge + GameData.as_float(_special.get("brake_s")) \
+			+ maxf(merge, (front + driver.half_length + _car_half_length) / drop_ms)
+
+
+## True when he can pass, cut in, brake and get out of the way again without
+## driving through anybody and without taking road the leg needs: for as
+## long as it takes, the lane he is in and the car's lane are clear as far
+## as he goes and the vehicles in them come, nobody is about to move into
+## either, and the plan's line does not move over. (The line is the way the
+## generator kept open, GDD 9.2 rule 3. He has no business on it.)
+func _tail_can_pass(driver: TrafficSim.Vehicle, car_lane: int, pass_lane: int, behind: float, from_behind: bool) -> bool:
+	var seconds: float = _tail_pass_time(driver, behind, from_behind)
+	var car_ms: float = _car.speed * KMH_TO_MS
+	# The line: no move across within the stretch the car covers meanwhile,
+	# nor one that is not finished yet.
+	for at: float in _line_changes:
+		if at > _car.s - _change_length and at < _car.s + car_ms * seconds:
+			return false
+	# The road: his nose gets as far as this ahead of the car's middle.
+	var reach: float = _car_half_length + GameData.as_float(_special.get("brake_gap_m")) + 2.0 * driver.half_length + _follow_gap
+	var back: float = behind + driver.half_length + _follow_gap
+	var his_x: float = _traffic.lane_center(pass_lane)
+	var car_x: float = _traffic.lane_center(car_lane)
+	for other: TrafficSim.Vehicle in _traffic.vehicles:
+		if other == driver or other.off_road:
+			continue
+		var in_his: bool = _in_lane(other, his_x, driver.half_width)
+		var in_cars: bool = _in_lane(other, car_x, driver.half_width)
+		if not in_his and not in_cars:
+			continue
+		if other.direction <= 0:
+			return false
+		# Where it is from the car's middle now, and when he is done.
+		var now: float = other.s - _car.s
+		var then: float = now - (_car.speed - other.speed) * KMH_TO_MS * seconds
+		var near: float = other.half_length
+		if in_cars and now < 0.0 and then < 0.0:
+			# Behind the car in the car's own lane, and it stays there.
+			continue
+		if maxf(now, then) + near > -back and minf(now, then) - near < reach:
+			return false
+	return true
+
+
+## True if a vehicle is in the lane whose middle is `lane_x`, or on its way
+## into it, as far as a vehicle `half_width` wide there is concerned.
+func _in_lane(other: TrafficSim.Vehicle, lane_x: float, half_width: float) -> bool:
+	if absf(other.x - lane_x) < other.half_width + half_width:
+		return true
+	if other.changing or other.signalling != 0:
+		return absf(other.change_to_x - lane_x) < other.half_width + half_width
+	return other.has_plan and absf(_traffic.lane_center(other.plan_lane) - lane_x) < other.half_width + half_width
+
+
+## True if there is room for him at `s` along the road and `x` across it:
+## nobody there, nor within traffic_follow_gap in front or behind.
+func _tail_slot_free(s: float, x: float, driver: TrafficSim.Vehicle) -> bool:
+	for other: TrafficSim.Vehicle in _traffic.vehicles:
+		if other == driver or other.off_road or other.direction <= 0:
+			continue
+		if not _in_lane(other, x, driver.half_width):
+			continue
+		if absf(other.s - s) < other.half_length + driver.half_length + _follow_gap:
+			return false
+	return true
 
 
 ## The encounter is at him now (GDD 11.3 has no heckle begin "during an

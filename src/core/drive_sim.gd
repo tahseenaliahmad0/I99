@@ -604,9 +604,11 @@ func step(input: DriveInput) -> void:
 	if free_traffic_per_km > 0.0:
 		_step_free_traffic()
 	if not stopped:
-		leg.step_traffic(_road_dt)
-		traffic.step(_road_dt, car.s, car.x, car.speed)
-		boss.step_traffic(_road_dt)
+		# (At Dawn's last checkpoint the road waits for him: D-067.)
+		var traffic_dt: float = _road_dt * boss.traffic_pace()
+		leg.step_traffic(traffic_dt)
+		traffic.step(traffic_dt, car.s, car.x, car.speed)
+		boss.step_traffic(traffic_dt)
 		_step_oncoming()
 
 	# 7. Collisions and close calls.

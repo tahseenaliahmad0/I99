@@ -572,6 +572,156 @@ func test_leg_06() -> void:
 	_drive_to(LegGenerator.generate(data, "open_road", 2, 72, ""), 900.0)
 	check(_sim.encounter.tailgater() == null and not _sim.encounter.active, "the Open road has no Tailgater")
 
+	_check_tailgater_in_traffic(special)
+
+
+## The Tailgater among other vehicles (D-067): he drives through nobody and
+## keeps off the road the leg needs.
+func _check_tailgater_in_traffic(special: Dictionary) -> void:
+	var hold: float = GameData.as_float(special.get("lane_hold_s"))
+	var merge: float = GameData.as_float(special.get("merge_s"))
+	var follow: float = tuning.f("traffic_follow_gap")
+	var end: float = GameData.as_float(special.get("at_s")) + GameData.as_float(special.get("duration_s"))
+
+	# A slow truck in his lane when the car leaves it: he cannot keep level,
+	# and swerves in behind the car again.
+	_begin_quiet_straight("tailgater", 2, 71)
+	_drive_quiet_until(20.0, 1)
+	var truck: TrafficSim.Vehicle = _sim.traffic.spawn(&"truck", 1, _sim.car.s + 30.0, 60.0)
+	var driver: TrafficSim.Vehicle = _sim.encounter.tailgater()
+	if not check(truck != null and driver != null and _sim.encounter.tail_phase == EncounterSim.TAIL_ON_BUMPER, "(on the bumper at 20 s, a truck 30 m ahead in the lane)"):
+		return
+	var driver_id: int = driver.id
+	var changed_at: float = _sim.leg.time
+	var through: int = 0
+	var level_ticks: int = 0
+	var came_in_at: float = -1.0
+	while _sim.leg.time < changed_at + hold - 2.0 * DT:
+		_hold_lane_and_step(2)
+		driver = _sim.encounter.tailgater()
+		if driver == null:
+			break
+		through += _inside_another(driver)
+		if absf(driver.x - _sim.traffic.lane_center(1)) < 0.01:
+			level_ticks += 1
+		elif came_in_at < 0.0:
+			came_in_at = _sim.leg.time
+	check(level_ticks > 0, "the car changes lane: at first he keeps his own")
+	check(came_in_at > changed_at and came_in_at < changed_at + hold - merge, "with the truck %d m in front of him he swerves in behind the car (%.2f s after the change)" % [roundi(follow), came_in_at - changed_at])
+	if check(driver != null and _sim.encounter.tail_phase == EncounterSim.TAIL_ON_BUMPER, "he is on the bumper again: passing a slow vehicle does not lose him"):
+		check(absf(driver.x - _sim.car.x) < 0.01, "in the car's lane, behind it")
+		check(_sim.encounter.nerves_rate > 0.0, "and on his Nerves again")
+	# The lane change is held for 3 s all the same: off the bumper for good.
+	_drive_quiet_until(changed_at + hold + 2.0 * DT, 2)
+	check_eq(_sim.encounter.tail_phase, EncounterSim.TAIL_HANGING_BACK, "3 s after the change he is off the bumper: he hangs back (the truck is still beside the car)")
+	check_near(_sim.encounter.nerves_rate, 0.0, 0.000001, "and adds nothing to his Nerves")
+	# He goes by when the lane beside the car is clear of the truck.
+	var passing_from: float = -1.0
+	var pass_x: float = 0.0
+	var cut_offs: int = 0
+	var gap_at_brake: float = -1.0
+	var nearest: float = INF
+	var behind_when_passing: float = 0.0
+	var truck_behind_when_passing: float = 0.0
+	while _sim.encounter.active and _sim.leg.time < changed_at + 30.0:
+		_hold_lane_and_step(2)
+		driver = _sim.encounter.tailgater()
+		if driver == null:
+			break
+		through += _inside_another(driver)
+		var gap: float = (driver.s - driver.half_length) - (_sim.car.s + _sim.car.length() * 0.5)
+		if _sim.encounter.tail_phase == EncounterSim.TAIL_HANGING_BACK:
+			behind_when_passing = (_sim.car.s - _sim.car.length() * 0.5) - (driver.s + driver.half_length)
+			truck_behind_when_passing = _sim.car.s - truck.s
+		if _sim.encounter.tail_phase == EncounterSim.TAIL_PASSING and passing_from < 0.0:
+			passing_from = _sim.leg.time
+		if _sim.encounter.tail_phase == EncounterSim.TAIL_CUTTING_IN and pass_x == 0.0:
+			pass_x = driver.x
+		if _sim.encounter.cut_off:
+			cut_offs += 1
+		if _sim.encounter.tail_phase == EncounterSim.TAIL_BRAKING:
+			if gap_at_brake < 0.0:
+				gap_at_brake = gap
+			nearest = minf(nearest, gap)
+	check_near(behind_when_passing, follow, 0.3, "hanging back he is traffic_follow_gap behind the bumper (%.1f m)" % behind_when_passing)
+	check(passing_from > changed_at + hold, "he pulls out when there is room beside the car (%.1f s after the change)" % (passing_from - changed_at))
+	check(truck_behind_when_passing > follow + truck.half_length, "the truck is well behind by then (%.0f m)" % truck_behind_when_passing)
+	check_near(pass_x, _sim.traffic.lane_center(1), 0.01, "he goes by in the lane beside the car")
+	check_eq(cut_offs, 1, "cuts in once")
+	check_near(gap_at_brake, GameData.as_float(special.get("brake_gap_m")), 0.5, "%d m ahead of his bumper" % roundi(GameData.as_float(special.get("brake_gap_m"))))
+	check(nearest > 0.5 and _sim.faults.lamps == 0, "and a driver who holds third gear is not touched (nearest %.1f m)" % nearest)
+	check_eq(_sim.encounter.tail_phase, EncounterSim.TAIL_GONE, "then he is gone")
+	check_eq(through, 0, "in all of it he was never inside another vehicle")
+	# Where he went: out of the car's lane, slower than the car, falling behind.
+	var gone: TrafficSim.Vehicle = null
+	for vehicle: TrafficSim.Vehicle in _sim.traffic.vehicles:
+		if vehicle.id == driver_id:
+			gone = vehicle
+	if check(gone != null, "(he is still on the road)"):
+		check(absf(gone.x - _sim.car.x) >= gone.half_width + _sim.car.half_width(), "after his stab at the brake he is out of the car's lane")
+		check(gone.speed < _sim.car.speed, "and slower than the car")
+		_drive_quiet_until(_sim.leg.time + 4.0, 2)
+		check(gone.s + gone.half_length < _sim.car.s - _sim.car.length() * 0.5, "4 s on he is behind it: he takes no road ahead of the car")
+
+	# Somebody close ahead in the car's own lane: there is no room to cut in.
+	# He hangs back until his 40 s are over, and goes without a pass.
+	_begin_quiet_straight("tailgater", 2, 71)
+	_drive_quiet_until(20.0, 1)
+	_events = []
+	_sim.traffic.spawn(&"pickup", 2, _sim.car.s + 25.0, _sim.car.speed)
+	changed_at = _sim.leg.time
+	_drive_quiet_until(changed_at + hold + 2.0 * DT, 2)
+	check_eq(_sim.encounter.tail_phase, EncounterSim.TAIL_HANGING_BACK, "with a vehicle 25 m ahead in the car's lane he does not pass: he hangs back")
+	_drive_quiet_until(40.0, 2)
+	check_eq(_sim.encounter.tail_phase, EncounterSim.TAIL_HANGING_BACK, "and is still hanging back at 40 s")
+	# No ramming from back there.
+	_input.rmb = true
+	_drive_quiet_until(40.3, 2)
+	_input.rmb = false
+	_drive_quiet_until(end + 1.0, 2)
+	check(_events_named("hit").is_empty() and _sim.faults.lamps == 0, "a touch of the brake while he hangs back: nobody rams")
+	check(_sim.encounter.tail_phase == EncounterSim.TAIL_GONE and not _has_event_named("close_call"), "when his 40 s are over he falls back, without a pass")
+
+	# The plan's line is about to move over: he waits until it has.
+	var plan: Dictionary = _begin_quiet_straight("tailgater", 2, 71)
+	var third_ms: float = tuning.fi("gear_speeds", 2) * KMH_TO_MS
+	var change_at: float = (20.0 + hold + 1.5) * third_ms
+	GameData.as_array(plan["path"]).append([change_at, 0])
+	_sim.begin_leg(plan)
+	_drive_quiet_until(20.0, 1)
+	changed_at = _sim.leg.time
+	passing_from = -1.0
+	var s_at_pass: float = 0.0
+	while _sim.encounter.active and _sim.leg.time < changed_at + 30.0:
+		_hold_lane_and_step(2)
+		if _sim.encounter.tail_phase == EncounterSim.TAIL_PASSING and passing_from < 0.0:
+			passing_from = _sim.leg.time
+			s_at_pass = _sim.car.s
+	check(passing_from > changed_at + hold + 1.0, "with the plan's line moving over 1.5 s after the 3 s are up, he does not pass at once")
+	check(s_at_pass >= change_at + tuning.f("gen_lane_change") - 1.0, "he pulls out when the line has moved over (%d m after it began to)" % roundi(s_at_pass - change_at))
+	check(s_at_pass < change_at + tuning.f("gen_lane_change") + 3.0, "and no later")
+	check_eq(_sim.encounter.tail_phase, EncounterSim.TAIL_GONE, "(and goes by, and is gone)")
+
+
+## A quiet Tailgater leg whose plan's line keeps one lane.
+func _begin_quiet_straight(leg_id: String, act: int, leg_seed: int) -> Dictionary:
+	var plan: Dictionary = _begin_quiet(leg_id, act, leg_seed)
+	plan["path"] = [[0.0, GameData.as_int(plan.get("start_lane"))]]
+	_sim = DriveSim.new(fresh_data())
+	_sim.gate.reset(3)
+	_sim.begin_leg(plan)
+	_checker.load_plan(plan)
+	_events = []
+	return plan
+
+
+## 1 if the vehicle overlaps another one, else 0.
+func _inside_another(vehicle: TrafficSim.Vehicle) -> int:
+	for other: TrafficSim.Vehicle in _sim.traffic.vehicles:
+		if other != vehicle and absf(other.s - vehicle.s) < other.half_length + vehicle.half_length and absf(other.x - vehicle.x) < other.half_width + vehicle.half_width:
+			return 1
+	return 0
+
 
 ## T-LEG-07: Patrol: a police car follows for patrol_duration; blue lights
 ## show in the mirror 3 s before Suspicion starts, about 20 s into the leg; at

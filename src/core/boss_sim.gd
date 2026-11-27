@@ -186,7 +186,10 @@ var _corridor_at: float = 0.0
 var _corridor_to: float = 0.0
 var _corridor_half_gap: float = 0.0
 var _corridor_max_kmh: float = INF
+var _par_kmh: float = 100.0
 var _corridor_sign_at: float = -1.0
+## Where he is back at par after the corridor, taking third gear at its end.
+var _corridor_clear_at: float = -1.0
 var _corridor_judged: bool = false
 var _sunrise_at: float = 0.0
 var _glare_from: float = 0.0
@@ -534,6 +537,7 @@ func stop() -> void:
 	_corridor_to = 0.0
 	_corridor_max_kmh = INF
 	_corridor_sign_at = -1.0
+	_corridor_clear_at = -1.0
 	_corridor_judged = false
 	begin_tick()
 
@@ -820,7 +824,11 @@ func _set_corridor(check: Dictionary) -> void:
 	_corridor_from = _corridor_at - GameData.as_float(check.get("taper_m"))
 	_corridor_to = _corridor_at + GameData.as_float(check.get("length_m"))
 	_corridor_half_gap = GameData.as_float(check.get("gap_m")) * 0.5
-	_corridor_sign_at = maxf(_corridor_from - GameData.as_float(check.get("sign_lead_s")) * _data.tuning.fi("gear_speeds", 2) * KMH_TO_MS, 0.0)
+	_par_kmh = _data.tuning.fi("gear_speeds", 2)
+	_corridor_sign_at = maxf(_corridor_from - GameData.as_float(check.get("sign_lead_s")) * _par_kmh * KMH_TO_MS, 0.0)
+	# From the limit back to par in third gear, at the car's own pull.
+	var limit: float = GameData.as_float(check.get("max_kmh"), _par_kmh)
+	_corridor_clear_at = _corridor_to + maxf(_par_kmh * _par_kmh - limit * limit, 0.0) / (2.0 * _data.tuning.f("accel")) * KMH_TO_MS
 	_corridor_judged = false
 	# Concrete stands between the lanes from the taper's mouth to the
 	# corridors' end: no vehicle changes lane there, whatever honks.
@@ -848,6 +856,22 @@ func walls(s: float, x: float) -> Vector2:
 		left = lerpf(_car.left_limit_x() if lane == 0 else middle - lane_half, left, closed)
 		right = lerpf(_car.guardrail_x() if lane == _car.lanes - 1 else middle + lane_half, right, closed)
 	return Vector2(left, right)
+
+
+## How fast the road's traffic moves this tick, as a share of its own pace.
+##
+## At Dawn's last checkpoint the road waits for him (D-067). The traffic was
+## laid out for a driver at par (GDD 9.2), and the checkpoint lets nobody
+## keep par: every second he loses there would move the place he meets a
+## vehicle by tens of metres, and what the generator kept apart would close
+## up into a wall in front of him, in the stretch of the Call. So from the
+## checkpoint's sign until he can be back at par behind it, the traffic
+## moves as he does: at his share of par. Whatever he loses to the soldiers,
+## the road he drives out onto is the road that was planned.
+func traffic_pace() -> float:
+	if not active or kind != DAWN or _corridor_sign_at < 0.0 or _car.s < _corridor_sign_at or _car.s >= _corridor_clear_at:
+		return 1.0
+	return _car.speed / _par_kmh
 
 
 ## The corridor for the view: Vector3(where the barriers begin to close in,

@@ -2618,3 +2618,87 @@ menu and every in-game action".
   it and reads what it prints.
 - **The debug keys** (F1 to F8, GDD 13.9) are for whoever builds the game
   and are no function of it.
+
+## D-067 (M11, 2026-11-27) No wall: the scripted driver, the Tailgater, and Dawn's last checkpoint
+
+GDD 18.1, T-WALL-01: "A scripted ideal driver in gear 3 clears every
+generated leg with no contact." GDD 9.2 rule 3: "At every point at least
+one lane is passable in gear 3 without a close call. The generator never
+builds a wall."
+
+- **The driver** (`tests/support/ideal_driver.gd`) is a script and nothing
+  else: third gear, the car put on the plan's `path` tick by tick, in the
+  real `DriveSim`. He looks at nothing, brakes for nothing, waits for
+  nothing. "Clears" is read strictly: no hit, no hazard run over, no
+  Wreck, no pull-over, no close call, no lamp, and the leg done within its
+  par. A first version braked behind what was in his way and would not
+  move over into a vehicle beside him. It was taken out: with it the test
+  passed on legs where the plan did not hold, which is the thing the test
+  is for. T-WALL-01 drives every leg type in each of its acts and with
+  each modifier it allows (46 legs), Tailgater legs until he has gone by
+  in one, a leg with each kind of Twist (said and not said), Dawn three
+  times, the Commute's road, and four failure cases. A sweep of 210 legs
+  (70 combinations, three seeds) by the same driver touched nothing.
+  Not driven: the roads the leg generator does not lay out (the Storm's,
+  the Checkpoint's queue, the Arrival's street, the road to a fork), and
+  Endless Night, whose legs are the generator's ordinary ones.
+- **The Tailgater took the road the plan kept open.** Driven this way,
+  one Tailgater leg in four ended in a hit. He was held in place
+  relative to the car through whatever stood in the lane (the lane the
+  car had left is usually left because something slow is in it); he cut
+  in 16 m ahead of the car with a slower vehicle just in front of him and
+  could not get away; and once "gone" he was ordinary traffic ahead of
+  the car, stuck behind the next slow vehicle in the very lane the line
+  uses, eight metres nearer than the plan had counted. GDD 9.3 as built
+  now (`EncounterSim`, phases `TAIL_*`):
+  1. On the bumper as before. When the car leaves his lane he keeps his
+     own, level with it. If that lane is not clear ahead of him
+     (`traffic_follow_gap`) before the 3 s are up, he swerves in behind
+     the car again, where the road is the car's own tracks: passing a slow
+     vehicle does not lose him. If somebody is already there, he is lost.
+  2. A lane change held for 3 s takes him off the bumper for good (GDD
+     9.3: "He leaves when the player changes lane and holds it for 3 s"):
+     no more Nerves, no ramming. He passes at once if he can; otherwise he
+     hangs back in the car's tracks, `traffic_follow_gap` behind it
+     (`TAIL_HANGING_BACK`), until he can or until his 40 s are over.
+  3. He passes only into a window: for as long as the whole thing takes
+     (out, past, in, the stab at the brake, out again and behind the car)
+     the lane he passes in and the car's lane are clear as far as he goes
+     and as the vehicles in them come, nobody is moving into either, and
+     the plan's line does not move over. He takes whichever lane beside
+     the car has it. The line is the generator's promise; an actor of the
+     leg has no business on it.
+  4. After the stab he does not stay in front: he goes back into the lane
+     he passed in, still 40 km/h down, and the car goes by him. (With
+     somebody beside him there he gets away forwards, as he used to.)
+  `pass_speed_kmh` went from 30 to 50: a shorter pass finds more windows.
+  For a driver on the line he now goes by in about one Tailgater leg in
+  four (17 of 60) and touches nobody; before, in nearly every one, through
+  the traffic. T-LEG-06's checks hold unchanged.
+  *Left open:* whoever follows in the car's tracks (the Patrol's car, the
+  Tailgater closing up or hanging back) can still be drawn inside a
+  vehicle the car has just cut in front of. It is behind the car and
+  seen, if at all, in the mirror.
+- **Dawn's road waits at the last checkpoint** (DAWN-01 of the M7
+  review). The road is laid out for a driver at par, and the checkpoint
+  lets nobody keep par (70 km/h between the barriers, or a search). Every
+  second lost there moved the place he met a truck by 40 m, and in about
+  one Dawn in five a rolling wall filled all three lanes in the stretch
+  of the Call. Now, from the checkpoint's sign until he can be back at
+  par behind the barriers (their end plus the 59 m third gear needs from
+  70), the traffic moves as he does: at his share of par
+  (`BossSim.traffic_pace`, used for the traffic's time step in
+  `DriveSim.step`). The picture in front of him is then a matter of where
+  he is and not of when, and he drives out onto the road that was
+  planned, whatever the soldiers cost him. T-WALL-01 drives the same Dawn
+  quickly and slowly and finds every vehicle within a metre of the same
+  place. Considered and not done: starting the traffic afresh behind the
+  barriers (vehicles would appear 80 m ahead of him in plain sight, or
+  the road would be empty for 750 m); laying the road out for one
+  slower pace (any other pace still meets the wall). What it costs:
+  while he crawls or stands at the barriers, so does everybody else in
+  sight. At a checkpoint that reads as a checkpoint.
+- **The Motorcade** holds every lane at 70 km/h (GDD 9.3). The plan's line
+  behind it is open at the motorcade's pace: third gear does 70 there for
+  120 s and touches nothing. The way through at third gear's own pace is
+  the side road, and the scripted driver takes it too (100.7 s, par 110).
