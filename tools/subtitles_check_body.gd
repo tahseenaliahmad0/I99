@@ -34,10 +34,29 @@ const RTL_MIXED: String = "الطريق I-99 طويل، 540 كيلومترا ح�
 ## The characters that force a direction on text: the marks, embeddings,
 ## overrides and isolates of the bidirectional algorithm.
 const DIRECTION_MARKS: String = "\u200E\u200F\u061C\u202A\u202B\u202C\u202D\u202E\u2066\u2067\u2068\u2069"
+## An Arabic sentence that is cut so that its second line begins with a
+## Latin word: "the road to Basra is long, my daughter; I-99 is the name of
+## this long road".
+const RTL_LATIN_SECOND: String = "الطريق إلى البصرة طويل يا ابنتي I-99 هو اسم هذا الطريق الطويل"
+const LATIN_WORD: String = "I-99"
+## An exchange as a writer may leave it (wreck.children.1): what each says,
+## divided as the English row divides it, and the speaker column filled in
+## too, in Arabic ("a child, then Abu Noor"), which is not asked of them.
+const RTL_EXCHANGE_LINE: String = "wreck.children.1"
+const RTL_CHILD: String = "طفل"
+const RTL_SPEAKERS: String = "طفل، ثم أبو نور"
+const RTL_ASKED: String = "كيف أنت هنا إذن؟"
+const RTL_ANSWERED: String = "سؤال جيد. من جديد."
+## A name as its own line may come to be written: not what the speaker
+## columns say.
+const WRITTEN_NAME: String = "Noor, the bride"
 
 ## The Call of Dawn (GDD 10.4): what Noor says when he answers (GDD 3.6), the
 ## rituals that take it (data/rituals.json), and where his hand goes for it.
 const CALL_LINE: String = SHORT_LINE
+## Lines that announce something a moment ahead (GDD 2.2 pillar 4): the ring
+## of the Call written out, and Noor's last words before the talk ends.
+const TELL_LINES: PackedStringArray = ["call.noor.rings", "noor.call.bye"]
 ## The ring of that phone, written out for as long as it rings (D-050).
 const RING_LINE: String = "call.noor.rings"
 ## What ends the ring's line: the payload's "until" names this event.
@@ -103,6 +122,9 @@ func run(tree: SceneTree) -> int:
 	_settings()
 	_numbers()
 	_view()
+	_few_wait()
+	_tells_first()
+	_written()
 	_the_call()
 	_scene()
 	await _in_the_scene(tree)
@@ -117,11 +139,22 @@ func run(tree: SceneTree) -> int:
 ## text for that line and for its speaker's name. That table is made in
 ## memory; lines_ar.csv itself stays empty (GDD 17.3).
 func rtl_shot(tree: SceneTree, path: String) -> void:
+	await _rtl_picture(tree, path, RTL_LONG)
+
+
+## The same picture with a sentence whose second line begins with a Latin
+## word (I-99): it stands at the right end of that line, where an Arabic
+## reader begins it, because both lines are one paragraph.
+func rtl_latin_shot(tree: SceneTree, path: String) -> void:
+	await _rtl_picture(tree, path, RTL_LATIN_SECOND)
+
+
+func _rtl_picture(tree: SceneTree, path: String, said: String) -> void:
 	var shipped: GameData = Game.data
 	var english: Dictionary = GameData.as_dict(shipped.lines.get("en")).duplicate(true)
 	var arabic: Dictionary = GameData.as_dict(shipped.lines.get("ar")).duplicate(true)
 	arabic[Lines.speaker_line_id(GameData.as_string(shipped.line(TWO_LINE_LINE).get("speaker")))] = {"speaker": "", "text": RTL_SPEAKER, "needs_writer": false}
-	arabic[TWO_LINE_LINE] = {"speaker": "", "text": RTL_LONG, "needs_writer": false}
+	arabic[TWO_LINE_LINE] = {"speaker": "", "text": said, "needs_writer": false}
 	tree.change_scene_to_file(DRIVE_SCENE)
 	for frame: int in SCENE_FRAMES:
 		await tree.process_frame
@@ -298,6 +331,9 @@ func _wrapping(queue: SubtitleQueue) -> void:
 
 	var spaced: PackedStringArray = queue.lines_of("  one   two\tthree\nfour  ")
 	_check(spaced.size() == 1 and spaced[0] == "one two three four", "spaces, tabs and line ends between words count as one space")
+	# A label breaks the line at these by itself: left in a line, they would make three lines of two.
+	var ended: PackedStringArray = queue.lines_of("one\u2028two\u2029three\r\nfour\u000Bfive\u000Csix\u0085seven")
+	_check(ended.size() == 1 and ended[0] == "one two three four five six seven", "and so does every other kind of line end (the line separator, the paragraph separator)")
 
 	var word: String = "x".repeat(chars * 2 + 16)
 	var word_lines: PackedStringArray = queue.lines_of(word)
@@ -383,13 +419,34 @@ func _durations(queue: SubtitleQueue) -> void:
 	var own_length: bool = hundred.size() == 2
 	var sum: float = 0.0
 	var told: PackedStringArray = []
-	for part: SubtitleQueue.Part in hundred:
-		var length: int = part.joined().length()
+	for index: int in hundred.size():
+		var part: SubtitleQueue.Part = hundred[index]
+		# A part that another follows is timed with the space it was cut off at.
+		var length: int = part.joined().length() + (1 if index < hundred.size() - 1 else 0)
 		own_length = own_length and absf(part.duration - maxf(queue.min_duration, queue.char_duration * float(length))) <= TOLERANCE
 		sum += part.duration
 		told.append("%d characters %s s" % [length, str(snappedf(part.duration, 0.001))])
-	_check(own_length, "a text of 100 characters is two parts, each timed by its own length (%s)" % ", ".join(told))
+	_check(own_length, "a text of 100 characters is two parts, each timed by its own length, the first with the space it was cut off at (%s)" % ", ".join(told))
 	_check(sum >= 6.0 - TOLERANCE, "together they are held no less than the 6.0 s the whole text asks for (%s s)" % str(snappedf(sum, 0.001)))
+
+	# The rule is for the text, however many parts it is shown in: no part's
+	# cut may take time away from it.
+	var long_text: String = _line_text(LONG_LINE)
+	var long_parts: Array[SubtitleQueue.Part] = queue.parts_of("", long_text)
+	var long_sum: float = _held(long_parts)
+	_check(long_parts.size() == 2 and absf(long_sum - queue.duration_of(long_text.length())) <= TOLERANCE,
+			"the two parts of %s are held %s s together: what its %d characters ask for (%s s)" % [LONG_LINE, str(snappedf(long_sum, 0.001)), long_text.length(), str(snappedf(queue.duration_of(long_text.length()), 0.001))])
+	var tried: int = 0
+	var most_parts: int = 0
+	var short_by: float = 0.0
+	for length: int in range(1, queue.line_chars * 12):
+		var text: String = _text_of(length)
+		var parts: Array[SubtitleQueue.Part] = queue.parts_of("", text)
+		tried += 1
+		most_parts = maxi(most_parts, parts.size())
+		short_by = maxf(short_by, queue.duration_of(text.length()) - _held(parts))
+	_check(tried > 0 and most_parts > 2 and short_by <= TOLERANCE,
+			"%d texts of 1 to %d characters, in up to %d parts: none is held less than its characters ask for (short by %s s at most)" % [tried, queue.line_chars * 12 - 1, most_parts, str(snappedf(short_by, 0.001))])
 
 
 func _three_in_order() -> void:
@@ -578,6 +635,24 @@ func _speakers() -> void:
 	_check(Lines.get_speaker_name("A stranger") == "A stranger", "a speaker with no line is shown as the speaker column has it")
 	_check(Lines.speaker_line_id(RTL_SHORT).is_empty() and Lines.get_speaker_name(RTL_SHORT) == RTL_SHORT, "and so is a name written in Arabic")
 
+	# Who speaks is read from the English table alone (Lines.get_speaker): the
+	# other files translate what is said and, once, each name. So their
+	# speaker column stays empty, and what an exchange says stays divided.
+	var named: PackedStringArray = []
+	var undivided: PackedStringArray = []
+	for locale: String in GameData.LINE_LOCALES:
+		for id: String in _data.line_ids(locale):
+			var row: Dictionary = _data.line(id, locale)
+			if locale != Lines.FALLBACK_LOCALE and not GameData.as_string(row.get("speaker")).strip_edges().is_empty():
+				named.append("%s (%s)" % [id, locale])
+			var who: String = GameData.as_string(_data.line(id).get("speaker")) if _data.has_line(id) else ""
+			var speakers: int = who.split(SubtitleQueue.SPEAKERS_THEN).size()
+			var text: String = GameData.as_string(row.get("text"))
+			if speakers > 1 and not text.strip_edges().is_empty() and SubtitleQueue.exchange(who, text).size() != speakers:
+				undivided.append("%s (%s)" % [id, locale])
+	_check(named.is_empty(), "no row of another language's file names a speaker: who speaks is the English table's to say%s" % ("" if named.is_empty() else "; named in: " + ", ".join(named)))
+	_check(undivided.is_empty(), "a row that holds an exchange says as much as it names speakers, in every language that has its text%s" % ("" if undivided.is_empty() else "; not: " + ", ".join(undivided)))
+
 
 func _settings() -> void:
 	_heading("the Subtitles settings of GDD 17.1")
@@ -588,6 +663,15 @@ func _settings() -> void:
 	var sizes: Dictionary = _tuning.d("subtitle_font_sizes")
 	_check(sizes.size() == 3 and GameData.as_float(sizes.get("small")) > 0.0 and GameData.as_float(sizes.get("small")) < GameData.as_float(sizes.get("medium")) and GameData.as_float(sizes.get("medium")) < GameData.as_float(sizes.get("large")),
 			"tuning has the three sizes, small under medium under large (%s)" % str(sizes))
+	# GDD 17.3: "Use a font slot per language in settings; the owner will add an Arabic font."
+	var slots: PackedStringArray = []
+	var empty: bool = true
+	for locale: String in GameData.LINE_LOCALES:
+		var slot: String = SubtitlesView.FONT_SETTING + locale
+		if Settings.has_setting(slot):
+			slots.append(slot)
+			empty = empty and Settings.get_value(slot) is String and GameData.as_string(Settings.get_value(slot)).is_empty()
+	_check(slots.size() == GameData.LINE_LOCALES.size() and empty, "Settings has a font slot for each language of the line files, empty by default (%s)" % ", ".join(slots))
 
 
 ## The validator knows the constants of GDD 15 by name; these it only reads
@@ -602,6 +686,8 @@ func _numbers() -> void:
 	_check(bad.is_empty(), "the four colours are colours%s" % ("" if bad.is_empty() else ": not " + ", ".join(bad)))
 	_check(_tuning.i("subtitle_line_chars") >= 1 and _tuning.i("subtitle_max_lines") >= 1 and _tuning.f("subtitle_min_duration") > 0.0 and _tuning.f("subtitle_char_duration") >= 0.0,
 			"a line has room for a character, a subtitle for a line, and it is held for some time")
+	_check(_tuning.has("subtitle_max_waiting") and GameData.is_number(_tuning.raw("subtitle_max_waiting")) and _tuning.i("subtitle_max_waiting") >= 1,
+			"one line at least may wait behind the one on screen (%d)" % _tuning.i("subtitle_max_waiting"))
 	_check(_tuning.f("subtitle_speaker_scale") > 0.0 and _tuning.f("subtitle_outline_share") >= 0.0 and _tuning.f("subtitle_bottom_margin") >= 0.0
 			and _tuning.a("subtitle_padding").size() == 2 and _tuning.fi("subtitle_padding", 0) >= 0.0 and _tuning.fi("subtitle_padding", 1) >= 0.0
 			and _tuning.f("subtitle_line_spacing") >= 0.0 and _tuning.f("subtitle_speaker_gap") >= 0.0 and _tuning.f("subtitle_corner_radius") >= 0.0,
@@ -645,8 +731,10 @@ func _view() -> void:
 	var short_frames: int = _frames_until_change(view)
 	_check(_held_for(short_frames, queue.duration_of(Lines.get_text(SHORT_LINE).length())), "it is held 1.5 s (%d frames)" % short_frames)
 	var narrator: PackedStringArray = view.shown_lines()
-	_check(view.shown_speaker() == "Abu Noor" and narrator.size() == 2 and " ".join(narrator) == Lines.get_text(TWO_LINE_LINE) and text.text == "\n".join(narrator),
+	_check(view.shown_speaker() == "Abu Noor" and narrator.size() == 2 and " ".join(narrator) == Lines.get_text(TWO_LINE_LINE) and text.text == SubtitlesView.LINE_BREAK.join(narrator),
 			"then %s, on two lines: %s" % [TWO_LINE_LINE, " | ".join(narrator)])
+	_check(SubtitlesView.LINE_BREAK == "\u2028" and not text.text.contains("\n") and text.get_line_count() == 2,
+			"the label breaks the line at a line separator, not a line end: its two lines are one paragraph")
 	var narrator_frames: int = _frames_until_change(view)
 	_check(_held_for(narrator_frames, queue.duration_of(Lines.get_text(TWO_LINE_LINE).length())) and not view.is_showing() and view.waiting() == 0,
 			"held %s s (%d frames), and then nothing is drawn" % [str(queue.duration_of(Lines.get_text(TWO_LINE_LINE).length())), narrator_frames])
@@ -728,6 +816,390 @@ func _view() -> void:
 	# Nothing is left behind for the next tool or test.
 	Settings.reset_to_defaults()
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(Game.user_dir.path_join(Settings.FILE_NAME)))
+	view.free()
+
+
+## GDD 16.6 says nothing of a queue. Lines wait their turn, so that nothing
+## said is cut short; but a line of the line table is not queued again while
+## it is showing or waiting, and only `subtitle_max_waiting` of them wait:
+## for one more, the one that has waited longest gives way. Otherwise six
+## TAPs on a passenger's shoulder are six subtitles, and what is said after
+## them (the ring of his phone) comes seconds late.
+func _few_wait() -> void:
+	_heading("a line is not said twice over, and only a few wait")
+	var most: int = _tuning.i("subtitle_max_waiting")
+	var queue: SubtitleQueue = _new_queue()
+	_check(queue.max_waiting == most and most >= 2, "%d lines may wait behind the one on screen (tuning): three asked for at once are all shown" % most)
+	var texts: PackedStringArray = [_text_of(30), _text_of(40), _text_of(50), _text_of(60)]
+	var hold: int = _frames_in(queue.duration_of(texts[0].length()))
+
+	# Asked for again while it is showing, and while it waits.
+	var said: bool = _say(queue, "line.a", texts[0])
+	queue.advance(FRAME)
+	for _frame: int in hold / 2:
+		queue.advance(FRAME)
+	var again: bool = _say(queue, "line.a", texts[0])
+	_check(said and not again and queue.size() == 1 and queue.holds("line.a"), "a line asked for again while it is showing is not queued again")
+	var next: bool = _say(queue, "line.b", texts[1])
+	var next_again: bool = _say(queue, "line.b", texts[1])
+	_check(next and not next_again and queue.size() == 2 and queue.lines_waiting() == 1, "nor is one that waits")
+	var frames: int = 1 + hold / 2
+	while queue.current() != null and queue.current().line_id == "line.a" and frames < MOST_FRAMES:
+		queue.advance(FRAME)
+		frames += 1
+	_check(_held_for(frames - 1, queue.duration_of(texts[0].length())), "and the line on screen is held no longer for it (%d frames)" % (frames - 1))
+	_check(queue.current() != null and queue.current().line_id == "line.b" and not queue.holds("line.a") and _say(queue, "line.a", texts[0]) and queue.size() == 2,
+			"once it has had its time it can be said again")
+
+	# One more than may wait: the one that has waited longest gives way.
+	queue = _new_queue()
+	var ids: PackedStringArray = []
+	for index: int in most + 2:
+		ids.append("line.%d" % index)
+	for index: int in most + 1:
+		_say(queue, ids[index], texts[index % texts.size()])
+	queue.advance(FRAME)
+	_check(queue.lines_waiting() == most and queue.size() == most + 1, "with one line on screen, %d wait" % most)
+	for _frame: int in hold / 2:
+		queue.advance(FRAME)
+	_check(_say(queue, ids[most + 1], texts[0]) and queue.lines_waiting() == most and not queue.holds(ids[1]) and queue.holds(ids[0]) and queue.holds(ids[most + 1]),
+			"one more is asked for: the line that has waited longest gives way to it, and the line on screen stays")
+	var order: PackedStringArray = []
+	frames = 1 + hold / 2
+	var head_frames: int = 0
+	for _frame: int in MOST_FRAMES:
+		var part: SubtitleQueue.Part = queue.current()
+		if part == null:
+			break
+		if order.is_empty() or order[order.size() - 1] != part.line_id:
+			order.append(part.line_id)
+		if part.line_id == ids[0]:
+			head_frames = frames
+		queue.advance(FRAME)
+		frames += 1
+	var kept: PackedStringArray = ids.duplicate()
+	kept.remove_at(1)
+	_check(order == kept, "what is left is shown in the order it was asked for (%s)" % ", ".join(order))
+	_check(_held_for(head_frames, queue.duration_of(texts[0].length())), "and the line on screen had its whole time, no more (%d frames)" % head_frames)
+
+	# A line of several parts is one line: on screen, its parts to come are
+	# not counted; waiting, it gives way whole.
+	queue = _new_queue()
+	var long_text: String = _text_of(queue.line_chars * (queue.max_lines * 2 + 1))
+	var long_parts: int = queue.parts_of("", long_text).size()
+	_say(queue, "long.a", long_text)
+	queue.advance(FRAME)
+	_say(queue, "long.b", long_text)
+	for index: int in most - 1:
+		_say(queue, ids[index], texts[0])
+	_check(long_parts > 2 and queue.lines_waiting() == most and queue.size() == long_parts * 2 + most - 1,
+			"a line of %d parts on screen: its parts to come are not lines that wait" % long_parts)
+	_check(_say(queue, ids[most], texts[0]) and not queue.holds("long.b") and queue.lines_waiting() == most and queue.size() == long_parts + most,
+			"a waiting line of %d parts gives way whole; the parts of the line on screen stay" % long_parts)
+
+	# What is pushed without a line of the table is neither counted nor dropped.
+	queue = _new_queue()
+	for text: String in texts:
+		queue.push("", text)
+	queue.advance(FRAME)
+	for index: int in most + 1:
+		_say(queue, ids[index], texts[0])
+	_check(queue.size() == texts.size() + most and queue.lines_waiting() == most and not queue.holds(ids[0]) and not queue.holds(""),
+			"what is pushed without a line is not counted and does not give way (%d parts, %d lines waiting)" % [queue.size(), queue.lines_waiting()])
+	queue.clear()
+	queue.push("", texts[0])
+	_check(queue.current().line_id.is_empty(), "after clear() what is pushed belongs to no line")
+
+	# The same through the view: lines asked for on the Events bus.
+	Settings.reset_to_defaults()
+	var view: SubtitlesView = SubtitlesView.new()
+	view.name = "Subtitles"
+	_root.add_child(view)
+	view.setup(_data)
+	var asked: PackedStringArray = [SHORT_LINE, "heckle.children.twist.sheep", "heckle.drivers.dare.gear4", "heckle.uncles.doubt.1", "heckle.aunts.order.tea"]
+	Events.emit_event("line_requested", {"id": asked[0]})
+	Events.emit_event("line_requested", {"id": asked[0]})
+	view._process(FRAME)
+	Events.emit_event("line_requested", {"id": asked[0]})
+	_check(view.is_showing() and view.waiting() == 1, "%s asked for three times on the bus is on screen once" % asked[0])
+	for index: int in range(1, most + 2):
+		Events.emit_event("line_requested", {"id": asked[index]})
+		Events.emit_event("line_requested", {"id": asked[index]})
+	var shown: PackedStringArray = []
+	while view.is_showing() and shown.size() < MOST_FRAMES:
+		shown.append(" ".join(view.shown_lines()))
+		_frames_until_change(view)
+	var expected: PackedStringArray = [Lines.get_text(asked[0])]
+	for index: int in range(2, most + 2):
+		expected.append(Lines.get_text(asked[index]))
+	_check(most + 2 <= asked.size() and shown == expected, "%d more asked for twice each: all but the first of them are shown, once each, in order (%d subtitles)" % [most + 1, shown.size()])
+	Settings.reset_to_defaults()
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(Game.user_dir.path_join(Settings.FILE_NAME)))
+	view.free()
+
+
+## A line of the line table said to a bare queue, as the view says it: false
+## if the queue would not have it again.
+func _say(queue: SubtitleQueue, line_id: String, text: String) -> bool:
+	if not queue.begin_line(line_id):
+		return false
+	queue.push("", text)
+	return true
+
+
+## A tell is said (GDD 2.2 pillar 4: it announces something a moment ahead).
+func _tell(queue: SubtitleQueue, line_id: String, text: String, until: String = "") -> bool:
+	if not queue.begin_line(line_id):
+		return false
+	queue.push("", text, until, true)
+	return true
+
+
+## The lines a queue shows from now until it is empty, in order, and the
+## frames each is on screen (counted as _until_it_is_over counts them).
+func _play_out(queue: SubtitleQueue) -> Array:
+	var order: PackedStringArray = []
+	var frames: Dictionary = {}
+	for _frame: int in MOST_FRAMES:
+		queue.advance(FRAME)
+		var part: SubtitleQueue.Part = queue.current()
+		if part == null:
+			break
+		if order.is_empty() or order[order.size() - 1] != part.line_id:
+			order.append(part.line_id)
+		frames[part.line_id] = GameData.as_int(frames.get(part.line_id)) + 1
+	return [order, frames]
+
+
+## A tell does not wait its turn: what announces something 1 or 2 s ahead
+## would otherwise be read when it has happened.
+func _tells_first() -> void:
+	_heading("a tell is shown at once, and what it took the screen from is shown again after it")
+	var texts: PackedStringArray = [_text_of(50), _text_of(40), _text_of(30), _text_of(35)]
+	var queue: SubtitleQueue = _new_queue()
+	_say(queue, "line.a", texts[0])
+	_say(queue, "line.b", texts[1])
+	queue.advance(FRAME)
+	for _frame: int in 20:
+		queue.advance(FRAME)
+	_check(queue.current() != null and queue.current().line_id == "line.a" and queue.size() == 2, "(a line is showing and another waits)")
+	_check(_tell(queue, "line.tell", texts[2]) and queue.current().line_id == "line.tell", "a tell takes the screen in the frame it is asked for")
+	_check(queue.size() == 3 and queue.holds("line.a") and queue.holds("line.b"), "nothing that was showing or waiting is lost for it")
+	_check(not _tell(queue, "line.tell", texts[2]) and queue.size() == 3, "asked for again while it shows, it is not said twice over")
+	var played: Array = _play_out(queue)
+	var order: PackedStringArray = played[0]
+	var frames: Dictionary = played[1]
+	_check(order == PackedStringArray(["line.tell", "line.a", "line.b"]), "the tell, then the line it took the screen from, then what waited: %s" % ", ".join(order))
+	_check(_held_for(GameData.as_int(frames.get("line.tell")), queue.duration_of(texts[2].length())), "the tell is held its whole time (%d frames)" % GameData.as_int(frames.get("line.tell")))
+	_check(_held_for(GameData.as_int(frames.get("line.a")), queue.duration_of(texts[0].length())), "the line it interrupted is shown again for its whole time (%d frames)" % GameData.as_int(frames.get("line.a")))
+	_check(_held_for(GameData.as_int(frames.get("line.b")), queue.duration_of(texts[1].length())), "and what waited has its whole time (%d frames)" % GameData.as_int(frames.get("line.b")))
+
+	# With nothing showing a tell is a line like any other.
+	queue = _new_queue()
+	_tell(queue, "line.tell", texts[2])
+	played = _play_out(queue)
+	order = played[0]
+	frames = played[1]
+	_check(order == PackedStringArray(["line.tell"]) and _held_for(GameData.as_int(frames.get("line.tell")), queue.duration_of(texts[2].length())), "said into the silence, a tell is shown for its time like any line")
+
+	# An exchange that is a tell keeps its order, and a later tell goes before an earlier one.
+	queue = _new_queue()
+	_say(queue, "line.a", texts[0])
+	queue.advance(FRAME)
+	queue.begin_line("line.two")
+	queue.push("One", texts[1], "", true)
+	queue.push("Other", texts[2], "", true)
+	_check(queue.current().speaker == "One" and queue.size() == 3, "a tell of two speakers: the first of them takes the screen")
+	_tell(queue, "line.late", texts[3])
+	_check(queue.current().line_id == "line.late", "a tell asked for while another shows goes before it")
+	var speakers: PackedStringArray = []
+	for _frame: int in MOST_FRAMES:
+		queue.advance(FRAME)
+		var part: SubtitleQueue.Part = queue.current()
+		if part == null:
+			break
+		var who: String = "%s/%s" % [part.line_id, part.speaker]
+		if speakers.is_empty() or speakers[speakers.size() - 1] != who:
+			speakers.append(who)
+	_check(speakers == PackedStringArray(["line.late/", "line.two/One", "line.two/Other", "line.a/"]), "then the earlier tell, its speakers in their order, then the line: %s" % ", ".join(speakers))
+
+	# A tell that lasts until something happens: over, what it interrupted is back at once.
+	queue = _new_queue()
+	_say(queue, "line.a", texts[0])
+	queue.advance(FRAME)
+	for _frame: int in 20:
+		queue.advance(FRAME)
+	_tell(queue, "line.ring", texts[2], "over")
+	_check(queue.current().line_id == "line.ring", "(a tell that lasts until something is over)")
+	queue.advance(FRAME)
+	queue.advance(FRAME)
+	queue.drop("over")
+	_check(queue.current() != null and queue.current().line_id == "line.a" and queue.size() == 1, "when it is over the line it interrupted is back")
+	played = _play_out(queue)
+	frames = played[1]
+	_check(_held_for(GameData.as_int(frames.get("line.a")), queue.duration_of(texts[0].length())), "with its whole time before it (%d frames)" % GameData.as_int(frames.get("line.a")))
+
+	# No more lines wait for a tell than may wait.
+	var most: int = _tuning.i("subtitle_max_waiting")
+	queue = _new_queue()
+	_say(queue, "line.0", texts[0])
+	queue.advance(FRAME)
+	for index: int in most:
+		_say(queue, "line.w%d" % index, texts[1])
+	_check(queue.lines_waiting() == most, "(as many wait as may: %d)" % most)
+	_tell(queue, "line.tell", texts[2])
+	_check(queue.current().line_id == "line.tell" and queue.lines_waiting() == most and queue.holds("line.0") and not queue.holds("line.w0"),
+			"a tell with the queue full: the one that waited longest gives way, the one on screen comes after the tell")
+
+	# Through the view: asked for on the bus with "tell".
+	Settings.reset_to_defaults()
+	var view: SubtitlesView = SubtitlesView.new()
+	view.name = "Subtitles"
+	_root.add_child(view)
+	view.setup(_data)
+	Events.emit_event("line_requested", {"id": TWO_LINE_LINE})
+	view._process(FRAME)
+	view._process(FRAME)
+	_check(view.is_showing() and " ".join(view.shown_lines()) == Lines.get_text(TWO_LINE_LINE), "(the view shows a line)")
+	Events.emit_event("line_requested", {"id": SHORT_LINE, "tell": true})
+	view._process(FRAME)
+	_check(view.shown_lines() == PackedStringArray([Lines.get_text(SHORT_LINE)]), "a line asked for on the bus as a tell is on screen in the next frame: %s" % " | ".join(view.shown_lines()))
+	var tell_frames: int = _frames_until_change(view)
+	_check(_held_for(tell_frames, view_duration(SHORT_LINE)) and " ".join(view.shown_lines()) == Lines.get_text(TWO_LINE_LINE), "after its time the line it interrupted is shown again")
+	Events.emit_event("line_requested", {"id": SHORT_LINE})
+	view._process(FRAME)
+	_check(" ".join(view.shown_lines()) == Lines.get_text(TWO_LINE_LINE), "(asked for without \"tell\", the same line waits its turn)")
+	view.clear()
+	_root.remove_child(view)
+	view.free()
+	# The simulation's tells: what it writes out a moment ahead is asked for as one.
+	var marked: PackedStringArray = []
+	var tell: RegEx = RegEx.new()
+	tell.compile("line_requested.*\"id\":\\s*\"([a-z0-9_.]+)\".*\"tell\":\\s*true")
+	for path: String in ProjectFiles.find("res://src/core", PackedStringArray(["gd"])):
+		for line: String in FileAccess.get_file_as_string(path).split("\n"):
+			var hit: RegExMatch = tell.search(line)
+			if hit != null:
+				marked.append(hit.get_string(1))
+	marked.sort()
+	print("tells: the simulation asks for %s as tells" % ", ".join(marked))
+	for id: String in TELL_LINES:
+		_check(marked.has(id), "%s announces something a moment ahead: the simulation must ask for it as a tell" % id)
+
+
+## Seconds the view holds a line of one part.
+func view_duration(line_id: String) -> float:
+	var queue: SubtitleQueue = _new_queue()
+	return queue.duration_of(Lines.get_text(line_id).length())
+
+
+func _new_queue() -> SubtitleQueue:
+	var queue: SubtitleQueue = SubtitleQueue.new()
+	queue.configure(_tuning)
+	return queue
+
+
+## The line table as a writer will leave it, made in memory (lines_ar.csv
+## itself stays empty, GDD 17.3): a name line that says more than the speaker
+## columns do; Arabic for a line that needs two lines, cut so that the second
+## begins with a Latin word; and an exchange whose speaker column is filled
+## in as well, in Arabic, which no writer is asked for. What is held: the tag
+## is the text of the speaker's own line; both lines of a subtitle run the
+## way their sentence does; and who speaks, and how many they are, is read
+## from the English table whatever another one says. Then the font the owner
+## will add for the language (GDD 17.3): its slot in the settings, with a
+## font made here standing in for it.
+func _written() -> void:
+	_heading("a line table as the writer will leave it: names, right to left, an exchange, a font")
+	var english: Dictionary = GameData.as_dict(_data.lines.get("en")).duplicate(true)
+	var arabic: Dictionary = GameData.as_dict(_data.lines.get("ar")).duplicate(true)
+	var written: Dictionary = {"speaker": "", "text": "", "needs_writer": false}
+	var exchange: Array[PackedStringArray] = SubtitleQueue.exchange(_line_speaker(RTL_EXCHANGE_LINE), _line_text(RTL_EXCHANGE_LINE))
+	english[Lines.speaker_line_id(_line_speaker(SHORT_LINE))] = written.merged({"text": WRITTEN_NAME}, true)
+	arabic[Lines.speaker_line_id(_line_speaker(TWO_LINE_LINE))] = written.merged({"text": RTL_SPEAKER}, true)
+	arabic[Lines.speaker_line_id(exchange[0][0])] = written.merged({"text": RTL_CHILD}, true)
+	arabic[TWO_LINE_LINE] = written.merged({"text": RTL_LATIN_SECOND}, true)
+	arabic[RTL_EXCHANGE_LINE] = written.merged({"speaker": RTL_SPEAKERS, "text": RTL_ASKED + SubtitleQueue.SAID_THEN + RTL_ANSWERED}, true)
+	Lines.setup(GameData.from_parts(_data.roots, {"en": english, "ar": arabic}))
+	Settings.reset_to_defaults()
+	var view: SubtitlesView = SubtitlesView.new()
+	view.name = "Subtitles"
+	_root.add_child(view)
+	view.setup(_data)
+	var text: Label = view.get_node("Box/Rows/Text") as Label
+
+	# A name is a line: what the tag shows is that line's text.
+	Events.emit_event("line_requested", {"id": SHORT_LINE})
+	view._process(FRAME)
+	_check(_line_speaker(SHORT_LINE) != WRITTEN_NAME and view.shown_speaker() == WRITTEN_NAME,
+			"the tag is the text of the speaker's own line, not what the speaker column writes: %s" % view.shown_speaker())
+	view.clear()
+
+	# Arabic on two lines, the second beginning with a Latin word.
+	Lines.set_locale("ar")
+	Events.emit_event("line_requested", {"id": TWO_LINE_LINE})
+	view._process(FRAME)
+	var lines: PackedStringArray = view.shown_lines()
+	_check(view.shown_speaker() == RTL_SPEAKER and lines.size() == 2 and " ".join(lines) == RTL_LATIN_SECOND and lines[1].begins_with(LATIN_WORD),
+			"in Arabic, %s is under his Arabic name on two lines, the second beginning with %s" % [TWO_LINE_LINE, LATIN_WORD])
+	# Where the label draws its letters: a line that runs right to left has
+	# its first letter at its right end. (No frame is drawn here, so the box
+	# has not grown yet: the label is given the room its text asks for.)
+	text.reset_size()
+	var upper_first: Rect2 = text.get_character_bounds(0)
+	var upper_last: Rect2 = text.get_character_bounds(lines[0].length() - 1)
+	var lower_first: Rect2 = text.get_character_bounds(text.text.find(LATIN_WORD))
+	var lower_last: Rect2 = text.get_character_bounds(text.text.length() - 1)
+	_check(text.get_line_count() == 2 and upper_first.position.y < lower_first.position.y and is_equal_approx(lower_first.position.y, lower_last.position.y),
+			"the label draws them as two lines")
+	_check(upper_first.position.x > upper_last.position.x, "the first line runs right to left")
+	_check(lower_first.position.x > lower_last.position.x,
+			"and so does the second, though it begins with a Latin word: %s stands at its right end (%d px right of its last letter)" % [LATIN_WORD, roundi(lower_first.position.x - lower_last.position.x)])
+	view.clear()
+
+	# An exchange: who speaks, and how many they are, is the English table's to say.
+	Events.emit_event("line_requested", {"id": RTL_EXCHANGE_LINE})
+	view._process(FRAME)
+	var asked: String = "%s: %s" % [view.shown_speaker(), " | ".join(view.shown_lines())]
+	_frames_until_change(view)
+	var answered: String = "%s: %s" % [view.shown_speaker(), " | ".join(view.shown_lines())]
+	_frames_until_change(view)
+	_check(Lines.get_speaker(RTL_EXCHANGE_LINE) == _line_speaker(RTL_EXCHANGE_LINE), "who says %s is read from the English table, whatever the Arabic row's speaker column holds" % RTL_EXCHANGE_LINE)
+	_check(asked == "%s: %s" % [RTL_CHILD, RTL_ASKED] and answered == "%s: %s" % [RTL_SPEAKER, RTL_ANSWERED] and not view.is_showing(),
+			"so it is still two subtitles, each under the name its speaker's own line gives in Arabic")
+
+	# The font slot of the language (GDD 17.3). A font made here stands in
+	# for the one the owner will add. (Test runs in other checkouts clear the
+	# folder the tools share, so it is made again before the font goes in.)
+	var speaker: Label = view.get_node("Box/Rows/Speaker") as Label
+	var slot: String = SubtitlesView.FONT_SETTING + "ar"
+	var font_path: String = Game.user_dir.path_join("subtitles_check_font_%d.tres" % OS.get_process_id())
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(Game.user_dir))
+	var saved: Error = ResourceSaver.save(SystemFont.new(), font_path)
+	var own: Font = text.get_theme_font("font")
+	_check(saved == OK and _given_font(text).is_empty() and _given_font(speaker).is_empty(), "while the slots are empty the labels take the theme's font")
+	Settings.set_value(slot, font_path)
+	_check(_given_font(text) == font_path and _given_font(speaker) == font_path,
+			"a font named in `%s` is taken by the tag and the text as soon as it is set, the lines being in Arabic" % slot)
+	var face: FontVariation = text.get_theme_font("font") as FontVariation
+	_check(face != null and face.fallbacks.size() == 1 and is_same(face.fallbacks[0], own), "with the theme's font behind it, for the letters it does not have")
+	Lines.set_locale(Lines.FALLBACK_LOCALE)
+	_check(_given_font(text).is_empty() and _given_font(speaker).is_empty(), "in English, whose slot is empty, they take the theme's font again")
+	Lines.set_locale("ar")
+	_check(_given_font(text) == font_path and _given_font(speaker) == font_path, "and in Arabic the Arabic font")
+	Settings.set_value(slot, "")
+	_check(_given_font(text).is_empty() and _given_font(speaker).is_empty(), "an emptied slot gives the theme's font back at once")
+	# A settings file edited by hand may name what is no font: the view says so (one warning) and keeps the theme's.
+	print("        (one warning about the font 'res://data/tuning.json' is expected here)")
+	Settings.set_value(slot, "res://data/tuning.json")
+	_check(_given_font(text).is_empty() and _given_font(speaker).is_empty(), "a slot that names no font leaves the theme's font")
+
+	# Nothing is left behind for the next tool or test.
+	Lines.set_locale(Lines.FALLBACK_LOCALE)
+	Lines.setup(_data)
+	Settings.reset_to_defaults()
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(Game.user_dir.path_join(Settings.FILE_NAME)))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(font_path))
 	view.free()
 
 
@@ -833,6 +1305,22 @@ func _the_call() -> void:
 	_check(_showing == said, "answered, the ring's line is gone and she is on screen in that frame: %s" % _showing)
 	_check_said(view, said, hold)
 	_check(_seen.count(ring) == 1, "and the ring's line does not come back")
+	# An answer that comes too late is none: a TAP on his pocket that ends
+	# after the Call has rung out takes nothing, and she says nothing.
+	_to_the_ring(view, false)
+	_reach(view, POCKET)
+	var guard: int = _frames_in(ring_s + 1.0)
+	while _sim.boss.call == BossSim.CALL_RINGING and _sim.boss.call_left > FRAME * 1.5 and guard > 0:
+		guard -= 1
+		_drive(view, 1)
+	var still_ringing: bool = _sim.boss.call == BossSim.CALL_RINGING and _sim.hand.at_id() == POCKET
+	_input.lmb = true
+	_drive(view, TAP_FRAMES)
+	_input.lmb = false
+	_drive(view, _frames_in(0.5))
+	_check(still_ringing and _count("call_resolved") == 1 and not GameData.as_bool(_last("call_resolved").get("answered")),
+			"(a TAP begun in the Call's last frame ends after it has rung out: unanswered)")
+	_check(_unspoken(said), "an answer that comes too late asks for nothing: she does not speak")
 	# Left to ring, the line has its own time: it is not held for all the ringing.
 	_to_the_ring(view, false)
 	_drive(view, _frames_in(ring_s + 1.0))
@@ -1012,20 +1500,33 @@ func _scene() -> void:
 	print("        %s" % ", ".join(order))
 
 
-## The drive scene itself, running (it needs no renderer), driven through the
-## game's own input as far as M7 lets it be driven in a moment: the Call
-## answered on Dawn's road, and a Telling ended with the key in the bay of
-## the Arrival. What is checked is the scene's own wiring: its controller
-## sends what the simulation announces to the Events bus, its Subtitles layer
-## listens there, and the controller clears it where the night begins again.
+## The drive scene itself, running (it needs no renderer): started with
+## `--say=`, and driven through the game's own input as far as M7 lets it be
+## driven in a moment: the Call answered on Dawn's road, and a Telling ended
+## with the key in the bay of the Arrival. What is checked is the scene's own
+## wiring: its controller asks for the lines of `--say`, it sends what the
+## simulation announces to the Events bus, its Subtitles layer listens there,
+## and the controller clears it where the night begins again.
 func _in_the_scene(tree: SceneTree) -> void:
-	_heading("the drive scene running: the Call answered, and the night begun again")
+	_heading("the drive scene running: --say, the Call answered, and the night begun again")
 	Events.line_requested.connect(_on_bus_line)
 	Events.arrived.connect(_on_bus_arrived)
 
+	# `--say=`: the scene asks for those lines as it starts, and they are shown.
+	_bus_lines = []
+	var said: PackedStringArray = [LONG_LINE, SHORT_LINE]
+	var drive: Node = await _drive_scene(tree, {"say": ",".join(said)})
+	var layer: SubtitlesView = drive.get_node("Subtitles") as SubtitlesView
+	var queue: SubtitleQueue = SubtitleQueue.new()
+	queue.configure(_tuning)
+	var first: Array[SubtitleQueue.Part] = queue.parts_of("", Lines.get_text(said[0]))
+	_check(_bus_lines == said, "started with --say=%s, the scene asks for those lines on the Events bus, in that order" % ",".join(said))
+	_check(layer.is_showing() and layer.shown_lines() == first[0].lines and layer.shown_speaker() == Lines.get_speaker_name(Lines.get_speaker(said[0])) and layer.waiting() == first.size() + 1,
+			"and its Subtitles layer shows the first of them, the other waiting: %s: %s" % [layer.shown_speaker(), " | ".join(layer.shown_lines())])
+
 	# Dawn's road: the phone rings, the hand is on his pocket, a TAP.
 	_bus_lines = []
-	var drive: Node = await _answer_in_the_scene(tree)
+	drive = await _answer_in_the_scene(tree)
 	var sim: DriveSim = drive.get("sim") as DriveSim
 	var view: SubtitlesView = drive.get_node("Subtitles") as SubtitlesView
 	_check(sim.boss.call == BossSim.CALL_TALKING and sim.boss.call_taken == BossSim.TAKEN_ALONE,
@@ -1106,6 +1607,20 @@ func _line_text(id: String) -> String:
 	return GameData.as_string(_data.line(id).get("text"))
 
 
+## Who says a line, as the speaker column of the English table writes it.
+func _line_speaker(id: String) -> String:
+	return GameData.as_string(_data.line(id).get("speaker"))
+
+
+## The path of the font a label has been given in place of the theme's own
+## ("" while it has the theme's).
+func _given_font(label: Label) -> String:
+	if not label.has_theme_font_override("font"):
+		return ""
+	var face: FontVariation = label.get_theme_font("font") as FontVariation
+	return face.base_font.resource_path if face != null and face.base_font != null else "?"
+
+
 func _longest(lines: PackedStringArray) -> int:
 	var longest: int = 0
 	for line: String in lines:
@@ -1126,6 +1641,14 @@ func _rejoined(parts: Array[SubtitleQueue.Part]) -> String:
 	for part: SubtitleQueue.Part in parts:
 		texts.append(part.joined())
 	return " ".join(texts)
+
+
+## Seconds the parts are held, one after the other.
+func _held(parts: Array[SubtitleQueue.Part]) -> float:
+	var seconds: float = 0.0
+	for part: SubtitleQueue.Part in parts:
+		seconds += part.duration
+	return seconds
 
 
 ## Steps the view frame by frame until what it shows is something else (or

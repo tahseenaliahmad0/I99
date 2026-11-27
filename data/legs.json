@@ -17,7 +17,7 @@
     {"id": "checkpoint", "act": 1, "length_m": 500, "par_s": 90, "lanes": 3, "divided": true,
      "modifiers": ["long_queue", "thorough"],
      "checkpoint": {
-       "corridor": {"at_m": 200, "length_m": 150, "taper_m": 60, "gap_m": 2.34, "sign_lead_s": 5},
+       "corridor": {"at_m": 200, "length_m": 150, "taper_m": 60, "gap_m": 2.34, "sign_lead_s": 2},
        "barrier_suspicion": 25,
        "queue": {"cars": 6, "gap_m": 2.5, "creep_kmh": 12, "pull_up_per_s": 2.0, "settle_m": 0.1, "serve_s": 4, "leave_kmh": 40, "clear_m": 4,
                  "vehicles": ["car", "taxi", "pickup", "minibus"]},
@@ -32,10 +32,10 @@
     {"id": "storm", "act": 2, "length_m": 2000, "par_s": 100, "lanes": 3, "divided": true,
      "modifiers": ["crosswind", "night_storm"],
      "storm": {
-       "thin_s": 8, "thin_m": 40, "thick_s": 12, "thick_m": 15,
+       "thin_s": 8, "thin_m": 40, "thick_s": 12, "thick_m": 15, "dust_tell_s": 1,
        "gust_push": 2.0, "gust_every_s": 9,
        "wipe_haze": 0.10, "window_haze_per_s": 0.05,
-       "stopped_kmh": 1, "rear_end_every_s": 10, "rear_end_tell_s": 1, "rear_end_chance": 0.5,
+       "stopped_kmh": 1, "moved_off_kmh": 15, "rear_end_every_s": 10, "rear_end_tell_s": 2, "rear_end_chance": 0.5,
        "tail_lights": {"first_m": 120, "gap_m": [140, 220], "speed_kmh": [60, 70], "vehicles": ["car", "taxi", "pickup", "truck"]}
      },
      "line_ids": {"name": "boss.storm.name"}},
@@ -47,7 +47,7 @@
        "road": {"density": 12, "tail_m": 150, "builds_from": 0.25,
                 "beat_weights": {"CALM": 2, "CLUSTER": 4, "SLOWPOKE": 3, "MERGE": 4, "CURVE": 1, "HAZARD": 1}},
        "checkpoint": {"at_m": 1900, "length_m": 150, "taper_m": 60, "gap_m": 2.34, "max_kmh": 70, "sign_lead_s": 5, "search_minutes": 15},
-       "call": {"from_end_m": 833, "ring_s": 8, "talk_s": 30, "wrist_steer": 0.4, "stopped_kmh": 1}
+       "call": {"from_end_m": 833, "ring_s": 8, "talk_s": 30, "talk_end_tell_s": 1.5, "wrist_steer": 0.4, "stopped_kmh": 1}
      },
      "line_ids": {"name": "boss.dawn.name"}}
   ],

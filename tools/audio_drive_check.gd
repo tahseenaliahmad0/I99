@@ -1,8 +1,9 @@
 extends RefCounted
 ## The second half of the sound check (tools/audio_check.gd): the Audio
 ## autoload, taken through the states of a drive and the events of the bus,
-## and through what two set pieces bring with simulations of their own: the
-## horn behind a car that stands in the Storm, the Call at Dawn.
+## and through what simulations of its own bring: the horn behind a car that
+## stands in the Storm, the Call at Dawn, a lamp lit and put out again, a
+## Wreck in a Telling.
 ## Loaded by the first half once the autoloads are there.
 ##
 ## Nothing here waits for a sound to play out: frames are stepped by hand
@@ -28,8 +29,18 @@ const BOSS_SEED: int = 1
 ## How many of the Storm's waits the check stands through for something to
 ## come up behind him: each wait brings it with the Storm's rear_end_chance.
 const STORM_WAITS: int = 30
+## Seconds of the Storm the check drives to hear its gusts announced.
+const STORM_GUST_WATCH: float = 30.0
+## Seconds within which the soldier must set off toward a car at the bar.
+const SOLDIER_SETS_OFF: float = 3.0
 ## How far short of where the Call begins the check sets the car down, m.
 const CALL_RUN_UP: float = 2.0
+## What any sound may say about how it is played; every other key of
+## Audio.PLAY_KEYS is read from some sounds only.
+const ANY_SOUND_KEYS: PackedStringArray = ["gain_db", "functional", "note"]
+## The Telling the check wrecks: its Table (the Drivers', GDD 11.2) and seed.
+const TABLE: String = "drivers"
+const TELLING_SEED: int = 1
 
 var _data: GameData
 var _tuning: Tuning
@@ -54,6 +65,10 @@ func run(data: GameData) -> PackedStringArray:
 		_check_requests()
 		_check_engine()
 		_check_rumble()
+		_check_rattle()
+		_check_gust()
+		_check_dust()
+		_check_soldier()
 		_check_heartbeat()
 		_check_radio()
 		_check_tape()
@@ -66,6 +81,7 @@ func run(data: GameData) -> PackedStringArray:
 		_check_horn_behind()
 		_check_indicator()
 		_check_events()
+		_check_wreck()
 		_check_scene_gone()
 		_check_stream_files()
 		_time_a_frame()
@@ -77,13 +93,38 @@ func run(data: GameData) -> PackedStringArray:
 
 # --- The entries -------------------------------------------------------------
 
-## An entry says nothing that neither the generator nor the player reads: a
-## misspelt key would otherwise be a number that silently does nothing.
+## An entry says nothing that neither the generator nor the player reads, and
+## nothing about how it is played that means nothing for its sound: a misspelt
+## key, or a key on the wrong sound, would otherwise be a number that silently
+## does nothing.
 func _check_entries() -> void:
 	for key: Variant in _data.root("sfx"):
-		for name: Variant in _synth(str(key)):
+		var id: String = str(key)
+		for name: Variant in _synth(id):
 			_expect(SfxSynth.KEYS.has(str(name)) or Audio.PLAY_KEYS.has(str(name)),
-					"%s: nothing reads its key \"%s\"" % [str(key), str(name)])
+					"%s: nothing reads its key \"%s\"" % [id, str(name)])
+		var idle: PackedStringArray = Audio.idle_keys(id, _synth(id))
+		_expect(idle.is_empty(), "%s: \"%s\" says nothing about how a sound like this one is played" % [id, "\", \"".join(idle)])
+	# The rule itself. Every key that only some sounds are played by, taken
+	# from a sound that has it and put on one that ends, is no cue and does
+	# not repeat (the crash), is found idle there, and nothing else with it.
+	var bare: Dictionary = _synth(Audio.CRASH).duplicate()
+	for name: String in Audio.PLAY_KEYS:
+		if not ANY_SOUND_KEYS.has(name):
+			bare.erase(name)
+	var tried: Dictionary = {}
+	for key: Variant in _data.root("sfx"):
+		var spec: Dictionary = _synth(str(key))
+		for name: String in Audio.PLAY_KEYS:
+			if ANY_SOUND_KEYS.has(name) or tried.has(name) or not spec.has(name):
+				continue
+			tried[name] = true
+			var planted: Dictionary = bare.duplicate()
+			planted[name] = spec[name]
+			var found: PackedStringArray = Audio.idle_keys(Audio.CRASH, planted)
+			_expect(found.size() == 1 and found[0] == name, "\"%s\" on a sound that it means nothing for is not found idle" % name)
+	_expect(tried.size() == Audio.PLAY_KEYS.size() - ANY_SOUND_KEYS.size(),
+			"%d of the %d keys that only some sounds are played by could be tried on another sound" % [tried.size(), Audio.PLAY_KEYS.size() - ANY_SOUND_KEYS.size()])
 
 
 # --- The buses ---------------------------------------------------------------
@@ -225,6 +266,178 @@ func _check_rumble() -> void:
 	_expect(not Audio.is_sounding(Audio.RUMBLE), "rumble_strip: heard under a car that stands")
 
 
+## The Rattle (GDD 6.3) has nothing to show, so it is heard (GDD 16.3): for as
+## long as its lamp is lit and the engine runs, and no longer.
+func _check_rattle() -> void:
+	var out: float = GameData.as_float(_synth(Audio.RATTLE).get("fade_out")) + STEP * 3.0
+	var cruise: float = _tuning.fi("gear_speeds", 2)
+	var rattling: Array[StringName] = [DriveSim.FAULT_RATTLE]
+	var pulling: Array[StringName] = [DriveSim.FAULT_PULL]
+	_rest()
+	_run(_snap({"speed": cruise}), 1.0)
+	_expect(not Audio.is_sounding(Audio.RATTLE), "rattle: heard with no lamp lit")
+	_run(_snap({"speed": cruise, "faults": pulling}), 1.0)
+	_expect(not Audio.is_sounding(Audio.RATTLE), "rattle: heard with the lamp of another fault lit")
+	_run(_snap({"speed": cruise, "faults": rattling}), 1.0)
+	_expect(Audio.is_sounding(Audio.RATTLE), "rattle: not heard with the Rattle's lamp lit")
+	_expect(is_equal_approx(Audio.volume_of(Audio.RATTLE), GameData.as_float(_synth(Audio.RATTLE).get("gain_db"))), "rattle: not all the way in after a second")
+	_expect(Audio.duck_db() == 0.0, "rattle: it turns everything else down; it is no functional cue")
+	# It frays him standing as it does driving (GDD 6.1): the engine runs.
+	_run(_snap({"speed": 0.0, "gear": GearGate.NEUTRAL, "faults": rattling}), 1.0)
+	_expect(Audio.is_sounding(Audio.RATTLE), "rattle: not heard in a car that stands with its engine running")
+	_run(_snap({"speed": cruise, "faults": rattling, "wrecked": true}), out)
+	_expect(not Audio.is_sounding(Audio.RATTLE), "rattle: still heard after a Wreck")
+	# Through a simulation of its own: the lamp that a hit lights, and that a
+	# fitter puts out again.
+	var sim: DriveSim = DriveSim.new(_data)
+	sim.in_encounter = true
+	_rest()
+	_drive(sim, 1.0)
+	_expect(not Audio.is_sounding(Audio.RATTLE), "rattle: heard in a car with no fault")
+	sim.faults.deck.erase(DriveSim.FAULT_RATTLE)
+	sim.faults.deck.push_front(DriveSim.FAULT_RATTLE)
+	sim.faults.light(1)
+	_drive(sim, 1.0)
+	_expect(sim.faults.has(DriveSim.FAULT_RATTLE) and Audio.is_sounding(Audio.RATTLE), "rattle: the fault is lit and not heard")
+	sim.faults.repair(DriveSim.FAULT_RATTLE)
+	_drive(sim, out)
+	_expect(not Audio.is_sounding(Audio.RATTLE), "rattle: still heard when the fault has been repaired")
+
+
+## A gust's tell (GDD 5.4, 10.3) is heard as well as seen (GDD 17.2): for as
+## long as its streaks blow, and no longer.
+func _check_gust() -> void:
+	var spec: Dictionary = _synth(Audio.GUST)
+	var tell: float = _tuning.f("gust_tell")
+	var out: float = GameData.as_float(spec.get("fade_out")) + STEP * 3.0
+	var cruise: float = _tuning.fi("gear_speeds", 2)
+	_rest()
+	_run(_snap({"speed": cruise}), 1.0)
+	_expect(not Audio.is_sounding(Audio.GUST), "gust: heard with no gust coming")
+	_run(_snap({"speed": cruise, "gust_tell": tell, "gust_dir": 1}), tell)
+	_expect(Audio.is_sounding(Audio.GUST), "gust: not heard while a gust's streaks blow")
+	_expect(is_equal_approx(Audio.volume_of(Audio.GUST), GameData.as_float(spec.get("gain_db"))), "gust: not all the way in by the end of the tell")
+	_expect(Audio.duck_db() == 0.0, "gust: it turns everything else down; it is no functional cue")
+	_run(_snap({"speed": cruise, "gust_tell": 0.0}), out)
+	_expect(not Audio.is_sounding(Audio.GUST), "gust: still heard when the tell is over")
+	_run(_snap({"speed": cruise, "gust_tell": tell, "gust_dir": -1, "wrecked": true}), 1.0)
+	_expect(not Audio.is_sounding(Audio.GUST), "gust: heard after a Wreck")
+	# The Storm itself: every tell of a gust is heard from its first frame to
+	# its last, and between them the wind is still.
+	var sim: DriveSim = _quiet_boss(BossSim.STORM)
+	_rest()
+	var told: int = 0
+	var unheard: int = 0
+	var gusts: int = 0
+	var blowing: bool = false
+	var quiet_for: float = INF
+	var heard_in_quiet: int = 0
+	for frame: int in roundi(STORM_GUST_WATCH * FPS):
+		_drive(sim, STEP)
+		var left: float = sim.leg.gust_tell_left
+		if left > 0.0:
+			told += 1
+			quiet_for = 0.0
+			if not blowing:
+				gusts += 1
+			if not Audio.is_sounding(Audio.GUST):
+				unheard += 1
+		else:
+			quiet_for += STEP
+			if quiet_for > out and Audio.is_sounding(Audio.GUST):
+				heard_in_quiet += 1
+		blowing = left > 0.0
+	if _expect(gusts >= 2, "the Storm: %d gust(s) in %.0f s; their sound was not checked" % [gusts, STORM_GUST_WATCH]):
+		_expect(unheard == 0, "gust: %d of the %d frames of the Storm's tells were silent" % [unheard, told])
+		_expect(heard_in_quiet == 0, "gust: heard in %d frames with no gust coming" % heard_in_quiet)
+
+
+## The Storm's thick dust (GDD 10.3) is heard as well as seen (GDD 17.2):
+## from when it begins to close in until it thins.
+func _check_dust() -> void:
+	var spec: Dictionary = _synth(Audio.DUST)
+	var out: float = GameData.as_float(spec.get("fade_out")) + STEP * 3.0
+	var into: float = GameData.as_float(spec.get("fade_in"))
+	var cruise: float = _tuning.fi("gear_speeds", 2)
+	_rest()
+	_run(_snap({"speed": cruise}), 1.0)
+	_expect(not Audio.is_sounding(Audio.DUST), "dust: heard on a clear road")
+	_run(_snap({"speed": cruise, "dust_thick": false, "dust_closing": 0.0, "dust_change_in": 5.0}), 1.0)
+	_expect(not Audio.is_sounding(Audio.DUST), "dust: heard in thin dust that is not yet closing in")
+	_run(_snap({"speed": cruise, "dust_thick": false, "dust_closing": 0.5}), STEP * 2.0)
+	_expect(Audio.is_sounding(Audio.DUST), "dust: not heard as the thick dust closes in")
+	_run(_snap({"speed": cruise, "dust_thick": true, "dust_closing": 0.0}), into + STEP)
+	_expect(Audio.is_sounding(Audio.DUST) and is_equal_approx(Audio.volume_of(Audio.DUST), GameData.as_float(spec.get("gain_db"))),
+			"dust: not all the way in once the dust is thick")
+	_expect(Audio.duck_db() == 0.0, "dust: it turns everything else down; it is no functional cue")
+	_run(_snap({"speed": cruise, "dust_thick": false, "dust_closing": 0.0}), out)
+	_expect(not Audio.is_sounding(Audio.DUST), "dust: still heard when the dust has thinned")
+	_run(_snap({"speed": cruise, "dust_thick": true, "wrecked": true}), 1.0)
+	_expect(not Audio.is_sounding(Audio.DUST), "dust: heard after a Wreck")
+	# The Storm itself, standing or driving (the dust goes by the clock): it
+	# is heard from the first frame of the closing to the last of thick dust.
+	var storm: Dictionary = _boss_numbers(BossSim.STORM)
+	var cycle: float = GameData.as_float(storm.get("thin_s")) + GameData.as_float(storm.get("thick_s"))
+	var tell: float = GameData.as_float(storm.get("dust_tell_s"))
+	var sim: DriveSim = _quiet_boss(BossSim.STORM)
+	_rest()
+	var unheard: int = 0
+	var early: int = 0
+	var closing: int = 0
+	var thick: int = 0
+	for frame: int in roundi(cycle * FPS):
+		_drive(sim, STEP)
+		var shot: Dictionary = sim.snapshot()
+		var wanted: bool = GameData.as_bool(shot["dust_thick"]) or GameData.as_float(shot["dust_closing"]) > 0.0
+		if GameData.as_bool(shot["dust_thick"]):
+			thick += 1
+		elif wanted:
+			closing += 1
+		if wanted and not Audio.is_sounding(Audio.DUST):
+			unheard += 1
+		if not wanted and GameData.as_float(shot["dust_change_in"]) > tell + out and GameData.as_float(shot["dust_change_in"]) < GameData.as_float(storm.get("thin_s")) - out and Audio.is_sounding(Audio.DUST):
+			early += 1
+	_expect(absi(closing - roundi(tell * FPS)) <= 1, "dust: the Storm's dust closes in for %d frames; its tell is %.1f s" % [closing, tell])
+	_expect(thick > 0 and unheard == 0, "dust: %d frames of the Storm's closing and thick dust were silent" % unheard)
+	_expect(early == 0, "dust: heard in %d frames of thin dust that was not closing in" % early)
+
+
+## The soldier (GDD 10.2) is heard as well as seen (GDD 17.2): a whistle as
+## he sets off toward the car, a knock with the sign he puts up.
+func _check_soldier() -> void:
+	var numbers: Dictionary = _boss_numbers(BossSim.CHECKPOINT)
+	var stow: float = GameData.as_float(numbers.get("stow_s"))
+	var sim: DriveSim = DriveSim.new(_data)
+	var plan: Dictionary = BossSim.plan(_data, BossSim.CHECKPOINT, "", BOSS_SEED)
+	var nobody: Array = []
+	for lane: int in GameData.as_int(plan.get("lanes")):
+		nobody.append([])
+	plan["queue"] = nobody
+	sim.gate.reset(1)
+	sim.begin_leg(plan)
+	sim.in_encounter = true
+	sim.drain_events()
+	sim.car.x = sim.car.lane_center(1)
+	sim.car.s = sim.boss.bar_at - sim.car.length() * 0.5
+	sim.car.speed = 0.0
+	_rest()
+	var whistles: int = Audio.starts_of(Audio.WHISTLE)
+	var knocks: int = Audio.starts_of(Audio.KNOCK)
+	var guard: int = roundi(SOLDIER_SETS_OFF * FPS)
+	while sim.boss.phase != BossSim.STOW and guard > 0:
+		guard -= 1
+		_drive(sim, STEP)
+	if not _expect(sim.boss.phase == BossSim.STOW, "the Checkpoint: the soldier did not set off toward a car at the bar; his sounds were not checked"):
+		return
+	_expect(Audio.starts_of(Audio.WHISTLE) == whistles + 1, "soldier_whistle: not heard as the soldier sets off toward the car")
+	_expect(Audio.starts_of(Audio.KNOCK) == knocks, "soldier_knock: heard before he has come")
+	_drive(sim, stow + 1.0)
+	_expect(sim.boss.phase == BossSim.PAPERS, "the Checkpoint: the soldier did not arrive in %.0f s" % (stow + 1.0))
+	_expect(Audio.starts_of(Audio.WHISTLE) == whistles + 1, "soldier_whistle: heard more than once on his way")
+	_expect(Audio.starts_of(Audio.KNOCK) == knocks + 1, "soldier_knock: not heard once as his sign goes up")
+	_expect(Audio.duck_db() == 0.0, "soldier: his sounds turn everything else down; they are no functional cues")
+
+
 ## The heartbeat is the tell of Pound: from the first of per_minute where
 ## Pound begins to the second at the edge of a Snap.
 func _check_heartbeat() -> void:
@@ -242,6 +455,11 @@ func _check_heartbeat() -> void:
 		_expect(beats >= floori(asked) and beats <= ceili(asked) + 1,
 				"heartbeat: %d beats in %.0f s at Nerves %.0f; %.0f a minute is %.1f" % [beats, COUNT_SECONDS, nerves, rate, asked])
 	_expect(_count(Audio.HEARTBEAT, _snap({"pound": false, "nerves": pound_from}), COUNT_SECONDS) == 0, "heartbeat: heard without Pound")
+	# Nerves that jump (a hit, a slap) are heard at the pace they have jumped to.
+	var slow: float = Audio.SECONDS_PER_MINUTE / GameData.as_float(per_minute[0])
+	var fast: float = Audio.SECONDS_PER_MINUTE / GameData.as_float(per_minute[1])
+	_expect(_jump_is_heard(Audio.HEARTBEAT, _snap({"pound": true, "nerves": pound_from}), _snap({"pound": true, "nerves": snap_at}), slow, fast),
+			"heartbeat: Nerves that jump to the edge of a Snap are not heard within %.2f s; the slow beat is waited out" % fast)
 
 
 func _check_radio() -> void:
@@ -327,6 +545,10 @@ func _check_siren() -> void:
 	_expect(_count(Audio.SIREN, _snap({"suspicion_watching": true, "suspicion": most, "pulled_over": true}), calm * 2.0) == 0,
 			"siren_chirp: heard while the officer stands at the window")
 	_expect(_count(Audio.SIREN, _snap({}), calm * 2.0) == 0, "siren_chirp: heard with nobody behind him")
+	# Suspicion that jumps (the phone, contraband: GDD 6.5) is heard at the
+	# pace it has jumped to, not after the long gap that began before it.
+	_expect(_jump_is_heard(Audio.SIREN, _snap({"suspicion_watching": true, "suspicion": 0.0}), _snap({"suspicion_watching": true, "suspicion": most}), calm, hot),
+			"siren_chirp: Suspicion that jumps to the top is not heard within %.1f s; the calm gap is waited out" % hot)
 
 
 func _check_phone() -> void:
@@ -575,6 +797,82 @@ func _check_events() -> void:
 	_expect(Audio.starts_of(Audio.HECKLE) == dings + 1, "a heckle begins without its ding")
 
 
+## A Wreck stops the Telling where it stands (GDD 3.2): while the Table
+## objects the snapshot stays what it was, and nothing that it says is going
+## on is heard to go on. Only the radio plays over the cut.
+func _check_wreck() -> void:
+	var cut: float = _tuning.f("wreck_to_wheel")
+	var music: String = Audio.RADIO % String(ItemSim.MUSIC)
+	var rattling: Array[StringName] = [DriveSim.FAULT_RATTLE]
+	var going: Dictionary = {
+		"speed": _tuning.fi("gear_speeds", 2), "gear": PAR_GEAR, "on_rumble": true, "radio": ItemSim.MUSIC,
+		"snap": true, "cramp": DriveSim.HUM, "rear_end_in": cut, "faults": rattling,
+		"pound": true, "nerves": _tuning.f("snap_at"), "caller": String(ItemSim.CALLER_DISPATCHER),
+		"suspicion_watching": true, "suspicion": _tuning.f("suspicion_max"), "indicator": 1,
+	}
+	var repeating: PackedStringArray = [Audio.HEARTBEAT, Audio.RING, Audio.SIREN, Audio.TICK]
+	var starts: Dictionary = {}
+	_rest()
+	for id: String in repeating:
+		starts[id] = Audio.starts_of(id)
+	_run(_snap(going), 1.0)
+	for id: String in [Audio.ENGINE, Audio.RATTLE, Audio.RUMBLE, Audio.HORN, Audio.HORN_BEHIND, Audio.HUM, music]:
+		_expect(Audio.is_sounding(id), "the Wreck: %s is not heard before it" % id)
+	for id: String in repeating:
+		_expect(Audio.starts_of(id) > GameData.as_int(starts[id]), "the Wreck: %s is not heard before it" % id)
+		starts[id] = Audio.starts_of(id)
+	going["wrecked"] = true
+	_run(_snap(going), STEP)
+	_expect(not Audio.is_sounding(Audio.RING), "the Wreck: the ring that was sounding is not cut")
+	_run(_snap(going), cut)
+	for id: String in Audio.ids():
+		if GameData.as_bool(_synth(id).get("loop")):
+			_expect(Audio.is_sounding(id) == (id == music), "the Wreck: %s %s through the cut" % [id, "is not heard" if id == music else "is heard"])
+	for id: String in repeating:
+		_expect(Audio.starts_of(id) == GameData.as_int(starts[id]), "the Wreck: %s goes on through the cut (%d times)" % [id, Audio.starts_of(id) - GameData.as_int(starts[id])])
+
+	# A Telling of its own: four lamps lit, his Nerves a scrape short of a
+	# Snap, and the guardrail. The scrape is the last lamp and the last straw
+	# at once, so the snapshot says "snap" for as long as the Table objects:
+	# his horn is heard for the honk he gave and no longer, the engine is dead,
+	# and both are as they were when the Telling is told again.
+	var sim: DriveSim = DriveSim.new(_data)
+	sim.begin_telling(TABLE, TELLING_SEED)
+	_rest()
+	_drive(sim, 1.0)
+	_expect(Audio.is_sounding(Audio.ENGINE), "the Wreck: the engine is not heard in a Telling")
+	sim.faults.light(sim.faults.capacity - 1)
+	sim.nerves.add(_tuning.f("snap_at") - _tuning.fi("hit_nerves", 0) * 0.5 - sim.nerves.value)
+	sim.car.x = sim.car.guardrail_x()
+	var guard: int = roundi(FPS)
+	while not sim.wrecked and guard > 0:
+		guard -= 1
+		_drive(sim, STEP, null, false)
+	if not _expect(sim.wrecked and GameData.as_bool(sim.snapshot()["snap"]), "the Wreck: a scrape with four lamps lit did not wreck him in a Snap; the cut was not checked"):
+		return
+	var honk: float = GameData.as_float(_synth(Audio.HORN).get("hold")) + GameData.as_float(_synth(Audio.HORN).get("fade_out"))
+	var horn_frames: int = 0
+	var cut_frames: int = 0
+	var engine_heard: bool = true
+	guard = roundi((cut + 1.0) * FPS)
+	while sim.wrecked and guard > 0:
+		guard -= 1
+		_drive(sim, STEP, null, false)
+		cut_frames += 1
+		if Audio.is_sounding(Audio.HORN):
+			horn_frames += 1
+		if sim.wrecked:
+			engine_heard = Audio.is_sounding(Audio.ENGINE)
+	_expect(absi(cut_frames - roundi(cut * FPS)) <= 1, "the Wreck: the cut lasted %.2f s, not %.1f" % [float(cut_frames) * STEP, cut])
+	_expect(horn_frames > 0 and float(horn_frames) * STEP <= honk + STEP * 2.0,
+			"the Wreck: his horn is heard for %.2f s of the cut; the honk he gave is %.2f s" % [float(horn_frames) * STEP, honk])
+	_expect(not engine_heard or cut < GameData.as_float(_synth(Audio.ENGINE).get("fade_out")),
+			"the Wreck: the engine is still heard at the end of the cut")
+	_drive(sim, 1.0)
+	_expect(not sim.wrecked and Audio.is_sounding(Audio.ENGINE), "the Wreck: the engine does not start again when the Telling is told again")
+	_expect(not Audio.is_sounding(Audio.HORN), "the Wreck: his horn sounds on when the Telling is told again")
+
+
 ## When no snapshot comes any more, what it asked for goes quiet.
 func _check_scene_gone() -> void:
 	_rest()
@@ -596,6 +894,11 @@ func _check_stream_files() -> void:
 	var yawn: AudioStreamWAV = Audio.stream_of("yawn") as AudioStreamWAV
 	var music: String = Audio.RADIO % String(ItemSim.MUSIC)
 	var disk_path: String = Game.user_dir.path_join(STREAM_FILE)
+	var changed: GameData = GameData.load_from(_data.dir)
+	# Every copy of the project shares this folder, and a test run of any of
+	# them clears it away as it ends: it is made again here, as Game.write_save
+	# makes it, and the file is read back as soon as it is written.
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(Game.user_dir))
 	if yawn == null or yawn.save_to_wav(disk_path) != OK:
 		_fail("stream: cannot write %s to try it" % disk_path)
 		return
@@ -605,7 +908,6 @@ func _check_stream_files() -> void:
 	# read from the disk.
 	var shared: AudioStreamWAV = yawn.duplicate() as AudioStreamWAV
 	shared.take_over_path(SHARED_STREAM)
-	var changed: GameData = GameData.load_from(_data.dir)
 	GameData.as_dict(changed.root("sfx").get(Audio.HECKLE))["stream"] = SHARED_STREAM
 	GameData.as_dict(changed.root("sfx").get(music))["stream"] = SHARED_STREAM
 	GameData.as_dict(changed.root("sfx").get(Audio.SCRAPE))["stream"] = disk_path
@@ -621,6 +923,9 @@ func _check_stream_files() -> void:
 			"stream: a file that an entry loops must itself be left as it is")
 	_expect(read != null and read.loop_mode == AudioStreamWAV.LOOP_DISABLED and read.data.size() / 2 == frames,
 			"stream: scrape must play the file on the disk that its entry names")
+	# The file on the disk has been read: it is not asked for again.
+	GameData.as_dict(changed.root("sfx").get(Audio.SCRAPE))["stream"] = null
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(disk_path))
 	# A file that loops by itself keeps its loop for an entry that loops, and
 	# is played once, as a copy, by an entry that ends.
 	shared.loop_mode = AudioStreamWAV.LOOP_FORWARD
@@ -635,7 +940,6 @@ func _check_stream_files() -> void:
 	_expect(Audio.stream_of(Audio.HECKLE).get_length() < yawn.get_length() * 0.5
 			and (Audio.stream_of(music) as AudioStreamWAV).loop_end != frames,
 			"stream: the generated sounds did not come back")
-	DirAccess.remove_absolute(ProjectSettings.globalize_path(disk_path))
 
 
 ## What a frame of sound costs: a busy snapshot applied and stepped.
@@ -699,6 +1003,22 @@ func _count(id: String, snapshot: Dictionary, seconds: float) -> int:
 	return Audio.starts_of(id) - before
 
 
+## True when a sound that repeats every `slow_gap` seconds in the state `slow`
+## is heard again within `fast_gap` of the state changing to `fast`, half a
+## fast gap after it was last heard: the old gap is not waited out.
+func _jump_is_heard(id: String, slow: Dictionary, fast: Dictionary, slow_gap: float, fast_gap: float) -> bool:
+	_rest()
+	var heard: int = Audio.starts_of(id)
+	var guard: int = roundi((slow_gap + 1.0) * FPS)
+	while Audio.starts_of(id) == heard and guard > 0:
+		guard -= 1
+		_run(slow, STEP)
+	_run(slow, fast_gap * 0.5)
+	heard = Audio.starts_of(id)
+	_run(fast, fast_gap + STEP * 2.0)
+	return guard > 0 and Audio.starts_of(id) == heard + 1
+
+
 ## The numbers of a boss: the object of its own name in its record.
 func _boss_numbers(boss_id: String) -> Dictionary:
 	return GameData.as_dict(_data.record("bosses", boss_id).get(boss_id))
@@ -756,14 +1076,16 @@ func _stand_in_the_storm(brake: DriveInput) -> DriveSim:
 
 
 ## A simulation driven as the drive scene drives it: two ticks a frame, its
-## events onto the bus, its snapshot to Audio. The car is kept in its lane.
-## `input` is what the player does meanwhile (nothing, if it is not given).
-func _drive(sim: DriveSim, seconds: float, input: DriveInput = null) -> void:
+## events onto the bus, its snapshot to Audio. The car is kept in its lane
+## unless `in_lane` is false. `input` is what the player does meanwhile
+## (nothing, if it is not given).
+func _drive(sim: DriveSim, seconds: float, input: DriveInput = null, in_lane: bool = true) -> void:
 	if input == null:
 		input = DriveInput.new()
 	for frame: int in roundi(seconds * FPS):
 		for tick: int in roundi(STEP / DriveSim.DT):
-			sim.car.x = sim.car.lane_center(clampi(sim.car.lane_of(sim.car.x), 0, sim.car.lanes - 1))
+			if in_lane:
+				sim.car.x = sim.car.lane_center(clampi(sim.car.lane_of(sim.car.x), 0, sim.car.lanes - 1))
 			sim.step(input)
 			for event: Dictionary in sim.drain_events():
 				Events.emit_event(GameData.as_string(event.get("type")), event)

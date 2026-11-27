@@ -9,7 +9,8 @@ extends TestSuite
 ##   3. Each way of breaking that fixture is caught with the right error code,
 ##      so "validates" means something.
 
-const BROKEN_DIR: String = "user://test_runs/broken_data"
+## Under this process's own test folder (Smoke.test_user_root()).
+var _broken_dir: String = Smoke.test_user_root().path_join("broken_data")
 
 ## The records of GDD 14, verbatim.
 const GDD_ITEM: String = """
@@ -80,6 +81,7 @@ func test_data_01() -> void:
 	_check_broken_item_rules()
 	_check_broken_passenger_rules()
 	_check_broken_cabin_props()
+	_check_broken_boss_rules()
 
 
 # --- 1. Shipped data ----------------------------------------------------------
@@ -97,6 +99,69 @@ func _check_shipped_data() -> void:
 		data.tuning.keys().size(), data.records("anchors").size(), data.line_ids().size()])
 
 
+# --- 9. The set pieces (M7) ----------------------------------------------------
+
+## The rules a boss's record must keep (GDD 10.2 to 10.4, D-046 to D-048 and
+## the review of M7): each broken once.
+func _check_broken_boss_rules() -> void:
+	_reset_fixture()
+	_record("bosses", "storm").erase("storm")
+	_expect("E_MISSING", "storm", "a Storm without its numbers")
+
+	_reset_fixture()
+	_boss_numbers("storm")["moved_off_kmh"] = _boss_numbers("storm")["stopped_kmh"]
+	_expect("E_RANGE", "storm.moved_off_kmh", "a Storm in which driving off is no more than rolling")
+
+	_reset_fixture()
+	_boss_numbers("storm")["rear_end_tell_s"] = 1.0
+	_expect("E_RANGE", "storm.rear_end_tell_s", "a horn behind him that leaves no time to drive off")
+
+	_reset_fixture()
+	_boss_numbers("storm")["dust_tell_s"] = GameData.as_float(_boss_numbers("storm")["thin_s"]) + 1.0
+	_expect("E_RANGE", "storm.dust_tell_s", "thick dust that closes in for longer than the dust is thin")
+
+	_reset_fixture()
+	_boss_numbers("storm").erase("dust_tell_s")
+	_expect("E_MISSING", "storm.dust_tell_s", "a Storm that does not say how long its thick dust is announced")
+
+	_reset_fixture()
+	GameData.as_dict(_boss_numbers("storm")["tail_lights"])["gap_m"] = [220, 140]
+	_expect("E_RANGE", "storm.tail_lights.gap_m", "tail lights whose gaps are not least, most")
+
+	_reset_fixture()
+	GameData.as_dict(_boss_numbers("checkpoint")["corridor"])["at_m"] = 20
+	_expect("E_RANGE", "checkpoint.corridor", "a taper that begins before the Checkpoint's road")
+
+	_reset_fixture()
+	GameData.as_dict(_boss_numbers("checkpoint")["corridor"])["gap_m"] = 1.0
+	_expect("E_RANGE", "checkpoint.corridor.gap_m", "barriers nearer than the car is wide")
+
+	_reset_fixture()
+	GameData.as_dict(_boss_numbers("checkpoint")["queue"])["cars"] = 40
+	_expect("E_RANGE", "checkpoint.queue.cars", "a queue that does not fit between the barriers")
+
+	_reset_fixture()
+	_boss_numbers("checkpoint")["pass_under"] = 120
+	_expect("E_RANGE", "checkpoint.pass_under", "passing at more Suspicion than turns him back")
+
+	_reset_fixture()
+	_boss_numbers("checkpoint")["documents"] = ["licence", "licence", "registration"]
+	_expect("E_DUP_ID", "checkpoint.documents", "a document listed twice")
+
+	_reset_fixture()
+	_boss_numbers("dawn")["sunrise_at_m"] = 3000
+	_expect("E_RULE", "dawn", "a sunrise after the last checkpoint")
+
+	_reset_fixture()
+	_record("bosses", "storm")["modifiers"] = ["crosswind", "thorough"]
+	_expect("E_RULE", "bosses[storm].modifiers", "a boss with another boss's modifier")
+
+
+## A boss's own numbers in the fixture (the object under its id).
+func _boss_numbers(id: String) -> Dictionary:
+	return GameData.as_dict(_record("bosses", id)[id])
+
+
 # --- 6. What items say they do (M6) -------------------------------------------
 
 ## The rules that came with the items of GDD 7: entries of gives and takes,
@@ -106,9 +171,34 @@ func _check_broken_item_rules() -> void:
 	_record("items", "cigarettes")["synergies"] = [{"with": "tea_glass", "rule": "nonsense"}]
 	_expect("E_ENUM", "items[cigarettes].synergies[0].rule", "a synergy rule the simulation does not know")
 
+	# A synergy says the numbers its rule works with: without them the
+	# simulation would calm by nothing, pay nothing, multiply by nothing.
+	_reset_fixture()
+	_record("items", "cigarettes")["synergies"] = [{"with": "tea_glass", "rule": "sip_extends_burn"}]
+	_expect("E_RULE", "items[cigarettes].synergies[0]", "a sip that lengthens the burn by no time")
+	for case: Array in [["beads", "bead_calm", "amount"], ["arak_flask", "photo_sobers", "amount"], ["arak_flask", "numb_courage", "amount"],
+			["phone", "calls_in_a_row", "amount"], ["phone", "calls_in_a_row", "every"]]:
+		var owner: String = case[0]
+		var rule: String = case[1]
+		var number: String = case[2]
+		_reset_fixture()
+		var at: int = _synergy_index(owner, rule)
+		if check(at >= 0 and _synergy(owner, at).has(number), "(the shipped %s has the synergy %s with its \"%s\")" % [owner, rule, number]):
+			_synergy(owner, at).erase(number)
+			_expect("E_RULE", "items[%s].synergies[%d]" % [owner, at], "the synergy %s with no \"%s\"" % [rule, number])
+	for case: Array in [[0, "E_RANGE", "every no calls"], [-3, "E_RANGE", "every minus three calls"], [2.5, "E_TYPE", "every two and a half calls"], ["third", "E_TYPE", "a word for how often"]]:
+		_reset_fixture()
+		var at: int = _synergy_index("phone", "calls_in_a_row")
+		_synergy("phone", at)["every"] = case[0]
+		_expect(GameData.as_string(case[1]), "items[phone].synergies[%d].every" % at, "a bonus for calls in a row %s" % GameData.as_string(case[2]))
+
 	_reset_fixture()
 	_record("items", "cigarettes")["tags"] = ["smoke", "gadget"]
 	_expect("E_REF", "items[cigarettes].tags[1]", "a tag that is not in the tag list")
+
+	_reset_fixture()
+	_record("items", "cigarettes")["until_boss"] = "ambush"
+	_expect("E_REF", "items[cigarettes].until_boss", "an item for a boss the Telling does not have")
 
 	_reset_fixture()
 	_record("items", "cigarettes")["gives"] = [{"effect": "lit", "duration": 25, "bogus": 1}]
@@ -138,6 +228,20 @@ func _check_broken_item_rules() -> void:
 	_record("items", "cigarettes")["takes"] = [{"resource": "nerves"}]
 	_expect("E_RULE", "items[cigarettes].takes[0]", "a resource entry with no amount")
 
+	# By the second there are only Nerves: the simulation would take cash by
+	# the second, or a status with a rate, out of his Nerves.
+	_reset_fixture()
+	_record("items", "cigarettes")["takes"] = [{"resource": "cash", "per_s": 1}]
+	_expect("E_RULE", "items[cigarettes].takes[0]", "cash by the second")
+
+	_reset_fixture()
+	_record("items", "cigarettes")["gives"] = [{"effect": "lit", "per_s": 1}]
+	_expect("E_RULE", "items[cigarettes].gives[0]", "a status with a rate by the second")
+
+	_reset_fixture()
+	_record("items", "cigarettes")["takes"] = [{"resource": "nerves", "per_s": 1}]
+	check(_validate().is_empty(), "Nerves by the second are valid; first: %s" % _first(_validate()))
+
 	_reset_fixture()
 	_record("items", "cigarettes")["gives"] = [{"effect": "lit", "duration": "long"}]
 	_expect("E_TYPE", "items[cigarettes].gives[0].duration", "a duration that is not a number")
@@ -149,6 +253,17 @@ func _check_broken_item_rules() -> void:
 	_reset_fixture()
 	_record("items", "cigarettes")["gives"] = [{"resource": "nerves", "amount": -2, "synergy": "bead_calm"}]
 	_expect("E_REF", "items[cigarettes].gives[0].synergy", "an entry naming a synergy the item does not have")
+
+	# With its partner there the synergy's amount takes the entry's place:
+	# a synergy with none would make the entry nothing.
+	_reset_fixture()
+	_record("items", "cigarettes")["synergies"] = [{"with": "tea_glass", "rule": "no_smoke_haze"}]
+	_record("items", "cigarettes")["gives"] = [{"resource": "nerves", "amount": -2, "synergy": "no_smoke_haze"}]
+	_expect("E_RULE", "items[cigarettes].gives[0].synergy", "an entry naming a synergy that has no amount for it")
+
+	_reset_fixture()
+	_record("items", "cigarettes")["gives"] = [{"resource": "nerves", "amount": -2, "synergy": "sip_extends_burn"}]
+	check(_validate().is_empty(), "an entry naming a synergy that has an amount is valid; first: %s" % _first(_validate()))
 
 	_reset_fixture()
 	_record("items", "cigarettes")["gives"] = [{"passive": "moon_boots", "amount": 1}]
@@ -202,6 +317,22 @@ func _check_broken_item_rules() -> void:
 	carried["across_m"] = 0.4
 	check(_validate().is_empty(), "a carry across with no destination is valid; first: %s" % _first(_validate()))
 
+	# Carried back to where it was taken up, a thing must first be taken
+	# somewhere: with no distance the ritual is a press and a release.
+	_reset_fixture()
+	carried = _record("rituals", "tape_flip")
+	check_eq(GameData.as_string(carried.get("to")), "@slot", "(the tape goes out of the deck and in again)")
+	check(_validate().is_empty(), "with its distance that is valid; first: %s" % _first(_validate()))
+	carried.erase("out_m")
+	_expect("E_RULE", "rituals[tape_flip]", "a carry back to the slot with no distance to go first")
+
+	_reset_fixture()
+	carried = _record("rituals", "hand_banknotes")
+	carried["to"] = carried["anchor"]
+	_expect("E_RULE", "rituals[hand_banknotes]", "a carry from an anchor to the same anchor with no distance to go first")
+	carried["out_m"] = 0.3
+	check(_validate().is_empty(), "and with a distance it is valid; first: %s" % _first(_validate()))
+
 	# Statuses and anchors.
 	_reset_fixture()
 	_record("effects", "lit")["immune"] = ["sneeze"]
@@ -214,6 +345,11 @@ func _check_broken_item_rules() -> void:
 	_reset_fixture()
 	_record("anchors", "tape")["over"] = "moon"
 	_expect("E_REF", "anchors[tape].over", "an anchor standing over an unknown one")
+
+	# Over itself, an anchor would go out of use whenever something sat there.
+	_reset_fixture()
+	_record("anchors", "tape")["over"] = "tape"
+	_expect("E_RULE", "anchors[tape].over", "an anchor standing over itself")
 
 
 ## The rules that came with the passengers of GDD 8: what a Hand can be,
@@ -765,14 +901,14 @@ func _check_broken_tuning_anchors_lines() -> void:
 
 
 func _check_broken_files() -> void:
-	var dir_path: String = ProjectSettings.globalize_path(BROKEN_DIR)
+	var dir_path: String = ProjectSettings.globalize_path(_broken_dir)
 	DirAccess.make_dir_recursive_absolute(dir_path)
-	_write(BROKEN_DIR.path_join("tuning.json"), "{ \"hand_wheel\": { \"hand_speed\": 1.5 ")
-	_write(BROKEN_DIR.path_join("items.json"), "[1, 2, 3]")
-	_write(BROKEN_DIR.path_join("lines_en.csv"), "key,en,ar\nnarrator.start,hello,\n")
-	_write(BROKEN_DIR.path_join("lines_ar.csv"),
+	_write(_broken_dir.path_join("tuning.json"), "{ \"hand_wheel\": { \"hand_speed\": 1.5 ")
+	_write(_broken_dir.path_join("items.json"), "[1, 2, 3]")
+	_write(_broken_dir.path_join("lines_en.csv"), "key,en,ar\nnarrator.start,hello,\n")
+	_write(_broken_dir.path_join("lines_ar.csv"),
 			"id,speaker,text,needs_writer\na.b,,,true\na.b,,,true\nc.d,,\ne.f,,,maybe\n")
-	var broken: GameData = GameData.load_from(BROKEN_DIR)
+	var broken: GameData = GameData.load_from(_broken_dir)
 	var errors: PackedStringArray = DataValidator.validate(broken)
 	check(_has(errors, "E_JSON", "tuning.json"), "a JSON syntax error is reported with its file")
 	check(_has(errors, "E_JSON", "items.json"), "a JSON file whose top level is not an object is reported")
@@ -847,6 +983,24 @@ func _record(set_name: String, id: String) -> Dictionary:
 			return record
 	fail("fixture has no %s record '%s'" % [set_name, id])
 	return {}
+
+
+## Where in an item's "synergies" the one under a rule is (-1: nowhere).
+func _synergy_index(item_id: String, rule: String) -> int:
+	var synergies: Array = GameData.as_array(_record("items", item_id).get("synergies"))
+	for index: int in synergies.size():
+		if GameData.as_string(GameData.as_dict(synergies[index]).get("rule")) == rule:
+			return index
+	return -1
+
+
+## One synergy of an item in the fixture, to change.
+func _synergy(item_id: String, index: int) -> Dictionary:
+	var synergies: Array = GameData.as_array(_record("items", item_id).get("synergies"))
+	if index < 0 or index >= synergies.size():
+		fail("fixture item '%s' has no synergy %d" % [item_id, index])
+		return {}
+	return synergies[index]
 
 
 func items_root_for_test() -> Dictionary:

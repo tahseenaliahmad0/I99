@@ -37,6 +37,7 @@ passenger.apprentice.radio,Boy,(he turns the dial),true
 sign.hitcher,,[%s],false
 radio.news.patrol,Newsreader,Traffic police are out on the southern road tonight.,true
 noor.call.1,Noor,Baba? Are you awake?,true
+noor.call.bye,Noor,"Go on, Baba. Drive.",true
 finale.proverb,"Noor, then Abu Noor",They say one hand doesn't clap. / No. But it drives.,true
 speaker.abu_noor,,Abu Noor,true
 speaker.noor,,Noor,true
@@ -222,6 +223,10 @@ sign.document.id,,[ID],true
 sign.document.registration,,[REGISTRATION],true
 soldier.window,,(he taps on the glass),true
 soldier.wrong,,(he shakes his head),true
+soldier.pass,,(he waves him on),true
+soldier.search,,"(he is searched: out of the car, everything open)",true
+soldier.turned_back,,(he is sent to the back of the queue),true
+soldier.bribe,,(the notes are gone; he is waved on),true
 hud.checkpoint.queue,,Checkpoint: the queue,false
 hud.checkpoint.stow,,Checkpoint: the soldier is %s s away,false
 hud.checkpoint.papers,,Checkpoint: he wants %s (%s s),false

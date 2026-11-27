@@ -9,7 +9,16 @@ extends RefCounted
 const ERROR_PREFIXES: PackedStringArray = ["ERROR:", "SCRIPT ERROR:", "USER ERROR:", "USER SCRIPT ERROR:"]
 const WARNING_PREFIXES: PackedStringArray = ["WARNING:", "USER WARNING:"]
 const DEFAULT_FRAMES: int = 600
+## What the folder of a test process begins with; its process id follows.
 const TEST_USER_ROOT: String = "user://test_runs"
+
+
+## The folder this process and the scenes it launches write under. Every copy
+## of the project (a worktree, a snapshot) shares `user://`, and several may
+## be tested at once: each process that runs tests or a tool has a folder of
+## its own, so that one run never clears away what another is using.
+static func test_user_root() -> String:
+	return "%s_%d" % [TEST_USER_ROOT, OS.get_process_id()]
 
 
 ## Returns { "exit_code": int, "output": String, "errors": PackedStringArray,
@@ -29,7 +38,7 @@ static func run_scene(scene_path: String, frames: int = DEFAULT_FRAMES,
 		if arg.begins_with("--user-dir="):
 			has_user_dir = true
 	if not has_user_dir:
-		args.append("--user-dir=%s" % TEST_USER_ROOT.path_join("smoke_" + scene_path.get_file().get_basename()))
+		args.append("--user-dir=%s" % test_user_root().path_join("smoke_" + scene_path.get_file().get_basename()))
 	args.append_array(user_args)
 
 	var captured: Array = []
@@ -63,9 +72,9 @@ static func strip_ansi(text: String) -> String:
 	return regex.sub(text, "", true)
 
 
-## Deletes everything the test processes wrote under user://test_runs.
+## Deletes everything this process and the scenes it launched wrote.
 static func clean_test_user_root() -> void:
-	_remove_recursive(TEST_USER_ROOT)
+	_remove_recursive(test_user_root())
 
 
 static func _remove_recursive(path: String) -> void:

@@ -1683,7 +1683,8 @@ built by the workflow `m6-fixes`; this entry is what that work is held to.
   table of GDD 16.5 has none, GDD 1.5 forbids resources the document does
   not name, and the mix has about 0.1 dB of room left under the 6 dB rule.
   GDD 17.2 ("every tell has both a sound and a visual") is therefore not
-  met for those: NEEDS OWNER.
+  met for those: NEEDS OWNER. (Superseded by D-058: the tells have their
+  sounds.)
 - **Tools.** `tools/audio_check.gd` (a step of `tools/check.sh` after the
   data validator; with `-- --wav=<folder>` it writes every buffer for
   listening) and `tools/audio_drive_check.gd`, which holds what needs the
@@ -1691,6 +1692,26 @@ built by the workflow `m6-fixes`; this entry is what that work is held to.
   starts or ends.
 - **Nobody has heard it.** There are no speakers here: levels and character
   come from measurements and an offline recording. NEEDS OWNER.
+- **After its review** (merged as `m10/audio-in-fix`):
+  - Every `gain_db` is 5 dB lower, cues and the rest alike: the three cues
+    that can sound at once came to 1.7 of full scale. The check now adds
+    up the cues' peaks and fails above full scale.
+  - The added harmonic is the 12th, 11th, 10th, 9th and 8th of the engine's
+    pitch in gears 1 to 5: at low harmonics the two loops, each at its own
+    phase, could cancel instead of add.
+  - A Wreck silences everything the snapshot drives (the horn of a Snap,
+    the horn behind him, the hum, the heartbeat, the phone, the siren, the
+    indicator), as it did the engine. What had been asked for by itself
+    plays out into the cut. The radio plays on over it: NEEDS OWNER.
+  - A sound that repeats follows a gap that has grown shorter at once (a
+    jump in Suspicion or Nerves is heard within one new gap).
+  - Keys that say how a sound is played and mean nothing for that sound
+    are errors at boot, like the generator's.
+  - **A 34th sound, `rattle`**: GDD 16.3 asks for "each fault's visible or
+    audible effect" and the Rattle had neither. Quiet bursts of noise, a
+    higher band and slower than the rumble strip, no functional cue; heard
+    while the fault is lit and the engine runs. It is one commit
+    (4078d17) so that it can be taken back by itself. NEEDS OWNER.
 
 ## D-053 (M10, 2026-11-20) The post effects
 
@@ -1778,3 +1799,307 @@ built by the workflow `m6-fixes`; this entry is what that work is held to.
   the Arrival (NEEDS OWNER: `subtitle_bottom_margin`). No font slot per
   language yet (GDD 17.3; with the settings). For M9: a heckle's subtitle
   is its 2 s tell, and a line that waits behind another shortens it.
+
+## D-055 (M6 review, 2026-11-20) How the rulings of D-049 were built
+
+Built by the workflow `m6-fixes` on branches of their own and merged here
+(`m6fix/seams`, `m6fix/rituals`; what `m6fix/misc` and the tests after it
+add is entered below when it is merged). This amends D-031, D-036, D-038,
+D-040, D-041 and D-042 where they describe stops and pull-overs.
+
+- **Where the night waits** (`DriveSim._standing()`: at a stop, with the
+  officer) step 9 does not run: no effect timer, no item, no Nerves; only
+  a Snap's seconds are counted down. The hand is offered what
+  `_ritual_at` gives there: at a stop the stop's rituals (the tray,
+  placing what he bought, a hitcher's door), with the officer the controls
+  whose `requires` name `pulled_over` (his licence, banknotes). An anchor
+  is in use only where a ritual is offered, so the lever and the thumb
+  keypad wait for the road too.
+- **Pulled over** he is found with his eyes open (`NervesSim.rouse`): a
+  blink or Nod in progress would otherwise leave them shut for as long as
+  the officer waits. A call that was ringing is not dropped there; it
+  cannot be answered, and rings on for its remaining seconds when he is
+  let go. (At a stop a ringing call is dropped, as D-042 has it, and now
+  announced: `call_resolved` with `answered: false`, `dropped: true`.)
+- **A Snap that is running as he pulls into a stop is over there** (the
+  simulation is made anew and the save does not hold it). The countdown at
+  a stop is for a Snap that begins there.
+- **Once per leg at the edges.** `_set_stretch(plan, renews)`: a leg and a
+  boss renew, the road to a fork, the street of the Arrival and the road
+  beside a stop do not. On the road from Baghdad to the first fork nothing
+  has been done yet, so a look at the photo there counts and the first leg
+  renews it. What lasts "for the leg" and is taken in a boss lasts through
+  the boss stop and the road to the next fork and ends at the gore.
+  Passengers renew what they do once per leg at the same places (D-051).
+- **The save holds two more numbers**, each as the exact bits of a float:
+  `lapse` on an item (the seconds until its Craving bites; only while one
+  is owed) and `call_wait` in `item_state` (the seconds to the next ring;
+  negative while the wait is not drawn). A save without them loads with no
+  Craving owed and the wait still to be drawn. A cigarette that a stop
+  puts out starts its Craving there.
+- **Firsts.** `leg_state.spared` and `item_state.tape_spent` keep their
+  names and now say that the leg's first scrape, and the act's first
+  fault, is behind him, with or without the charm or the tape aboard.
+- **What a stop ends is said before it is rebuilt** (`_save_point`,
+  `_announce_what_ends`): `effect_expired` for every status that is on
+  except those the leg holds to its end; what the tape or the radio holds
+  on (`music`, `news`) ends there too and is announced again on the first
+  tick after he leaves. Statuses are reported a second time each tick,
+  after leg progress, so that what the gore ends is said in its tick; a
+  Snap that a missed Exit brings is announced as well (it used to reset
+  his Nerves and block his hand without a word).
+- **Requirements at completion.** `ItemSim.complete()` asks them again and
+  says whether the ritual ran; `ritual_completed` and the ritual's sound
+  follow only if it did. The gesture is not cancelled when its ritual
+  stops being possible: the hand's time is spent and nothing happens. (A
+  TAP on his pocket that ends after the Call has rung out therefore takes
+  nothing and Noor says nothing.)
+- **The same place** is the same place under the pointer: an anchor whose
+  pointer position equals that of an anchor the carried thing may be put
+  down on is switched off while the carry lasts. Today only `radio` and
+  `tape` coincide; with the rule above the dial is not in use at a stop
+  anyway, so this matters only for a tape carried on the road.
+- **A gust** is a countdown in the road's seconds: 120 ticks without
+  Focus, 141 with it, the car carried `gust_push` times `gust_duration`
+  either way.
+- **Drips** (a resource entry with `over`) are kept as 64-bit seconds: a
+  cigarette's calm falls on exactly its 3,000 ticks, the tick it is lit
+  included. The order of statuses within a tick is unchanged: what reads a
+  timed status in step 9 sees it for one tick less than its number.
+- **Left as it is, seen on the way:** a stop reorders the cabin's list
+  (items before Adaptations), which only tests that compare the order
+  see; the weather cramp's hum runs on while he is pulled over (it is the
+  hand's, like a Snap); the indicator's, the craving's and the horn's
+  countdowns are bare countdowns that land on their tick with today's
+  numbers.
+- **The third branch and the tests** (merged as `m6fix/tests`):
+  - *After a Wreck there is nothing saved.* `_retell()` empties
+    `checkpoint`, and the drive controller writes the file with no Telling
+    as soon as a Telling's `wreck` passes through it, three seconds before
+    the night is told again, so that quitting during the cut does not
+    bring the wrecked night back. A Wreck on a road of no Telling (the
+    sandbox, `--leg=`, `--boss=`) leaves the file alone; so must the
+    Children's free rewind of GDD 11.2 when M9 builds it. T-RUN-02 runs
+    the real drive scene inside the test for this, the only test that
+    does.
+  - *The Wreck is where the Telling stops.* In the tick of a Wreck he
+    neither pulls in at a stall nor passes a gore or the end of a road:
+    with the last lamp lit in the tick he reached a stall, the stop saved
+    him standing there with every lamp lit and the night went on (the
+    fix branch saw it and left it; fixed on the main line, T-RUN-02).
+  - *The validator holds an item's rules to what the simulation reads.*
+    A synergy says its numbers (`amount`; `every` and `amount` for calls
+    in a row); an entry that takes its amount from a synergy needs every
+    such synergy of the item to carry one; a DRAG_TO that ends where it
+    began needs `out_m`; no anchor is `over` itself; `per_s` is for Nerves
+    only.
+  - *The tick reads no item record.* What the tick needs of a record is
+    read when the item enters the cabin; the cabin's phone, its tape and
+    what depends on the whole cabin are read again when the cabin changes.
+  - *The tests* gained 283 checks in 13 tests, and
+    `tools/mutants/m6_items.py` holds 45 mutants in groups by the test of
+    their rule (`M6_GROUP=<test id>` runs one group); all are killed.
+    What the new checks pin where D-041 and D-042 were silent: under Focus
+    Suspicion keeps his own time, like Nerves, while the Patrol that
+    watches him runs with the road; the road's time also runs the
+    potholes' cooldown, what crosses the road, a gust's tell and the
+    immunity after a hit, while the tea's cooling and the clearing of the
+    glass keep his; for the duct tape the act's boss is of that act; Lag
+    is measured on the car's sideways speed, not on the wheel's read-out.
+  - *Seen and left:* a phone taken out of the cabin while it rings ends
+    its call without `call_resolved`, and a pack taken out while a
+    cigarette burns leaves the rest of its calm dripping (nothing in the
+    game takes either out); an item's `params` and its `lapse` are not
+    checked by the validator; the stand-in at the wheel hands a Patrol's
+    officer nothing and waits there for ever.
+
+## D-056 (M10, 2026-11-20) What of M10 is built now, and what waits for the frame
+
+- **Context.** While M8 was being built the owner said: "Finish m6, m7, m8,
+  and m10 then pause for now". M9 is not on that list, and GDD 18 says not
+  to start a milestone before the tests of the one before it pass. Three
+  pieces of M10 had been built ahead of their milestone by workflows,
+  while the main line was on M6 to M8, under the rule that they touch
+  nothing in `src/core`; they lay parked in `wip/`.
+- **Reading.** "Finish" means the work that was in flight on those four:
+  the review fixes of M6, the review of M7 and its fixes, M8 with its
+  review, and of M10 the three presentation pieces, taken in, reviewed and
+  merged (D-052 to D-054). M9 is not started.
+- **What of M10 waits for M9.** The eleven settings of GDD 17.1 and their
+  effects, the mouse-only menus, and the three tests. T-SMOKE-ALL starts
+  the title, the wedding room and the drive scene in each of its kinds;
+  T-ONEHAND-01 walks every menu; T-SETTINGS-01 changes a setting
+  mid-Telling through them. None of these scenes exists before M9. Only
+  the settings store and the two Subtitles keys exist. Building the
+  settings without the menus that change them would be a second milestone
+  begun ahead of its turn, and the owner asked for a pause.
+- **The three tests of M10 stay registered as failing** until then.
+
+## D-057 (M7 review, 2026-11-20) Rulings on the findings of the bosses' review
+
+The review `m7-review` read commit 2940233 through five lenses (the
+Checkpoint, the Storm, Dawn, the tests, the views), each finding with a
+probe. This entry is what was decided and built for the first four; where
+it changes D-046 to D-050, this is the later word. Every fix came with a
+check that failed before it.
+
+**The Checkpoint (amends D-048)**
+- *Which rows of Suspicion are its own.* Crossing a lane line without
+  indicating is the Patrol's row: before the barriers he may choose his
+  queue for nothing. A Snap is charged wherever the law watches (GDD 6.1
+  says "Suspicion +30" of the Snap itself): +30 at the Checkpoint too.
+- *Using contraband* (GDD 6.5, +40 in a Patrol's view) is a ritual that
+  gives the item's effect. Putting it away in the glovebox, or taking it
+  out, is none.
+- *A car that stands touches nothing.* Held at the bar (or for the Call) the
+  car is not stepped, so what it brushed in its last moving tick stayed
+  "touched" and was counted again every 0.8 s, to a Wreck.
+- *Forged papers* pass the Papers of the visit that gets him through. At
+  the top of Suspicion as the soldier arrives he is turned back as he
+  comes and they stay in the cabin. The shady guy holds them out only
+  while the Checkpoint is ahead: an item may name the boss it is for
+  (`until_boss`).
+- *The soldier is of the road.* Focus (GDD 7.4) slows his walk and his
+  patience with the queue: 11.8 s to stow, 5.9 s a delay, of the hand's
+  time. (Noor's ring stays on the cabin's time, D-047.)
+- *Under its eyes no empty road calms him* (GDD 6.1: "and no encounter"),
+  until he is let through.
+- *The queue is served once he has come to the barriers.* Standing short
+  of them there is nothing to wait out; phase 1 is his to drive.
+- *Stop and go needs the brake.* On the open road one contact is one hit
+  and he is held behind what he touched (D-023, D-029); in the queue that
+  carried him to the bar for one lamp. A queue vehicle he keeps pushing is
+  touched anew each time the last touch has worn off.
+- *The sign* stands 2 s short of the taper (it stood 1 m into the road).
+- *Whoever is waved on* drives to the road's end (each lane kept one, and
+  took the one before off the road in front of him).
+- *What a search takes is taken out of his hand*: a gesture on a thing that
+  has left the cabin is over.
+- *Concrete between the lanes*: `TrafficSim.walled` is the stretch where
+  nobody changes lane, whatever honks (the Loud horn at the Checkpoint,
+  any horn between Dawn's barriers).
+- *Suspicion's light* (GDD 16.3) shows in the mirror wherever he is
+  watched; D-050 kept it dark at the Checkpoint, where nothing else told
+  him where he stood between 0 and 100. The siren's chirps were already
+  heard there (D-052).
+- *Each verdict is said*: `soldier.pass`, `.search`, `.turned_back`,
+  `.bribe`, at the Checkpoint and at Dawn's barriers.
+
+**The Storm (amends D-046)**
+- *Standing* begins a wait when he stands (`stopped_kmh`) and it ends when
+  he has driven off (`moved_off_kmh`, 15) or made himself safe. A twitch
+  of the pedal neither begins the 10 s anew nor makes a hit miss. The horn
+  behind him sounds 2 s ahead (it was 1): time to reach 15 km/h from rest;
+  the validator holds the record to that.
+- *The safe place is safe for his Nerves too.* The shoulder frays him only
+  while the car moves (GDD 5.1: "drivable, +1 Nerves per second").
+- *Its lights in his mirror are a mirror tell* (GDD 7.6, 6.3): shown
+  `rear_end_tell_s` before the hit, 5 s earlier in the Wide mirror and not
+  before the hit in a cracked one (`rear_end_lights_in`). The horn keeps
+  its time.
+- *Tail lights leave a way past at any pace.* Each is put on the road only
+  where no other is nearer than the least gap (`apart_m`), and none is
+  faster than one ahead of it. A driver who followed them at their own
+  speed, as GDD 10.3 tells him to, used to get three abreast.
+- *A Telling told again* has a seed of its own: `RETELLING_SALT` was the
+  bosses' salt.
+- *Night storm* still changes nothing a driver with two headlights can
+  measure (the dust is always nearer than the cone, as D-046 has it):
+  NEEDS OWNER.
+
+**Dawn, the Call, the Arrival (amends D-047)**
+- *The 70 holds between the barriers*, not only at their mouth: searched,
+  once, on the first tick above it from the mouth to the corridors' end.
+- *Nothing wider than the barriers is on Dawn's road.* A road may say the
+  widest vehicle it lets through; the generator leaves wider types out
+  and gives a beat that names one the widest that fits.
+- *The end of the talk has a tell*, 1.5 s ahead: her last words
+  (`noor.call.bye`) and the phone's two notes. When the phone is put away
+  the pointer is on the wheel again, so his hand comes back to it. A car
+  that stood for the call stands until his hand has the wheel.
+- *The phone on its mount* keeps its own picture while Noor's rings
+  (`mount_caller`, `mount_ring_left`).
+- *The key parks the car*: the engine is off (`engine_on` in the snapshot),
+  the car and the Clock stand.
+- **Not built, known debt:** after the last checkpoint Dawn's traffic is
+  laid out for a driver at par, and the checkpoint makes every driver
+  slower than par: in about one Dawn in five a driver who took the
+  barriers in second gear meets vehicles across all three lanes during
+  the Call, and must brake behind them. The cure is in the generator
+  (nothing met after the barriers is on the road before he leaves them,
+  or a par frame that includes the slow passage) and belongs with
+  T-WALL-01 in M11. Without trucks on that road it is rarer than the
+  review measured. Also not built: a car across a lane line at the
+  taper's mouth is pushed up to 1.4 m sideways in one tick (it should
+  meet the barrier's head).
+
+**The tests**
+- The lens's 34 appended checks are in T-BOSS-01 to 03 and T-CALL-01 as
+  it wrote them. Four loops got guards. T-DATA-01 has the failure cases of
+  every boss rule. Where a rule changed, a step of an existing check was
+  corrected and its assertion kept: the queue's watcher stands at the
+  mouth of the barriers; the hazard-lights remedy keeps his foot on the
+  brake; after the Call the car moves off once he has the wheel.
+- Literals that stand beside a check pinning the data to the GDD's number
+  stay: changing such a number is a recorded decision anyway.
+
+## D-058 (M7 and M8 reviews, 2026-11-20) A sound for every tell; a tell is read at once
+
+GDD 17.2: "Every tell has both a sound and a visual." D-052 left six kinds
+of tell without a sound, because the table of GDD 16.5 has no row for them
+and GDD 1.5 forbids "a system, resource or screen that this document does
+not name". Two reviews (the views lens of M7, V-03; the tests-and-views
+lens of M8, m8tv-04, verified) found the rule broken. They are right, and
+this is the later word:
+
+- **The reading.** "Resource" in GDD 1.5 is what section 6 is called: the
+  meters and the money of the game. A placeholder sound is none. The table
+  of GDD 16.5 lists the sounds the document names; GDD 17.2 binds every
+  tell. Where a tell has no row, GDD 1.5 rule 3 decides: pillar 4 is the
+  tell, and the simplest thing that serves it is one more record in
+  `data/sfx.json`, which the generator already turns into a sound. `rattle`
+  and `horn_behind` (D-052) were added by the same reasoning.
+- **What counts as a tell here:** what announces, a moment ahead, something
+  he must answer at the wheel or with the hand (pillar 4), and what the GDD
+  itself says is heard ("prays aloud", "his snoring").
+
+| Tell | Seen | Heard |
+|---|---|---|
+| A gust (GDD 5.4, 10.3), on any road | Streaks, 1 s ahead | `gust`: wind that swells for as long as the streaks blow |
+| The Storm's thick dust | The dust closes in over the last `dust_tell_s` (1 s) of thin dust | `dust`: a low roar from the closing until it thins |
+| The soldier sets off (the Stow) | His walk | `soldier_whistle`, once |
+| A sign goes up (each document) | The sign; his line if the window is shut | `soldier_knock`, once a sign |
+| What comes up behind him | Its lights in the mirror (D-057) | `horn_behind` (D-052) |
+| The Call | The lit phone, the ring written out (D-050) | `phone_ring` |
+| The end of the talk | Her last words (D-057) | The phone's two notes |
+
+- **The dust's tell.** D-046 called the dust's fixed rhythm its own tell;
+  nothing on screen or in the ear said that a change was a second away.
+  The rule does not move: he sees 40 m to the last tick of thin dust and
+  15 m from the next (T-BOSS-02 holds that to the tick). What the views
+  fade the road at is a number of its own, `sight_shown`, which falls from
+  the one to the other through the tell (`dust_closing`, 0 to 1); the sky's
+  fog and the gust's streaks follow it. When it thins he is shown the
+  whole 40 m at once: relief needs no tell. The validator holds
+  `dust_tell_s` to no longer than the dust is thin.
+- **Not given a sound**, and why: the low sun (the GDD's own tell is "the
+  light source is visible first"; nothing a sun does is heard), the bar (a
+  verdict, which is said in a line and seen), the bay and the key (nothing
+  is announced ahead), a hitcher at the roadside.
+- **The mix.** One soldier does one thing at a time: `soldier_` is a
+  family in the check, like the radio's loops. With the new sounds the
+  ducks are 1 dB deeper (rumble strip -16, indicator -14.5, the yawns -14)
+  and each cue stands 6.9 to 7.3 dB clear of everything else at once.
+- **A tell is read at once.** A line that announces something a moment
+  ahead must not wait its turn behind what is being said (the queue of
+  D-054 holds a line 1.5 s at least). `line_requested` may carry
+  `"tell": true`: the subtitle takes the screen in that frame, and what it
+  took the screen from is shown again after it, with its whole time. The
+  simulation marks the ring written out and Noor's last words. The
+  heckles of M9 ("the subtitle appears 2 s before anything changes. That
+  lead is the tell", GDD 11.3) are to be asked for the same way.
+- **Whose turn the rest is.** The tells of the earlier milestones were not
+  gone through for GDD 17.2 (a curve's sign has no sound; the yawns and
+  the Phantom's hum have no picture): that belongs to the rest of M10
+  (settings and accessibility, D-056).
+- **NEEDS OWNER:** nobody has heard these sounds either (D-052).

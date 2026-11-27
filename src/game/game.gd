@@ -26,8 +26,11 @@ const VALUE_ARGS: PackedStringArray = ["table", "seed", "leg", "boss", "bot", "u
 ## `--hud` starts with the numeric HUD showing.
 const FLAG_ARGS: PackedStringArray = ["skip-prologue", "continue", "hud"]
 
-## Tools and tests started with `--script` never touch the player's files.
-const TOOL_USER_DIR: String = "user://test_runs/tool"
+## Tools and tests started with `--script` never touch the player's files:
+## each such process writes under a folder of its own, named after its process
+## id (the folder the test runner clears away, Smoke.test_user_root()), since
+## every copy of the project shares `user://` and several may run at once.
+const TOOL_USER_DIR: String = "user://test_runs_%d/tool"
 
 var data: GameData
 var data_errors: PackedStringArray = []
@@ -43,7 +46,7 @@ var saved_telling: Dictionary = {}
 func _ready() -> void:
 	if _runs_as_tool():
 		# Started with --script: the arguments after `--` belong to that tool.
-		user_dir = TOOL_USER_DIR
+		user_dir = TOOL_USER_DIR % OS.get_process_id()
 	else:
 		var problems: PackedStringArray = []
 		args = parse_user_args(OS.get_cmdline_user_args(), problems)
@@ -63,6 +66,10 @@ func _ready() -> void:
 		# Subtitles (GDD 17.1): size small, medium or large; background on or off.
 		"subtitle_size": "medium",
 		"subtitle_background": true,
+		# A font slot for each language (GDD 17.3): the path of a font of the
+		# project, "" for the theme's own.
+		"font_en": "",
+		"font_ar": "",
 	})
 	Lines.setup(data)
 	Audio.setup(data)
@@ -118,6 +125,30 @@ func add_guest(passenger_id: String) -> bool:
 func _runs_as_tool() -> bool:
 	var engine_args: PackedStringArray = OS.get_cmdline_args()
 	return engine_args.has("--script") or engine_args.has("-s")
+
+
+## The folder of a tool's own process goes with the tool, with whatever it
+## and the scenes it launched left there.
+func _exit_tree() -> void:
+	if _runs_as_tool():
+		_remove_folder(user_dir.get_base_dir())
+
+
+static func _remove_folder(path: String) -> void:
+	var dir: DirAccess = DirAccess.open(path)
+	if dir == null:
+		return
+	dir.include_hidden = true
+	dir.list_dir_begin()
+	var entry: String = dir.get_next()
+	while not entry.is_empty():
+		if dir.current_is_dir():
+			_remove_folder(path.path_join(entry))
+		else:
+			dir.remove(entry)
+		entry = dir.get_next()
+	dir.list_dir_end()
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 
 
 ## Parses `--key=value` and `--flag` arguments. Unknown or malformed arguments

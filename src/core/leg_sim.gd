@@ -388,6 +388,11 @@ func _spawn(spawn: Dictionary, dt: float) -> bool:
 	var clearance: float = GameData.as_float(record.get("length")) * 0.5 + _spawn_gap
 	if not _traffic.lane_is_free(lane, at_s, clearance, null):
 		return false
+	# A vehicle that keeps its distance (`apart_m`: the Storm's tail lights)
+	# waits while another going its way is that near its place, in any lane.
+	var apart: float = GameData.as_float(spawn.get("apart_m"))
+	if apart > 0.0 and _traffic.someone_near(at_s, apart, direction):
+		return false
 	var vehicle: TrafficSim.Vehicle = _traffic.spawn(type_id, lane, at_s, speed, direction)
 	if vehicle == null:
 		return true

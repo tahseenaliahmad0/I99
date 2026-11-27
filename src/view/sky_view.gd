@@ -54,7 +54,8 @@ func setup(data: GameData, factory: PlaceholderFactory) -> void:
 
 
 func apply(snapshot: Dictionary) -> void:
-	var sight: float = snapshot["visibility"]
+	# What he is shown: through the dust's tell the thick dust closes in.
+	var sight: float = snapshot["sight_shown"]
 	var sky: Color = _day
 	if snapshot["telling"]:
 		# The sky follows the Clock (GDD 6.4): night until the last part of

@@ -9,6 +9,10 @@ extends Node3D
 const WHEEL_NODE: String = "Wheel"
 const GEAR_LEVER_NODE: String = "GearLever"
 const GEAR_LEVER_ANCHOR: String = "gear_lever"
+## The drum grows by this much a step, for at most so many steps, until it
+## reaches the edge of a wide view (drum_span).
+const DRUM_GROWTH: float = 1.05
+const DRUM_STEPS: int = 60
 const MIRROR_ANCHOR: String = "mirror"
 ## What a slot that takes the tea holds.
 const DRINK: String = "drink"
@@ -76,11 +80,17 @@ var _pocket_phone: Node3D
 ## reach out with (to the wheel, across the lever, with the tea); the drum.
 var _passenger: Node3D
 var _passenger_at: Vector3 = Vector3.ZERO
+## How far whoever rides leans back at a stop, out of the way of the tray.
+var _passenger_back: Vector3 = Vector3.ZERO
 var _passenger_arm: MeshInstance3D
 var _arm_from: Vector3 = Vector3.ZERO
 var _sleep_tilt: float = 0.0
 var _drum: Node3D
 var _drum_at: Vector3 = Vector3.ZERO
+var _drum_radius: float = 0.0
+## The camera's numbers, for what must stand at a share of the view.
+var _fov: float = 0.0
+var _eye: Vector3 = Vector3.ZERO
 var _drum_bob: float = 0.0
 var _drum_hz: float = 0.0
 var _grip_point: Vector3 = Vector3.ZERO
@@ -222,9 +232,14 @@ func setup(data: GameData, factory: PlaceholderFactory) -> void:
 
 	var seat: Node3D = _group("Seat")
 	_passenger_at = Vector3(tuning.fi("passenger_pos", 0), tuning.fi("passenger_pos", 1), tuning.fi("passenger_pos", 2))
+	_passenger_back = Vector3(tuning.fi("passenger_stop_back", 0), tuning.fi("passenger_stop_back", 1), tuning.fi("passenger_stop_back", 2))
 	_arm_from = Vector3(tuning.fi("passenger_arm_from", 0), tuning.fi("passenger_arm_from", 1), tuning.fi("passenger_arm_from", 2))
 	_sleep_tilt = deg_to_rad(tuning.f("passenger_sleep_tilt"))
 	_drum_at = Vector3(tuning.fi("drum_pos", 0), tuning.fi("drum_pos", 1), tuning.fi("drum_pos", 2))
+	# (A cylinder's first size is its radius.)
+	_drum_radius = factory.size_of("cabin_drum").x
+	_fov = tuning.f("camera_fov")
+	_eye = GameData.as_vec3(GameData.as_dict(data.root("anchors").get("points")).get("eye"))
 	_drum_bob = tuning.f("drum_bob")
 	_drum_hz = tuning.f("drum_hz")
 	_grip_point = GameData.as_vec3(GameData.as_dict(data.root("anchors").get("points")).get("G"))
@@ -289,10 +304,10 @@ func apply(snapshot: Dictionary) -> void:
 	var time: float = snapshot["time"]
 	var flags: Dictionary = snapshot["flags"]
 	_show_switches(flags, time)
-	# Noor's call rings in his pocket (GDD 10.4); any other on the mount.
-	var caller: String = str(snapshot["caller"])
-	var his_own: bool = caller == DriveSim.NOOR
-	_show_items(items, moves, caller != "" and not his_own, time, GameData.as_bool(flags.get(ItemSim.FLAG_GLOVEBOX)))
+	# Noor's call rings in his pocket (GDD 10.4); any other on the mount,
+	# also while hers rings.
+	var his_own: bool = str(snapshot["caller"]) == DriveSim.NOOR
+	_show_items(items, moves, str(snapshot["mount_caller"]) != "", time, GameData.as_bool(flags.get(ItemSim.FLAG_GLOVEBOX)))
 	_pocket_phone.visible = his_own and _anchor_pos.has(POCKET_ANCHOR)
 	if _pocket_phone.visible:
 		var pocket: Vector3 = _anchor_pos[POCKET_ANCHOR]
@@ -335,8 +350,11 @@ func _show_mirror(snapshot: Dictionary) -> void:
 	if _markers.has(MIRROR_ANCHOR):
 		var marker: Node3D = _markers[MIRROR_ANCHOR]
 		marker.scale = Vector3(mirror_scale, 1.0, 1.0)
-	var rear_end_in: float = snapshot["rear_end_in"]
-	var near: float = clampf(1.0 - rear_end_in / maxf(_rear_end_tell, 0.001), 0.0, 1.0)
+	# The lights of what comes up behind him: a mirror tell, shown as long
+	# before it hits as this mirror shows it (wide: earlier; cracked: later).
+	var rear_end_in: float = snapshot["rear_end_lights_in"]
+	var mirror_shift: float = snapshot["mirror_shift"]
+	var near: float = clampf(1.0 - rear_end_in / maxf(_rear_end_tell + mirror_shift, 0.001), 0.0, 1.0)
 	for index: int in _mirror_lights.size():
 		var light: Node3D = _mirror_lights[index]
 		light.visible = rear_end_in > 0.0
@@ -344,9 +362,39 @@ func _show_mirror(snapshot: Dictionary) -> void:
 		light.position = _mirror_at + Vector3(side * lerpf(_light_spread.x, _light_spread.y, near), 0.0, _mirror_proud * 1.5)
 		light.scale = Vector3.ONE * lerpf(_light_grow.x, _light_grow.y, near)
 	var suspicion: float = snapshot["suspicion"]
-	_mirror_blue.visible = str(snapshot["suspicion_by"]) == PATROL and suspicion > 0.0
+	# Wherever the law is watching him, a Patrol behind him or the
+	# Checkpoint's soldiers: GDD 16.3 gives Suspicion one light.
+	_mirror_blue.visible = not str(snapshot["suspicion_by"]).is_empty() and suspicion > 0.0
 	if _mirror_blue.visible:
 		PlaceholderFactory.set_alpha(_mirror_blue, suspicion / maxf(_suspicion_max, 1.0))
+
+
+## Where the drum stands so that it blocks the right `block` of the view
+## as he looks straight ahead (GDD 8.2: "the right 10% of the view"),
+## whatever the window's shape: Vector2(the x of its middle in the cabin
+## frame, how much larger than itself it is drawn). `aspect` is the view's
+## width over its height, `fov` the camera's vertical angle in degrees,
+## `at` the drum's own place (its height and depth are kept) and `radius`
+## half its width.
+static func drum_span(block: float, aspect: float, fov: float, eye: Vector3, at: Vector3, radius: float) -> Vector2:
+	# Seen from above the drum is a circle. Its left side must touch the
+	# sight line that cuts the view at 1 - block of its width, and its
+	# right side reach the sight line of the view's edge: a larger drum
+	# where the window is wide.
+	var edge: float = atan(tan(deg_to_rad(fov) * 0.5) * aspect)
+	var cut: float = atan(tan(edge) * (1.0 - 2.0 * block))
+	var depth: float = eye.z - at.z
+	var grown: float = 1.0
+	var middle: float = 0.0
+	for _step: int in DRUM_STEPS:
+		var reach: float = radius * grown
+		var along: float = (depth + reach * sin(cut)) / cos(cut)
+		middle = along * sin(cut) + reach * cos(cut)
+		var right: float = atan2(middle, depth) + asin(minf(reach / Vector2(middle, depth).length(), 1.0))
+		if right >= edge:
+			break
+		grown *= DRUM_GROWTH
+	return Vector2(eye.x + middle, grown)
 
 
 ## Whoever rides (GDD 8.2): in the seat; leaning toward the door while they
@@ -363,10 +411,16 @@ func _show_passenger(snapshot: Dictionary, moves: Dictionary) -> void:
 	if not riding:
 		return
 	_passenger.rotation = Vector3(0.0, 0.0, -_sleep_tilt if snapshot["passenger_asleep"] else 0.0)
+	# At a stop they lean back: the vendor's tray is at their window, and
+	# its near end must be seen and reached past them.
+	_passenger.position = _passenger_at + (_passenger_back if snapshot["stopped"] else Vector3.ZERO)
 	var time: float = snapshot["time"]
 	if _drum.visible:
 		var beat: float = sin(TAU * _drum_hz * time) if snapshot["passenger_drumming"] else 0.0
-		_drum.position = _drum_at + Vector3(0.0, _drum_bob * beat, 0.0)
+		var view: Vector2 = get_viewport().get_visible_rect().size
+		var span: Vector2 = drum_span(block, view.x / maxf(view.y, 1.0), _fov, _eye, _drum_at, _drum_radius)
+		_drum.position = Vector3(span.x, _drum_at.y + _drum_bob * beat, _drum_at.z)
+		_drum.scale = Vector3(span.y, 1.0, span.y)
 	# Where the arm goes, if it goes anywhere.
 	var to: Vector3 = _arm_from
 	var held: int = snapshot["wheel_held"]

@@ -16,7 +16,7 @@ MUTANTS = [
  (B, '\t\t\tvar speed_ms: float = clampf(room * _pull_up_rate, 0.0, _creep_ms)', '\t\t\tvar speed_ms: float = clampf(room * _pull_up_rate, 0.0, _creep_ms * 4.0)', 'queue pulls up fast'),
  (B, '\t\tif _served[lane] >= _serve_s - dt * 0.5:', '\t\tif _served[lane] >= _serve_s * 0.25 - dt * 0.5:', 'served in a second'),
  (B, '\t\tif bar_at - (first.s + first.half_length) > _settle_m:\n\t\t\tcontinue\n', '', 'served before it is at the bar'),
- (B, '\t\t\tif gone.s - gone.half_length < bar_at + _queue_clear:\n\t\t\t\t# Not yet clear of the bar: the next one waits behind it.\n\t\t\t\tnose = minf(nose, gone.s - gone.half_length - _queue_gap)', '\t\t\tif false:\n\t\t\t\tnose = minf(nose, gone.s - gone.half_length - _queue_gap)', 'next one drives into the leaver'),
+ (B, '\t\tif gone != null and gone.s - gone.half_length < bar_at + _queue_clear:\n\t\t\t# Not yet clear of the bar: the next one waits behind it.', '\t\tif false:\n\t\t\t# Not yet clear of the bar: the next one waits behind it.', 'next one drives into the leaver'),
  # first in line, stow
  (B, '\tif lane >= _queue.size() or not _queue[lane].is_empty():\n\t\treturn false', '\tif lane >= _queue.size():\n\t\treturn false', 'first in line behind the queue'),
  (B, '\treturn _car.speed <= _stopped_kmh and nose <= bar_at + 0.001 and bar_at - nose <= _stop_zone', '\treturn nose <= bar_at + 0.001 and bar_at - nose <= _stop_zone', 'first in line while rolling'),
@@ -37,7 +37,7 @@ MUTANTS = [
  (D, '\t\tsuspicion.add(_checkpoint_number("courage_suspicion") * float(courage_noticed()))', '\t\tsuspicion.add(_checkpoint_number("courage_suspicion") * float(mini(courage_noticed(), 1)))', 'Courage counted once'),
  (D, '\t\tif use_forged_papers():\n\t\t\tboss.papers_passed()', '\t\tif false:\n\t\t\tboss.papers_passed()', 'forged papers pass nothing'),
  (D, '\tif boss.delayed:\n\t\tsuspicion.add(_checkpoint_number("delay_suspicion"))', '\tif boss.delayed:\n\t\tpass', 'delay costs nothing'),
- (D, '\tif boss.asked and not boss.papers_done and not items.flag(ItemSim.FLAG_WINDOW):', '\tif boss.asked and not boss.papers_done:', 'he taps on an open window'),
+ (D, '\t\tif not items.flag(ItemSim.FLAG_WINDOW):\n\t\t\t# He cannot be handed anything through the glass.', '\t\tif true:\n\t\t\t# He cannot be handed anything through the glass.', 'he taps on an open window'),
  (D, '\t\tif cash < price:\n\t\t\t_emit("pulled_over", {"released": false, "refused": true, "paid": "bribe", "cost": price})\n\t\t\treturn\n', '', 'a bribe he cannot pay is taken'),
  (D, '\t\tcash -= price\n\t\t_let_through("bribe", price, 0.0, [])', '\t\t_let_through("bribe", price, 0.0, [])', 'the bribe is free'),
  (D, '\tif not boss.hand_over(String(what)):\n\t\t_emit("line_requested", {"id": "soldier.wrong"})\n\t\treturn', '\tif not boss.hand_over(String(what)):\n\t\treturn', 'no shake of the head'),
@@ -65,4 +65,10 @@ MUTANTS = [
  (I, '\t\t\tmet = not free_cell().is_empty()', '\t\t\tmet = true', 'stowing into a full glovebox'),
  (I, '\t\tif GameData.as_bool(candidate.record.get("contraband")) and not is_stowed(candidate):\n\t\t\tcount += 1', '\t\tif GameData.as_bool(candidate.record.get("contraband")):\n\t\t\tcount += 1', 'stowed contraband still counts'),
  (I, '\t\tif id.begins_with(GLOVEBOX) and item_in_slot(StringName(id)) == null:\n\t\t\treturn id', '\t\tif id.begins_with(GLOVEBOX):\n\t\t\treturn id', 'a cell holds two things'),
+ # the soldier is heard (GDD 17.2)
+ (B, '\t\t\tstow_left = _stow_s\n\t\t\tstow_began = true\n', '\t\t\tstow_left = _stow_s\n', 'he sets off without a whistle'),
+ (D, '\tif boss.stow_began:\n', '\tif boss.stow_ended:\n', 'he whistles as he arrives, not as he sets off'),
+ (D, '\tif boss.asked and not boss.papers_done:\n\t\t# A sign goes up', '\tif boss.asked:\n\t\t# A sign goes up', 'a rap with nothing wanted'),
+ (D, '\t\t_emit("sfx_requested", {"id": "soldier_knock"})\n\t\tif not items.flag(ItemSim.FLAG_WINDOW):\n', '\t\tif not items.flag(ItemSim.FLAG_WINDOW):\n\t\t\t_emit("sfx_requested", {"id": "soldier_knock"})\n', 'he raps only on a shut window'),
+ (B, '\tstow_began = false\n\tstow_ended = false\n', '\tstow_ended = false\n', 'he whistles for as long as he walks'),
 ]

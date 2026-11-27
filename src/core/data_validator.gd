@@ -51,6 +51,16 @@ const CALL_WAYS: PackedStringArray = ["alone", "passenger"]
 const CABIN_FLAGS: PackedStringArray = ["hazards", "high_beam", "window_open", "glovebox_open", "passenger", "letter_aside"]
 ## Conditions that are not effect ids.
 const CONDITION_WORDS: PackedStringArray = ["supply>0", "hot", "playing", "warbling", "ringing", "glovebox_room", "stowed"]
+## The numbers a synergy rule works with (ItemSim reads them by these names):
+## a rule without them would calm by nothing, pay nothing, multiply by zero.
+## Rules that are not listed work by being there and need none.
+const SYNERGY_NUMBERS: Dictionary = {
+	"sip_extends_burn": ["amount"],
+	"bead_calm": ["amount"],
+	"photo_sobers": ["amount"],
+	"numb_courage": ["amount"],
+	"calls_in_a_row": ["every", "amount"],
+}
 ## Sources of Nerves a status can make him immune to (GDD 7.4, the seeds).
 const NERVE_SOURCES: PackedStringArray = ["honk", "tailgater", "doubt"]
 const REACHES: PackedStringArray = ["near", "mid", "far", "none"]
@@ -214,12 +224,14 @@ func _item_schema() -> Dictionary:
 		"rarity": _opt(_enum(RARITIES)),
 		"price": _num(0.0),
 		"contraband": _bool(),
+		# An item that is for one boss is sold only while that boss is ahead.
+		"until_boss": _opt(_ref("bosses")),
 		"supply": _opt(_nullable(_obj({"uses": _int(0.0), "restock": _num(0.0)}))),
 		"rituals": _list(_ref("rituals")),
 		"gives": _list(_obj({}, true)),
 		"takes": _list(_obj({}, true)),
 		"lapse": _opt(_nullable(_obj({}, true))),
-		"synergies": _opt(_list(_obj({"with": _str(), "rule": _str(), "amount": _opt(_num())}, true))),
+		"synergies": _opt(_list(_obj({"with": _str(), "rule": _str(), "amount": _opt(_num()), "every": _opt(_int(1.0))}, true))),
 		"params": _opt(_map(_t("any"))),
 		"line_ids": _map(_ref("lines")),
 	})
@@ -383,11 +395,13 @@ func _storm_schema() -> Dictionary:
 		"thin_m": _above(0.0),
 		"thick_s": _above(0.0),
 		"thick_m": _above(0.0),
+		"dust_tell_s": _num(0.0),
 		"gust_push": _num(0.0),
 		"gust_every_s": _above(0.0),
 		"wipe_haze": _num(0.0, 1.0),
 		"window_haze_per_s": _num(0.0, 1.0),
 		"stopped_kmh": _num(0.0),
+		"moved_off_kmh": _above(0.0),
 		"rear_end_every_s": _above(0.0),
 		"rear_end_tell_s": _num(0.0),
 		"rear_end_chance": _num(0.0, 1.0),
@@ -454,6 +468,7 @@ func _dawn_schema() -> Dictionary:
 			"from_end_m": _above(0.0),
 			"ring_s": _above(0.0),
 			"talk_s": _above(0.0),
+			"talk_end_tell_s": _num(0.0),
 			"wrist_steer": _num(0.0, 1.0),
 			"stopped_kmh": _num(0.0),
 		}),
@@ -537,6 +552,16 @@ func _check_bosses() -> void:
 			_err("E_MISSING", "legs.json", "%s.dawn" % label, "Dawn needs its numbers")
 		if id == "checkpoint" and not boss.has("checkpoint"):
 			_err("E_MISSING", "legs.json", "%s.checkpoint" % label, "the Checkpoint needs its numbers")
+		var storm: Dictionary = GameData.as_dict(boss.get("storm"))
+		if GameData.is_number(storm.get("dust_tell_s")) and GameData.is_number(storm.get("thin_s")):
+			if GameData.as_float(storm.get("dust_tell_s")) > GameData.as_float(storm.get("thin_s")):
+				_err("E_RANGE", "legs.json", "%s.storm.dust_tell_s" % label, "must not be longer than thin_s: the thick dust closes in while the dust is thin")
+		if GameData.is_number(storm.get("moved_off_kmh")) and GameData.is_number(storm.get("stopped_kmh")):
+			if GameData.as_float(storm.get("moved_off_kmh")) <= GameData.as_float(storm.get("stopped_kmh")):
+				_err("E_RANGE", "legs.json", "%s.storm.moved_off_kmh" % label, "must be above stopped_kmh: driving off is more than rolling")
+			# The horn behind him is a tell he can act on (GDD 2.2, pillar 4).
+			if GameData.as_float(storm.get("moved_off_kmh")) / maxf(_tuning_number("accel", 1.0), 0.001) >= GameData.as_float(storm.get("rear_end_tell_s")):
+				_err("E_RANGE", "legs.json", "%s.storm.rear_end_tell_s" % label, "must leave time to reach moved_off_kmh from rest")
 		var checkpoint: Dictionary = GameData.as_dict(boss.get("checkpoint"))
 		if not checkpoint.is_empty():
 			var corridor: Dictionary = GameData.as_dict(checkpoint.get("corridor"))
@@ -581,7 +606,6 @@ func _check_bosses() -> void:
 				_err("E_RULE", "legs.json", "%s.dawn" % label, "the order along the road must be: sunrise, the last checkpoint, the Call, the end")
 			if GameData.as_float(check.get("gap_m")) <= _tuning_number("car_width", 0.0) or GameData.as_float(check.get("gap_m")) > _tuning_number("lane_width", INF):
 				_err("E_RANGE", "legs.json", "%s.dawn.checkpoint.gap_m" % label, "must be wider than the car and no wider than a lane")
-		var storm: Dictionary = GameData.as_dict(boss.get("storm"))
 		var gaps: Array = GameData.as_array(GameData.as_dict(storm.get("tail_lights")).get("gap_m"))
 		if gaps.size() == 2 and GameData.as_float(gaps[0]) > GameData.as_float(gaps[1]):
 			_err("E_RANGE", "legs.json", "%s.storm.tail_lights.gap_m" % label, "must be [least, most]")
@@ -936,6 +960,10 @@ func _check_anchor_file() -> void:
 	else:
 		_err("E_MISSING", "anchors.json", "points", "required object is missing")
 	_check_record_set("anchors", _anchor_schema())
+	for anchor: Dictionary in _data.records("anchors"):
+		# An anchor over itself would go out of use whenever something sits there.
+		if anchor.get("over") is String and anchor.get("over") == anchor.get("id"):
+			_err("E_RULE", "anchors.json", "anchors[%s].over" % GameData.as_string(anchor.get("id")), "an anchor cannot stand over itself")
 	_check_record_set("props", _prop_schema())
 	_check_record_set("fittings", _fitting_schema())
 
@@ -1042,6 +1070,11 @@ func _check_cross_rules() -> void:
 			_err("E_REF", "rituals.json", ritual_label + ".to", "unknown anchors id '%s'" % to)
 		if to == SLOT_ANCHOR and anchor != SLOT_ANCHOR:
 			_err("E_RULE", "rituals.json", ritual_label + ".to", "\"@slot\" is where an item's own ritual began: the ritual must be at \"@slot\" too")
+		# Carried back to where it was taken up, a thing must have been somewhere
+		# first: with no "out_m" the ritual would be a press and a release.
+		if GameData.as_string(ritual.get("gesture")) == "DRAG_TO" and ritual.has("to") and ritual["to"] is String \
+				and to == anchor and not ritual.has("out_m"):
+			_err("E_RULE", "rituals.json", ritual_label, "a DRAG_TO that ends where it began needs \"out_m\"")
 		if not needs.is_empty() and not ritual.has(needs):
 			_err("E_RULE", "rituals.json", "rituals[%s]" % GameData.as_string(ritual.get("id"), "?"),
 					"a %s ritual needs \"%s\"" % [GameData.as_string(ritual.get("gesture")), needs])
@@ -1098,6 +1131,10 @@ func _check_cross_rules() -> void:
 			if synergy.has("rule") and synergy["rule"] is String and not ItemSim.SYNERGY_RULES.has(rule):
 				_err("E_ENUM", "items.json", "items[%s].synergies[%d].rule" % [item_id, index],
 						"'%s' is not a synergy rule (%s)" % [rule, ", ".join(ItemSim.SYNERGY_RULES)])
+			for number: Variant in GameData.as_array(SYNERGY_NUMBERS.get(rule)):
+				if not synergy.has(number):
+					_err("E_RULE", "items.json", "items[%s].synergies[%d]" % [item_id, index],
+							"the rule '%s' needs \"%s\"" % [rule, str(number)])
 			if with.is_empty():
 				continue
 			if not _data.has_record("items", with) and not _synergy_tokens().has(with):
@@ -1197,16 +1234,25 @@ func _check_entry(item: Dictionary, entry: Dictionary, where: String) -> void:
 			_err("E_ENUM", "items.json", where + ".resource", "must be nerves or cash, not '%s'" % resource)
 		if entry.has("amount") == entry.has("per_s"):
 			_err("E_RULE", "items.json", where, "a resource entry needs exactly one of \"amount\" and \"per_s\"")
+	# What comes by the second is Nerves (ItemSim): cash or a status with
+	# "per_s" would be taken out of his Nerves.
+	if entry.has("per_s") and (entry.has("effect") or GameData.as_string(entry.get("resource")) == "cash"):
+		_err("E_RULE", "items.json", where, "\"per_s\" is Nerves by the second: {\"resource\": \"nerves\", \"per_s\": number}")
 	if entry.has("while"):
 		_check_condition(GameData.as_string(entry.get("while")), "items.json", where + ".while")
 	if entry.has("synergy"):
 		var rule: String = GameData.as_string(entry.get("synergy"))
 		var found: bool = false
+		var lacks_amount: bool = false
 		for synergy: Variant in GameData.as_array(item.get("synergies")):
 			if GameData.as_string(GameData.as_dict(synergy).get("rule")) == rule:
 				found = true
+				lacks_amount = lacks_amount or not GameData.as_dict(synergy).has("amount")
 		if not found:
 			_err("E_REF", "items.json", where + ".synergy", "the item has no synergy with the rule '%s'" % rule)
+		elif lacks_amount:
+			# With its partner there, the synergy's amount takes the entry's place.
+			_err("E_RULE", "items.json", where + ".synergy", "the synergy '%s' has no \"amount\" to take this entry's place" % rule)
 
 
 ## One ritual op: "op" or "op:arg:arg". The op must be known, and the ids it

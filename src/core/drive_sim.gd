@@ -97,6 +97,9 @@ var run: RunState = RunState.new()
 var stop: StopSim = StopSim.new()
 ## Who rides in the seat (GDD 8).
 var passengers: PassengerSim = PassengerSim.new()
+## The key is turned in the bay (GDD 10.5): the engine is off, the car and
+## the Clock stand. Any road begun anew starts it again.
+var parked: bool = false
 
 var tick: int = 0
 ## Thousands of dinars (GDD 6). Never below zero.
@@ -138,7 +141,8 @@ var grip_toggle: bool = false:
 ## log into a simulation started the same way gives the same state hash.
 var input_log: InputLog = null
 ## What the last stop saved: the Telling as the save file holds it (GDD 13.7).
-## It changes only when the car comes to a stop, never during a leg.
+## It changes only when the car comes to a stop, never during a leg; and it
+## is empty again once the Telling is told again after a Wreck (GDD 11.4).
 var checkpoint: Dictionary = {}
 var checkpoints: int = 0
 
@@ -422,6 +426,8 @@ func step(input: DriveInput) -> void:
 		effects.remove(ItemSim.HOOK_SET)
 		# Whoever held the wheel for him lets go of it.
 		passengers.wheel_taken()
+		# And a car that stood on after the Call is his to drive again.
+		boss.wheel_taken()
 	if hand.at_ear != _wrist_on_wheel:
 		# The Call taken alone: his wrist is on the wheel while his hand holds
 		# the phone to his ear (GDD 10.4).
@@ -458,11 +464,16 @@ func step(input: DriveInput) -> void:
 	var walls: Vector2 = boss.walls(car.s, car.x)
 	car.wall_left = walls.x
 	car.wall_right = walls.y
-	if boss.holds_car():
+	if boss.holds_car() or parked:
 		# Pulled over for the Call, the car stands until he hangs up (GDD
-		# 10.4); first in line at the Checkpoint, until he is let through.
+		# 10.4); first in line at the Checkpoint, until he is let through;
+		# and with the key turned in the bay it is parked (GDD 10.5).
+		# A car that stands touches nothing: what it brushed in the last
+		# tick it moved is not brushed again.
 		car.speed = 0.0
 		car.v_lat = 0.0
+		car.edge_touched = CarSim.EDGE_NONE
+		car.wall_touched = false
 	elif not _standing():
 		car.step(_road_dt, wheel.steer(), gate.gear, _braking, _extra_drift())
 	_step_set_piece()
@@ -471,8 +482,9 @@ func step(input: DriveInput) -> void:
 	_step_cramp()
 	var lane: int = car.lane_of(car.x)
 	if lane != _lane:
-		# Crossing a lane line without indicating that way (GDD 6.5).
-		if items.indicator != signi(lane - _lane):
+		# Crossing a lane line without indicating that way (GDD 6.5): a row
+		# of the Patrol's. At the Checkpoint he may choose his queue.
+		if items.indicator != signi(lane - _lane) and boss.kind != BossSim.CHECKPOINT:
 			suspicion.add(tuning.f("suspicion_lane_cross"))
 		_lane = lane
 		items.on_lane_line_crossed()
@@ -538,8 +550,9 @@ func step(input: DriveInput) -> void:
 	if passengers.changed:
 		_fit_cabin()
 
-	# 10. Clock: it runs while he drives, not while he stands (GDD 6.4).
-	if not _standing():
+	# 10. Clock: it runs while he drives, not while he stands (GDD 6.4),
+	# and it is read when the key is turned: not after.
+	if not _standing() and not parked:
 		clock.step(DT)
 
 	# 12. Leg progress: Exit, Fork, boss and ending transitions.
@@ -601,6 +614,7 @@ func _announce_leg(plan: Dictionary) -> void:
 ## and nowhere else: not on the road to a fork, not on the street of the
 ## Arrival, not on the road he stands beside at a stop.
 func _set_stretch(plan: Dictionary, renews: bool = true) -> void:
+	parked = false
 	set_road(GameData.as_int(plan.get("lanes"), 3), GameData.as_bool(plan.get("divided"), true))
 	traffic.clear()
 	collision.reset()
@@ -692,9 +706,11 @@ func _step_leg_road() -> void:
 	curve_k = leg.curve_k
 	if leg.gust_started != 0:
 		_blow(leg.gust_started, leg.gust_push)
+	boss.mirror_shift = items.passive("mirror_lead_s") - faults.param(FAULT_MIRROR, "mirror_tell_delay_s", 0.0)
 	boss.step_road(_road_dt, DT, items.flag(FLAG_HAZARDS))
 	if boss.rear_end_tell:
-		# Its horn, and its lights in the mirror: the tell (GDD 2.2, pillar 4).
+		# Its horn: the tell (GDD 2.2, pillar 4). Its lights in the mirror
+		# come with it, or earlier or later as the mirror shows them.
 		_emit("sfx_requested", {"id": "horn", "behind": true})
 	_report_call()
 	_report_soldier()
@@ -719,6 +735,10 @@ func _enter_approach() -> void:
 
 
 func _step_telling(button_down: bool) -> void:
+	if wrecked:
+		# The Wreck is where the Telling stops (GDD 11.4): in its tick he
+		# neither pulls in at a stall nor passes a gore or the end of a road.
+		return
 	if stopped:
 		_step_stop(button_down)
 		return
@@ -945,6 +965,10 @@ func begin_arrival() -> void:
 ## soldiers, the phone in his pocket, the bay.
 func _step_set_piece() -> void:
 	boss.step_after_car(_car_s_then)
+	if boss.stow_began:
+		# First in line (GDD 10.2): the soldier whistles as he sets off toward
+		# the car, so that the Stow's tell is heard as well as seen (GDD 17.2).
+		_emit("sfx_requested", {"id": "soldier_whistle"})
 	if boss.call_began:
 		effects.hold(THE_CALL, SET_PIECE, true)
 		_emit("call_started", {"caller": NOOR})
@@ -952,7 +976,7 @@ func _step_set_piece() -> void:
 		# His pocket is out of his sight: the ring is written out as well
 		# (GDD 17.2: every tell has both a sound and a visual).
 		# (Until the Call is resolved: answered, the ring is over at once.)
-		_emit("line_requested", {"id": "call.noor.rings", "until": "call_resolved"})
+		_emit("line_requested", {"id": "call.noor.rings", "until": "call_resolved", "tell": true})
 		_sync_anchors()
 	if boss.searched:
 		_search_at_the_barriers()
@@ -968,6 +992,11 @@ func _report_call() -> void:
 		effects.hold(THE_CALL, SET_PIECE, false)
 		_emit("call_resolved", {"caller": NOOR, "answered": false, "taken": ""})
 		_sync_anchors()
+	if boss.call_ending:
+		# The end of the talk has its tell (GDD 2.2, pillar 4; 17.2): her
+		# last words, and the phone's two notes.
+		_emit("line_requested", {"id": "noor.call.bye", "tell": true})
+		_emit("sfx_requested", {"id": "phone_ring"})
 
 
 ## He took the phone from his pocket (GDD 10.4): a TAP answers it alone, and
@@ -998,6 +1027,7 @@ func _search_at_the_barriers() -> void:
 		taken_ids.append(String(id))
 	_fit_cabin()
 	_emit("pulled_over", {"released": true, "paid": "search", "cost": 0.0, "minutes": minutes, "taken": taken_ids})
+	_emit("line_requested", {"id": "soldier.search"})
 
 
 # --- The Checkpoint (GDD 10.2) -----------------------------------------------
@@ -1028,14 +1058,22 @@ func _report_soldier() -> void:
 		# each stack of Courage he can smell.
 		suspicion.add(_checkpoint_number("contraband_suspicion") * float(items.contraband_in_view()))
 		suspicion.add(_checkpoint_number("courage_suspicion") * float(courage_noticed()))
-		# Forged papers pass the Papers phase by themselves, once (GDD 7.7).
+		# Forged papers pass the Papers phase by themselves, once (GDD 7.7):
+		# on the visit that gets him through. At the top of Suspicion he is
+		# turned back as he comes, and they stay in the cabin for the next.
+		if items.has_pass("papers") and suspicion.value >= _checkpoint_number("turned_back_at"):
+			_turn_back(suspicion.value)
+			return
 		if use_forged_papers():
 			boss.papers_passed()
 	if boss.delayed:
 		suspicion.add(_checkpoint_number("delay_suspicion"))
-	if boss.asked and not boss.papers_done and not items.flag(ItemSim.FLAG_WINDOW):
-		# He cannot be handed anything through the glass.
-		_emit("line_requested", {"id": "soldier.window"})
+	if boss.asked and not boss.papers_done:
+		# A sign goes up: he raps on the door for it (GDD 17.2).
+		_emit("sfx_requested", {"id": "soldier_knock"})
+		if not items.flag(ItemSim.FLAG_WINDOW):
+			# He cannot be handed anything through the glass.
+			_emit("line_requested", {"id": "soldier.window"})
 	_hold_at_window()
 	if boss.papers_done:
 		_give_the_verdict()
@@ -1091,6 +1129,8 @@ func _let_through(how: String, cost: float, minutes: float, taken: Array[String]
 	suspicion.end_watch()
 	_hold_at_window()
 	_emit("pulled_over", {"released": true, "paid": how, "cost": cost, "minutes": minutes, "taken": taken, "suspicion": level})
+	# The verdict is said (GDD 16.3: what he is told, he reads).
+	_emit("line_requested", {"id": "soldier.%s" % how})
 	_emit("suspicion_changed", {"value": 0.0, "watching": false})
 
 
@@ -1113,6 +1153,7 @@ func _turn_back(level: float) -> void:
 	suspicion.begin_watch()
 	_hold_at_window()
 	_emit("pulled_over", {"released": false, "paid": "turned_back", "cost": 0.0, "minutes": minutes, "taken": [], "suspicion": level})
+	_emit("line_requested", {"id": "soldier.turned_back"})
 	_emit("suspicion_changed", {"value": 0.0, "watching": true})
 
 
@@ -1133,6 +1174,10 @@ func _arrive() -> void:
 	_in_bay = false
 	boss.stop()
 	leg.stop()
+	# The key is turned: the engine is off and the car stays where it is.
+	parked = true
+	car.speed = 0.0
+	car.v_lat = 0.0
 	_sync_anchors()
 	# Whoever he carried to Basra is a wedding guest from now on (GDD 8.1, 11.5).
 	_emit("arrived", {"table": table, "clock": clock.text(), "clock_minutes": clock.minutes, "late": clock.late(), "call": told_true,
@@ -1150,6 +1195,9 @@ func _retell() -> void:
 	var retellings: int = run.retellings
 	var pointer: Vector2 = hand.pointer
 	_build()
+	# After a Wreck there is no saved Telling to continue: what the last stop
+	# saved was the night that wrecked, and this one starts from Baghdad.
+	checkpoint = {}
 	run.table = table
 	run.seed = telling_seed
 	run.retellings = retellings
@@ -1352,7 +1400,10 @@ func _step_suspicion() -> void:
 		return
 	if boss.kind == BossSim.CHECKPOINT:
 		# At the Checkpoint only its own rows count (GDD 10.2: added where
-		# they happen); nothing wears off, and nobody is pulled over.
+		# they happen), and a Snap, which is charged wherever the law is
+		# watching (GDD 6.1); nothing wears off, and nobody is pulled over.
+		if _snapped:
+			suspicion.add(tuning.f("suspicion_snap"))
 		_snapped = false
 		suspicion.step(DT)
 		if suspicion.jumped != 0.0:
@@ -1537,9 +1588,24 @@ func heavy_floor() -> float:
 ## How far he can see along the road, in metres (GDD 9.1, 9.4): the
 ## headlight cone at night, the dust in a dust haze, else no limit (INF).
 func visibility() -> float:
+	return _sight_in(boss.visibility)
+
+
+## How far the views show him the road, m: what he sees, but through the
+## dust's tell the Storm's thick dust is already closing in (GDD 2.2 pillar
+## 4: an impairment has a tell). Nothing in the rules goes by this.
+func sight_shown() -> float:
+	var sight: float = visibility()
+	if boss.dust_closing > 0.0 and is_finite(sight):
+		sight = lerpf(sight, _sight_in(boss.thick_visibility()), boss.dust_closing)
+	return sight
+
+
+## How far he would see with the set piece's dust at `dust` metres.
+func _sight_in(dust: float) -> float:
 	if not leg.active:
 		return INF
-	var reach: float = minf(leg.dust_visibility, boss.visibility)
+	var reach: float = minf(leg.dust_visibility, dust)
 	if leg.night:
 		# What makes the night darker for him shortens what he sees of it
 		# (GDD 7.5, 7.7: cracked sunglasses, tinted glass).
@@ -1606,6 +1672,9 @@ func snapshot() -> Dictionary:
 		"mirror_shift": encounter.tell_shift,
 		"caller": NOOR if boss.call == BossSim.CALL_RINGING else String(items.caller),
 		"ring_left": boss.call_left if boss.call == BossSim.CALL_RINGING else items.ring_left,
+		# The phone on its mount by itself: it can ring while Noor's does.
+		"mount_caller": String(items.caller),
+		"mount_ring_left": items.ring_left,
 		"call": boss.call,
 		"call_left": boss.call_left,
 		"call_taken": boss.call_taken,
@@ -1618,6 +1687,8 @@ func snapshot() -> Dictionary:
 		"bar_at": boss.bar_at,
 		"bar_up": boss.released,
 		"suspicion_by": "checkpoint" if boss.kind == BossSim.CHECKPOINT else ("patrol" if suspicion.watching else ""),
+		# False once the key is turned in the bay (GDD 10.5): the car is parked.
+		"engine_on": not parked,
 		"sun": boss.glare,
 		"sun_side": boss.sun_side,
 		# Where the light behind the Glare is, while the sun is up (degrees
@@ -1719,9 +1790,12 @@ func snapshot() -> Dictionary:
 		"boss_time": boss.time,
 		"dust_thick": boss.thick,
 		"dust_change_in": boss.dust_change_in,
+		"dust_closing": boss.dust_closing,
 		"rear_end_in": boss.rear_end_in,
+		"rear_end_lights_in": boss.rear_end_lights_in,
 		"pulled_over": pulled_over,
 		"visibility": visibility(),
+		"sight_shown": sight_shown(),
 		# Unlit things show only inside what he can see: at night they appear late.
 		"hazards": _hazards_in_view(),
 		"signs": _signs_in_view(),
@@ -1952,8 +2026,13 @@ func _feed_nerves() -> void:
 		nearest = minf(nearest, distance)
 		if distance <= _traffic_radius:
 			near += 1
-	nerves.add_rate(nerves.road_rate(near, nearest, in_encounter or encounter.active))
-	if car.on_shoulder:
+	# (The law at the Checkpoint is an encounter like a Patrol: no empty
+	# road calms him under its eyes.)
+	nerves.add_rate(nerves.road_rate(near, nearest, in_encounter or encounter.active or boss.watching()))
+	if car.on_shoulder and car.speed > 0.0:
+		# The shoulder is rough to drive on (GDD 5.1). A car at rest is
+		# shaken by nothing: the Storm's safe place and the Call taken
+		# pulled over cost his Nerves no more than standing anywhere.
 		nerves.add_rate(_shoulder_rate)
 	nerves.add_rate(faults.param(FAULT_RATTLE, "nerves_per_s", 0.0))
 	if car.on_rumble:
@@ -1965,6 +2044,10 @@ func _feed_nerves() -> void:
 ## cabin now has it. Runs whenever the cabin has changed.
 func _fit_cabin() -> void:
 	_cabin_seen = items.cabin_serial
+	# What has left the cabin has left his hand: a gesture on a thing that
+	# is gone (a search took the flask he was carrying) is over.
+	if gesture.is_active() and _active_ritual.has("item") and items.owner_of(_active_ritual) == null:
+		gesture.cancel()
 	wheel.turn_rate_mult = items.passive("turn_rate_mult")
 	wheel.return_rate_mult = items.passive("return_rate_mult")
 	car.lat_speed_mult = items.passive("lat_speed_mult")

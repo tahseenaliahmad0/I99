@@ -13,8 +13,10 @@ enum Stage { NONE, APPROACH, LEG, STOP, BOSS, BOSS_STOP, ARRIVAL, ENDED }
 const STAGE_NAMES: PackedStringArray = ["none", "approach", "leg", "stop", "boss", "boss_stop", "arrival", "ended"]
 const LEFT: int = 0
 const RIGHT: int = 1
-## Keeps the seed of a Telling told again after a Wreck apart from the first.
-const RETELLING_SALT: int = 3000
+## Keeps the seed of a Telling told again after a Wreck apart from the
+## first, and from everything RunGenerator draws from a Telling's seed
+## (its salts end at 4003).
+const RETELLING_SALT: int = 5000
 
 var active: bool = false
 var table: String = ""

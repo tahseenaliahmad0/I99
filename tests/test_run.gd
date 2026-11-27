@@ -413,6 +413,45 @@ func test_run_02() -> void:
 	for _tick: int in int((cut + 1.0) / DT):
 		_sim.step(_input)
 	check(_sim.wrecked and _sim.faults.lamps == capacity, "and stays one: there is no Telling to tell again")
+	_check_seeds_kept_apart()
+
+
+## What is drawn from the Telling's seed is kept apart by salts (GDD 13.3):
+## forks, legs, bosses, hitchers, and the Telling told again. (The review of
+## M7: the seed of a Telling told again was the seed of a boss of the
+## Telling before it.)
+func _check_seeds_kept_apart() -> void:
+	var slots: int = RunGenerator.ACTS * RunGenerator.LEGS_PER_ACT * RunGenerator.BRANCHES
+	var ranges: Array[Vector2i] = [
+		Vector2i(RunGenerator.FORK_SALT, RunGenerator.FORK_SALT + slots),
+		Vector2i(RunGenerator.LEG_SALT, RunGenerator.LEG_SALT + slots),
+		Vector2i(RunGenerator.BOSS_SALT, RunGenerator.BOSS_SALT + RunGenerator.ACTS),
+		Vector2i(RunGenerator.HITCHER_SALT, RunGenerator.HITCHER_SALT + RunGenerator.ACTS),
+		# A Telling can be told again any number of times: nothing lies above.
+		Vector2i(RunState.RETELLING_SALT, 0x7FFFFFFF),
+	]
+	var apart: bool = true
+	for first: int in ranges.size():
+		for second: int in range(first + 1, ranges.size()):
+			if ranges[first].x <= ranges[second].y and ranges[second].x <= ranges[first].y:
+				apart = false
+	check(apart, "the salts of forks, legs, bosses, hitchers and retellings do not meet")
+	for telling_seed: int in [1, 4242, 987654321]:
+		var again: int = telling_seed
+		var before: int = telling_seed
+		for retelling: int in range(1, 4):
+			before = again
+			again = Rng.derive(before, RunState.RETELLING_SALT + retelling)
+			var met: bool = false
+			for act: int in range(1, RunGenerator.ACTS + 1):
+				met = met or again == RunGenerator.boss_seed(before, act)
+			check(not met, "seed %d: told again %d times, its seed is no boss's of the Telling before" % [telling_seed, retelling])
+
+	# From Baghdad also for the player who quits and goes on from the save:
+	# after a Wreck there is no saved Telling to continue.
+	_check_no_save_after_a_wreck()
+	_check_the_games_file_after_a_wreck()
+	_check_a_wreck_at_the_stall()
 
 
 # --- T-RUN-01, in parts ------------------------------------------------------
@@ -598,6 +637,251 @@ func _check_gore_line() -> void:
 	check_eq(_sim.leg.leg_id, GameData.as_string(first[RunState.RIGHT]["leg"]), "drifting right, onto the right-hand branch")
 	check_near(float(ticks) * DT, (tuning.f("leg_tail") - tuning.f("exit_slip_length")) / (tuning.fi("gear_speeds", 0) * KMH_TO_MS), 0.1,
 			"the first fork is %s m from where the Telling starts" % str(tuning.f("leg_tail") - tuning.f("exit_slip_length")))
+
+
+# --- T-RUN-02, in parts ------------------------------------------------------
+
+## A Wreck after a stop. What that stop saved is the night that wrecked: once
+## the Telling is told again there is nothing saved to go on from, until the
+## new night comes to a stop of its own.
+func _check_no_save_after_a_wreck() -> void:
+	_begin_quiet_leg()
+	check(_sim.checkpoint.is_empty(), "(before the first stop nothing is saved)")
+	_scrape()
+	_stop_at_the_stall()
+	if not check(_sim.stopped and not _sim.checkpoint.is_empty(), "(he stops on the first leg with a lamp lit, and the stop saves)"):
+		return
+	var saved: Dictionary = _sim.checkpoint
+	var first_seed: int = _sim.run.seed
+	var lamps_then: int = _sim.faults.lamps
+	var at_stop: DriveSim = DriveSim.new(fresh_data())
+	check(at_stop.restore(saved) and at_stop.run.seed == first_seed and at_stop.faults.lamps == lamps_then and at_stop.stopped,
+			"(a save the night could go on from: at that stop, with that lamp)")
+	_leave_the_stop()
+	check(not _sim.stopped and _sim.run.stage == RunState.Stage.LEG, "(he drives on)")
+	check(is_same(_sim.checkpoint, saved), "(on the road the save is still what the stop made it)")
+	_wreck_on_the_rail()
+	if not check(_sim.wrecked, "(and wrecks further down the same leg)"):
+		return
+	_input.clear()
+	var guard: int = int(10.0 / DT)
+	while _sim.wrecked and guard > 0:
+		guard -= 1
+		_sim.step(_input)
+	check(not _sim.wrecked and _sim.run.active and _sim.run.retellings == 1 and _sim.run.seed != first_seed, "(the Telling is told again)")
+	check(_sim.checkpoint.is_empty(), "told again, the Telling has no save: what the last stop saved was the night that wrecked")
+	var after: DriveSim = DriveSim.new(fresh_data())
+	check(not after.restore(_sim.checkpoint), "nothing is left that a simulation could go on from")
+	check(not after.run.active and after.faults.lamps == 0, "and nothing of the wrecked night comes back")
+
+	# The night told again saves at its own first stop, as itself.
+	var second_seed: int = _sim.run.seed
+	guard = int(60.0 / DT)
+	while _sim.run.stage == RunState.Stage.APPROACH and guard > 0:
+		guard -= 1
+		_sim.step(_input)
+	_quiet_this_leg()
+	_stop_at_the_stall()
+	if check(_sim.stopped and not _sim.checkpoint.is_empty(), "the Telling told again saves at its own first stop"):
+		check_eq(Save.seed_in(_sim.checkpoint.get("seed")), second_seed, "under its own seed")
+		check_eq(GameData.as_int(_sim.checkpoint.get("retellings")), 1, "as the night told a second time")
+		check_eq(GameData.as_array(_sim.checkpoint.get("faults")).size(), 0, "with none of the lamps of the first")
+
+
+## The last lamp lit in the very tick he pulls in at a stall. The Wreck is
+## where the Telling stops (GDD 11.4), not the stall: the stop used to save
+## him standing there with every lamp lit and the night going on.
+func _check_a_wreck_at_the_stall() -> void:
+	_begin_quiet_leg()
+	while _sim.faults.lamps < _sim.faults.capacity - 1:
+		var lamps: int = _sim.faults.lamps
+		_scrape()
+		if _sim.faults.lamps == lamps:
+			break
+	if not check(_sim.faults.lamps == _sim.faults.capacity - 1 and not _sim.wrecked, "(one lamp short of a Wreck)"):
+		return
+	var stall: float = _sim.leg.length - tuning.f("leg_tail") + tuning.f("exit_slip_length")
+	var slow: float = tuning.f("exit_max_speed")
+	var lanes: int = _sim.car.lanes
+	_sim.gate.reset(2)
+	_input.clear()
+	# Into the slip lane, a little short of the stall.
+	_sim.car.s = stall - 5.0
+	_sim.car.x = _sim.car.lane_center(lanes)
+	_sim.car.speed = slow
+	_sim.step(_input)
+	_collect()
+	check(not _sim.stopped and not _sim.wrecked and _sim.car.lanes == lanes + 1, "(in the slip lane, the stall just ahead)")
+	# The next tick takes him past the stall, along the slip lane's guardrail.
+	_events = []
+	_sim.car.s = stall - slow * KMH_TO_MS * DT * 0.5
+	_sim.car.x = _sim.car.guardrail_x()
+	_sim.car.speed = slow
+	_sim.step(_input)
+	_collect()
+	check(_sim.wrecked and _has_event("wreck"), "the last lamp is lit in the tick he reaches the stall: a Wreck")
+	check(not _sim.stopped and not _has_event("stop_entered"), "and no stop: he is not found standing at the stall with every lamp lit")
+	check(_sim.checkpoint.is_empty(), "nothing is saved of that night")
+	_input.clear()
+	var guard: int = int(10.0 / DT)
+	while _sim.wrecked and guard > 0:
+		guard -= 1
+		_sim.step(_input)
+	check(not _sim.wrecked and _sim.run.active and _sim.run.retellings == 1 and _sim.faults.lamps == 0 and not _sim.stopped,
+			"after the cut the Telling is told again from Baghdad, with no lamp lit")
+
+
+## The same through the game: the drive scene with its controller, and the
+## file the Game autoload writes (GDD 13.7). A stop writes the Telling into
+## it; a Wreck of that Telling takes it out again, at once, so that quitting
+## during the cut does not bring the wrecked night back. A Wreck on a road
+## that belongs to no Telling leaves the file alone.
+func _check_the_games_file_after_a_wreck() -> void:
+	var tree: SceneTree = Engine.get_main_loop() as SceneTree
+	var scene: PackedScene = load("res://scenes/drive.tscn") as PackedScene
+	if not check(tree != null and scene != null, "(the drive scene loads)"):
+		return
+	var kept_args: Dictionary = Game.args
+	Game.args = {"table": "drivers", "seed": "7"}
+	Game.write_save({})
+	var drive: Node = scene.instantiate()
+	tree.root.add_child(drive)
+	_sim = drive.get("sim") as DriveSim
+	if check(_sim != null and _sim.run.active, "(the scene begins a Telling)"):
+		# To the first leg and into its stall, tick by tick through the controller.
+		var guard: int = int(60.0 / DT)
+		while _sim.run.stage == RunState.Stage.APPROACH and guard > 0:
+			guard -= 1
+			drive.call("_physics_process", DT)
+		_quiet_this_leg()
+		var stall: float = _sim.leg.length - tuning.f("leg_tail") + tuning.f("exit_slip_length")
+		var lanes: int = _sim.car.lanes
+		_sim.car.s = stall - 20.0
+		_sim.gate.reset(2)
+		guard = int(10.0 / DT)
+		while not _sim.stopped and guard > 0:
+			guard -= 1
+			_sim.car.x = _sim.car.lane_center(lanes)
+			_sim.car.speed = tuning.f("exit_max_speed")
+			drive.call("_physics_process", DT)
+		check(_sim.stopped, "(he stops at the first stall)")
+		var on_disk: Dictionary = _telling_on_disk()
+		check_eq(GameData.as_string(on_disk.get("stage")), "stop", "at a stop the game's file holds the Telling")
+		check_eq(Save.seed_in(on_disk.get("seed")), _sim.run.seed, "this Telling")
+		var from_file: DriveSim = DriveSim.new(fresh_data())
+		check(from_file.restore(on_disk), "(which could be continued from it)")
+
+		# Out of the stop (the scene reads the mouse; the hand is worked here).
+		_leave_the_stop()
+		check(not _sim.stopped, "(he leaves the stop)")
+		_sim.gate.reset(3)
+		guard = int(30.0 / DT)
+		while not _sim.wrecked and guard > 0:
+			guard -= 1
+			_sim.car.x = _sim.car.guardrail_x()
+			_sim.car.s = minf(_sim.car.s, _sim.leg.length - 50.0)
+			drive.call("_physics_process", DT)
+		check(_sim.wrecked, "(and wrecks)")
+		check(_telling_on_disk().is_empty(), "on the tick of the Wreck the file holds no Telling any more")
+		guard = int(10.0 / DT)
+		while _sim.wrecked and guard > 0:
+			guard -= 1
+			drive.call("_physics_process", DT)
+		for _tick: int in int(1.0 / DT):
+			drive.call("_physics_process", DT)
+		check(not _sim.wrecked and _sim.run.retellings == 1, "(the Telling is told again)")
+		check(_telling_on_disk().is_empty(), "nor when the Telling has been told again")
+		Game.read_save()
+		check(Game.saved_telling.is_empty(), "the game reads no Telling to continue")
+	drive.free()
+
+	# Outside a Telling the file is not the road's to clear.
+	var saved: Dictionary = _a_save_made_at_a_stop()
+	Game.args = {}
+	check(not saved.is_empty() and Game.write_save(saved), "(a Telling is saved; the scene is opened without one)")
+	drive = scene.instantiate()
+	tree.root.add_child(drive)
+	_sim = drive.get("sim") as DriveSim
+	if check(_sim != null and not _sim.run.active, "(no Telling is under way)"):
+		_sim.gate.reset(3)
+		var guard: int = int(60.0 / DT)
+		while not _sim.wrecked and guard > 0:
+			guard -= 1
+			_sim.car.x = _sim.car.guardrail_x()
+			drive.call("_physics_process", DT)
+		for _tick: int in int((tuning.f("wreck_to_wheel") + 1.0) / DT):
+			drive.call("_physics_process", DT)
+		check(_sim.wrecked, "(the car is wrecked on a road of no Telling)")
+		check_eq(Save.seed_in(_telling_on_disk().get("seed")), Save.seed_in(saved.get("seed")), "a Wreck outside a Telling leaves the saved Telling in the file")
+	drive.free()
+
+	Game.args = kept_args
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(Game.save_path()))
+	Game.read_save()
+	_sim = DriveSim.new(fresh_data())
+
+
+## The Telling in the game's save file as it is on disk now ({} for none).
+func _telling_on_disk() -> Dictionary:
+	if not FileAccess.file_exists(Game.save_path()):
+		return {}
+	return GameData.as_dict(Save.from_text(FileAccess.get_file_as_string(Game.save_path())).get("telling"))
+
+
+## What a Telling saves at its first stop.
+func _a_save_made_at_a_stop() -> Dictionary:
+	_begin_quiet_leg()
+	_stop_at_the_stall()
+	return _sim.checkpoint
+
+
+## The leg he is on, begun again without its traffic, hazards, bends and gusts.
+func _quiet_this_leg() -> void:
+	var plan: Dictionary = RunGenerator.plan(data, _sim.run.branch, _sim.run.act)
+	for key: String in ["spawns", "hazards", "curves", "gusts", "zones"]:
+		plan[key] = []
+	for key: String in ["flock", "melons", "motorcade"]:
+		plan[key] = {}
+	_sim.gate.reset(3)
+	_sim.begin_leg(plan)
+
+
+## Into the slip lane and to the stall at exit_max_speed: he stops.
+func _stop_at_the_stall() -> void:
+	var stall: float = _sim.leg.length - tuning.f("leg_tail") + tuning.f("exit_slip_length")
+	var lanes: int = _sim.car.lanes
+	_sim.car.s = stall - 20.0
+	_sim.gate.reset(2)
+	_input.clear()
+	var guard: int = int(10.0 / DT)
+	while not _sim.stopped and guard > 0:
+		guard -= 1
+		_sim.car.x = _sim.car.lane_center(lanes)
+		_sim.car.speed = tuning.f("exit_max_speed")
+		_sim.step(_input)
+		_collect()
+
+
+## A moment at the stop with his hand off the wheel, then the wheel is
+## gripped until he is off.
+func _leave_the_stop() -> void:
+	_input.clear()
+	for _tick: int in int(0.2 / DT):
+		_sim.step(_input)
+	_grip_until_left(5.0)
+
+
+## Along the guardrail, kept on the leg, until every lamp is lit.
+func _wreck_on_the_rail() -> void:
+	_sim.gate.reset(3)
+	_input.clear()
+	var guard: int = int(30.0 / DT)
+	while not _sim.wrecked and guard > 0:
+		guard -= 1
+		_sim.car.x = _sim.car.guardrail_x()
+		_sim.car.s = minf(_sim.car.s, _sim.leg.length - 50.0)
+		_sim.step(_input)
+		_collect()
 
 
 # --- The scripted driver -----------------------------------------------------

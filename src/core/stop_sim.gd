@@ -216,6 +216,8 @@ func _draw_items(stock: Dictionary) -> Array[String]:
 		var id: String = GameData.as_string(record.get("id"))
 		if not pools.has(GameData.as_string(record.get("kind"))) or _items.item(StringName(id)) != null:
 			continue
+		if not _has_a_job(record):
+			continue
 		var rarity: int = DataValidator.RARITIES.find(GameData.as_string(record.get("rarity"), "common"))
 		by_rarity[maxi(rarity, 0)].append(id)
 	var shares: PackedFloat64Array = PackedFloat64Array()
@@ -236,6 +238,17 @@ func _draw_items(stock: Dictionary) -> Array[String]:
 		drawn.append(GameData.as_string(from[which]))
 		from.remove_at(which)
 	return drawn
+
+
+## Every item has a job (GDD 12.4). One that is for a boss (`until_boss`:
+## forged papers, for the Checkpoint) is held out only while that boss is
+## still ahead of him: in an earlier act, or in this one before its end.
+func _has_a_job(record: Dictionary) -> bool:
+	var boss_id: String = GameData.as_string(record.get("until_boss"))
+	if boss_id.is_empty():
+		return true
+	var boss_act: int = GameData.as_int(_data.record("bosses", boss_id).get("act"))
+	return boss_act > _act or (boss_act == _act and service != BOSS_SERVICE)
 
 
 ## Moves waiting offers onto free places of the tray, in order. At a boss

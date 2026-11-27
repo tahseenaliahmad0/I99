@@ -64,9 +64,20 @@ var visibility: float = INF
 var thick: bool = false
 ## Seconds until the dust thins or thickens.
 var dust_change_in: float = 0.0
-## Seconds until what is coming up behind his standing car reaches it
-## (0: nothing is coming). Its lights in the mirror and its horn are the tell.
+## The dust's tell (GDD 2.2 pillar 4): through the last dust_tell_s of thin
+## dust the thick dust closes in, from 0 to 1 as it turns thick. It is for
+## the views and the sound only: what he sees by the rules changes in one
+## tick (GDD 10.3).
+var dust_closing: float = 0.0
+## Seconds until what is coming up behind his standing car reaches it, from
+## the moment its horn sounds (0: nothing is coming, or not yet heard).
 var rear_end_in: float = 0.0
+## The same seconds from the moment its lights show in his mirror: a mirror
+## tell (GDD 7.6, 6.3), earlier in a wide mirror and later in a cracked one.
+var rear_end_lights_in: float = 0.0
+## Seconds by which the mirror shows things earlier (a wide mirror) or, below
+## zero, later (a cracked one). DriveSim sets it.
+var mirror_shift: float = 0.0
 
 # --- Dawn (GDD 10.4) ---------------------------------------------------------
 ## FALSE_DAWN, SUNRISE or THE_CALL (0 on any other road).
@@ -121,9 +132,11 @@ var in_bay: bool = false
 var rear_end_tell: bool = false
 ## It hit him.
 var rear_end: bool = false
-## The phone began to ring; it rang out unanswered; the talk ended.
+## The phone began to ring; it rang out unanswered; the talk is about to end
+## (its tell, talk_end_tell_s ahead); the talk ended.
 var call_began: bool = false
 var call_missed: bool = false
+var call_ending: bool = false
 var call_ended: bool = false
 ## He came to the last checkpoint's barriers too fast: he is stopped and
 ## searched.
@@ -132,6 +145,8 @@ var searched: bool = false
 var wall_speed: float = 0.0
 ## He ran into the lowered bar at this speed, km/h (0: he did not).
 var bar_speed: float = 0.0
+## The soldier has set off toward his window: the Stow begins.
+var stow_began: bool = false
 ## The soldier has reached his window: what he sees is counted now.
 var stow_ended: bool = false
 ## A sign went up (the first, or the next document of a thorough check).
@@ -149,16 +164,20 @@ var _thin_s: float = 0.0
 var _thin_m: float = 0.0
 var _thick_s: float = 0.0
 var _thick_m: float = 0.0
+var _dust_tell: float = 0.0
 var _stopped_kmh: float = 0.0
 var _rear_end_every: float = 0.0
 var _rear_end_tell: float = 0.0
 var _rear_end_chance: float = 0.0
+## The speed at which a car that stood in the Storm has driven off again.
+var _moved_off_kmh: float = 0.0
 ## Seconds he has stood where he is not safe, since the last time something
 ## could have come.
 var _stood: float = 0.0
-## The draw for this wait has been made; and it came up a hit.
+## The draw for this wait has been made; it came up a hit; its horn has sounded.
 var _drawn: bool = false
 var _coming: bool = false
+var _horned: bool = false
 var _length: float = 0.0
 ## A checkpoint's corridor (GDD 10.2, 10.4): where its barriers begin to
 ## close in, where they are corridor_gap apart, and where they end.
@@ -176,6 +195,11 @@ var _glare_ramp: float = 0.0
 var _call_at: float = 0.0
 var _ring_s: float = 0.0
 var _talk_s: float = 0.0
+var _talk_end_tell: float = 0.0
+## The end of this talk has been announced.
+var _bye_said: bool = false
+## The car stood for the talk and stands on until his hand has the wheel.
+var _stands_after_call: bool = false
 var _bump_kmh: float = 0.0
 ## The Checkpoint's queue: for each lane the vehicles still waiting, the one
 ## at the bar first; the seconds that one has been served; and the vehicle
@@ -183,9 +207,11 @@ var _bump_kmh: float = 0.0
 var _queue: Array[Array] = []
 var _served: PackedFloat64Array = PackedFloat64Array()
 var _waved_on: Array[TrafficSim.Vehicle] = []
-## How fast each of those is by now, km/h (TrafficSim sets a vehicle's own
-## speed to its cruise every tick, and theirs is 0 for it).
-var _waved_speed: PackedFloat64Array = PackedFloat64Array()
+## Everyone who was waved on and is still on the road, and how fast each is
+## by now, km/h (TrafficSim sets a vehicle's own speed to its cruise every
+## tick, and theirs is 0 for it). They drive to the road's end.
+var _leaving: Array[TrafficSim.Vehicle] = []
+var _leaving_speed: PackedFloat64Array = PackedFloat64Array()
 var _queue_plan: Array = []
 var _queue_gap: float = 0.0
 var _creep_ms: float = 0.0
@@ -291,6 +317,8 @@ static func _plan_dawn(data: GameData, out: Dictionary, dawn: Dictionary, modifi
 	road["par_s"] = GameData.as_float(out.get("par_s"))
 	road["length_m"] = GameData.as_float(out.get("length"))
 	road["density_mult"] = GameData.as_float(modifier.get("traffic_mult"), 1.0)
+	# Everything on this road passes between the last checkpoint's barriers.
+	road["max_vehicle_width"] = GameData.as_float(check.get("gap_m"))
 	var taper: float = GameData.as_float(check.get("taper_m"))
 	var zone: Dictionary = {
 		"kind": CORRIDOR,
@@ -367,8 +395,19 @@ static func _plan_storm(data: GameData, out: Dictionary, storm: Dictionary, modi
 			"trigger_s": snappedf(trigger, 0.01),
 			"ahead": snappedf(at - trigger, 0.01),
 			"meet_s": -1.0,
+			# Put on the road only where no other is nearer than the least
+			# gap: a driver at their own pace is not given a wall.
+			"apart_m": GameData.as_float(gaps[0]),
 		})
 		at += random.randf_range(GameData.as_float(gaps[0]), GameData.as_float(gaps[1]))
+	# None is faster than one ahead of it: they never close on one another,
+	# so what begins as a way past stays one.
+	var drawn: Array[float] = []
+	for spawn: Variant in spawns:
+		drawn.append(GameData.as_float(GameData.as_dict(spawn).get("speed")))
+	drawn.sort()
+	for index: int in spawns.size():
+		GameData.as_dict(spawns[index])["speed"] = drawn[index]
 	out["spawns"] = spawns
 
 
@@ -428,6 +467,7 @@ func begin(plan_of_road: Dictionary) -> void:
 		_call_at = _length - GameData.as_float(ring.get("from_end_m"))
 		_ring_s = GameData.as_float(ring.get("ring_s"))
 		_talk_s = GameData.as_float(ring.get("talk_s"))
+		_talk_end_tell = GameData.as_float(ring.get("talk_end_tell_s"))
 		wrist_steer = GameData.as_float(ring.get("wrist_steer"), 1.0)
 		_stopped_kmh = GameData.as_float(ring.get("stopped_kmh"))
 		phase = FALSE_DAWN
@@ -437,7 +477,9 @@ func begin(plan_of_road: Dictionary) -> void:
 		_thin_m = GameData.as_float(storm.get("thin_m"))
 		_thick_s = GameData.as_float(storm.get("thick_s"))
 		_thick_m = GameData.as_float(storm.get("thick_m"))
+		_dust_tell = GameData.as_float(storm.get("dust_tell_s"))
 		_stopped_kmh = GameData.as_float(storm.get("stopped_kmh"))
+		_moved_off_kmh = GameData.as_float(storm.get("moved_off_kmh"))
 		_rear_end_every = GameData.as_float(storm.get("rear_end_every_s"))
 		_rear_end_tell = GameData.as_float(storm.get("rear_end_tell_s"))
 		_rear_end_chance = GameData.as_float(storm.get("rear_end_chance"))
@@ -453,10 +495,13 @@ func stop() -> void:
 	visibility = INF
 	thick = false
 	dust_change_in = 0.0
+	dust_closing = 0.0
 	rear_end_in = 0.0
+	rear_end_lights_in = 0.0
 	_stood = 0.0
 	_drawn = false
 	_coming = false
+	_horned = false
 	phase = 0
 	glare = 0.0
 	sun_side = 0.0
@@ -467,6 +512,8 @@ func stop() -> void:
 	call_left = 0.0
 	call_taken = ""
 	call_answered = false
+	_bye_said = false
+	_stands_after_call = false
 	bay_from = 0.0
 	bay_to = 0.0
 	in_bay = false
@@ -478,7 +525,8 @@ func stop() -> void:
 	_queue = []
 	_served = PackedFloat64Array()
 	_waved_on = []
-	_waved_speed = PackedFloat64Array()
+	_leaving = []
+	_leaving_speed = PackedFloat64Array()
 	_documents = []
 	_delays = 0
 	_corridor_from = 0.0
@@ -496,10 +544,12 @@ func begin_tick() -> void:
 	rear_end = false
 	call_began = false
 	call_missed = false
+	call_ending = false
 	call_ended = false
 	searched = false
 	wall_speed = 0.0
 	bar_speed = 0.0
+	stow_began = false
 	stow_ended = false
 	asked = false
 	delayed = false
@@ -519,7 +569,9 @@ func step_road(dt: float, cabin_dt: float, hazards_on: bool) -> void:
 	elif kind == DAWN:
 		_step_call(cabin_dt)
 	elif kind == CHECKPOINT:
-		_step_soldier(cabin_dt)
+		# The soldier is of the road: Focus slows his walk and his patience
+		# with the queue, and buys the hand that time (GDD 7.4).
+		_step_soldier(dt)
 
 
 ## After the traffic has moved: the Checkpoint's queue, which this class
@@ -541,11 +593,15 @@ func step_after_car(s_then: float) -> void:
 			call = CALL_RINGING
 			call_left = _ring_s
 			call_began = true
-		# The soldiers wave through whoever comes to the barriers at
-		# corridor_max_kmh or less (GDD 10.4). Anyone faster is stopped.
-		if not _corridor_judged and s_then < _corridor_at and _car.s >= _corridor_at:
-			_corridor_judged = true
-			searched = _car.speed > _corridor_max_kmh + 0.001
+		# The soldiers wave through whoever drives between the barriers at
+		# corridor_max_kmh or less (GDD 10.4): from their mouth to their
+		# end, not only as he comes to them. Anyone faster is stopped, once.
+		if not _corridor_judged and _car.s >= _corridor_at:
+			if _car.s > _corridor_to:
+				_corridor_judged = true
+			elif _car.speed > _corridor_max_kmh + 0.001:
+				_corridor_judged = true
+				searched = true
 	elif kind == CHECKPOINT:
 		var nose: float = _car.length() * 0.5
 		if not released and s_then + nose <= bar_at + 0.001 and _car.s + nose > bar_at:
@@ -556,6 +612,7 @@ func step_after_car(s_then: float) -> void:
 		if phase == QUEUE and _first_in_line():
 			phase = STOW
 			stow_left = _stow_s
+			stow_began = true
 	elif kind == ARRIVAL:
 		var half_length: float = _car.length() * 0.5
 		if _car.s + half_length >= _length:
@@ -575,12 +632,12 @@ func _begin_queue() -> void:
 		for waiting: Variant in line:
 			var vehicle: TrafficSim.Vehicle = waiting
 			_traffic.remove(vehicle)
-	for gone: TrafficSim.Vehicle in _waved_on:
-		if gone != null:
-			_traffic.remove(gone)
+	for gone: TrafficSim.Vehicle in _leaving:
+		_traffic.remove(gone)
 	_queue = []
 	_waved_on = []
-	_waved_speed = PackedFloat64Array()
+	_leaving = []
+	_leaving_speed = PackedFloat64Array()
 	_served = PackedFloat64Array()
 	for lane: int in _queue_plan.size():
 		var line: Array = []
@@ -600,7 +657,6 @@ func _begin_queue() -> void:
 		_queue.append(line)
 		_served.append(0.0)
 		_waved_on.append(null)
-		_waved_speed.append(0.0)
 	phase = QUEUE
 	released = false
 	stow_left = 0.0
@@ -617,23 +673,35 @@ func _begin_queue() -> void:
 ## never faster than creep_kmh. TrafficSim leaves them where they are (their
 ## cruise is 0): its follow gap would spread the queue out.
 func _step_queue(dt: float) -> void:
+	# Whoever was waved on drives off, and is taken off the road at its end.
+	for index: int in range(_leaving.size() - 1, -1, -1):
+		var leaver: TrafficSim.Vehicle = _leaving[index]
+		_leaving_speed[index] = minf(_leaving_speed[index] + _leave_accel * dt, _leave_kmh)
+		leaver.speed = _leaving_speed[index]
+		leaver.s += leaver.speed * KMH_TO_MS * dt
+		leaver.cruise = 0.0
+		if leaver.s - leaver.half_length > _length:
+			_traffic.remove(leaver)
+			_leaving.remove_at(index)
+			_leaving_speed.remove_at(index)
+			for lane: int in _waved_on.size():
+				if _waved_on[lane] == leaver:
+					_waved_on[lane] = null
 	for lane: int in _queue.size():
 		var line: Array = _queue[lane]
 		var nose: float = bar_at
 		var gone: TrafficSim.Vehicle = _waved_on[lane]
-		if gone != null:
-			_waved_speed[lane] = minf(_waved_speed[lane] + _leave_accel * dt, _leave_kmh)
-			gone.speed = _waved_speed[lane]
-			gone.s += gone.speed * KMH_TO_MS * dt
-			gone.cruise = 0.0
-			if gone.s - gone.half_length < bar_at + _queue_clear:
-				# Not yet clear of the bar: the next one waits behind it.
-				nose = minf(nose, gone.s - gone.half_length - _queue_gap)
-			elif gone.s - gone.half_length > _length:
-				_traffic.remove(gone)
-				_waved_on[lane] = null
+		if gone != null and gone.s - gone.half_length < bar_at + _queue_clear:
+			# Not yet clear of the bar: the next one waits behind it.
+			nose = minf(nose, gone.s - gone.half_length - _queue_gap)
 		for waiting: Variant in line:
 			var vehicle: TrafficSim.Vehicle = waiting
+			# Stop and go needs the brake: a vehicle of the queue he keeps
+			# pushing against is touched anew when the last touch has worn
+			# off (on the open road one contact is one hit: he is held
+			# behind what he touched; here that would carry him through
+			# the queue for the price of one bump).
+			vehicle.cc_hit = false
 			var room: float = nose - vehicle.half_length - vehicle.s
 			var speed_ms: float = clampf(room * _pull_up_rate, 0.0, _creep_ms)
 			vehicle.s += minf(speed_ms * dt, maxf(room, 0.0))
@@ -645,15 +713,24 @@ func _step_queue(dt: float) -> void:
 		var first: TrafficSim.Vehicle = line[0]
 		if bar_at - (first.s + first.half_length) > _settle_m:
 			continue
+		if _car.s < _corridor_from:
+			# The queue is served once he has come to it: short of the
+			# barriers there is nothing to wait out (GDD 10.2, phase 1).
+			continue
 		_served[lane] += dt
 		if _served[lane] >= _serve_s - dt * 0.5:
 			_served[lane] = 0.0
 			line.remove_at(0)
 			first.role = WAVED_ON_ROLE
-			if _waved_on[lane] != null:
-				_traffic.remove(_waved_on[lane])
 			_waved_on[lane] = first
-			_waved_speed[lane] = 0.0
+			_leaving.append(first)
+			_leaving_speed.append(0.0)
+
+
+## True while the Checkpoint has him under its eyes: from its start until
+## he is let through. No empty road calms him there (GDD 6.1).
+func watching() -> bool:
+	return active and kind == CHECKPOINT and not released
 
 
 ## True when nothing of the queue is left ahead of him in his lane and he
@@ -745,6 +822,9 @@ func _set_corridor(check: Dictionary) -> void:
 	_corridor_half_gap = GameData.as_float(check.get("gap_m")) * 0.5
 	_corridor_sign_at = maxf(_corridor_from - GameData.as_float(check.get("sign_lead_s")) * _data.tuning.fi("gear_speeds", 2) * KMH_TO_MS, 0.0)
 	_corridor_judged = false
+	# Concrete stands between the lanes from the taper's mouth to the
+	# corridors' end: no vehicle changes lane there, whatever honks.
+	_traffic.walled = Vector2(_corridor_from, _corridor_to)
 
 
 ## The barriers beside a car at `s` whose middle is at `x` (GDD 10.2, 10.4),
@@ -793,6 +873,7 @@ func answer(how: String) -> bool:
 	call_left = _talk_s
 	call_taken = how
 	call_answered = true
+	_bye_said = false
 	return true
 
 
@@ -808,7 +889,13 @@ func pulled_over_safely(hazards_on: bool) -> bool:
 func holds_car() -> bool:
 	if kind == CHECKPOINT:
 		return phase == STOW or phase == PAPERS
-	return call == CALL_TALKING and call_taken == TAKEN_PARKED
+	return (call == CALL_TALKING and call_taken == TAKEN_PARKED) or _stands_after_call
+
+
+## His hand has the wheel: a car that stood on after a call taken pulled
+## over is his to drive again.
+func wheel_taken() -> void:
+	_stands_after_call = false
 
 
 ## True while the phone is at his ear in his own hand.
@@ -837,6 +924,10 @@ func _step_call(dt: float) -> void:
 	if call != CALL_RINGING and call != CALL_TALKING:
 		return
 	call_left -= dt
+	if call == CALL_TALKING and not _bye_said and call_left < _talk_end_tell + dt * 0.5:
+		# The end of the talk is announced (GDD 2.2, pillar 4).
+		_bye_said = true
+		call_ending = true
 	if call_left >= dt * 0.5:
 		return
 	call_left = 0.0
@@ -844,6 +935,8 @@ func _step_call(dt: float) -> void:
 		call_missed = true
 	else:
 		call_ended = true
+		# Pulled over, nobody is at the wheel yet: the car stands on.
+		_stands_after_call = call_taken == TAKEN_PARKED
 	call = CALL_OVER
 
 
@@ -857,31 +950,54 @@ func _step_dust(dt: float) -> void:
 	thick = at >= _thin_s
 	visibility = _thick_m if thick else _thin_m
 	dust_change_in = maxf((cycle if thick else _thin_s) - at + dt * 0.5, 0.0)
+	dust_closing = clampf(1.0 - dust_change_in / _dust_tell, 0.0, 1.0) if not thick and _dust_tell > 0.0 else 0.0
+
+
+## How far he sees in the Storm's thick dust, m (INF outside the Storm).
+func thick_visibility() -> float:
+	return _thick_m if kind == STORM and active else INF
 
 
 ## A car that stands in the Storm (GDD 10.3) is safe wholly off the lanes
 ## with its hazard lights on. Anywhere else, or dark, something may come out
 ## of the dust behind it every rear_end_every_s: the draw is made
 ## rear_end_tell_s before, and what it brings shows its lights and sounds its
-## horn for that long before it hits. A car that has moved off or made itself
-## safe by then is missed.
+## horn for that long before it hits. A car that has driven off or made
+## itself safe by then is missed. The wait begins when he stands
+## (stopped_kmh) and ends when he has driven off (moved_off_kmh): a car
+## that creeps where it stood is as easily run into as one that stands.
 func _step_standing(dt: float, hazards_on: bool) -> void:
 	var off_the_lanes: bool = _car.x - _car.half_width() >= _car.road_right()
-	if _car.speed > _stopped_kmh or (hazards_on and off_the_lanes):
-		_stood = 0.0
-		_drawn = false
-		_coming = false
-		rear_end_in = 0.0
+	var waiting: bool = _stood > 0.0
+	var driving: bool = _car.speed >= _moved_off_kmh if waiting else _car.speed > _stopped_kmh
+	if driving or (hazards_on and off_the_lanes):
+		_end_the_wait()
 		return
 	_stood += dt
-	if not _drawn and _stood >= _rear_end_every - _rear_end_tell - dt * 0.5:
+	# Its lights in his mirror are a mirror tell: as long before the hit as
+	# its horn, shifted by what the mirror is. The draw is made when the
+	# first of the two is due.
+	var lights_lead: float = maxf(_rear_end_tell + mirror_shift, 0.0)
+	var left: float = maxf(_rear_end_every - _stood, 0.0)
+	if not _drawn and _stood >= _rear_end_every - maxf(_rear_end_tell, lights_lead) - dt * 0.5:
 		_drawn = true
 		_coming = _rng.chance(Rng.ROAD, _rear_end_chance)
-		rear_end_tell = _coming
-	rear_end_in = maxf(_rear_end_every - _stood, 0.0) if _coming else 0.0
+	if _coming and not _horned and _stood >= _rear_end_every - _rear_end_tell - dt * 0.5:
+		_horned = true
+		rear_end_tell = true
+	rear_end_in = left if _horned else 0.0
+	rear_end_lights_in = left if _coming and lights_lead > 0.0 and _stood >= _rear_end_every - lights_lead - dt * 0.5 else 0.0
 	if _stood >= _rear_end_every - dt * 0.5:
 		rear_end = _coming
-		_stood = 0.0
-		_drawn = false
-		_coming = false
-		rear_end_in = 0.0
+		_end_the_wait()
+
+
+## Nothing is coming any more: he has driven off, made himself safe, or it
+## has come.
+func _end_the_wait() -> void:
+	_stood = 0.0
+	_drawn = false
+	_coming = false
+	_horned = false
+	rear_end_in = 0.0
+	rear_end_lights_in = 0.0

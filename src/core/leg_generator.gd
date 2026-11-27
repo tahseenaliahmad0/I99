@@ -101,6 +101,9 @@ var _act: int = 1
 var _lanes: int = 3
 var _divided: bool = true
 var _par: float = 0.0
+## The widest vehicle the road lets through (INF: any): a road with barriers
+## across it carries nothing wider than their gap.
+var _max_width: float = INF
 var _par_ms: float = 0.0
 var _leg_length: float = 0.0
 var _beats_end: float = 0.0
@@ -215,6 +218,7 @@ func _setup(data: GameData, leg: Dictionary, act: int, modifier_id: String) -> v
 	_lanes = GameData.as_int(_leg.get("lanes"), 3)
 	_divided = GameData.as_bool(_leg.get("divided"), true)
 	_par = _tuning.fi("gear_speeds", 2)
+	_max_width = GameData.as_float(_leg.get("max_vehicle_width"), INF)
 	_par_ms = _par * KMH_TO_MS
 	# A leg is leg_length long with leg_tail of it for the Exit; a road that
 	# is no leg says its own.
@@ -753,6 +757,7 @@ func _lane_center(lane: int) -> float:
 ## before the leg begins it is on the road from the start.
 func _plan_vehicle(vehicle: String, lane: int, speed: float, meet: float, direction: int = 1) -> Planned:
 	var planned: Planned = Planned.new()
+	vehicle = _fitting(vehicle)
 	planned.vehicle = vehicle
 	planned.lane = lane
 	planned.change_to = lane
@@ -1518,6 +1523,22 @@ func _add_filler(planned: Planned) -> bool:
 	return true
 
 
+## The vehicle a template names, or, on a road with a place it is too wide
+## for (barriers across it), the widest of this act's traffic that fits: at
+## the same place and speed, so the beat is what it was.
+func _fitting(vehicle: String) -> String:
+	if GameData.as_float(_data.record("vehicles", vehicle).get("width")) <= _max_width:
+		return vehicle
+	var best: String = vehicle
+	var widest: float = -1.0
+	for type: Dictionary in _traffic_types():
+		var width: float = GameData.as_float(type.get("width"))
+		if width > widest:
+			widest = width
+			best = GameData.as_string(type.get("id"))
+	return best
+
+
 ## Ordinary traffic of this act.
 func _traffic_types() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
@@ -1525,6 +1546,9 @@ func _traffic_types() -> Array[Dictionary]:
 		if type.has("traffic") and not GameData.as_bool(type.get("traffic")):
 			continue
 		if not GameData.as_array(type.get("acts")).has(float(_act)):
+			continue
+		if GameData.as_float(type.get("width")) > _max_width:
+			# The road has a place it does not fit through (barriers).
 			continue
 		out.append(type)
 	return out

@@ -752,6 +752,7 @@ func test_pass_drummer() -> void:
 	# Nobody carried: no guest.
 	_to_first_leg(_telling_seed("drummer"))
 	check_eq(GameData.as_string(_on_to_basra().get("guest")), "", "(with nobody in the seat at the end there is no guest)")
+	_check_where_the_drum_stands()
 
 
 # --- T-PASS-STUDENT ----------------------------------------------------------
@@ -1118,3 +1119,27 @@ func test_pass_apprentice() -> void:
 	var arrived: Dictionary = _on_to_basra()
 	check_eq(_count_events("passenger_left"), 0, "he gets out at no stop of the night")
 	check_eq(GameData.as_string(arrived.get("guest")), "apprentice", "he rides to Basra: he is a wedding guest")
+
+
+## "His drum blocks the right 10% of the view" (GDD 8.2), as he looks
+## straight ahead, in a window of any shape: the view places the drum from
+## the snapshot's number, and here its place is projected back with the
+## camera's own numbers (the review of M8: it was the right tenth at 16:9
+## only, and outside the picture at 4:3).
+func _check_where_the_drum_stands() -> void:
+	var block: float = GameData.as_float(_passenger("drummer").get("view_block_right"))
+	var fov: float = tuning.f("camera_fov")
+	var eye: Vector3 = GameData.as_vec3(GameData.as_dict(data.root("anchors").get("points")).get("eye"))
+	var at: Vector3 = Vector3(tuning.fi("drum_pos", 0), tuning.fi("drum_pos", 1), tuning.fi("drum_pos", 2))
+	var radius: float = GameData.as_float(GameData.as_array(GameData.as_dict(GameData.as_dict(data.root("placeholders").get("cabin_drum")).get("placeholder")).get("size"))[0])
+	check(block > 0.0 and radius > 0.0 and eye.z > at.z, "(the drum stands ahead of his eye and has a width)")
+	for shape: Vector2 in [Vector2(16.0, 9.0), Vector2(4.0, 3.0), Vector2(21.0, 9.0), Vector2(16.0, 10.0)]:
+		var aspect: float = shape.x / shape.y
+		var span: Vector2 = CabinView.drum_span(block, aspect, fov, eye, at, radius)
+		var half_view: float = tan(deg_to_rad(fov) * 0.5) * aspect
+		var middle: Vector2 = Vector2(span.x - eye.x, eye.z - at.z)
+		var half_angle: float = asin(radius * span.y / middle.length())
+		var left_share: float = 0.5 + 0.5 * tan(atan2(middle.x, middle.y) - half_angle) / half_view
+		var right_share: float = 0.5 + 0.5 * tan(atan2(middle.x, middle.y) + half_angle) / half_view
+		check_near(left_share, 1.0 - block, 0.001, "at %d:%d the drum's left edge is %d%% of the way across the view (%.1f%%)" % [roundi(shape.x), roundi(shape.y), roundi((1.0 - block) * 100.0), left_share * 100.0])
+		check(right_share >= 1.0, "(and it reaches the view's right edge: %.1f%%)" % (right_share * 100.0))

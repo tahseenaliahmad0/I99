@@ -4,7 +4,8 @@ extends TestSuite
 const DT: float = DriveSim.DT
 const KMH_TO_MS: float = 1.0 / 3.6
 const TABLE: String = "drivers"
-const SAVE_DIR: String = "user://test_runs/t_save"
+## Under this process's own test folder (Smoke.test_user_root()).
+var _save_dir: String = Smoke.test_user_root().path_join("t_save")
 
 var _sim: DriveSim
 var _input: DriveInput
@@ -153,8 +154,8 @@ func test_save_01() -> void:
 
 	# Through the file and back.
 	var text: String = Save.to_text(profile, saved)
-	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(SAVE_DIR))
-	var path: String = SAVE_DIR.path_join(Save.FILE_NAME)
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(_save_dir))
+	var path: String = _save_dir.path_join(Save.FILE_NAME)
 	var file: FileAccess = FileAccess.open(path, FileAccess.WRITE)
 	if not check(file != null, "(the test can write %s)" % path):
 		return

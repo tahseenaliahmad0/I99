@@ -69,6 +69,10 @@ class Vehicle:
 const KMH_TO_MS: float = 1.0 / 3.6
 
 var vehicles: Array[Vehicle] = []
+## Where barriers stand between the lanes (a checkpoint's corridors and the
+## taper into them), from and to in metres along the road; ZERO for none.
+## Nobody changes lane there. Whoever builds the road sets it.
+var walled: Vector2 = Vector2.ZERO
 
 var _type_ids: Array[StringName] = []
 var _type_records: Array[Dictionary] = []
@@ -114,6 +118,7 @@ func clear() -> void:
 	vehicles.clear()
 	_order_stale = true
 	_next_id = 1
+	walled = Vector2.ZERO
 
 
 ## Takes every vehicle off the road in the middle of a leg (the car has
@@ -171,14 +176,39 @@ func plan_lane_change(vehicle: Vehicle, at_s: float, to_lane: int, late: bool = 
 
 
 ## Starts a lane change now. `duration` is how long the move itself takes
-## (0 means lane_change_time); the horn asks for a quicker one.
+## (0 means lane_change_time); the horn asks for a quicker one. Nobody
+## changes lane where barriers stand between the lanes, nor begins a change
+## that would still be going on when they are reached.
 func begin_lane_change(vehicle: Vehicle, to_lane: int, signal_time: float, duration: float = 0.0) -> void:
 	if vehicle.changing or vehicle.signalling != 0 or to_lane == vehicle.lane:
+		return
+	var took: float = signal_time + (duration if duration > 0.0 else _change_time)
+	if _between_walls(vehicle, took):
 		return
 	vehicle.signalling = 1 if to_lane > vehicle.lane else -1
 	vehicle.signal_left = signal_time
 	vehicle.change_to_lane = to_lane
 	vehicle.change_duration = duration if duration > 0.0 else _change_time
+
+
+## True when a vehicle going `direction`'s way is within `reach` metres of
+## `s` along the road, in any lane.
+func someone_near(s: float, reach: float, direction: int) -> bool:
+	for vehicle: Vehicle in vehicles:
+		if vehicle.direction == direction and absf(vehicle.s - s) < reach:
+			return true
+	return false
+
+
+## True when any of a vehicle's next `seconds` of road, at the speed it has,
+## lies where barriers stand between the lanes.
+func _between_walls(vehicle: Vehicle, seconds: float) -> bool:
+	if walled.y <= walled.x:
+		return false
+	var from: float = vehicle.s - vehicle.half_length
+	var to: float = vehicle.s + vehicle.half_length
+	var travel: float = vehicle.velocity() * KMH_TO_MS * seconds
+	return maxf(to, to + travel) >= walled.x and minf(from, from + travel) <= walled.y
 
 
 func step(dt: float, player_s: float, player_x: float, player_speed: float) -> void:

@@ -132,6 +132,16 @@ class Item:
 	var warm_while_chewing: bool = false
 	## What it does by the second while it is in the cabin.
 	var standing: Array[Standing] = []
+	## What the tick needs of its record, read once when it is put in the
+	## cabin: the time by which a smoke must be ashed (0: nothing to ash), the
+	## length of a tape's side (INF: no tape), whether it burns down when used
+	## (it has an ash time and a status of its own), whether it takes calls,
+	## and its synergies as the record lists them.
+	var ash_by: float = 0.0
+	var side_s: float = INF
+	var smokes: bool = false
+	var is_phone: bool = false
+	var synergies: Array = []
 
 
 ## One thing an item does all the time it is there (its condition allowing).
@@ -256,6 +266,13 @@ var _placed: Dictionary = {}
 var _leg_holds: Array[StringName] = []
 ## Standing changes of what is in the cabin, combined: key -> value.
 var _passives: Dictionary = {}
+## Read from the cabin whenever it changes (_refresh_passives), for the tick:
+## the first thing that takes calls, the first tape, whether anything is kept
+## warm by chewing, and the standing change to how fast the haze clears.
+var _phone: Item = null
+var _tape: Item = null
+var _keeps_warm: bool = false
+var _haze_clear_mult: float = 1.0
 ## Counts every change to what is in the cabin, so that who reads the
 ## standing changes knows when to read them again.
 var cabin_serial: int = 0
@@ -488,10 +505,15 @@ func add_item(id: StringName, slot: StringName, supply: int = -1) -> Item:
 		item.supply = supply if supply >= 0 else GameData.as_int(supply_spec.get("uses"))
 	item.hot_left = _param(item, "hot_for_s", 0.0)
 	item.is_tape = _param(item, "side_s", 0.0) > 0.0
+	item.side_s = _param(item, "side_s", INF)
+	item.ash_by = _param(item, "ash_by_s", 0.0)
+	item.is_phone = GameData.as_array(record.get("tags")).has(TAG_PHONE)
+	item.synergies = GameData.as_array(record.get("synergies"))
 	for give: Variant in GameData.as_array(record.get("gives")):
 		var entry: Dictionary = GameData.as_dict(give)
 		if entry.has("effect") and entry.has("duration") and item.use_effect == &"" and not entry.has("while"):
 			item.use_effect = StringName(GameData.as_string(entry.get("effect")))
+	item.smokes = not (item.ash_by <= 0.0 or item.use_effect == &"")
 	for list: String in ["gives", "takes"]:
 		for listed: Variant in GameData.as_array(record.get(list)):
 			var standing: Standing = _standing_of(GameData.as_dict(listed))
@@ -788,18 +810,24 @@ func owner_of(ritual: Dictionary) -> Item:
 ## TAP): false, and nothing is done, when it no longer holds.
 func complete(ritual: Dictionary, direction: int) -> bool:
 	var owner: Item = owner_of(ritual)
+	if ritual.has("item") and owner == null:
+		# The thing it was to be done with is no longer in the cabin.
+		return false
 	if not _requirements_hold(ritual, owner):
 		return false
+	# A use is what gives the item's effect. Putting a thing away in the
+	# glovebox, or taking it out, is none.
+	var used: bool = owner != null and GameData.as_array(ritual.get("on_complete")).has("give")
 	if owner != null:
 		# Using contraband, or the phone, is something a police car sees (GDD 6.5).
-		if GameData.as_bool(owner.record.get("contraband")):
+		if used and GameData.as_bool(owner.record.get("contraband")):
 			contraband_used = true
 		# One use for a call, however many TAPs answer it.
 		if GameData.as_array(owner.record.get("tags")).has(TAG_PHONE) and not dialling():
 			phone_used = true
 	for op: Variant in GameData.as_array(ritual.get("on_complete")):
 		_run(GameData.as_string(op), owner, direction)
-	if owner != null and GameData.as_array(ritual.get("on_complete")).has("give"):
+	if used:
 		# What he has just used, by its tags.
 		for tag: Variant in GameData.as_array(owner.record.get("tags")):
 			if not used_tags.has(GameData.as_string(tag)):
@@ -872,9 +900,9 @@ func _met(condition: Condition, owner: Item) -> bool:
 		Condition.HOT:
 			met = owner != null and owner.hot_left > 0.0
 		Condition.PLAYING:
-			met = owner != null and _is_tape(owner) and not _warbles(owner)
+			met = owner != null and owner.is_tape and not (owner.side_time >= owner.side_s)
 		Condition.WARBLING:
-			met = owner != null and _is_tape(owner) and _warbles(owner)
+			met = owner != null and owner.is_tape and owner.side_time >= owner.side_s
 		Condition.FLAG:
 			met = flag(condition.name)
 		Condition.RINGING:
@@ -1055,7 +1083,7 @@ func pair(rule: String) -> Dictionary:
 func _synergy(owner: Item, rule: String) -> Dictionary:
 	if owner == null:
 		return {}
-	for listed: Variant in GameData.as_array(owner.record.get("synergies")):
+	for listed: Variant in owner.synergies:
 		var synergy: Dictionary = GameData.as_dict(listed)
 		if GameData.as_string(synergy.get("rule")) == rule and _partner_there(GameData.as_string(synergy.get("with"))):
 			return synergy
@@ -1139,16 +1167,29 @@ func _refresh_passives() -> void:
 				var synergy: Dictionary = GameData.as_dict(listed)
 				if GameData.as_string(synergy.get("rule")) == "chewing_keeps_warm" and GameData.as_string(synergy.get("with")) == String(candidate.id):
 					candidate.warm_while_chewing = true
+	# What the tick asks of the cabin as a whole, looked up now and not then:
+	# who takes calls, what plays in the deck, whether anything is kept warm,
+	# how fast the haze clears.
+	var handset: Item = null
+	var cassette: Item = null
+	var keeps_warm: bool = false
+	for candidate: Item in items:
+		if handset == null and candidate.is_phone:
+			handset = candidate
+		if cassette == null and candidate.is_tape:
+			cassette = candidate
+		keeps_warm = keeps_warm or candidate.warm_while_chewing
+	_phone = handset
+	_tape = cassette
+	_keeps_warm = keeps_warm
+	_haze_clear_mult = passive("haze_clear_mult")
 
 
 # --- The phone (GDD 7.4) -----------------------------------------------------
 
 ## The phone in the cabin, or null.
 func phone() -> Item:
-	for candidate: Item in items:
-		if GameData.as_array(candidate.record.get("tags")).has(TAG_PHONE):
-			return candidate
-	return null
+	return _phone
 
 
 ## True from the first TAP of an answer until the call is answered or lost:
@@ -1245,10 +1286,7 @@ func _hang_up() -> void:
 
 ## The tape in the deck, or null.
 func tape() -> Item:
-	for candidate: Item in items:
-		if _is_tape(candidate):
-			return candidate
-	return null
+	return _tape
 
 
 func _is_tape(candidate: Item) -> bool:
@@ -1257,7 +1295,7 @@ func _is_tape(candidate: Item) -> bool:
 
 ## A tape left unflipped past the length of its side warbles (GDD 7.4).
 func _warbles(candidate: Item) -> bool:
-	return candidate.side_time >= _param(candidate, "side_s", INF)
+	return candidate.side_time >= candidate.side_s
 
 
 ## For the views: this item is a tape, and it warbles.
@@ -1331,6 +1369,14 @@ func on_hit(kind: int) -> void:
 		var spills_from: float = _param(candidate, "spills_on_hit", 0.0)
 		if spills_from > 0.0 and float(kind) >= spills_from and candidate.supply > 0:
 			candidate.supply = 0
+
+
+## True while something in the cabin passes a check by itself (use_pass).
+func has_pass(what: String) -> bool:
+	for candidate: Item in items:
+		if GameData.as_string(GameData.as_dict(candidate.record.get("params")).get("passes")) == what:
+			return true
+	return false
 
 
 ## Something in the cabin that passes a check by itself (forged papers pass
@@ -1473,15 +1519,21 @@ func step(dt: float) -> void:
 		else:
 			index += 1
 
+	# What follows is done for everything in the cabin on every tick: it reads
+	# what the items carry and what _refresh_passives keeps, never the records.
 	var haze_rate: float = 0.0
-	var deck_mult: float = _window_radio_mult if flag(FLAG_WINDOW) else 1.0
-	var chewing: bool = _effects.has_own(CHEWING)
+	var window_open: bool = flag(FLAG_WINDOW)
+	var deck_mult: float = _window_radio_mult if window_open else 1.0
+	var chewing: bool = _keeps_warm and _effects.has_own(CHEWING)
+	var half_tick: float = dt * 0.5
 	for candidate: Item in items:
+		var hot: float = candidate.hot_left
 		if not (chewing and candidate.warm_while_chewing):
-			candidate.hot_left -= dt
-		if candidate.hot_left < dt * 0.5:
-			candidate.hot_left = 0.0
-		if _is_tape(candidate):
+			hot -= dt
+		if hot < half_tick:
+			hot = 0.0
+		candidate.hot_left = hot
+		if candidate.is_tape:
 			candidate.side_time += dt
 		for standing: Standing in candidate.standing:
 			var on: bool = standing.condition == null or _met(standing.condition, candidate)
@@ -1492,20 +1544,22 @@ func step(dt: float) -> void:
 				Standing.NERVES:
 					if on:
 						# What comes out of the deck is halved by an open window.
-						_nerves.add_rate(standing.amount * (deck_mult if _is_tape(candidate) else 1.0))
+						_nerves.add_rate(standing.amount * (deck_mult if candidate.is_tape else 1.0))
 				Standing.STATUS:
 					if on != standing.held:
 						standing.held = on
 						_effects.hold(standing.effect, candidate.id, on)
-		_step_smoke(candidate, dt)
-		_step_lapse(candidate, dt)
+		if candidate.smokes:
+			_step_smoke(candidate, dt)
+		if not (candidate.lapse_left < 0.0 or candidate.burning):
+			_step_lapse(candidate, dt)
 
-	if flag(FLAG_WINDOW):
+	if window_open:
 		haze_rate += dust_rate
 	if haze_rate > 0.0:
 		haze = minf(haze + haze_rate * dt, _haze_cap)
 	else:
-		var clear: float = _haze_clear * passive("haze_clear_mult") * (_window_haze_mult if flag(FLAG_WINDOW) else 1.0)
+		var clear: float = _haze_clear * _haze_clear_mult * (_window_haze_mult if window_open else 1.0)
 		haze = maxf(haze - clear * dt, 0.0)
 
 	_step_radio(dt)
@@ -1516,7 +1570,7 @@ func step(dt: float) -> void:
 ## A smoke burns while its status lasts. It must be ashed once before
 ## ash_by_s or the ash falls (GDD 7.4).
 func _step_smoke(candidate: Item, dt: float) -> void:
-	var ash_by: float = _param(candidate, "ash_by_s", 0.0)
+	var ash_by: float = candidate.ash_by
 	if ash_by <= 0.0 or candidate.use_effect == &"":
 		return
 	var lit: bool = _effects.has_own(candidate.use_effect)
@@ -1563,11 +1617,10 @@ func _step_radio(dt: float) -> void:
 		_radio_time += dt
 		if _radio_time >= _radio_drift:
 			radio = STATIC
-	var mult: float = _window_radio_mult if flag(FLAG_WINDOW) else 1.0
 	if radio == &"music":
-		_nerves.add_rate(_radio_music_rate * mult)
+		_nerves.add_rate(_radio_music_rate * (_window_radio_mult if flag(FLAG_WINDOW) else 1.0))
 	elif radio == &"news":
-		_nerves.add_rate(_radio_news_rate * mult)
+		_nerves.add_rate(_radio_news_rate * (_window_radio_mult if flag(FLAG_WINDOW) else 1.0))
 	# The station is a status while it plays: "news" implies Awake, "music"
 	# is what the beads answer to (GDD 7.8).
 	if radio != _radio_held:
