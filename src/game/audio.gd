@@ -15,7 +15,7 @@ extends Node
 ##     (the one on its mount, and the one in his pocket at Dawn), the
 ##     indicator's tick, the Phantom's hum, the horn of a Snap, the horn of
 ##     what comes up behind his standing car, the Rattle, a gust's tell
-##     and the Storm's thick dust.
+##     and the Storm's thick dust, a passenger's snoring and her prayer.
 ##
 ## What an entry says about how its sound is played, beside how it is made:
 ##
@@ -65,6 +65,12 @@ const DUST: String = "dust"
 ## he whistles as he sets off toward the car and knocks with each sign.
 const WHISTLE: String = "soldier_whistle"
 const KNOCK: String = "soldier_knock"
+## A passenger (GDD 8.2): the one who sleeps snores, the one who says aloud
+## what his driving costs her murmurs, for as long as the snapshot says so;
+## the boy's warning before a repair is asked for by the simulation.
+const SNORE: String = "passenger_snore"
+const MURMUR: String = "passenger_murmur"
+const CLINK: String = "passenger_clink"
 const HEARTBEAT: String = "heartbeat"
 const HORN: String = "horn"
 ## The horn of another: of what comes up behind his standing car (GDD 10.3).
@@ -176,6 +182,8 @@ var _harmonic: Voice
 var _rattle: Voice
 var _gust: Voice
 var _dust: Voice
+var _snore: Voice
+var _murmur: Voice
 var _rumble: Voice
 var _horn: Voice
 var _horn_behind: Voice
@@ -309,6 +317,8 @@ func apply(snapshot: Dictionary) -> void:
 	var gust_tell: float = snapshot["gust_tell"]
 	var dust_thick: bool = snapshot["dust_thick"]
 	var dust_closing: float = snapshot["dust_closing"]
+	var asleep: bool = snapshot["passenger_asleep"]
+	var aloud: bool = snapshot["passenger_aloud"]
 
 	# The engine (GDD 16.5): its pitch is the speed, its added harmonic the
 	# gear. A wrecked engine is a dead one (GDD 6.3).
@@ -334,6 +344,13 @@ func apply(snapshot: Dictionary) -> void:
 		_gust.wanted = gust_tell > 0.0 and not wrecked
 	if _dust != null:
 		_dust.wanted = (dust_thick or dust_closing > 0.0) and not wrecked
+
+	# A passenger is heard doing what the snapshot says they do (GDD 8.2,
+	# 17.2): he snores while he sleeps, she prays aloud while she does.
+	if _snore != null:
+		_snore.wanted = asleep and not wrecked
+	if _murmur != null:
+		_murmur.wanted = aloud and not wrecked
 
 	# The rumble strip is heard while the car runs on it.
 	if _rumble != null:
@@ -505,6 +522,8 @@ func _clear() -> void:
 	_rattle = null
 	_gust = null
 	_dust = null
+	_snore = null
+	_murmur = null
 	_rumble = null
 	_horn = null
 	_horn_behind = null
@@ -658,11 +677,13 @@ func _configure(tuning: Tuning) -> void:
 	_rattle = _voices.get(RATTLE)
 	_gust = _voices.get(GUST)
 	_dust = _voices.get(DUST)
+	_snore = _voices.get(SNORE)
+	_murmur = _voices.get(MURMUR)
 	_rumble = _voices.get(RUMBLE)
 	_horn = _voices.get(HORN)
 	_horn_behind = _voices.get(HORN_BEHIND)
 	_hum = _voices.get(HUM)
-	for id: String in [RATTLE, GUST, DUST, RUMBLE, HORN, HORN_BEHIND, HUM]:
+	for id: String in [RATTLE, GUST, DUST, SNORE, MURMUR, RUMBLE, HORN, HORN_BEHIND, HUM]:
 		var voice: Voice = _voices.get(id)
 		if voice == null or not voice.looped:
 			push_error("Audio: sfx.json needs '%s', as a loop" % id)

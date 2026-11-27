@@ -198,4 +198,9 @@ MUTANTS = [
  (V, '\tif passenger.has("repairs"):\n\t\tlines.append("repair")', '\tif false:\n\t\tlines.append("repair")', 'a repair may go unannounced'),
  (V, '\tif kind == "hold_wheel" and GameData.as_float(hand.get("catch_s")) <= 0.0:', '\tif false:', 'a hand on the wheel with no time to ask it'),
  (V, '\tif kind != "hold_wheel" and hand.has("catch_s"):', '\tif false:', 'a catch on any Hand'),
+ # a passenger is heard (GDD 17.2, D-058)
+ (P, '\treturn aboard() and _weighing', '\treturn false', 'her prayer is never said aloud by the snapshot'),
+ (P, '\treturn aboard() and _weighing', '\treturn aboard()', 'whoever rides is always aloud'),
+ (P, '\t\t\t\tevents.append({"type": "sfx_requested", "id": "passenger_clink"})\n', '', 'the warning is not heard'),
+ (P, '\t\t\t\t_say("repair", true)', '\t\t\t\t_say("repair")', 'the warning waits its turn'),
 ]

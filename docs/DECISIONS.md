@@ -2072,6 +2072,10 @@ this is the later word:
 | What comes up behind him | Its lights in the mirror (D-057) | `horn_behind` (D-052) |
 | The Call | The lit phone, the ring written out (D-050) | `phone_ring` |
 | The end of the talk | Her last words (D-057) | The phone's two notes |
+| The boy's repair, 2 s ahead (GDD 8.2) | His line, as a tell | `passenger_clink`, once |
+| She prays aloud (gear 4 and above) | Her line as she begins | `passenger_murmur` for as long as she does (`passenger_aloud`) |
+| He sleeps and snores | The sleeper in the seat | `passenger_snore` for as long as he sleeps |
+| He drums | The drum before the right of the view | The music loop (the drum is music, D-051) |
 
 - **The dust's tell.** D-046 called the dust's fixed rhythm its own tell;
   nothing on screen or in the ear said that a change was a second away.
@@ -2086,16 +2090,18 @@ this is the later word:
   light source is visible first"; nothing a sun does is heard), the bar (a
   verdict, which is said in a line and seen), the bay and the key (nothing
   is announced ahead), a hitcher at the roadside.
-- **The mix.** One soldier does one thing at a time: `soldier_` is a
-  family in the check, like the radio's loops. With the new sounds the
-  ducks are 1 dB deeper (rumble strip -16, indicator -14.5, the yawns -14)
-  and each cue stands 6.9 to 7.3 dB clear of everything else at once.
+- **The mix.** One soldier does one thing at a time, and at most one
+  passenger rides: `soldier_` and `passenger_` are families in the check,
+  like the radio's loops. With the seven new sounds the ducks are 1 dB
+  deeper (rumble strip -16, indicator -14.5, the yawns -14) and each cue
+  stands 6.8 to 7.2 dB clear of everything else at once.
 - **A tell is read at once.** A line that announces something a moment
   ahead must not wait its turn behind what is being said (the queue of
   D-054 holds a line 1.5 s at least). `line_requested` may carry
   `"tell": true`: the subtitle takes the screen in that frame, and what it
   took the screen from is shown again after it, with its whole time. The
-  simulation marks the ring written out and Noor's last words. The
+  simulation marks the ring written out, Noor's last words and the boy's
+  warning before a repair. The
   heckles of M9 ("the subtitle appears 2 s before anything changes. That
   lead is the tell", GDD 11.3) are to be asked for the same way.
 - **Whose turn the rest is.** The tells of the earlier milestones were not

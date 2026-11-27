@@ -1828,6 +1828,7 @@ func snapshot() -> Dictionary:
 		"passenger": passengers.id,
 		"passenger_legs": passengers.legs_ridden,
 		"passenger_asleep": passengers.asleep(),
+		"passenger_aloud": passengers.aloud(),
 		"passenger_awake_left": passengers.awake_left,
 		"passenger_drumming": passengers.drumming,
 		"tea_passed": passengers.passes_tea(),

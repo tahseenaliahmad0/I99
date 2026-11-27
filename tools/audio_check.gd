@@ -54,10 +54,14 @@ const GUST: String = "gust"
 const DUST: String = "dust"
 const WHISTLE: String = "soldier_whistle"
 const KNOCK: String = "soldier_knock"
+const SNORE: String = "passenger_snore"
+const MURMUR: String = "passenger_murmur"
+const CLINK: String = "passenger_clink"
 ## Sounds of which only one is heard at a time: the radio's loops, the
 ## squeals, the two yawns (GDD 5.8: he blinks or he nods), what the one
-## soldier does (he whistles as he sets off, he knocks when he has come).
-const FAMILIES: PackedStringArray = ["radio_", "squeal_", "yawn", "soldier_"]
+## soldier does (he whistles as he sets off, he knocks when he has come),
+## what the one passenger does (GDD 8.1: at most one rides).
+const FAMILIES: PackedStringArray = ["radio_", "squeal_", "yawn", "soldier_", "passenger_"]
 ## The events of GDD 16.5's table.
 const TABLE_IDS: PackedStringArray = [
 	"engine", "rumble_strip", "indicator_tick", "lighter_click", "bead_click", "horn", "wiper",
@@ -382,6 +386,29 @@ func _check_tells() -> void:
 				var pitch: float = GameData.as_float(GameData.as_array(note)[0])
 				_expect(whistle > pitch, "%s: its %s Hz is not over the %s Hz of %s" % [WHISTLE, str(whistle), str(pitch), other])
 		_expect(not GameData.as_bool(_synth(WHISTLE).get("loop")), "%s: he whistles once" % WHISTLE)
+	# A passenger: the snore and the murmur last, so they are loops that come
+	# in and go out; the snore is slow breaths of noise, far slower than the
+	# rumble strip's bursts; the murmur is a voice lower and softer than the
+	# news; the boy's clink is two high notes that end.
+	for id: String in [SNORE, MURMUR]:
+		if _expect(registry.has(id), "sfx.json has no '%s' (GDD 17.2)" % id):
+			_expect(GameData.as_bool(_synth(id).get("loop")) and GameData.as_float(_synth(id).get("fade_in")) > 0.0, "%s: it must be a loop that comes in, heard for as long as it lasts" % id)
+	if registry.has(SNORE):
+		_expect(_same(_synth(SNORE).get("wave"), "noise") and GameData.as_float(_synth(SNORE).get("burst_hz")) <= 1.0, "%s: a snore is a slow breath of noise" % SNORE)
+		_expect(GameData.as_float(_synth(SNORE).get("burst_hz")) < GameData.as_float(strip.get("burst_hz")) / 10.0, "%s: its breaths must come far slower than the rumble strip's bursts" % SNORE)
+	if registry.has(MURMUR):
+		var highest: float = 0.0
+		for note: Variant in GameData.as_array(_synth(MURMUR).get("notes")):
+			highest = maxf(highest, GameData.as_float(GameData.as_array(note)[0]))
+		var news_lowest: float = INF
+		for note: Variant in GameData.as_array(_synth("radio_news").get("notes")):
+			var pitch: float = GameData.as_float(GameData.as_array(note)[0])
+			if pitch > 0.0:
+				news_lowest = minf(news_lowest, pitch)
+		_expect(highest > 0.0 and highest < news_lowest, "%s: her voice at %s Hz does not lie under the news at %s" % [MURMUR, str(highest), str(news_lowest)])
+		_expect(GameData.as_float(_synth(MURMUR).get("gain_db")) < GameData.as_float(_synth("radio_news").get("gain_db")), "%s: it must be softer than the radio" % MURMUR)
+	if _expect(registry.has(CLINK), "sfx.json has no '%s' (GDD 17.2)" % CLINK):
+		_expect(not GameData.as_bool(_synth(CLINK).get("loop")) and GameData.as_array(_synth(CLINK).get("notes")).size() >= 2, "%s: two tools knocked together, once" % CLINK)
 	# His knock: more than one dull rap, lower than a clap.
 	if _expect(registry.has(KNOCK), "sfx.json has no '%s' (GDD 17.2)" % KNOCK):
 		var knock: Dictionary = _synth(KNOCK)

@@ -189,11 +189,12 @@ Things a human must judge or supply. Nothing here blocks the build.
   writes each sound for listening.
 - **Sounds beyond the table of GDD 16.5** (D-052, D-058): `horn_behind`,
   `rattle`, and the tells that had only a picture: `gust`, `dust`,
-  `soldier_whistle`, `soldier_knock`. Each is one record of
+  `soldier_whistle`, `soldier_knock`, `passenger_snore`,
+  `passenger_murmur`, `passenger_clink`. Each is one record of
   `data/sfx.json`; rename, replace or strike them there. Still silent on
   purpose: the low sun, the bar, the bay and the key, a hitcher at the
   roadside.
-- **The mix** has about 0.9 dB of room under the rule that a functional cue
+- **The mix** has about 0.8 dB of room under the rule that a functional cue
   stands 6 dB over everything else at once (D-058 deepened the ducks by
   1 dB); a further sound heard at once will want deeper ducks again.
 - **Subtitles lie over the wheel hub** and the key of the Arrival (bottom

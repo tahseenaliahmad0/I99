@@ -347,6 +347,12 @@ func holds_straight() -> bool:
 	return hold == HOLD_STRAIGHT
 
 
+## A Weight that bites by the second for how he drives is said aloud for as
+## long as it bites (GDD 8.2: "she prays aloud").
+func aloud() -> bool:
+	return aboard() and _weighing
+
+
 ## One who sleeps is asleep.
 func asleep() -> bool:
 	return record.has("sleeps") and awake_left <= 0.0
@@ -466,7 +472,10 @@ func _step_repair(dt: float) -> void:
 			if repaired < GameData.as_int(repairs.get("per_leg")) and _fault_to_mend() != &"":
 				repair = REPAIR_ANNOUNCED
 				repair_left = GameData.as_float(repairs.get("announce_s"))
-				_say("repair")
+				# The warning is a tell (GDD 8.2: "announced 2 s ahead"): it is
+				# read at once, and heard as well (GDD 17.2).
+				_say("repair", true)
+				events.append({"type": "sfx_requested", "id": "passenger_clink"})
 		REPAIR_ANNOUNCED:
 			repair_left -= dt
 			if repair_left < dt * 0.5:
@@ -534,9 +543,13 @@ func _line(what: String) -> String:
 
 
 ## A line of the passenger's, if they have one for this.
-func _say(what: String) -> void:
+func _say(what: String, tell: bool = false) -> void:
 	if _data.has_line(_line(what)):
-		events.append({"type": "line_requested", "id": _line(what)})
+		var asked: Dictionary = {"type": "line_requested", "id": _line(what)}
+		if tell:
+			# What announces something a moment ahead does not wait its turn.
+			asked["tell"] = true
+		events.append(asked)
 
 
 ## What the save keeps (GDD 13.7): who rides and how far they have come; null

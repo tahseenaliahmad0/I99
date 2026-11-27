@@ -630,8 +630,12 @@ func _check_hajjiya_prays() -> void:
 			rise["%d%s" % [gear, rider]] = _nerves_over(2.0)
 			if gear == 4 and not rider.is_empty():
 				check_eq(_count_events("line_requested", "id", "passenger.hajjiya.prayer"), 1, "(she is heard praying, once as she begins)")
+				check(GameData.as_bool(_shot("passenger_aloud")), "(and for as long as she prays the snapshot says so: it is heard, GDD 17.2)")
 			elif not rider.is_empty():
 				check_eq(_count_events("line_requested", "id", "passenger.hajjiya.prayer"), 0, "(in third gear she is quiet)")
+				check(not GameData.as_bool(_shot("passenger_aloud")), "(and nothing is said aloud)")
+			else:
+				check(not GameData.as_bool(_shot("passenger_aloud")), "(with nobody in the seat nobody prays)")
 	check_near(GameData.as_float(rise["4hajjiya"]) - GameData.as_float(rise["4"]), rate * 2.0, 0.05, "in fourth gear her prayer adds 3 Nerves a second (6 in 2 s)")
 	check_near(GameData.as_float(rise["3hajjiya"]) - GameData.as_float(rise["3"]), 0.0, 0.05, "in third gear it adds nothing")
 
@@ -1567,6 +1571,7 @@ func test_pass_apprentice() -> void:
 	_ticks(_ticks_in(5.0))
 	check_eq(GameData.as_int(_shot("passenger_repair")), PassengerSim.REPAIR_IDLE, "with no lamp lit he has nothing to repair")
 	check_eq(_count_events("line_requested", "id", "passenger.apprentice.repair"), 0, "(and says nothing)")
+	check_eq(_count_events("sfx_requested", "id", "passenger_clink"), 0, "(nor is anything heard of his tools)")
 	# A lamp lights: he says so, and 2 s later he is across the lever.
 	_scrape()
 	check_eq(_sim.faults.lamps, 1, "(a scrape lights a lamp)")
@@ -1576,6 +1581,12 @@ func test_pass_apprentice() -> void:
 		if GameData.as_string(_events[index].get("id")) == "passenger.apprentice.repair":
 			said += 1
 	check_eq(said, 1, "a fault is lit: he announces the repair")
+	check_eq(_count_events("sfx_requested", "id", "passenger_clink"), 1, "and it is heard as well as read: a clink of his tools, once (GDD 17.2)")
+	var warning: Dictionary = {}
+	for event: Dictionary in _events:
+		if GameData.as_string(event.get("id")) == "passenger.apprentice.repair":
+			warning = event
+	check(GameData.as_bool(warning.get("tell")), "(the warning is asked for as a tell: it is read at once, not after what is being said)")
 	# (The scrape helper has driven on past the hit's immunity: start again with a fresh fault to time it.)
 	_to_quiet_leg("fuel_station")
 	_sim.board("apprentice")
