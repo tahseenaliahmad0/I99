@@ -232,3 +232,10 @@ hud.checkpoint.queue,,Checkpoint: the queue,false
 hud.checkpoint.stow,,Checkpoint: the soldier is %s s away,false
 hud.checkpoint.papers,,Checkpoint: he wants %s (%s s),false
 hud.checkpoint.passed,,Checkpoint: through,false
+table.children.name,,THE CHILDREN,true
+table.drivers.name,,THE DRIVERS,true
+table.uncles.name,,THE UNCLES,true
+table.inlaws.name,,THE IN-LAWS,true
+table.aunts.name,,THE AUNTS,true
+table.groom.name,,THE GROOM,true
+table.noor.name,,NOOR,true

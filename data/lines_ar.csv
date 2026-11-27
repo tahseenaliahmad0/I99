@@ -232,3 +232,10 @@ hud.checkpoint.queue,,,true
 hud.checkpoint.stow,,,true
 hud.checkpoint.papers,,,true
 hud.checkpoint.passed,,,true
+table.children.name,,,true
+table.drivers.name,,,true
+table.uncles.name,,,true
+table.inlaws.name,,,true
+table.aunts.name,,,true
+table.groom.name,,,true
+table.noor.name,,,true

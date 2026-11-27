@@ -110,6 +110,15 @@ var wrecked: bool = false
 var act: int = 1
 ## Added to the Heavy floor (a Table's rule, painkillers).
 var heavy_floor_bonus: float = 0.0
+## The rules of the Table this Telling is told to (GDD 11.2); the base rules
+## on a road that belongs to no Telling.
+var table: TableRules = TableRules.new()
+## Free rewinds he still has (GDD 11.2, the Children's Table): a Wreck then
+## returns him to the start of the leg or boss he is on.
+var rewinds_left: int = 0
+## The Telling as it was when that leg or boss began ({} when no rewind is
+## left to need it). It is kept in memory only: nothing is saved in a leg.
+var _leg_start: Dictionary = {}
 ## True while an encounter is on: an empty road does not calm him then.
 ## (The leg's own encounter counts as well; this one is for set pieces.)
 var in_encounter: bool = false
@@ -389,7 +398,10 @@ func step(input: DriveInput) -> void:
 		if _wreck_left > DT * 0.5:
 			tick += 1
 			return
-		_retell()
+		if _can_rewind():
+			_rewind()
+		else:
+			_retell()
 	gate.begin_tick()
 	nerves.begin_tick()
 	effects.begin_tick()
@@ -398,6 +410,7 @@ func step(input: DriveInput) -> void:
 	encounter.begin_tick()
 	boss.begin_tick()
 	suspicion.begin_tick()
+	suspicion.gain_mult = _suspicion_gain()
 	passengers.begin_tick()
 
 	# Focus (GDD 7.4): the road runs slower, the hand does not.
@@ -750,11 +763,28 @@ func _step_leg_road() -> void:
 
 ## Starts a Telling of `table` from Baghdad: the starting cabin, 22:00, the
 ## car rolling in first gear toward the first fork with nobody at the wheel.
-func begin_telling(table: String, telling_seed: int) -> void:
+func begin_telling(table_id: String, telling_seed: int) -> void:
 	_build()
-	reseed(telling_seed)
-	run.begin(table, telling_seed)
+	table = TableRules.of(data, table_id)
+	# A Table whose road is fixed tells the same night every time.
+	var seed_told: int = table.seed if table.seed != TableRules.NO_SEED else telling_seed
+	reseed(seed_told)
+	run.rules = table
+	run.begin(table_id, seed_told)
+	_lay_the_table()
 	_enter_approach()
+
+
+## What a Table changes about how the night begins (GDD 11.2): when he
+## leaves, and what the cabin holds besides its own.
+func _lay_the_table() -> void:
+	rewinds_left = table.free_rewinds
+	_leg_start = {}
+	clock.add_minutes(table.depart_min)
+	for item_id: String in table.start_items:
+		give_item(StringName(item_id))
+	for item_id: String in table.full_supplies:
+		give_item(StringName(item_id))
 
 
 ## The road to a fork: nothing on it but the sign and the split. It is no
@@ -794,18 +824,24 @@ func _step_telling(button_down: bool) -> void:
 ## The gore point (GDD 9.5): the branch is the side of the split the car is on.
 func _take_fork() -> void:
 	var side: int = RunState.LEFT if car.x < car.road_right() * 0.5 else RunState.RIGHT
+	# On a fixed road the next leg simply begins: nothing was chosen.
+	var forked: bool = run.splits_ahead()
+	if not forked:
+		side = RunState.LEFT
 	_side = side
 	var branch: Dictionary = run.take_branch(side)
+	_keep_leg_start()
 	var plan: Dictionary = RunGenerator.plan(data, branch, run.act)
-	_emit("fork_taken", {
-		"act": run.act,
-		"leg_index": run.legs_done,
-		"side": side,
-		"leg": GameData.as_string(branch.get("leg")),
-		"modifier": GameData.as_string(branch.get("modifier")),
-		"stop": GameData.as_string(branch.get("stop")),
-		"par": GameData.as_float(branch.get("par_s")),
-	})
+	if forked:
+		_emit("fork_taken", {
+			"act": run.act,
+			"leg_index": run.legs_done,
+			"side": side,
+			"leg": GameData.as_string(branch.get("leg")),
+			"modifier": GameData.as_string(branch.get("modifier")),
+			"stop": GameData.as_string(branch.get("stop")),
+			"par": GameData.as_float(branch.get("par_s")),
+		})
 	_roll_into(plan)
 	_arm_exit()
 	_announce_leg(plan)
@@ -843,8 +879,9 @@ func _enter_stop() -> void:
 	run.enter_stop()
 	var minutes: float = GameData.as_float(data.record("stops", run.stop).get("clock_min")) if data.has_record("stops", run.stop) else 0.0
 	clock.add_minutes(minutes)
-	# The shady guy is there after a leg that lit no lamp (GDD 9.6).
-	_shady_here = _leg_lamps_lit == 0
+	# The shady guy is there after a leg that lit no lamp (GDD 9.6), unless
+	# the Table will have no Deals.
+	_shady_here = _leg_lamps_lit == 0 and table.deals_offered()
 	_let_passenger_out(false)
 	_save_point()
 	_emit("stop_entered", {"stop": run.stop, "minutes": minutes, "act": run.act, "leg_index": run.legs_done,
@@ -894,7 +931,7 @@ func _announce_what_ends() -> void:
 
 func _open_stop(shady: bool) -> void:
 	if data.has_record("stops", run.stop):
-		stop.begin(run.stop, run.act, shady)
+		stop.begin(run.stop, run.act, shady, table.price_mult, table)
 		stop.hitcher = _hitcher_here()
 	_sync_anchors()
 
@@ -905,6 +942,12 @@ func _open_stop(shady: bool) -> void:
 ## night. Never the one he carries, and never the one who has just got out
 ## here.
 func _hitcher_here() -> String:
+	if table.places_hitchers():
+		# The Table says who waits where (GDD 11.2: Noor's), and nobody else
+		# does. (The boss stop is none of an act's three stops: no entry
+		# names it.)
+		var waits: String = table.hitcher_at(run.act, run.legs_done)
+		return "" if waits == passengers.id or waits == _left_here else waits
 	return RunGenerator.hitcher(data, run.seed, run.act, run.legs_done, stop.id_now(), passengers.id, _left_here)
 
 
@@ -965,8 +1008,63 @@ func _leave_stop() -> void:
 ## The act's boss (GDD 10): the road leads into it from the third leg.
 func _begin_boss() -> void:
 	run.begin_boss()
+	_keep_leg_start()
 	_roll_into(BossSim.plan(data, run.boss, run.boss_modifier, RunGenerator.boss_seed(run.seed, run.act)))
+	_meet_the_boss()
+
+
+## What the start of a boss does to him, and its announcement.
+func _meet_the_boss() -> void:
+	if table.boss_alone_nerves != 0.0 and not passengers.aboard():
+		# A boss begun with nobody beside him (GDD 11.2, the Groom's Table).
+		nerves.add(table.boss_alone_nerves)
 	_emit("boss_started", {"boss": run.boss, "act": run.act, "modifier": boss.modifier})
+
+
+## While a free rewind is left, the Telling as it stands where a leg or a
+## boss begins is kept, to return to.
+func _keep_leg_start() -> void:
+	_leg_start = capture() if rewinds_left > 0 else {}
+
+
+func _can_rewind() -> bool:
+	return rewinds_left > 0 and not _leg_start.is_empty()
+
+
+## A free rewind (GDD 11.2: "the first Wreck returns to the start of that
+## leg"): the Telling is as it was when the leg, or the boss, he wrecked on
+## began, and he drives it again from its start. What the last stop saved
+## is still the night he is telling.
+func _rewind() -> void:
+	var from: Dictionary = _leg_start
+	var left: int = rewinds_left - 1
+	var saved: Dictionary = checkpoint
+	var pointer: Vector2 = hand.pointer
+	_put_back(from)
+	checkpoint = saved
+	rewinds_left = left
+	_leg_start = {}
+	_side = GameData.as_int(from.get("side"), RunState.RIGHT)
+	_left_here = ""
+	run.resume_on_road(GameData.as_string(from.get("table")), Save.seed_in(from.get("seed")), GameData.as_int(from.get("retellings")),
+			GameData.as_int(from.get("act"), 1), GameData.as_int(from.get("leg")), GameData.as_string(from.get("stage")), _side)
+	run.boss_on_sign = false
+	run.call_answered = GameData.as_bool(from.get("call_answered"))
+	if run.stage == RunState.Stage.BOSS:
+		_set_stretch(BossSim.plan(data, run.boss, run.boss_modifier, RunGenerator.boss_seed(run.seed, run.act)))
+		items.set_telling_state(GameData.as_dict(from.get("item_state")))
+		_meet_the_boss()
+	else:
+		var plan: Dictionary = RunGenerator.plan(data, run.branch, run.act)
+		_set_stretch(plan)
+		items.set_telling_state(GameData.as_dict(from.get("item_state")))
+		_arm_exit()
+		_announce_leg(plan)
+	effects.begin_tick()
+	if space.pointer_on_rim(pointer):
+		hand.place_at(space.rim_point(pointer))
+	else:
+		hand.pointer = pointer
 
 
 ## Starts a boss by itself, from the start of its road in the middle lane (a
@@ -1125,9 +1223,10 @@ func _hand_out(what: StringName) -> void:
 	if boss.kind != BossSim.CHECKPOINT or boss.phase != BossSim.PAPERS:
 		return
 	if what == BANKNOTES:
-		# Banknotes pass at any level (GDD 10.2), if he has them.
+		# Banknotes pass at any level (GDD 10.2), if he has them, and if the
+		# Table has bribes at all.
 		var price: float = tuning.f("checkpoint_bribe")
-		if cash < price:
+		if cash < price or table.no_bribes:
 			_emit("pulled_over", {"released": false, "refused": true, "paid": "bribe", "cost": price})
 			return
 		cash -= price
@@ -1231,7 +1330,7 @@ func _arrive() -> void:
 ## seed, the starting cabin, 22:00. The pointer stays where the player has it,
 ## so a hand that is asking for the wheel has it at once.
 func _retell() -> void:
-	var table: String = run.table
+	var table_id: String = run.table
 	var telling_seed: int = run.seed
 	var retellings: int = run.retellings
 	var pointer: Vector2 = hand.pointer
@@ -1239,11 +1338,13 @@ func _retell() -> void:
 	# After a Wreck there is no saved Telling to continue: what the last stop
 	# saved was the night that wrecked, and this one starts from Baghdad.
 	checkpoint = {}
-	run.table = table
+	run.rules = table
+	run.table = table_id
 	run.seed = telling_seed
 	run.retellings = retellings
 	run.retell()
 	reseed(run.seed)
+	_lay_the_table()
 	_enter_approach()
 	if space.pointer_on_rim(pointer):
 		hand.place_at(space.rim_point(pointer))
@@ -1289,6 +1390,7 @@ func capture() -> Dictionary:
 		"left_here": _left_here,
 		"boss_sign": run.boss_on_sign,
 		"call_answered": run.call_answered,
+		"rewinds": rewinds_left,
 		# For people: rounded. What is loaded are the exact bits below.
 		"clock_min": snappedf(clock.minutes, 0.001),
 		"cash": snappedf(cash, 0.001),
@@ -1317,7 +1419,25 @@ func restore(telling: Dictionary) -> bool:
 	if stage != RunState.STAGE_NAMES[RunState.Stage.STOP] and stage != RunState.STAGE_NAMES[RunState.Stage.BOSS_STOP]:
 		# A save is made at a stop and nowhere else: this is not one.
 		return false
+	_put_back(telling)
+	_side = GameData.as_int(telling.get("side"), RunState.RIGHT)
+	_shady_here = GameData.as_bool(telling.get("shady"))
+	_left_here = GameData.as_string(telling.get("left_here"))
+	run.resume(GameData.as_string(telling.get("table")), Save.seed_in(telling.get("seed")), GameData.as_int(telling.get("retellings")),
+			GameData.as_int(telling.get("act"), 1), GameData.as_int(telling.get("leg")), stage, _side)
+	run.boss_on_sign = GameData.as_bool(telling.get("boss_sign"))
+	run.call_answered = GameData.as_bool(telling.get("call_answered"))
+	_stand_at_the_stop(telling)
+	return true
+
+
+## What a captured Telling holds of the car, the cabin and the night, put
+## into a simulation made anew: everything but where on the road he is.
+func _put_back(telling: Dictionary) -> void:
 	_build()
+	table = TableRules.of(data, GameData.as_string(telling.get("table")))
+	run.rules = table
+	rewinds_left = GameData.as_int(telling.get("rewinds"))
 	rng.set_state(GameData.as_dict(telling.get("rng_state")))
 	# The exact bits where the save has them; a save written by hand has
 	# only the readable numbers.
@@ -1350,13 +1470,10 @@ func restore(telling: Dictionary) -> bool:
 	passengers.set_state(telling.get("passenger"))
 	passengers.begin_tick()
 
-	_side = GameData.as_int(telling.get("side"), RunState.RIGHT)
-	_shady_here = GameData.as_bool(telling.get("shady"))
-	_left_here = GameData.as_string(telling.get("left_here"))
-	run.resume(GameData.as_string(telling.get("table")), Save.seed_in(telling.get("seed")), GameData.as_int(telling.get("retellings")),
-			GameData.as_int(telling.get("act"), 1), GameData.as_int(telling.get("leg")), stage, _side)
-	run.boss_on_sign = GameData.as_bool(telling.get("boss_sign"))
-	run.call_answered = GameData.as_bool(telling.get("call_answered"))
+
+## The car stands at the stop a save was made at (see restore).
+func _stand_at_the_stop(telling: Dictionary) -> void:
+	var bits: Dictionary = GameData.as_dict(telling.get("exact"))
 	if run.stage == RunState.Stage.STOP:
 		# At the stall of the leg he is on.
 		_set_stretch(RunGenerator.plan(data, run.branch, run.act), false)
@@ -1386,7 +1503,6 @@ func restore(telling: Dictionary) -> bool:
 	_open_stop(_shady_here)
 	# What the save put back did not begin here: it is not said again.
 	effects.begin_tick()
-	return true
 
 
 ## A fingerprint of the whole simulation (GDD 13.3): two simulations that
@@ -1437,6 +1553,16 @@ func _step_encounter() -> void:
 
 
 ## Suspicion (GDD 6.5): what he did this tick that the police saw.
+## What every gain of Suspicion is multiplied by: what the cabin and the one
+## beside him make of it, and at the Checkpoint what the Table does (GDD
+## 11.2: the Uncles).
+func _suspicion_gain() -> float:
+	var gain: float = items.passive("suspicion_gain_mult") * passengers.suspicion_mult()
+	if boss.kind == BossSim.CHECKPOINT:
+		gain *= table.checkpoint_suspicion_mult
+	return gain
+
+
 func _step_suspicion() -> void:
 	if not suspicion.watching or pulled_over:
 		_snapped = false
@@ -1496,7 +1622,7 @@ func _pull_over() -> void:
 		"released": false,
 		"fine": fine(),
 		"bribe": bribe(),
-		"can_bribe": cash >= bribe(),
+		"can_bribe": cash >= bribe() and not table.no_bribes,
 	})
 	_sync_anchors()
 
@@ -1521,7 +1647,7 @@ func _pay_the_officer(how: StringName) -> void:
 	var taken: Array[StringName] = []
 	if how == &"bribe":
 		cost = bribe()
-		if cash < cost:
+		if cash < cost or table.no_bribes:
 			_emit("pulled_over", {"released": false, "refused": true, "fine": fine(), "bribe": cost, "can_bribe": false})
 			return
 		minutes = tuning.f("bribe_minutes")
@@ -1631,7 +1757,7 @@ func _blow(direction: int, push: float) -> void:
 func heavy_floor() -> float:
 	var index: int = clampi(act, 1, _heavy_floors.size()) - 1
 	var base: float = _floor_of_road if _floor_of_road >= 0.0 else _heavy_floors[index]
-	return base + heavy_floor_bonus + effects.total(HEAVY_FLOOR)
+	return base + heavy_floor_bonus + table.heavy_floor_add + effects.total(HEAVY_FLOOR)
 
 
 ## How far he can see along the road, in metres (GDD 9.1, 9.4): the
@@ -1823,7 +1949,7 @@ func snapshot() -> Dictionary:
 		"legs_done": run.legs_done,
 		"stop": run.stop,
 		"stopped": stopped,
-		"gore_ahead": leg.length - car.s if run.active and run.fork_ahead() and leg.active else -1.0,
+		"gore_ahead": leg.length - car.s if run.active and run.splits_ahead() and leg.active else -1.0,
 		"offers": _offers_in_view(),
 		"passenger": passengers.id,
 		"passenger_legs": passengers.legs_ridden,
@@ -1915,7 +2041,7 @@ func _signs_in_view() -> Array[Dictionary]:
 		if to_exit >= 0.0 and to_exit <= ahead:
 			signs.append({"kind": "exit", "ahead": to_exit, "stop": GameData.as_string(run.branch.get("stop"))})
 	# The fork's overhead sign: for each branch its leg, modifier, stop and par.
-	if run.fork_ahead():
+	if run.splits_ahead():
 		var fork_sign_at: float = maxf(leg.length - tuning.f("fork_sign_lead") * par_ms, 0.0)
 		# One who reads the road has the sign earlier (GDD 8.2), where the
 		# road he came onto still has that place ahead of him. Where it does
@@ -2058,7 +2184,7 @@ func _apply_collisions() -> void:
 		if faults.is_wrecked() and not wrecked:
 			wrecked = true
 			_wreck_left = tuning.f("wreck_to_wheel")
-			_emit("wreck", {"table": run.table, "act": run.act, "retellings": run.retellings})
+			_emit("wreck", {"table": run.table, "act": run.act, "retellings": run.retellings, "rewind": run.active and _can_rewind()})
 	# A vehicle passed closely honks (a taxi), close call or not (GDD 5.5).
 	if not collision.honk_vehicle_ids.is_empty():
 		nerves.add(collision.honk_nerves - collision.honk_frights)
@@ -2123,7 +2249,7 @@ func _fit_cabin() -> void:
 	collision.cash_bonus = items.passive("close_call_bonus")
 	car.high_gear_bonus = items.passive("high_gear_bonus")
 	car.brake_mult = items.passive("brake_mult")
-	suspicion.gain_mult = items.passive("suspicion_gain_mult") * passengers.suspicion_mult()
+	suspicion.gain_mult = _suspicion_gain()
 	_close_call_mult = items.passive("close_call_mult")
 	_lag_sources = items.passive("lag_sources")
 	_wheel_keys = items.passive("wheel_keys") > 0.0
@@ -2352,7 +2478,11 @@ func _report_nerves() -> void:
 ## A Snap (GDD 6.1): he leans on the horn, and whatever his hand was at is over.
 func _report_snap() -> void:
 	_snapped = true
-	_emit("snap", {"nerves": nerves.value})
+	if table.snap_minutes > 0.0:
+		# At a Table that counts them, each Snap costs the Clock (GDD 11.2).
+		clock_minutes_owed += table.snap_minutes
+		clock.add_minutes(table.snap_minutes)
+	_emit("snap", {"nerves": nerves.value, "minutes": table.snap_minutes})
 	_emit("sfx_requested", {"id": "horn"})
 	if not _standing():
 		# Two seconds of his horn wake one who sleeps (GDD 8.2) as its TAP

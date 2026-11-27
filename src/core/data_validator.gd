@@ -84,6 +84,7 @@ const REQUIRED_RECORDS: Dictionary = {
 	"faults": ["rattle", "cracked_windscreen", "dead_headlight", "pulling_steering", "slipping_clutch", "stuck_wiper", "cracked_mirror"],
 	"stops": ["fuel_station", "fitter", "tea_stall", "roadside_find", "hitcher", "shady_guy", "boss_stop"],
 	"bosses": ["checkpoint", "storm", "dawn"],
+	"tables": ["children", "drivers", "uncles", "inlaws", "aunts", "groom", "noor"],
 	"boss_modifiers": ["long_queue", "thorough", "crosswind", "night_storm", "market_day", "early_sun"],
 	# The controls that are always in the car (GDD 4.6) and that the code names.
 	"anchors": ["gear_lever", "horn", "wiper_stalk", "indicator_stalk", "headlight_knob", "hazard_button", "radio", "window_crank", "glovebox", "visor", "face"],
@@ -692,7 +693,31 @@ func _table_schema() -> Dictionary:
 		"id": _str(),
 		"unlock": _str(),
 		"depart_min": _num(0.0),
-		"rules": _obj({}, true),
+		# What TableRules reads, and nothing else: a misspelt rule would be a
+		# rule that silently does not hold.
+		"rules": _obj({
+			"price_mult": _opt(_above(0.0)),
+			"free_rewinds": _opt(_int(0.0)),
+			"patrol_every_act": _opt(_bool()),
+			"checkpoint_suspicion_mult": _opt(_above(0.0)),
+			"no_contraband": _opt(_bool()),
+			"no_deals": _opt(_bool()),
+			"no_bribes": _opt(_bool()),
+			"snap_minutes": _opt(_num(0.0)),
+			"heavy_floor_add": _opt(_num()),
+			"start_items": _opt(_list(_ref("items"))),
+			"full_supplies": _opt(_list(_ref("items"))),
+			"boss_alone_nerves": _opt(_num()),
+			"seed": _opt(_int(0.0)),
+			"road": _opt(_list_n(_list_n(_ref("legs"), RunGenerator.LEGS_PER_ACT), RunGenerator.ACTS)),
+			"stops": _opt(_list_n(_list_n(_ref("stops"), RunGenerator.LEGS_PER_ACT), RunGenerator.ACTS)),
+			"services": _opt(_list(_enum(STOP_SERVICES), 1)),
+			"hitchers": _opt(_list(_obj({
+				"act": _int(1.0, float(RunGenerator.ACTS)),
+				"stop": _int(1.0, float(RunGenerator.LEGS_PER_ACT)),
+				"passenger": _ref("passengers"),
+			}))),
+		}),
 		"heckle_weights": _map_keyed(_enum(HECKLE_TYPES), _num(0.0)),
 		"line_prefix": _ref("line_prefix"),
 	}, true)
@@ -1035,6 +1060,19 @@ func _check_cross_rules() -> void:
 				_err("E_REF", "tables.json", label, "unknown table id '%s'" % target)
 		elif table.has("unlock") and table["unlock"] is String:
 			_err("E_ENUM", "tables.json", label, "must be \"start\" or \"win:<table id>\"")
+	for table: Dictionary in _data.records("tables"):
+		var rules: Dictionary = GameData.as_dict(table.get("rules"))
+		var label: String = "tables[%s].rules" % GameData.as_string(table.get("id"), "?")
+		# A fixed road says its stops and its seed too: it is one course.
+		if rules.has("road") != rules.has("stops"):
+			_err("E_RULE", "tables.json", label, "\"road\" and \"stops\" come together: a fixed road has its stops")
+		if rules.has("road") and not rules.has("seed"):
+			_err("E_RULE", "tables.json", label + ".seed", "a fixed road needs its seed: it is the same road every time")
+		# Only what is used up can start full.
+		for item_id: Variant in GameData.as_array(rules.get("full_supplies")):
+			var supply: Dictionary = GameData.as_dict(_data.record("items", GameData.as_string(item_id)).get("supply"))
+			if _data.has_record("items", GameData.as_string(item_id)) and GameData.as_int(supply.get("uses")) <= 0:
+				_err("E_RULE", "tables.json", label + ".full_supplies", "'%s' has no supply to start full" % GameData.as_string(item_id))
 	for passenger: Dictionary in _data.records("passengers"):
 		var has_legs: bool = passenger.has("rides_legs")
 		var has_until: bool = passenger.has("rides_until")

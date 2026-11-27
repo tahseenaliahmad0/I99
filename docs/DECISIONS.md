@@ -2219,3 +2219,74 @@ rest on the main line. Where this changes D-051, it is the later word.
   passenger, the hook with somebody in the seat). The build is right in
   each today (the verifier's probes); the checks are owed. The lists are
   in the review's reports, copied to `docs/reviews/`.
+
+## D-060 (M9, 2026-11-27) The seven Tables as built
+
+GDD 11.2 gives each Table a row of one or two sentences. This is how each
+sentence became a rule. A Table's rules are the keys of `rules` in its
+record of `data/tables.json`; `TableRules` reads them once and every sim
+asks it; the validator knows every key, so a misspelt rule is an error and
+not a rule that silently does not hold. "Rules do not stack": a Telling
+has the rules of its own Table and of no other.
+
+- **The Children.** "One free rewind: the first Wreck returns to the start
+  of that leg." The Telling is kept as `capture()` makes it at the moment a
+  leg (or a boss) begins. The first Wreck puts that back: cash, Clock,
+  Nerves, lamps, cabin, passengers, the same leg from its first metre with
+  the same seed. It is not a retelling (the Telling's seed and its count of
+  retellings stay) and the last stop's save is not cleared. The rewind is
+  spent by the Wreck that uses it; the second Wreck is Baghdad (GDD 11.5),
+  and the Telling told again from Baghdad has its rewind again: it is one
+  per night told. The save holds how many are left. A Wreck on the approach
+  to the first fork, before any leg has begun, is Baghdad: there is no leg
+  to return to. "Prices -25%" is `price_mult` 0.75 on everything a stop
+  asks cash for: stock, restocks, Deals with a price, and repairs.
+- **The Drivers.** `rules` is empty. A Table the data does not have (a leg
+  driven by itself, a save from before the Tables) has these rules too.
+- **The Uncles.** "A Patrol leg in every act": one place of each act's
+  three, drawn from the Telling's seed, where both branches of the fork are
+  Patrol legs, so the choice there is of stop and modifier only. Their
+  stops and seeds stay those the generator drew; par is the Patrol leg's.
+  One place and not "at least one branch somewhere", because a Patrol he
+  can drive around is no rule. "Checkpoint Suspicion gains x1.25" scales
+  every gain while the Checkpoint is the boss he is in, on top of what the
+  cabin and the passenger do; losses are not scaled. The record's heckle
+  weights are Doubts alone: GDD 14's example record weighs DOUBT, TWIST and
+  DARE, the table of 11.2 says "Doubts", and Part II overrides Part III on
+  what the rules are (GDD 1.5). The example stays in the test fixture of
+  T-DATA-01 as an example of the format.
+- **The In-laws.** "No contraband": no stop holds contraband out, restocks
+  it or deals in it. "No Deals": the shady guy is never there. "No bribes":
+  neither the officer nor the soldier takes banknotes; the gesture is
+  refused and the snapshot says a bribe cannot be offered, so the HUD shows
+  none. What he already carries is not taken from him: nothing in the
+  starting cabin is contraband. "Each Snap costs 15 game minutes": added to
+  the Clock at the Snap, and the `snap` event carries the minutes.
+- **The Aunts.** "Heavy floor +10 all night": added wherever the Heavy
+  floor is read. "Prices +25%": `price_mult` 1.25, as above. "He starts
+  with a Thermos and seeds": given at the start of every Telling told,
+  besides the starting cabin, into the slots those items take.
+- **The Groom.** "He leaves at 22:45": `depart_min` 45, added to the Clock
+  at the start (the wedding does not wait: he has 45 minutes less). "Any
+  boss begun without a passenger starts with +20 Nerves": at the tick the
+  boss begins, when the seat is empty.
+- **Noor.** "One fixed road with no forks": the record names the leg of
+  each of the nine places and its stop, and a seed (1977) that is the
+  Telling's whatever seed is asked for, so every beat is where it was last
+  time. The generator gives one branch per place: there is no gore, no fork
+  sign, no `fork_taken`; the car is carried onto the next leg wherever it
+  is. A Wreck tells the same road again (the retelling's seed is not
+  drawn). "No shops but tea and repairs": `services` lists the two; a stop
+  holds out no stock, restocks nothing, has no shady guy, and the boss stop
+  (GDD 9.6: a choice of three) offers the tea stall and the fitter alone.
+  The nine stops alternate tea stall and fitter, beginning with tea, so the
+  second stop of Act 2 is a tea stall. "The Student waits at the second
+  stop of Act 2": `hitchers` says who waits where, and at a Table that
+  says so nobody else waits anywhere. "The starting cabin plus beads and a
+  full pack": `start_items` and `full_supplies` (the pack of cigarettes
+  starts at its full count instead of the starting cabin's). "No heckles":
+  its weights are empty.
+- **The chain.** `unlock` is `start` (the Children) or `win:<table>`:
+  Children, Drivers, Uncles, In-laws, Aunts, Groom, Noor, in the order of
+  the GDD's table. `TableRules.win` opens in a profile what a win on time
+  opens; what calls it, and what a win is, belongs to the endings (M9c).

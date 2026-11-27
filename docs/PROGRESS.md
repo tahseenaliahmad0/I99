@@ -27,8 +27,8 @@ Useful commands:
 
 ## Current state
 
-- **Milestone:** paused, as the owner asked on 2026-11-20 ("finish M6, M7, M8 and M10, then pause"; read in D-056 as the work in flight on those four). M6 (items), M7 (bosses) and M8 (passengers) are built and reviewed, and what their reviews found is applied but for the open findings below. Of M10 the three presentation pieces are in and reviewed: sound, post effects, subtitles. **The next milestone is M9** (the frame); the rest of M10 (the eleven settings of GDD 17.1, mouse-only menus, T-ONEHAND-01, T-SETTINGS-01, T-SMOKE-ALL) needs M9's scenes and comes after it.
-- **Tests:** 97 of 114 passing (M0: 2, M1: 8, M2: 10, M3: 7, M4: 13, M5: 6, M6: 42, M7: 4, M8: 5). `tools/check.sh` has eight steps (import, parse with the core and event-name lints, data, audio, tests, subtitles, smoke, postfx) and prints `CHECK OK`.
+- **Milestone:** **M9, the frame**, taken up again on 2026-11-27 (the owner: "continue"). Its first part is done: the seven Tables (D-060). Next are the heckles (M9b), then endings and persistence (M9c), the prologue and the finale (M9d), the scenes and the lines (M9e). M6 (items), M7 (bosses) and M8 (passengers) are built and reviewed, and what their reviews found is applied but for the open findings below. Of M10 the three presentation pieces are in and reviewed: sound, post effects, subtitles; the rest of M10 (the eleven settings of GDD 17.1, mouse-only menus, T-ONEHAND-01, T-SETTINGS-01, T-SMOKE-ALL) needs M9's scenes and comes after it.
+- **Tests:** 104 of 114 passing (M0: 2, M1: 8, M2: 10, M3: 7, M4: 13, M5: 6, M6: 42, M7: 4, M8: 5, M9: 7). `tools/check.sh` has eight steps (import, parse with the core and event-name lints, data, audio, tests, subtitles, smoke, postfx) and prints `CHECK OK`.
 - **How the last session ended.** On 2026-11-20 the account's monthly spend limit stopped six workflows in mid-run. What their agents had finished was taken in by hand on 2026-11-27: the M8 rules fixes (`m8fix/rules`, complete), the M6 test gaps (`m6fix/tests`, complete), the post effects review fixes (uncommitted in the agent's worktree; committed, merged, pictures retaken and looked at), and of the M7 views fixes V-01 and V-05. **What never ran and is still owed, if the owner wants it:** a skeptic's check of the fixes themselves. The fixes of D-055, D-057, D-058 and D-059, and the post effects fixes, are held by their own tests and mutants and by nothing else: no second agent tried to break them. The workflows' local branches (`m6fix/*`, `m7fix/views`, `m8fix/rules`, `m10/*-in-fix`) hold nothing that is not merged; they are not pushed and need not be.
 - **The reviews' reports** are in `docs/reviews/` (one JSON per lens, with the GDD sentence, evidence and proposed fix of each finding). The probes they name are gone with the scratch folder.
 - **Open findings, by milestone** (ids as in the reports):
@@ -40,7 +40,7 @@ Useful commands:
   - *M1 and M2* (reviews of 2026-11-17, never finished): (a) M2 views: pointer ring drawn at the hand's clamped target; the hand does not follow the gear knob; forearm stretches beyond 0.30 m for five far anchors (decision not recorded); `scene` in placeholders ignored for road strips, arm and pointer. (b) M1 test honesty (18): no test moves the pointer with relative motion; T-WHEEL-01 never releases a turned wheel; grip and ride on an off-centre wheel; gate engage radius and grind band probed from one side; FLICK time and direction limits; CRANK angle-not-distance; gate channel width; camera pitch and glance following the hand; pointer pixels to screen; steering sensitivity wiring; loose brackets on timing limits; literals standing in for tuning values. (c) M1 gesture: rituals.json is not checked against the table of GDD 4.6. (d) M2 test honesty leftovers (see D-028 and D-029 for what was done). M3, M4 and M5 have not been reviewed.
 - **Next step:**
   1. `tools/check.sh` must print `CHECK OK` (about six minutes on an idle machine).
-  2. **M9, the frame** (GDD 11, 3, 10.1, 10.6): wedding room, seven Tables, heckles, lines, endings, persistence, prologue, finale, modes; tests T-TABLE-* (7), T-HECKLE-01, T-END-01, T-PROLOGUE-01, T-FINALE-01. Heckle lines are tells: ask for them with `"tell": true` (D-058). A Wreck that only rewinds (the Children's Table) must leave the save file alone (D-055).
+  2. **M9, the frame** (GDD 11, 3, 10.1, 10.6), what is left of it: heckles (T-HECKLE-01: `HeckleDirector` as GDD 13.1 names it, `data/heckles.json`, the `heckle` stream; a Table's `heckle_weights` are read by `TableRules`), endings and persistence (T-END-01: `TableRules.win` opens Tables in a profile and nothing calls it yet; guests, told true, the modes), the prologue and the finale (T-PROLOGUE-01, T-FINALE-01), then the scenes (title, wedding room, ending, credits; GDD 13.4) and about 250 placeholder lines. Heckle lines are tells: ask for them with `"tell": true` (D-058). A Telling is begun with `DriveSim.begin_telling(table_id, seed)`; the Table's rules are `sim.table`.
   3. Then the rest of M10, M11 (the DriverBot replaces `src/game/stand_in_bot.gd`; T-WALL-01 with DAWN-01), M12.
   The open findings above can be taken at any time; each needs a check that fails first.
   Mutation runs are `python3 tools/mutants.py <test ids> tools/mutants/<list>.py [log]` (one textual change at a time, the tests, the file restored; `MUT_ROOT=<copy>` runs them on a copy of the project, `MUT_ONLY=3,5` a few of them). Every entry of every list applies to the code as it is (checked 2026-11-27); a change to `src/core` can make an entry stale, which `tools/mutants.py` reports instead of running it.
@@ -152,7 +152,11 @@ Do not start a milestone until every test of the previous one passes (GDD 18).
 - [ ] Left open: the test gaps m8tv-08, 09, 10 (see "Current state")
 
 ### M9 The frame: T-TABLE-* (7), T-HECKLE-01, T-END-01, T-PROLOGUE-01, T-FINALE-01
-- [ ] not started
+- [x] M9a The seven Tables (D-060): `TableRules`, `data/tables.json` (rules as validated keys), the rules in `DriveSim`, `RunState`, `RunGenerator` and `StopSim`; seven tests; T-DATA-01 breaks each rule key once; mutants in `tools/mutants/tables.py`
+- [ ] M9b Heckles: T-HECKLE-01
+- [ ] M9c Endings and persistence: T-END-01
+- [ ] M9d Prologue and finale: T-PROLOGUE-01, T-FINALE-01
+- [ ] M9e Scenes (title, wedding room, ending, credits), lines, views, smoke runs
 
 ### M10 Presentation and options: T-ONEHAND-01, T-SETTINGS-01, T-SMOKE-ALL
 - [x] Generated audio (GDD 16.5; D-052): `SfxSynth`, `Audio`, `data/sfx.json`, the mix; `tools/audio_check.gd` is a step of `tools/check.sh`
@@ -272,3 +276,5 @@ Two lines per slice, newest last.
   M6: the third fix branch and 283 new checks merged (D-055); a Wreck in the tick he pulls in at a stall is a Wreck. Each test process keeps to a user folder of its own. The spend limit then ended six workflows.
 - 2026-11-27 What the stopped workflows had finished is in: the M8 rules fixes (D-059), the post effects review fixes, V-01 and V-05 of the M7 views lens. On the main line: the passengers' sounds, V-07, V-10, V-11, V-19.
   The review reports are kept in `docs/reviews/`; every mutant list applies again. Paused as asked: next is M9. 97 of 114.
+- 2026-11-27 M9a: the seven Tables (D-060). Each Table's rule is a validated key of its record; the Children's rewind returns him to the leg's start as it was; the Uncles' Patrol is one place per act on both branches;
+  Noor's road is nine named legs under one seed, with no fork to take, tea and repairs only, and the Student at Act 2's second stop. 104 of 114.

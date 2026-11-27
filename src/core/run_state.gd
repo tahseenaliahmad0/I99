@@ -45,6 +45,9 @@ var call_answered: bool = false
 ## The stop he is at, else "".
 var stop: String = ""
 
+## The rules of the Table (GDD 11.2): what they say of the road.
+var rules: TableRules = TableRules.new()
+
 var _data: GameData
 
 
@@ -69,9 +72,10 @@ func begin(table_id: String, telling_seed: int) -> void:
 
 
 ## The same Table, told again after a Wreck: another seed, from Baghdad.
+## (A Table whose road is fixed has one seed: the same night again.)
 func retell() -> void:
 	retellings += 1
-	begin(table, Rng.derive(seed, RETELLING_SALT + retellings))
+	begin(table, rules.seed if rules.seed != TableRules.NO_SEED else Rng.derive(seed, RETELLING_SALT + retellings))
 
 
 ## A Telling loaded from a save: he stands at a stop (`stage_id` is "stop",
@@ -104,6 +108,34 @@ func stage_name() -> String:
 
 func fork_ahead() -> bool:
 	return not branches.is_empty() and (stage == Stage.APPROACH or stage == Stage.LEG)
+
+
+## The road ahead splits in two. (On a fixed road another leg is ahead, and
+## no fork: there is nothing to sign and nothing to choose.)
+func splits_ahead() -> bool:
+	return fork_ahead() and branches.size() > 1
+
+
+## A Telling put back on the road at the start of the leg he took on `side`
+## of the fork before leg `legs_behind` of `in_act` ("leg"), or at the start
+## of that act's boss ("boss"): where a free rewind returns him to.
+func resume_on_road(table_id: String, telling_seed: int, told_again: int, in_act: int, legs_behind: int, stage_id: String, side: int) -> void:
+	active = true
+	table = table_id
+	seed = telling_seed
+	retellings = told_again
+	act = clampi(in_act, 1, RunGenerator.ACTS)
+	legs_done = clampi(legs_behind, 0, RunGenerator.LEGS_PER_ACT)
+	boss = ""
+	boss_modifier = ""
+	stop = ""
+	if stage_id == STAGE_NAMES[Stage.BOSS]:
+		branch = {}
+		begin_boss()
+		return
+	stage = Stage.APPROACH
+	branches = _fork(legs_done)
+	take_branch(side)
 
 
 ## The car is at the gore: it takes the branch on its side. Returns the leg.
@@ -188,4 +220,4 @@ func _fork(index: int) -> Array[Dictionary]:
 	if index >= RunGenerator.LEGS_PER_ACT:
 		var none: Array[Dictionary] = []
 		return none
-	return RunGenerator.fork(_data, seed, act, index)
+	return RunGenerator.fork(_data, seed, act, index, rules)

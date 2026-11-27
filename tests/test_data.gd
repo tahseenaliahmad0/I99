@@ -82,6 +82,7 @@ func test_data_01() -> void:
 	_check_broken_passenger_rules()
 	_check_broken_cabin_props()
 	_check_broken_boss_rules()
+	_check_broken_table_rules()
 
 
 # --- 1. Shipped data ----------------------------------------------------------
@@ -97,6 +98,110 @@ func _check_shipped_data() -> void:
 	check(data.has_line("narrator.start"), "a line of GDD 3.6 exists by id")
 	note("%d tuning constants, %d anchors, %d lines" % [
 		data.tuning.keys().size(), data.records("anchors").size(), data.line_ids().size()])
+
+
+# --- 10. The Tables' rules (M9) ------------------------------------------------
+
+## What a Table's "rules" may say (GDD 11.2, D-060): each broken once. A rule
+## the validator let through misspelt would be a rule that silently does not
+## hold.
+func _check_broken_table_rules() -> void:
+	_reset_fixture()
+	_table_rules("uncles")["patrol_each_act"] = true
+	_expect("E_UNKNOWN_KEY", "tables[uncles].rules.patrol_each_act", "a rule no Table has")
+
+	_reset_fixture()
+	_table_rules("children")["price_mult"] = 0
+	_expect("E_RANGE", "tables[children].rules.price_mult", "prices times nothing")
+
+	_reset_fixture()
+	_table_rules("children")["free_rewinds"] = -1
+	_expect("E_RANGE", "tables[children].rules.free_rewinds", "fewer rewinds than none")
+
+	_reset_fixture()
+	_table_rules("inlaws")["no_bribes"] = "yes"
+	_expect("E_TYPE", "tables[inlaws].rules.no_bribes", "a rule that is not true or false")
+
+	_reset_fixture()
+	_table_rules("aunts")["start_items"] = ["thermos", "samovar"]
+	_expect("E_REF", "tables[aunts].rules.start_items[1]", "a starting item nobody sells")
+
+	_reset_fixture()
+	_table_rules("noor")["full_supplies"] = ["beads"]
+	_expect("E_RULE", "tables[noor].rules.full_supplies", "a full supply of something that is not used up")
+
+	_reset_fixture()
+	_table_rules("noor").erase("stops")
+	_expect("E_RULE", "tables[noor].rules", "a fixed road with no stops")
+
+	_reset_fixture()
+	_table_rules("noor").erase("road")
+	_expect("E_RULE", "tables[noor].rules", "fixed stops with no road")
+
+	_reset_fixture()
+	_table_rules("noor").erase("seed")
+	_expect("E_RULE", "tables[noor].rules.seed", "a fixed road with no seed")
+
+	_reset_fixture()
+	var road: Array = GameData.as_array(_table_rules("noor")["road"])
+	var first_act: Array = road[0]
+	first_act[1] = "ring_road"
+	_expect("E_REF", "tables[noor].rules.road[0][1]", "a leg the road does not have")
+
+	_reset_fixture()
+	road = GameData.as_array(_table_rules("noor")["road"])
+	first_act = road[0]
+	first_act.pop_back()
+	_expect("E_RANGE", "tables[noor].rules.road[0]", "an act of two legs")
+
+	_reset_fixture()
+	road = GameData.as_array(_table_rules("noor")["road"])
+	road.pop_back()
+	_expect("E_RANGE", "tables[noor].rules.road", "a road of two acts")
+
+	_reset_fixture()
+	var stops: Array = GameData.as_array(_table_rules("noor")["stops"])
+	var last_act: Array = stops[2]
+	last_act[0] = "caravanserai"
+	_expect("E_REF", "tables[noor].rules.stops[2][0]", "a stop the road does not have")
+
+	_reset_fixture()
+	_table_rules("noor")["services"] = ["tea", "massage"]
+	_expect("E_ENUM", "tables[noor].rules.services[1]", "a service no stop gives")
+
+	_reset_fixture()
+	var hitchers: Array = GameData.as_array(_table_rules("noor")["hitchers"])
+	var waiting: Dictionary = hitchers[0]
+	waiting["passenger"] = "poet"
+	_expect("E_REF", "tables[noor].rules.hitchers[0].passenger", "a hitcher nobody has met")
+
+	_reset_fixture()
+	hitchers = GameData.as_array(_table_rules("noor")["hitchers"])
+	waiting = hitchers[0]
+	waiting["stop"] = 4
+	_expect("E_RANGE", "tables[noor].rules.hitchers[0].stop", "a fourth stop in an act")
+
+	_reset_fixture()
+	hitchers = GameData.as_array(_table_rules("noor")["hitchers"])
+	waiting = hitchers[0]
+	waiting["act"] = 0
+	_expect("E_RANGE", "tables[noor].rules.hitchers[0].act", "an act before the first")
+
+	_reset_fixture()
+	var tables: Array = _list("tables", "tables")
+	for index: int in tables.size():
+		var table: Dictionary = tables[index]
+		if GameData.as_string(table.get("id")) == "aunts":
+			tables.remove_at(index)
+			break
+	_expect("E_MISSING", "tables[aunts]", "a Table of GDD 11.2 that is not there")
+	_reset_fixture()
+
+
+## The "rules" of a Table of the fixture, to break.
+func _table_rules(table_id: String) -> Dictionary:
+	var rules: Dictionary = _record("tables", table_id)["rules"]
+	return rules
 
 
 # --- 9. The set pieces (M7) ----------------------------------------------------
