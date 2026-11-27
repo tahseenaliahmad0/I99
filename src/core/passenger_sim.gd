@@ -59,9 +59,11 @@ var id: String = ""
 var record: Dictionary = {}
 ## Legs whose stall they have ridden past since they boarded.
 var legs_ridden: int = 0
-## The wheel is held for him, and for how long yet.
+## The wheel is held for him, and for how long yet; and, by one who holds it
+## "at its current angle", the angle at which.
 var hold: int = HOLD_NONE
 var hold_left: float = 0.0
+var held_angle: float = 0.0
 ## One who sleeps: seconds they stay awake (0: asleep).
 var awake_left: float = 0.0
 ## One who drums: drumming now. (Not drumming, his hands are free for the tea.)
@@ -142,6 +144,7 @@ func _seat(passenger_id: String) -> void:
 		_weights.append(_weight(GameData.as_dict(entry)))
 	hold = HOLD_NONE
 	hold_left = 0.0
+	held_angle = 0.0
 	awake_left = 0.0
 	repair = REPAIR_IDLE
 	repair_left = 0.0
@@ -206,6 +209,7 @@ func _empty_seat() -> void:
 	legs_ridden = 0
 	hold = HOLD_NONE
 	hold_left = 0.0
+	held_angle = 0.0
 	awake_left = 0.0
 	drumming = false
 	repair = REPAIR_IDLE
@@ -265,7 +269,9 @@ func begin_leg() -> void:
 
 # --- The Hand (GDD 8.1: a TAP on the shoulder) -------------------------------
 
-func ask() -> void:
+## `wheel_angle` is the angle one who holds the wheel "at its current angle"
+## is to hold it at (DriveSim knows the wheel).
+func ask(wheel_angle: float) -> void:
 	if not aboard():
 		return
 	if record.has("sleeps") and awake_left <= 0.0:
@@ -280,16 +286,21 @@ func ask() -> void:
 		HAND_HOLD:
 			hold = HOLD_ANGLE
 			hold_left = GameData.as_float(hand.get("duration_s"))
+			held_angle = wheel_angle
 		HAND_CIGARETTE:
 			if not _items.light_handed():
 				return
 		HAND_TEA:
 			# A tap stops the drum, and his hands are free for the tea; the
-			# next starts it again.
+			# next starts it again. With no tea to pass, the tap stops and
+			# starts the drum and he says nothing of tea.
 			drumming = not drumming
 			_hold_statuses()
 			changed = true
-			events.append({"type": "line_requested", "id": _line("hand" if not drumming else "drum")})
+			if drumming:
+				_say("drum")
+			elif passes_tea():
+				_say("hand")
 			return
 		_:
 			return
@@ -307,10 +318,25 @@ func on_horn() -> void:
 		_wake()
 
 
+## One who answers his calls took one (GDD 8.2): what they tell him of it.
+## The line of that Hand is the dispatcher's fare; a call from his family has
+## a word of its own.
+func on_call_taken(caller: StringName) -> void:
+	_say("hand" if caller == ItemSim.CALLER_DISPATCHER else "family")
+
+
 ## He took the wheel himself: nobody holds it for him any more.
 func wheel_taken() -> void:
 	hold = HOLD_NONE
 	hold_left = 0.0
+
+
+## Seconds after the driver's hand has left the wheel in which one who holds
+## it "at its current angle" still takes it back to the angle it was let go
+## at (GDD 8.2; 0 for everybody else). A wheel let go is back at its centre
+## before a TAP can land on a shoulder half a second away (GDD 4.3).
+func catch_time() -> float:
+	return GameData.as_float(GameData.as_dict(record.get("hand")).get("catch_s"))
 
 
 func holds_wheel() -> bool:
@@ -326,10 +352,13 @@ func asleep() -> bool:
 	return record.has("sleeps") and awake_left <= 0.0
 
 
-## The tea is held out to him beside the wheel: where, in the cabin frame.
+## The tea is held out to him beside the wheel (tea_at: where, in the cabin
+## frame): by one whose Hand that is, while his own hands are off the drum
+## and a tea stands in the cabin for him to take.
 func passes_tea() -> bool:
 	return aboard() and record.has("drums") and not drumming \
-			and GameData.as_string(GameData.as_dict(record.get("hand")).get("kind")) == HAND_TEA
+			and GameData.as_string(GameData.as_dict(record.get("hand")).get("kind")) == HAND_TEA \
+			and _items.in_reach(ItemSim.TAG_TEA) != null
 
 
 func tea_at() -> Vector3:
@@ -418,21 +447,23 @@ func step(dt: float, gear: int, raining: bool) -> void:
 	if weighing and not _weighing:
 		_say("prayer")
 	_weighing = weighing
-	# His drum is music as the radio's is (GDD 6.1), unless the radio plays
-	# music already: music is music once.
-	if drumming and _held.has(ItemSim.MUSIC) and _items.radio != ItemSim.MUSIC:
-		_nerves.add_rate(_music_rate)
+	# His drum is music as the radio's is (GDD 6.1), and music is music once:
+	# where the radio or a tape plays as well, the drum gives only what it is
+	# stronger by. (An open window lets out what comes from the dash, GDD 4.6;
+	# his drum is not the radio.)
+	if drumming and _held.has(ItemSim.MUSIC):
+		_nerves.add_rate(minf(_music_rate - _items.music_rate, 0.0))
 
 
 ## One fault per leg (GDD 8.2): announced, then for a while he leans across
-## the gear lever, and then the oldest fault is mended.
+## the gear lever, and then the oldest fault that is his to mend is mended.
 func _step_repair(dt: float) -> void:
 	var repairs: Dictionary = GameData.as_dict(record.get("repairs"))
 	if repairs.is_empty():
 		return
 	match repair:
 		REPAIR_IDLE:
-			if repaired < GameData.as_int(repairs.get("per_leg")) and not _faults.active.is_empty():
+			if repaired < GameData.as_int(repairs.get("per_leg")) and _fault_to_mend() != &"":
 				repair = REPAIR_ANNOUNCED
 				repair_left = GameData.as_float(repairs.get("announce_s"))
 				_say("repair")
@@ -446,14 +477,26 @@ func _step_repair(dt: float) -> void:
 			if repair_left < dt * 0.5:
 				repair = REPAIR_IDLE
 				repair_left = 0.0
-				repaired += 1
-				if not _faults.active.is_empty():
-					var fault: StringName = _faults.active[0]
+				var fault: StringName = _fault_to_mend()
+				if fault != &"":
+					repaired += 1
 					_faults.repair(fault)
 					events.append({"type": "fault_repaired", "fault": String(fault), "lamps": _faults.lamps, "price": 0.0, "by": id})
 
 
-## The radio, turned to static every so often (GDD 8.2).
+## The fault he would mend: the oldest lit one that duct tape is not already
+## mending (GDD 7.5: that one repairs itself; he does not spend his repair
+## on it). Empty when there is none.
+func _fault_to_mend() -> StringName:
+	for fault: StringName in _faults.active:
+		if fault != _items.mending:
+			return fault
+	return &""
+
+
+## The radio, turned to static every so often (GDD 8.2). Where it is there
+## already (nothing plays, or a tape is in the deck) there is no dial for him
+## to turn and nothing to say.
 func _step_retune(dt: float) -> void:
 	var retunes: Dictionary = GameData.as_dict(record.get("retunes"))
 	if retunes.is_empty():
@@ -461,8 +504,10 @@ func _step_retune(dt: float) -> void:
 	retune_in -= dt
 	if retune_in < dt * 0.5:
 		retune_in = GameData.as_float(retunes.get("every_s"))
-		_items.set_radio(StringName(GameData.as_string(retunes.get("to"))))
-		_say("radio")
+		var to: StringName = StringName(GameData.as_string(retunes.get("to")))
+		if _items.radio != to:
+			_items.set_radio(to)
+			_say("radio")
 
 
 ## He used things with these tags (a cigarette lit, a sip from the flask):

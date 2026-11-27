@@ -51,6 +51,9 @@ var active: bool = false
 var stop_id: String = ""
 ## What is on offer now. A boss stop takes on the service he chooses.
 var service: String = ""
+## The stop a boss stop has become by that choice (GDD 9.6); "" until he has
+## chosen, and at every other stop.
+var chosen: String = ""
 var offers: Array[Offer] = []
 var picks_left: int = 0
 ## Nothing here costs Clock minutes (a boss stop).
@@ -99,6 +102,7 @@ func begin(id: String, act: int, shady: bool, price_mult: float = 1.0) -> void:
 	_services_due = false
 	tea_served = false
 	hitcher = ""
+	chosen = ""
 	events = []
 	var record: Dictionary = _data.record("stops", id)
 	service = GameData.as_string(record.get("service"))
@@ -118,6 +122,12 @@ func end() -> void:
 	offers = []
 	picks_left = 0
 	hitcher = ""
+	chosen = ""
+
+
+## The stop this is now: itself, or the stop he chose at a boss stop.
+func id_now() -> String:
+	return stop_id if chosen.is_empty() else chosen
 
 
 # --- What the stop offers ----------------------------------------------------
@@ -377,10 +387,11 @@ func buy(anchor: String, cash: float) -> float:
 			events.append({"type": "fault_repaired", "fault": offer.id, "lamps": _faults.lamps, "price": offer.price})
 		SERVICE:
 			# The boss stop becomes the stop he chose, at no Clock cost.
-			var chosen: Dictionary = _data.record("stops", offer.id)
+			var record: Dictionary = _data.record("stops", offer.id)
 			offers = []
-			service = GameData.as_string(chosen.get("service"))
-			_lay_out(chosen)
+			chosen = offer.id
+			service = GameData.as_string(record.get("service"))
+			_lay_out(record)
 	_fill_tray()
 	return cash - offer.price
 

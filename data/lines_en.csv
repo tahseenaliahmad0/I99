@@ -27,6 +27,7 @@ passenger.student.name,,THE STUDENT,true
 passenger.student.board,Student,Basra? I can pay. A little.,true
 passenger.student.leave,Student,"Thank you, uncle. Slowly, yes?",true
 passenger.student.hand,Student,"I have it. He says ten, for the airport.",true
+passenger.student.family,Student,"Your wife, uncle. She asks if you have eaten.",true
 passenger.student.weight,Student,"The lane, uncle. The lane!",true
 passenger.apprentice.name,,THE APPRENTICE,true
 passenger.apprentice.board,Boy,My master says a car like this should not still be running.,true

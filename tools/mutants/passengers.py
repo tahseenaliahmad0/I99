@@ -1,11 +1,21 @@
 """Mutants of the passengers (GDD 8) for the five T-PASS tests.
     python3 tools/mutants.py T-PASS tools/mutants/passengers.py
+
+The last block (the validator's rules for passengers.json) is for T-DATA-01:
+    MUT_ONLY=<its numbers> python3 tools/mutants.py T-DATA-01 tools/mutants/passengers.py
+
+After the fixes of the M8 review (RULES-01 to RULES-12): #105 to #152 and
+the thirteen entries rewritten to the changed code (#10, #11, #44, #55, #68,
+#86, #87, #88, #93, #94, #95, #100, #103) are killed by the T-PASS tests,
+#153 to #165 by T-DATA-01. (#142 lived until T-PASS-HAJJIYA said which of
+the five "the next" is.)
 """
 P = 'src/core/passenger_sim.gd'
 D = 'src/core/drive_sim.gd'
 I = 'src/core/item_sim.gd'
 S = 'src/core/stop_sim.gd'
 R = 'src/core/run_generator.gd'
+V = 'src/core/data_validator.gd'
 MUTANTS = [
  # boarding and the seat
  (P, '\tif aboard() or not _data.has_record("passengers", passenger_id):', '\tif not _data.has_record("passengers", passenger_id):', 'a second passenger gets in'),
@@ -17,8 +27,8 @@ MUTANTS = [
  (S, '\treturn not hitcher.is_empty() and not _items.seat_occupied', '\treturn not hitcher.is_empty()', 'the door opens with the seat taken'),
  (S, '\t\treturn {"id": BOARD, "anchor": anchor, "gesture": "TAP"} if _door_can_open() else {}', '\t\treturn {}', 'the door cannot be unlocked'),
  (D, '\t\tif board(stop.hitcher):\n\t\t\tstop.hitcher = ""', '\t\tstop.hitcher = ""', 'the hitcher vanishes instead of getting in'),
- (D, '\t\tstop.hitcher = RunGenerator.hitcher(data, run.seed, run.act, run.legs_done, run.stop, passengers.id)', '\t\tstop.hitcher = ""', 'nobody ever stands at the roadside'),
- (R, '\tif ids[which] == aboard:\n\t\twhich = (which + 1) % ids.size()', '\tif false:\n\t\twhich = (which + 1) % ids.size()', 'the one he carries stands at the roadside'),
+ (D, '\t\tstop.begin(run.stop, run.act, shady)\n\t\tstop.hitcher = _hitcher_here()', '\t\tstop.begin(run.stop, run.act, shady)\n\t\tstop.hitcher = ""', 'nobody ever stands at the roadside'),
+ (R, '\t\tif ids[which] != aboard and ids[which] != left_here:', '\t\tif ids[which] != left_here:', 'the one he carries stands at the roadside'),
  (R, '(stands != HITCHER_SOMETIMES or roll >= data.tuning.f("hitcher_chance"))', '(stands != HITCHER_SOMETIMES or roll >= 1.0)', 'a hitcher at every fuel station and tea stall'),
  (R, '(stands != HITCHER_SOMETIMES or roll >= data.tuning.f("hitcher_chance"))', '(stands != HITCHER_SOMETIMES or roll >= 0.0)', 'never one at a fuel station or tea stall'),
  (R, '\tif stands != HITCHER_ALWAYS and (', '\tif stands == "" or (', 'a Hitcher stop is only sometimes one'),
@@ -53,7 +63,7 @@ MUTANTS = [
  (P, '\tif GameData.as_bool(kept.get("blessed")):\n\t\t_bless(true)', '\tif false:\n\t\t_bless(true)', 'a stop forgets the blessing'),
  # the Hand
  (I, '\t\t"ask":\n\t\t\tasked = true', '\t\t"ask":\n\t\t\tpass', 'the tap asks nothing'),
- (D, '\tif items.asked:\n\t\tpassengers.ask()\n', '', 'nobody hears the tap'),
+ (D, '\tif items.asked:\n\t\tpassengers.ask(_angle_asked_for())\n', '', 'nobody hears the tap'),
  (P, '\tif record.has("sleeps") and awake_left <= 0.0:\n\t\t# The tap wakes him; only then does his Hand work.', '\tif false:\n\t\t# The tap wakes him; only then does his Hand work.', 'asleep, his Hand works'),
  (P, '\t\t\thold = HOLD_STRAIGHT\n\t\t\thold_left = GameData.as_float(hand.get("duration_s"))', '\t\t\thold = HOLD_STRAIGHT\n\t\t\thold_left = 3.0', 'she holds for 3 s'),
  (P, '\t\t\thold = HOLD_STRAIGHT\n', '\t\t\thold = HOLD_ANGLE\n', 'she only keeps the wheel where it is'),
@@ -78,7 +88,7 @@ MUTANTS = [
  (P, '\treturn GameData.as_float(GameData.as_dict(record.get("always")).get("suspicion_gain_mult"), 1.0)', '\treturn 1.0', 'the uniform does nothing'),
  (D, '\tsuspicion.gain_mult = items.passive("suspicion_gain_mult") * passengers.suspicion_mult()', '\tsuspicion.gain_mult = items.passive("suspicion_gain_mult")', 'the uniform is not asked'),
  (P, '\treturn GameData.as_float(GameData.as_dict(record.get("always")).get("fork_sign_lead_s"))', '\treturn 0.0', 'she does not read the road'),
- (D, '(tuning.f("fork_sign_lead") + passengers.fork_sign_lead())', '(tuning.f("fork_sign_lead") - passengers.fork_sign_lead())', 'the sign stands later'),
+ (D, '\t\tvar early_at: float = fork_sign_at - passengers.fork_sign_lead() * par_ms', '\t\tvar early_at: float = fork_sign_at + passengers.fork_sign_lead() * par_ms', 'the sign stands later'),
  (P, '\treturn GameData.as_float(record.get("view_block_right"))', '\treturn 0.0', 'the drum blocks nothing'),
  (P, '\treturn repair == REPAIR_LEANING', '\treturn false', 'the lever is never blocked'),
  (P, '\treturn repair == REPAIR_LEANING', '\treturn repair != REPAIR_IDLE', 'the lever is blocked from the warning on'),
@@ -96,23 +106,96 @@ MUTANTS = [
  (P, '\t\tif bites:\n\t\t\t_nerves.add_rate(weight.per_s)', '\t\tif bites:\n\t\t\t_nerves.add_rate(weight.per_s * 0.5)', 'the Weights weigh half'),
  (D, '\tpassengers.step(DT, gate.gear, leg.active and leg.raining)', '\tpassengers.step(DT, gate.gear, false)', 'it never rains on her'),
  (D, '\tpassengers.step(DT, gate.gear, leg.active and leg.raining)', '\tpassengers.step(DT, 3, leg.active and leg.raining)', 'the gear is not told'),
- (P, '\tif drumming and _held.has(ItemSim.MUSIC) and _items.radio != ItemSim.MUSIC:', '\tif drumming and _held.has(ItemSim.MUSIC):', 'music twice with the radio'),
- (P, '\tif drumming and _held.has(ItemSim.MUSIC) and _items.radio != ItemSim.MUSIC:\n\t\t_nerves.add_rate(_music_rate)', '\tif drumming and _held.has(ItemSim.MUSIC) and _items.radio != ItemSim.MUSIC:\n\t\tpass', 'the drum does not calm'),
- (P, '\t\t\tif repaired < GameData.as_int(repairs.get("per_leg")) and not _faults.active.is_empty():', '\t\t\tif not _faults.active.is_empty():', 'he repairs every fault'),
+ (P, '\t\t_nerves.add_rate(minf(_music_rate - _items.music_rate, 0.0))', '\t\t_nerves.add_rate(_music_rate)', 'music twice with the radio'),
+ (P, '\tif drumming and _held.has(ItemSim.MUSIC):\n\t\t_nerves.add_rate(minf(_music_rate - _items.music_rate, 0.0))', '\tif drumming and _held.has(ItemSim.MUSIC):\n\t\tpass', 'the drum does not calm'),
+ (P, '\t\t\tif repaired < GameData.as_int(repairs.get("per_leg")) and _fault_to_mend() != &"":', '\t\t\tif _fault_to_mend() != &"":', 'he repairs every fault'),
  (P, '\t\t\t\trepair_left = GameData.as_float(repairs.get("announce_s"))', '\t\t\t\trepair_left = 0.0', 'no warning'),
  (P, '\t\t\t\trepair_left = GameData.as_float(repairs.get("lean_s"))', '\t\t\t\trepair_left = 1.0', 'he leans for a second'),
  (P, '\t\t\t\t\t_faults.repair(fault)\n', '', 'he repairs nothing'),
  (P, 'func begin_leg() -> void:\n\trepaired = 0', 'func begin_leg() -> void:\n\tpass', 'one repair a night'),
- (D, '\t\t# A leg or a boss, not the road to a fork: what is once per leg is new.\n\t\tpassengers.begin_leg()\n', '\t\tpass\n', 'the next leg is not told'),
- (P, '\t\t_items.set_radio(StringName(GameData.as_string(retunes.get("to"))))\n', '', 'he leaves the radio alone'),
- (P, '\t\tretune_in = GameData.as_float(retunes.get("every_s"))\n\t\t_items', '\t\tretune_in = 20.0\n\t\t_items', 'the second retune comes early'),
+ (D, '\t\t# passenger does once per leg is new, as it is for the items.\n\t\tpassengers.begin_leg()\n', '\t\t# passenger does once per leg is new, as it is for the items.\n\t\tpass\n', 'the next leg is not told'),
+ (P, '\t\t\t_items.set_radio(to)\n', '', 'he leaves the radio alone'),
+ (P, '\t\tretune_in = GameData.as_float(retunes.get("every_s"))\n\t\tvar to', '\t\tretune_in = 20.0\n\t\tvar to', 'the second retune comes early'),
  (P, '\tretune_in = GameData.as_float(GameData.as_dict(record.get("retunes")).get("every_s"))', '\tretune_in = 20.0', 'the first retune comes early'),
  (P, '\t\tif weight.when == WHEN_TAG and tags.has(weight.tag):\n\t\t\t_nerves.add(weight.amount)', '\t\tif weight.when == WHEN_TAG and tags.has(weight.tag):\n\t\t\tpass', 'what she forbids is free'),
  (P, '\t\tif weight.when == WHEN_TAG and tags.has(weight.tag):', '\t\tif weight.when == WHEN_TAG:', 'she forbids everything'),
  (D, '\tif not items.used_tags.is_empty():\n\t\tpassengers.on_used(items.used_tags)\n', '', 'she does not see what he uses'),
- (I, '\tif owner != null and GameData.as_array(ritual.get("on_complete")).has("give"):\n\t\t# What he has just used, by its tags.', '\tif owner != null:\n\t\t# What he has just used, by its tags.', 'ashing is smoking'),
+ (I, '\tif used:\n\t\t# What he has just used, by its tags.', '\tif owner != null:\n\t\t# What he has just used, by its tags.', 'ashing is smoking'),
  (P, '\t\tif weight.when == WHEN_SCRAPE:\n\t\t\t_nerves.add(weight.amount)', '\t\tif weight.when == WHEN_SCRAPE:\n\t\t\tpass', 'a scrape does not scare her'),
  (D, '\t\tif collision.hit == Collision.Hit.SCRAPE:\n\t\t\tpassengers.on_scrape()\n', '', 'she does not see the scrape'),
- (I, '\tif answered_for_him:\n\t\t# His passenger picks it up: what the call gives, without his hand.\n\t\t_answer(handset, true)\n', '', 'the phone rings on'),
+ (I, '\tif answered_for_him:\n\t\t# His passenger picks it up: what the call gives, without his hand.\n\t\ttaken_for_him = caller\n\t\t_answer(handset, true)\n', '', 'the phone rings on'),
  (I, '"in_a_row": answered_run, "for_him": for_him})', '"in_a_row": answered_run, "for_him": false})', 'nobody says who answered'),
+ # --- what the review of M8 changed (RULES-01 to RULES-11)
+ # RULES-01: the boy's retune ends what the station held on
+ (I, '\tif _radio_held != radio:\n\t\t_let_station_go()\n\t_radio_time = 0.0', '\tif _radio_held != radio:\n\t\t_radio_held = STATIC\n\t_radio_time = 0.0', 'his retune leaves the station\'s status on'),
+ # RULES-11: one music
+ (I, '\t\tmusic_rate += _radio_music_rate * mult\n', '', 'the radio\'s music is not told to the drum'),
+ (I, '\t\tmusic_rate += _radio_music_rate * mult\n', '\t\tmusic_rate += _radio_music_rate\n', 'the radio\'s music is told as if the window were shut'),
+ (I, '\t\t\t\t\t\tif standing.music:\n\t\t\t\t\t\t\tmusic_rate += rate\n', '', 'a tape\'s music is not told to the drum'),
+ (I, '\t\t\tif other.kind == Standing.NERVES and other.condition == holding.condition:', '\t\t\tif other.kind == Standing.NERVES:', 'a tape\'s warble counts as its music'),
+ (P, '\t\t_nerves.add_rate(minf(_music_rate - _items.music_rate, 0.0))', '\t\t_nerves.add_rate(_music_rate if _items.music_rate == 0.0 else 0.0)', 'the drum gives way to any music from the dash'),
+ # RULES-10: what they say is what they do
+ (P, '\t_say("hand" if caller == ItemSim.CALLER_DISPATCHER else "family")', '\t_say("hand")', 'she says the fare of every call'),
+ (P, '\t_say("hand" if caller == ItemSim.CALLER_DISPATCHER else "family")', '\t_say("hand" if caller == ItemSim.CALLER_DISPATCHER else "")', 'his family\'s call has no word'),
+ (D, '\tif items.taken_for_him != &"":\n\t\tpassengers.on_call_taken(items.taken_for_him)\n', '', 'she takes his calls without a word'),
+ (P, '\t\tif _items.radio != to:\n\t\t\t_items.set_radio(to)', '\t\tif true:\n\t\t\t_items.set_radio(to)', 'he turns a silent dial and says so'),
+ (P, '\t\t\telif passes_tea():\n\t\t\t\t_say("hand")', '\t\t\telse:\n\t\t\t\t_say("hand")', 'he says "your tea" with no tea in the car'),
+ (P, '\t\t\tif drumming:\n\t\t\t\t_say("drum")\n', '\t\t\tif drumming:\n\t\t\t\tpass\n', 'the drum begins again without a word'),
+ (P, ' \\\n\t\t\tand _items.in_reach(ItemSim.TAG_TEA) != null', '', 'a tea that is not there is held out'),
+ # RULES-07: the boy and the tape
+ (P, '\t\tif fault != _items.mending:\n\t\t\treturn fault', '\t\tif true:\n\t\t\treturn fault', 'he mends the fault the tape holds'),
+ (P, '\t\t\t\tif fault != &"":\n\t\t\t\t\trepaired += 1\n', '\t\t\t\tif fault != &"":\n', 'his repairs are not counted'),
+ # RULES-09: a Snap's horn
+ (D, '\tif not _standing():\n\t\t# Two seconds of his horn wake one who sleeps (GDD 8.2) as its TAP\n\t\t# does: on the road. Where the night waits, nothing of a passenger runs.\n\t\tpassengers.on_horn()\n', '', 'a Snap\'s horn wakes nobody'),
+ (D, '\tif not _standing():\n\t\t# Two seconds of his horn wake', '\tif true:\n\t\t# Two seconds of his horn wake', 'a Snap wakes him with the officer at the window'),
+ (D, '\t\t_report_snap()\n\t\t_announce_passenger()\n', '\t\t_report_snap()\n', 'what he says in a Snap after a missed Exit is lost'),
+ # RULES-03: the wheel as it was let go
+ (D, '\t\t_catch_left = passengers.catch_time()\n', '\t\t_catch_left = 0.0\n', 'the angle let go is never caught'),
+ (D, '\tif _catch_left > 0.0:\n\t\t_catch_left -= DT\n', '\tif _catch_left > 0.0:\n\t\tpass\n', 'the catch never ends'),
+ (D, '\t\tif _catch_left < DT * 0.5:\n\t\t\t_catch_left = 0.0\n\tif hand.let_go:', '\t\tif _catch_left < DT * 1.5:\n\t\t\t_catch_left = 0.0\n\tif hand.let_go:', 'the catch ends a tick early'),
+ (D, '\t\tif _catch_left < DT * 0.5:\n\t\t\t_catch_left = 0.0\n\tif hand.let_go:', '\t\tif _catch_left < -DT * 0.5:\n\t\t\t_catch_left = 0.0\n\tif hand.let_go:', 'the catch ends a tick late'),
+ (D, '\tif _catch_left > 0.0 and not effects.has_own(ItemSim.HOOK_SET):\n\t\treturn _let_go_angle', '\tif true:\n\t\treturn _let_go_angle', 'he always takes the wheel back to the last let-go'),
+ (D, '\tif _catch_left > 0.0 and not effects.has_own(ItemSim.HOOK_SET):', '\tif _catch_left > 0.0:', 'he takes the wheel back from the hook'),
+ (D, '\t\t_let_go_angle = wheel.angle\n', '', 'the angle let go is not remembered'),
+ (P, '\t\t\theld_angle = wheel_angle\n', '\t\t\theld_angle = 0.0\n', 'he holds the wheel at its centre'),
+ (D, '\t\twheel.hold_at(passengers.held_angle)\n', '\t\tpass\n', 'he holds the wheel where it is, whatever he was asked for'),
+ (P, '\treturn GameData.as_float(GameData.as_dict(record.get("hand")).get("catch_s"))', '\treturn GameData.as_float(GameData.as_dict(record.get("hand")).get("catch_s")) * 0.5', 'half the time to ask him'),
+ # RULES-04: the Hitcher's service after a boss
+ (S, '\t\t\tchosen = offer.id\n', '', 'a boss stop stays a boss stop for the draw'),
+ (D, '\t\tif stop.id_now() != stop_was:\n\t\t\t# The stop after a boss has become the stop he chose (GDD 9.6):\n\t\t\t# whoever stands at such a stop stands here.\n\t\t\tstop.hitcher = _hitcher_here()\n', '', 'the service chosen after a boss draws nobody'),
+ (D, 'stop.id_now(), passengers.id, _left_here)', 'stop.id_now(), "", _left_here)', 'the one he carries may be drawn'),
+ (D, 'stop.id_now(), passengers.id, _left_here)', '"hitcher" if not stop.chosen.is_empty() else stop.id_now(), passengers.id, _left_here)', 'whatever he chooses after a boss, a hitcher stands there'),
+ # RULES-08: nobody stands where they got out
+ (D, '\t_left_here = passengers.id\n\tpassengers.leave("ride_over")', '\tpassengers.leave("ride_over")', 'who got out here is forgotten'),
+ (D, '\t\t"left_here": _left_here,\n', '\t\t"left_here": "",\n', 'the save forgets who got out here'),
+ (D, '\t_left_here = GameData.as_string(telling.get("left_here"))\n', '', 'a loaded save forgets who got out here'),
+ (D, '\t_emit("stop_left", {"stop": run.stop})\n\t_left_here = ""\n', '\t_emit("stop_left", {"stop": run.stop})\n', 'who got out is remembered down the road'),
+ (R, '\t\tif ids[which] != aboard and ids[which] != left_here:', '\t\tif ids[which] != aboard:', 'the one who got out stands at the roadside'),
+ (R, '\t\twhich = (which + 1) % ids.size()\n\treturn ""', '\t\twhich = (which + 2) % ids.size()\n\treturn ""', 'not the next of the five but the one after'),
+ # RULES-06: her sign is ahead of him
+ (D, '\t\tif early_at > _road_from:\n\t\t\tfork_sign_at = early_at', '\t\tif true:\n\t\t\tfork_sign_at = early_at', 'her sign stands earlier wherever that is'),
+ (D, '\t\t_lane = car.lane_of(car.x)\n\t\t_road_from = car.s\n', '\t\t_lane = car.lane_of(car.x)\n', 'pulling away from a stall is not coming onto the road'),
+ (D, '\t_exit = EXIT_NONE\n\t_road_from = car.s\n', '\t_exit = EXIT_NONE\n', 'a new road is entered where the last one was'),
+ (D, '\t\tif early_at > _road_from:\n\t\t\tfork_sign_at = early_at', '\t\tif early_at > car.s:\n\t\t\tfork_sign_at = early_at', 'past her sign, the usual one stands as well'),
+ # RULES-02 and RULES-05: what the M6 fixes cured, and the tests did not hold
+ (D, '\tif renews and (not leg.leg_id.is_empty() or boss.active):', '\tif not leg.leg_id.is_empty() or boss.active:', 'a stop at the stall renews his one repair'),
+ (P, '\t\trepaired = GameData.as_int(kept.get("repaired"))', '\t\trepaired = 0', 'a stop forgets that he has repaired'),
+ (P, '"repaired": repaired, "blessed": blessed}', '"repaired": 0, "blessed": blessed}', 'the save forgets that he has repaired'),
+ (D, '\tif _standing():\n\t\tnerves.step_snap(DT)\n\telse:', '\tif stopped:\n\t\tnerves.step_snap(DT)\n\telse:', 'with the officer at the window the night runs on'),
+ (D, '\tif _standing():\n\t\tnerves.step_snap(DT)\n\telse:', '\tif _standing():\n\t\tnerves.step_snap(DT)\n\t\tif pulled_over:\n\t\t\t_step_passenger()\n\telse:', 'with the officer at the window the passenger\'s time runs on'),
+ (D, '\tif pulled_over:\n\t\treturn items.ritual_for(PULLED_OVER, anchor)\n', '', 'with the officer at the window the cabin is his to use'),
+ # --- the validator's rules (RULES-12): for T-DATA-01
+ (V, '\tif not LEAVE_OPS.has(parts[0]):', '\tif false:', 'every ritual op may be left behind'),
+ (V, 'const LEAVE_OPS: PackedStringArray = ["nerves", "cash", "add_effect"]', 'const LEAVE_OPS: PackedStringArray = ["nerves", "add_effect"]', 'cash cannot be left behind'),
+ (V, '\telif not blessing and parts.size() < 3:', '\telif false:', 'a status left behind for no time'),
+ (V, '\tif blessing and parts.size() > 2:', '\tif false:', 'a blessing with seconds'),
+ (V, '(GameData.as_string(weight.get("resource")) == "suspicion") != (when == WEIGHT_ON_SUSPICION):', '(GameData.as_string(weight.get("resource")) == "suspicion") and when != WEIGHT_ON_SUSPICION:', 'a drum may weigh on Nerves'),
+ (V, '(GameData.as_string(weight.get("resource")) == "suspicion") != (when == WEIGHT_ON_SUSPICION):', '(GameData.as_string(weight.get("resource")) != "suspicion") and when == WEIGHT_ON_SUSPICION:', 'anything may weigh on Suspicion'),
+ (V, '\tif kind != "always" or GameData.as_bool(GameData.as_dict(passenger.get("always")).get("answers_calls")):', '\tif kind != "always":', 'one who takes his calls owes no line'),
+ (V, '\tif kind != "always" or GameData.as_bool(GameData.as_dict(passenger.get("always")).get("answers_calls")):', '\tif GameData.as_bool(GameData.as_dict(passenger.get("always")).get("answers_calls")):', 'a Hand asked by a tap owes no line'),
+ (V, '\tif kind == "pass_tea":\n\t\tlines.append("drum")', '\tif false:\n\t\tlines.append("drum")', 'the drum owes no line'),
+ (V, '\tif passenger.has("sleeps"):\n\t\tlines.append("wake")', '\tif false:\n\t\tlines.append("wake")', 'the waking owes no line'),
+ (V, '\tif passenger.has("repairs"):\n\t\tlines.append("repair")', '\tif false:\n\t\tlines.append("repair")', 'a repair may go unannounced'),
+ (V, '\tif kind == "hold_wheel" and GameData.as_float(hand.get("catch_s")) <= 0.0:', '\tif false:', 'a hand on the wheel with no time to ask it'),
+ (V, '\tif kind != "hold_wheel" and hand.has("catch_s"):', '\tif false:', 'a catch on any Hand'),
 ]
