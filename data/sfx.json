@@ -382,5 +382,37 @@
       "note": "Not of GDD 16.5's table: the soldier raps on the door with every sign he puts up (GDD 10.2: the Papers), so that the document he asks for is heard as well as seen (GDD 17.2). Three dull knocks"
     },
     "stream": null
+  },
+  "passenger_snore": {
+    "synth": {
+      "wave": "noise", "seed": 63, "filter": "bandpass", "cutoff": 180, "q": 2.5,
+      "burst_hz": 0.5, "burst_decay": 0.35,
+      "rate": 11025, "duration": 2.0, "peak": 0.9, "loop": true,
+      "gain_db": -22, "fade_in": 0.3, "fade_out": 0.3,
+      "note": "Not of GDD 16.5's table: the Conscript's snoring (GDD 8.2, 6.1), heard for as long as he sleeps (GDD 17.2). One slow breath of low noise every two seconds"
+    },
+    "stream": null
+  },
+  "passenger_murmur": {
+    "synth": {
+      "wave": "saw", "harmonics": 6,
+      "notes": [[147, 2], [0, 1], [139, 2], [165, 3], [0, 2], [147, 1], [131, 3], [0, 2]],
+      "note_attack": 0.03, "note_release": 0.06,
+      "filter": "lowpass", "cutoff": 600, "q": 0.7,
+      "rate": 11025, "duration": 1.6, "peak": 0.9, "loop": true,
+      "gain_db": -27, "fade_in": 0.3, "fade_out": 0.3,
+      "note": "Not of GDD 16.5's table: a passenger who says aloud what the way he drives costs her (GDD 8.2: in gear 4 or above the Hajjiya prays aloud), heard for as long as it weighs on him (GDD 17.2). A low voice, lower and softer than the radio's news"
+    },
+    "stream": null
+  },
+  "passenger_clink": {
+    "synth": {
+      "wave": "sine", "partials": [1, 0, 0.5], "notes": [[2900, 1], [3500, 1]],
+      "note_attack": 0.002, "note_decay": 0.03, "note_release": 0.02,
+      "rate": 22050, "duration": 0.24, "peak": 0.9,
+      "gain_db": -18,
+      "note": "Not of GDD 16.5's table: the Apprentice's warning before he leans across the gear lever (GDD 8.2: announced 2 s ahead) is heard as well as read (GDD 17.2). Two tools knocked together"
+    },
+    "stream": null
   }
 }

@@ -53,25 +53,42 @@ func setup(data: GameData, factory: PlaceholderFactory) -> void:
 	add_child(world)
 
 
+## The share of day in the sky, 0 (night) to 1 (day). In a Telling the sky
+## follows the Clock (GDD 6.4): night until `dawn_from` of the night has
+## gone, then lighter until the deadline. On Dawn's road (`dawn_phase` above
+## 0, `along` it from 0 to 1) it is never darker than Dawn driven by itself:
+## the real sun does not rise into a night sky (GDD 10.4), however far ahead
+## of the Clock he is.
+static func day_share(telling: bool, night_share: float, dawn_from: float, dawn_phase: int, along: float, boss_dawn: Vector2) -> float:
+	var by_road: float = lerpf(boss_dawn.x, boss_dawn.y, clampf(along, 0.0, 1.0)) if dawn_phase > 0 else 0.0
+	if not telling:
+		return by_road
+	var by_clock: float = clampf((night_share - dawn_from) / maxf(1.0 - dawn_from, 0.001), 0.0, 1.0)
+	return maxf(by_clock, by_road)
+
+
 func apply(snapshot: Dictionary) -> void:
 	# What he is shown: through the dust's tell the thick dust closes in.
 	var sight: float = snapshot["sight_shown"]
 	var sky: Color = _day
+	var dawn_phase: int = GameData.as_int(snapshot["dawn_phase"])
+	var car_s: float = snapshot["car_s"]
+	var length: float = snapshot["leg_length"]
+	var along: float = clampf(car_s / maxf(length, 1.0), 0.0, 1.0)
 	if snapshot["telling"]:
 		# The sky follows the Clock (GDD 6.4): night until the last part of
-		# it, then lighter until the deadline, when it is day.
+		# it, then lighter until the deadline, when it is day; and on Dawn's
+		# road no darker than that road makes it.
 		var share: float = snapshot["night_share"]
-		var dawn: float = clampf((share - _dawn_from) / maxf(1.0 - _dawn_from, 0.001), 0.0, 1.0)
+		var dawn: float = day_share(true, share, _dawn_from, dawn_phase, along, _boss_dawn)
 		sky = _night.lerp(_day, dawn)
 		if snapshot["raining"]:
 			sky = sky.lerp(_rain, 0.5 * dawn)
 		elif is_finite(sight) and not snapshot["night"]:
 			sky = sky.lerp(_dust, 0.5)
-	elif GameData.as_int(snapshot["dawn_phase"]) > 0:
+	elif dawn_phase > 0:
 		# Dawn by itself: the sky lightens along its road.
-		var car_s: float = snapshot["car_s"]
-		var length: float = snapshot["leg_length"]
-		sky = _night.lerp(_day, lerpf(_boss_dawn.x, _boss_dawn.y, clampf(car_s / maxf(length, 1.0), 0.0, 1.0)))
+		sky = _night.lerp(_day, day_share(false, 0.0, _dawn_from, dawn_phase, along, _boss_dawn))
 	elif snapshot["night"]:
 		sky = _night
 	elif snapshot["raining"]:

@@ -69,6 +69,7 @@ func run(data: GameData) -> PackedStringArray:
 		_check_gust()
 		_check_dust()
 		_check_soldier()
+		_check_passengers()
 		_check_heartbeat()
 		_check_radio()
 		_check_tape()
@@ -436,6 +437,64 @@ func _check_soldier() -> void:
 	_expect(Audio.starts_of(Audio.WHISTLE) == whistles + 1, "soldier_whistle: heard more than once on his way")
 	_expect(Audio.starts_of(Audio.KNOCK) == knocks + 1, "soldier_knock: not heard once as his sign goes up")
 	_expect(Audio.duck_db() == 0.0, "soldier: his sounds turn everything else down; they are no functional cues")
+
+
+## A passenger is heard (GDD 8.2, 17.2): the one who sleeps snores for as
+## long as he sleeps, the one who prays aloud for as long as she does, and
+## the boy's warning before he leans across the lever comes with a clink.
+func _check_passengers() -> void:
+	var cruise: float = _tuning.fi("gear_speeds", 2)
+	for pair: Array in [[Audio.SNORE, "passenger_asleep"], [Audio.MURMUR, "passenger_aloud"]]:
+		var id: String = pair[0]
+		var key: String = pair[1]
+		var spec: Dictionary = _synth(id)
+		var out: float = GameData.as_float(spec.get("fade_out")) + STEP * 3.0
+		_rest()
+		_run(_snap({"speed": cruise}), 1.0)
+		_expect(not Audio.is_sounding(id), "%s: heard with nobody in the seat" % id)
+		_run(_snap({"speed": cruise, key: true}), 1.0)
+		_expect(Audio.is_sounding(id), "%s: not heard while the snapshot says %s" % [id, key])
+		_expect(is_equal_approx(Audio.volume_of(id), GameData.as_float(spec.get("gain_db"))), "%s: not all the way in after a second" % id)
+		_expect(Audio.duck_db() == 0.0, "%s: it turns everything else down; it is no functional cue" % id)
+		_run(_snap({"speed": cruise, key: false}), out)
+		_expect(not Audio.is_sounding(id), "%s: still heard when it is over" % id)
+		_run(_snap({"speed": cruise, key: true, "wrecked": true}), 1.0)
+		_expect(not Audio.is_sounding(id), "%s: heard after a Wreck" % id)
+	# The Conscript himself: he sleeps as he gets in, the horn wakes him, and
+	# he sleeps again.
+	var sim: DriveSim = DriveSim.new(_data)
+	sim.in_encounter = true
+	sim.board("conscript")
+	_rest()
+	_drive(sim, 1.0)
+	_expect(sim.passengers.asleep() and Audio.is_sounding(Audio.SNORE), "passenger_snore: the Conscript sleeps and is not heard")
+	_expect(not Audio.is_sounding(Audio.MURMUR), "passenger_murmur: heard from one who sleeps")
+	sim.passengers.on_horn()
+	_drive(sim, GameData.as_float(_synth(Audio.SNORE).get("fade_out")) + STEP * 3.0)
+	_expect(not sim.passengers.asleep() and not Audio.is_sounding(Audio.SNORE), "passenger_snore: still heard when the horn has woken him")
+	# The Hajjiya: in fourth gear she prays aloud, in third she is quiet.
+	sim = DriveSim.new(_data)
+	sim.in_encounter = true
+	sim.board("hajjiya")
+	sim.gate.reset(4)
+	sim.car.speed = _tuning.fi("gear_speeds", 3)
+	_rest()
+	_drive(sim, 1.0)
+	_expect(sim.passengers.aloud() and Audio.is_sounding(Audio.MURMUR), "passenger_murmur: she prays in fourth gear and is not heard")
+	sim.gate.reset(3)
+	_drive(sim, GameData.as_float(_synth(Audio.MURMUR).get("fade_out")) + STEP * 3.0)
+	_expect(not sim.passengers.aloud() and not Audio.is_sounding(Audio.MURMUR), "passenger_murmur: still heard in third gear")
+	# The Apprentice: a lamp is lit, and his warning is heard once.
+	sim = DriveSim.new(_data)
+	sim.in_encounter = true
+	sim.board("apprentice")
+	_rest()
+	var clinks: int = Audio.starts_of(Audio.CLINK)
+	_drive(sim, 1.0)
+	_expect(Audio.starts_of(Audio.CLINK) == clinks, "passenger_clink: heard with no lamp lit")
+	sim.faults.light(1)
+	_drive(sim, 1.0)
+	_expect(sim.passengers.repair != PassengerSim.REPAIR_IDLE and Audio.starts_of(Audio.CLINK) == clinks + 1, "passenger_clink: the boy's warning is not heard once as he announces the repair")
 
 
 ## The heartbeat is the tell of Pound: from the first of per_minute where

@@ -59,7 +59,7 @@ const HIDES_COURAGE: String = "hides_courage"
 const COURAGE: StringName = &"courage"
 const PAINKILLERS: StringName = &"painkillers"
 ## What the tea is tagged (the Drummer passes it, GDD 8.2).
-const TEA: String = "tea"
+const TEA: String = ItemSim.TAG_TEA
 ## The two parts of the weather cramp (GDD 7.9).
 const HUM: String = "hum"
 const CRAMPED: String = "cramp"
@@ -224,6 +224,10 @@ var _leg_lamps_lit: int = 0
 var _exit: int = EXIT_NONE
 var _exit_at: float = 0.0
 var _stall_at: float = 0.0
+## Where along the road he is on the car came onto it: its start, or the
+## stall he pulled away from. (A sign that would stand before that place is
+## one he has never been ahead of.)
+var _road_from: float = 0.0
 ## Seconds the hand has held the wheel at a stop: stop_leave_grip of it leaves.
 var _leave_grip: float = 0.0
 ## The hand has been off the wheel since he stopped: only then can a grip leave.
@@ -232,8 +236,16 @@ var _let_go_at_stop: bool = false
 var _side: int = RunState.RIGHT
 ## The shady guy is at the stop he stands at.
 var _shady_here: bool = false
+## The passenger who got out at the stop he stands at ("" for nobody): they
+## do not stand at its roadside asking for a ride (GDD 8.1).
+var _left_here: String = ""
 ## Seconds until a wrecked Telling is told again.
 var _wreck_left: float = 0.0
+## The angle the wheel had when his hand last let go of it, and the seconds
+## for which a passenger asked to hold the wheel "at its current angle" still
+## takes it back there (GDD 8.2; 0: no longer).
+var _let_go_angle: float = 0.0
+var _catch_left: float = 0.0
 
 
 func _init(game_data: GameData) -> void:
@@ -336,11 +348,15 @@ func _build() -> void:
 	_snapped = false
 	_leg_lamps_lit = 0
 	_exit = EXIT_NONE
+	_road_from = 0.0
 	_leave_grip = 0.0
 	_let_go_at_stop = false
 	_side = RunState.RIGHT
 	_shady_here = false
+	_left_here = ""
 	_wreck_left = 0.0
+	_let_go_angle = 0.0
+	_catch_left = 0.0
 	hand.grip_toggle = grip_toggle
 
 	var start_gear: int = tuning.i("start_gear")
@@ -414,8 +430,18 @@ func step(input: DriveInput) -> void:
 	_step_wheel_keys(input)
 
 	# 4. Wheel.
+	if _catch_left > 0.0:
+		_catch_left -= DT
+		if _catch_left < DT * 0.5:
+			_catch_left = 0.0
 	if hand.let_go:
 		wheel.release()
+		# From here it returns to its centre (GDD 4.3). A passenger who holds
+		# the wheel "at its current angle" can be asked for this angle for a
+		# moment yet (GDD 8.2; D-043 has the hook wait for the let-go for the
+		# same reason).
+		_let_go_angle = wheel.angle
+		_catch_left = passengers.catch_time()
 		if effects.has_own(ItemSim.HOOK_ARMED):
 			# The hook, hung in its ring, takes the wheel as his hand leaves it
 			# (GDD 7.6): for hook_lock_s at most.
@@ -442,7 +468,10 @@ func step(input: DriveInput) -> void:
 		# whatever else pulls steadily, so that on a straight the car keeps
 		# its line. A curve or a gust still carries it off.
 		wheel.hold_at(_straight_angle())
-	elif wheel.locked and _hook_keeps_lane and curve_k == 0.0 and not passengers.holds_wheel():
+	elif passengers.holds_wheel():
+		# Held for him at an angle (GDD 8.2): the one he was asked for.
+		wheel.hold_at(passengers.held_angle)
+	elif wheel.locked and _hook_keeps_lane and curve_k == 0.0:
 		wheel.hold_at(_lane_keeping_angle())
 	wheel.tremor = nerves.tremor_offset
 	wheel.step(DT, hand.steer_px, steer_sensitivity)
@@ -545,8 +574,7 @@ func step(input: DriveInput) -> void:
 		_announce(event)
 	stop.events.clear()
 	cash = maxf(cash + passengers.cash_delta, 0.0)
-	for event: Dictionary in passengers.events:
-		_announce(event)
+	_announce_passenger()
 	if passengers.changed:
 		_fit_cabin()
 
@@ -571,6 +599,7 @@ func step(input: DriveInput) -> void:
 	_report_effects()
 	if nerves.snapped and not snap_said:
 		_report_snap()
+		_announce_passenger()
 
 	tick += 1
 
@@ -650,6 +679,7 @@ func _set_stretch(plan: Dictionary, renews: bool = true) -> void:
 	car.lat_tau_mult = _rain_response if leg.raining else 1.0
 	_leg_lamps_lit = 0
 	_exit = EXIT_NONE
+	_road_from = car.s
 
 
 ## The same for a car that drives on from one stretch into the next: it
@@ -827,6 +857,7 @@ func _enter_stop() -> void:
 func _let_passenger_out(after_boss: bool) -> void:
 	if not passengers.ride_over(after_boss):
 		return
+	_left_here = passengers.id
 	passengers.leave("ride_over")
 	cash = maxf(cash + passengers.cash_delta, 0.0)
 	for event: Dictionary in passengers.events:
@@ -864,9 +895,17 @@ func _announce_what_ends() -> void:
 func _open_stop(shady: bool) -> void:
 	if data.has_record("stops", run.stop):
 		stop.begin(run.stop, run.act, shady)
-		# Somebody may stand there, asking for a ride (GDD 8.1).
-		stop.hitcher = RunGenerator.hitcher(data, run.seed, run.act, run.legs_done, run.stop, passengers.id)
+		stop.hitcher = _hitcher_here()
 	_sync_anchors()
+
+
+## Who stands at the stop he is at, asking for a ride (GDD 8.1; "" for
+## nobody): drawn from the Telling's seed for the stop it is now (the stop
+## after a boss is the stop he chose there, GDD 9.6) and its place in the
+## night. Never the one he carries, and never the one who has just got out
+## here.
+func _hitcher_here() -> String:
+	return RunGenerator.hitcher(data, run.seed, run.act, run.legs_done, stop.id_now(), passengers.id, _left_here)
 
 
 ## The car stands; the road is gone until he leaves.
@@ -899,6 +938,7 @@ func _step_stop(button_down: bool) -> void:
 
 func _leave_stop() -> void:
 	_emit("stop_left", {"stop": run.stop})
+	_left_here = ""
 	if stop.tea_served:
 		# The next fork's sign also shows the modifier of the boss ahead (GDD 9.6).
 		run.boss_on_sign = true
@@ -917,6 +957,7 @@ func _leave_stop() -> void:
 		run.leave_stop()
 		car.x = car.lane_center(car.lanes - 1)
 		_lane = car.lane_of(car.x)
+		_road_from = car.s
 	car.speed = 0.0
 	_sync_anchors()
 
@@ -1245,6 +1286,7 @@ func capture() -> Dictionary:
 		"leg_state": items.leg_state(),
 		"item_state": items.telling_state(),
 		"shady": _shady_here,
+		"left_here": _left_here,
 		"boss_sign": run.boss_on_sign,
 		"call_answered": run.call_answered,
 		# For people: rounded. What is loaded are the exact bits below.
@@ -1310,6 +1352,7 @@ func restore(telling: Dictionary) -> bool:
 
 	_side = GameData.as_int(telling.get("side"), RunState.RIGHT)
 	_shady_here = GameData.as_bool(telling.get("shady"))
+	_left_here = GameData.as_string(telling.get("left_here"))
 	run.resume(GameData.as_string(telling.get("table")), Save.seed_in(telling.get("seed")), GameData.as_int(telling.get("retellings")),
 			GameData.as_int(telling.get("act"), 1), GameData.as_int(telling.get("leg")), stage, _side)
 	run.boss_on_sign = GameData.as_bool(telling.get("boss_sign"))
@@ -1364,7 +1407,7 @@ func state() -> Array:
 				vehicle.direction, vehicle.lane, vehicle.signalling, vehicle.changing, vehicle.role])
 	return [
 		tick, snapshot(), capture(), effects.get_state(), vehicles,
-		car.s, car.x, car.speed, car.v_lat, car.drift, wheel.angle, gate.gear, gate.lever,
+		car.s, car.x, car.speed, car.v_lat, car.drift, wheel.angle, _let_go_angle, _catch_left, _road_from, gate.gear, gate.lever,
 		hand.pos, hand.target, hand.pointer, hand.gripping, nerves.value, nerves.snap_left,
 		collision.chain, collision.immunity_left, leg.time, clock.minutes, suspicion.value, cash,
 	]
@@ -1552,11 +1595,17 @@ func give_item(id: StringName, slot: StringName = &"") -> ItemSim.Item:
 func board(passenger_id: String) -> bool:
 	if not passengers.board(passenger_id):
 		return false
+	_announce_passenger()
+	_fit_cabin()
+	return true
+
+
+## What whoever rides with him has said or done since this was last asked:
+## each is announced once.
+func _announce_passenger() -> void:
 	for event: Dictionary in passengers.events:
 		_announce(event)
 	passengers.events.clear()
-	_fit_cabin()
-	return true
 
 
 ## Sets the road the car is on: 1 to 3 lanes, divided or not (GDD 5.1).
@@ -1698,6 +1747,11 @@ func snapshot() -> Dictionary:
 		"glow_side": boss.glow_side,
 		"corridor": boss.corridor(),
 		"corridor_gap": boss.corridor_gap(),
+		# The road's own limits across it: what ends it on the left (the
+		# median barrier, or the rail beyond the oncoming lane) and the
+		# guardrail on the right. A checkpoint's outermost barriers close in
+		# from them, and the bay of the Arrival lies between them.
+		"road_limits": Vector2(car.left_limit_x(), car.guardrail_x()),
 		"bay": Vector2(boss.bay_from, boss.bay_to),
 		"in_bay": boss.in_bay,
 		"call_taps": items.call_taps,
@@ -1774,6 +1828,7 @@ func snapshot() -> Dictionary:
 		"passenger": passengers.id,
 		"passenger_legs": passengers.legs_ridden,
 		"passenger_asleep": passengers.asleep(),
+		"passenger_aloud": passengers.aloud(),
 		"passenger_awake_left": passengers.awake_left,
 		"passenger_drumming": passengers.drumming,
 		"tea_passed": passengers.passes_tea(),
@@ -1861,7 +1916,15 @@ func _signs_in_view() -> Array[Dictionary]:
 			signs.append({"kind": "exit", "ahead": to_exit, "stop": GameData.as_string(run.branch.get("stop"))})
 	# The fork's overhead sign: for each branch its leg, modifier, stop and par.
 	if run.fork_ahead():
-		var to_fork: float = maxf(leg.length - (tuning.f("fork_sign_lead") + passengers.fork_sign_lead()) * par_ms, 0.0) - car.s
+		var fork_sign_at: float = maxf(leg.length - tuning.f("fork_sign_lead") * par_ms, 0.0)
+		# One who reads the road has the sign earlier (GDD 8.2), where the
+		# road he came onto still has that place ahead of him. Where it does
+		# not (he pulled away from a stall that lies beyond it; the short
+		# road to an act's first fork), the sign stands where it always does.
+		var early_at: float = fork_sign_at - passengers.fork_sign_lead() * par_ms
+		if early_at > _road_from:
+			fork_sign_at = early_at
+		var to_fork: float = fork_sign_at - car.s
 		if to_fork >= 0.0 and to_fork <= ahead:
 			var sign: Dictionary = {"kind": "fork", "ahead": to_fork, "left": run.branches[RunState.LEFT], "right": run.branches[RunState.RIGHT]}
 			if run.boss_on_sign:
@@ -1897,6 +1960,10 @@ func _vehicle_snapshots() -> Array[Dictionary]:
 
 func _anchors_in_use() -> Array[StringName]:
 	var out: Array[StringName] = []
+	if not hand.can_reach:
+		# The talk of the Call, a Snap: the hand goes nowhere (GDD 10.4, 6.1),
+		# so nothing in the cabin is his to use.
+		return out
 	for index: int in hand.anchor_count():
 		if hand.is_anchor_active(index):
 			out.append(hand.anchor_id(index))
@@ -2074,11 +2141,7 @@ func _fit_cabin() -> void:
 func _anchor_moves() -> Dictionary:
 	var moves: Dictionary = items.anchor_moves()
 	if passengers.passes_tea():
-		for tea: ItemSim.Item in items.tagged(TEA):
-			var anchor: String = items.anchor_of(tea)
-			if not anchor.is_empty() and not items.is_stowed(tea):
-				moves[anchor] = passengers.tea_at()
-				break
+		moves[items.anchor_of(items.in_reach(TEA))] = passengers.tea_at()
 	return moves
 
 
@@ -2086,12 +2149,24 @@ func _anchor_moves() -> Dictionary:
 ## are stepped: what they make of what he has just done, and their own time.
 func _step_passenger() -> void:
 	if items.asked:
-		passengers.ask()
+		passengers.ask(_angle_asked_for())
 	if items.horn_blown:
 		passengers.on_horn()
+	if items.taken_for_him != &"":
+		passengers.on_call_taken(items.taken_for_him)
 	if not items.used_tags.is_empty():
 		passengers.on_used(items.used_tags)
 	passengers.step(DT, gate.gear, leg.active and leg.raining)
+
+
+## The angle a passenger asked to hold the wheel "at its current angle" is
+## to hold it at (GDD 8.2): the wheel as it is; or, asked within the catch
+## time of the driver's hand leaving a wheel that nothing else took, the
+## wheel as it was let go. (What the hook has taken, it has where it is.)
+func _angle_asked_for() -> float:
+	if _catch_left > 0.0 and not effects.has_own(ItemSim.HOOK_SET):
+		return _let_go_angle
+	return wheel.angle
 
 
 ## The wheel angle that holds the car on a straight line where the road is
@@ -2279,6 +2354,10 @@ func _report_snap() -> void:
 	_snapped = true
 	_emit("snap", {"nerves": nerves.value})
 	_emit("sfx_requested", {"id": "horn"})
+	if not _standing():
+		# Two seconds of his horn wake one who sleeps (GDD 8.2) as its TAP
+		# does: on the road. Where the night waits, nothing of a passenger runs.
+		passengers.on_horn()
 	if gesture.is_active():
 		gesture.cancel()
 	if _lever_in_hand:
@@ -2415,7 +2494,12 @@ func _complete_ritual() -> void:
 	if _active_anchor == _lever_anchor and sequential_shift:
 		gate.shift_sequential(1 if gesture.direction == Gesture.DIR_UP else -1)
 	elif ritual_id == StopSim.BUY:
+		var stop_was: String = stop.id_now()
 		cash = stop.buy(String(hand.anchor_id(_active_anchor)), cash)
+		if stop.id_now() != stop_was:
+			# The stop after a boss has become the stop he chose (GDD 9.6):
+			# whoever stands at such a stop stands here.
+			stop.hitcher = _hitcher_here()
 	elif ritual_id == StopSim.PLACE:
 		stop.place(String(hand.anchor_id(_active_anchor)), String(hand.anchor_id(hand.at_index)))
 	elif ritual_id == StopSim.BOARD:

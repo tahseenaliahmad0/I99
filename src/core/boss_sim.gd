@@ -829,16 +829,25 @@ func _set_corridor(check: Dictionary) -> void:
 
 ## The barriers beside a car at `s` whose middle is at `x` (GDD 10.2, 10.4),
 ## as Vector2(left, right) in x; (-INF, INF) where there are none. Every lane
-## has a corridor of its own, corridor_gap wide about the lane's middle; over
-## the taper before it the barriers close in from the lane's own lines.
+## has a corridor of its own, corridor_gap wide about the lane's middle. Over
+## the taper before it the barriers close in: between two lanes from the line
+## between them, and the outermost two from the road's own limits, the
+## guardrail on the right and what ends the road on the left. So whoever is
+## on the shoulder where the taper begins is between the last lane's
+## barriers, and is squeezed in over the taper's length.
 func walls(s: float, x: float) -> Vector2:
 	if not active or _corridor_to <= _corridor_from or s < _corridor_from or s > _corridor_to:
 		return Vector2(-INF, INF)
-	var half: float = _corridor_half_gap
+	var lane: int = clampi(_car.lane_of(x), 0, _car.lanes - 1)
+	var middle: float = _car.lane_center(lane)
+	var left: float = middle - _corridor_half_gap
+	var right: float = middle + _corridor_half_gap
 	if s < _corridor_at:
-		half = lerpf(_car.lane_width() * 0.5, _corridor_half_gap, (s - _corridor_from) / (_corridor_at - _corridor_from))
-	var middle: float = _car.lane_center(clampi(_car.lane_of(x), 0, _car.lanes - 1))
-	return Vector2(middle - half, middle + half)
+		var closed: float = (s - _corridor_from) / (_corridor_at - _corridor_from)
+		var lane_half: float = _car.lane_width() * 0.5
+		left = lerpf(_car.left_limit_x() if lane == 0 else middle - lane_half, left, closed)
+		right = lerpf(_car.guardrail_x() if lane == _car.lanes - 1 else middle + lane_half, right, closed)
+	return Vector2(left, right)
 
 
 ## The corridor for the view: Vector3(where the barriers begin to close in,

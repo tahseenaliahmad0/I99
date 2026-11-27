@@ -36,7 +36,7 @@
       ] },
 
     { "id": "apprentice", "rides_until": "basra", "fare": 0, "line_prefix": "passenger.apprentice",
-      "hand": { "kind": "hold_wheel", "duration_s": 3, "on": "tap" },
+      "hand": { "kind": "hold_wheel", "duration_s": 3, "catch_s": 1.5, "on": "tap" },
       "repairs": { "per_leg": 1, "announce_s": 2, "lean_s": 3 },
       "retunes": { "every_s": 30, "to": "static" },
       "weights": [] }

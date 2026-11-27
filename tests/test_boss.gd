@@ -60,6 +60,8 @@ func test_boss_01() -> void:
 	_check_review_rolling_in_the_stop_zone()
 	_check_review_room_between_barriers()
 	_check_checkpoint_rows()
+	_check_views_bar_never_more_open()
+	_check_views_barriers_from_the_limits(CHECKPOINT)
 
 
 ## The road, its numbers, and who is watching.
@@ -2356,6 +2358,7 @@ func test_boss_03() -> void:
 	_check_dawn_traffic_builds()
 	_check_dawn_glare()
 	_check_where_the_sun_stands()
+	_check_the_sun_rises_into_no_night_sky()
 	_check_last_checkpoint()
 	_check_nobody_leaves_a_corridor()
 	_check_dawn_traffic_fits_the_barriers()
@@ -2368,6 +2371,7 @@ func test_boss_03() -> void:
 	_check_review_bay_line()
 	_check_review_dawn_layout()
 	_check_review_street()
+	_check_views_barriers_from_the_limits(DAWN)
 
 
 ## False dawn, sunrise, the Call: by where he is along the 3,333 m.
@@ -3121,6 +3125,78 @@ func test_call_01() -> void:
 	_check_review_passenger_pulled_over()
 	_check_the_end_of_the_talk()
 	_check_two_phones_ringing()
+	_check_no_anchor_while_he_cannot_reach()
+
+
+## "The real sun rises ahead" (GDD 10.4): on Dawn's road the sky is never
+## darker than Dawn driven by itself has it, however far ahead of the Clock
+## he is. (The review of M7: in a Telling the sky was the Clock's alone, and
+## a driver who was early saw the sun come up into a night sky.)
+func _check_the_sun_rises_into_no_night_sky() -> void:
+	var from: float = tuning.f("sky_dawn_from")
+	var road: Vector2 = Vector2(tuning.fi("sky_boss_dawn", 0), tuning.fi("sky_boss_dawn", 1))
+	check(road.x > 0.0 and road.y > road.x and road.y <= 1.0, "(Dawn's own road lightens from %.2f to %.2f of day)" % [road.x, road.y])
+	# Early in the night by the Clock, on Dawn's road.
+	var early: float = from * 0.5
+	check_near(SkyView.day_share(true, early, from, 0, 0.5, road), 0.0, 0.000001, "in a Telling, on a road that is not Dawn's, an early hour is night")
+	for along: float in [0.0, 0.5, 1.0]:
+		check_near(SkyView.day_share(true, early, from, BossSim.SUNRISE, along, road), lerpf(road.x, road.y, along), 0.000001,
+				"on Dawn's road, ahead of the Clock, the sky is as light as Dawn's road makes it (%.0f%% along)" % (along * 100.0))
+	check_near(SkyView.day_share(true, early, from, BossSim.FALSE_DAWN, 0.0, road), road.x, 0.000001, "from the false dawn on")
+	# Late by the Clock: the Clock's day is lighter, and the sky follows it.
+	check_near(SkyView.day_share(true, 1.0, from, BossSim.SUNRISE, 0.0, road), 1.0, 0.000001, "at the deadline it is day, wherever on Dawn's road he is")
+	var late: float = from + (1.0 - from) * 0.9
+	check_near(SkyView.day_share(true, late, from, BossSim.SUNRISE, 0.0, road), 0.9, 0.000001, "late by the Clock the sky is the Clock's, where that is lighter")
+	# Outside a Telling nothing has changed.
+	check_near(SkyView.day_share(false, 0.0, from, BossSim.SUNRISE, 0.5, road), lerpf(road.x, road.y, 0.5), 0.000001, "Dawn by itself lightens along its road")
+	check_near(SkyView.day_share(false, 0.0, from, 0, 0.5, road), 0.0, 0.000001, "(and no other road does)")
+	# The snapshot carries what the sky needs, in a Telling too.
+	_begin_quiet_boss(DAWN)
+	var shot: Dictionary = _sim.snapshot()
+	check(GameData.as_int(shot["dawn_phase"]) > 0 and shot.has("leg_length") and shot.has("car_s") and shot.has("night_share"), "(the snapshot says where on Dawn's road he is)")
+
+
+## "He ... cannot reach anything" (GDD 10.4): while the hand can reach
+## nothing (the talk, the two seconds of a Snap) no anchor is in use, so the
+## cabin shows him none (GDD 16.1: an anchor is yellow while something can be
+## done there). The review of M7: every marker stayed lit through the 30 s.
+func _check_no_anchor_while_he_cannot_reach() -> void:
+	for passenger: bool in [false, true]:
+		var how: String = "with a passenger" if passenger else "alone"
+		_to_the_call(passenger)
+		check(GameData.as_array(_sim.snapshot()["anchors_in_use"]).has(&"pocket"), "%s, while it rings his pocket is an anchor in use" % how)
+		if passenger:
+			_drag("pocket", "passenger_shoulder")
+		else:
+			_reach(POCKET)
+			_input.lmb = true
+			_ticks(TAP_TICKS)
+			_input.lmb = false
+		var guard: int = SETTLE * 4
+		while _sim.boss.call != BossSim.CALL_TALKING and guard > 0:
+			guard -= 1
+			_tick()
+		_tick()
+		if not check(_sim.boss.call == BossSim.CALL_TALKING and not _sim.hand.can_reach, "(%s: he talks, and can reach nothing)" % how):
+			continue
+		_ticks(_ticks_in(1.0))
+		check_eq(GameData.as_array(_sim.snapshot()["anchors_in_use"]).size(), 0, "%s: while he talks no anchor is in use" % how)
+		guard = _ticks_in(GameData.as_float(GameData.as_dict(_dawn().get("call")).get("talk_s")) + 2.0)
+		while _sim.boss.call == BossSim.CALL_TALKING and guard > 0:
+			guard -= 1
+			if _sim.car.s > _sim.leg.length - 100.0:
+				_sim.car.s -= 400.0
+			_tick()
+		_ticks(_ticks_in(1.0))
+		check(_sim.hand.can_reach and GameData.as_array(_sim.snapshot()["anchors_in_use"]).has(&"horn"), "%s: the talk over, the cabin is his again" % how)
+	# A Snap: two seconds in which the hand goes nowhere.
+	_begin_quiet_boss(DAWN)
+	_sim.nerves.set_value(tuning.f("snap_at") - 1.0)
+	_tap_at("face")
+	if check(_sim.nerves.snap_left > 0.0, "(a slap at the edge is a Snap)"):
+		check_eq(GameData.as_array(_sim.snapshot()["anchors_in_use"]).size(), 0, "through a Snap no anchor is in use")
+		_ticks(_ticks_in(tuning.f("snap_duration") + 0.5))
+		check(GameData.as_array(_sim.snapshot()["anchors_in_use"]).has(&"horn"), "after it they are again")
 
 
 ## Dawn at the moment the phone begins to ring, on an empty road.
@@ -4408,3 +4484,231 @@ func _check_review_room_between_barriers() -> void:
 		check_eq(_count_events("hit"), 0, "2 cm short of the %s barrier he touches nothing: all 2.34 m are his" % ("left" if side < 0.0 else "right"))
 		check_near(_sim.suspicion.value, 0.0, 0.000001, "(and no Suspicion)")
 	_keep_lane = true
+
+
+# --- Appended from the review of M7's views ---
+
+## Half the length of every type of vehicle, by its id (as the view has it).
+func _views_half_lengths() -> Dictionary:
+	var out: Dictionary = {}
+	for record: Dictionary in data.records("vehicles"):
+		out[StringName(GameData.as_string(record.get("id")))] = GameData.as_float(record.get("length")) * 0.5
+	return out
+
+
+## True when he must brake behind whatever is ahead of him in `lane`, as
+## _follow_the_queue has him brake: but with nothing for the bar.
+func _views_brakes_behind(lane: int) -> bool:
+	var car: CarSim = _sim.car
+	var room: float = INF
+	for vehicle: TrafficSim.Vehicle in _sim.traffic.vehicles:
+		if absf(vehicle.x - car.lane_center(lane)) < car.lane_width() * 0.5 and vehicle.s > car.s:
+			room = minf(room, vehicle.s - vehicle.half_length - car.s - car.length() * 0.5)
+	var speed_ms: float = car.speed * KMH_TO_MS
+	return room < 1.5 + speed_ms * speed_ms / (2.0 * tuning.f("brake_decel") * KMH_TO_MS) + speed_ms * 0.15
+
+
+## V-01. What is drawn is never more open than the simulation. Which bars the
+## view wants up is a function of the snapshot (SetPieceView.bars_wanted): a
+## lane's bar while the body of a vehicle that was waved on is under it, his
+## own once he is let through, and none at any other time. He follows the
+## last vehicle of his lane as closely as the queue lets him, on the brake
+## behind what is ahead and with nothing for the bar. The simulation's bar
+## stops him (GDD 10.2), and at no tick is he within reach of a bar that is
+## wanted up. (It was wanted up until the vehicle's tail was 4 m past it and
+## then drawn swinging down: 58 to 68 degrees up where it stopped him.)
+func _check_views_bar_never_more_open() -> void:
+	var queue: Dictionary = GameData.as_dict(_checkpoint().get("queue"))
+	var settle: float = GameData.as_float(queue.get("settle_m"))
+	var lane_width: float = tuning.f("lane_width")
+	var half_lengths: Dictionary = _views_half_lengths()
+	var lane: int = 1
+	_begin_checkpoint("", 1)
+	_sim.gate.reset(1)
+	_events = []
+	var car: CarSim = _sim.car
+	var lanes: int = car.lanes
+	var nose: float = car.length() * 0.5
+	var bar: float = _sim.boss.bar_at
+	# Ticks at which a bar is wanted otherwise than the rule has it; how
+	# often his lane's bar went up; ticks another lane's was up.
+	var wrong: int = 0
+	var raised: int = 0
+	var others: int = 0
+	var was_up: bool = false
+	# Ticks at which his lane's bar was wanted up with nothing between his
+	# nose and it (the bar within his reach); and as it held him.
+	var within_reach: int = 0
+	var held_open: int = 0
+	var met_at: float = 0.0
+	var guard: int = _ticks_in(240.0)
+	while met_at <= 0.0 and guard > 0:
+		guard -= 1
+		_input.clear()
+		_input.rmb = _views_brakes_behind(lane)
+		car.x = car.lane_center(lane)
+		_tick()
+		met_at = maxf(met_at, _sim.boss.bar_speed)
+		var wanted: Array[bool] = SetPieceView.bars_wanted(_sim.snapshot(), lanes, lane_width, half_lengths, settle)
+		# The rule, by the simulation's own vehicles.
+		var under: Array[bool] = []
+		under.resize(lanes)
+		under.fill(false)
+		for vehicle: TrafficSim.Vehicle in _sim.traffic.vehicles:
+			if vehicle.role == BossSim.WAVED_ON_ROLE and vehicle.s - vehicle.half_length < bar and vehicle.s + vehicle.half_length >= bar - settle:
+				under[vehicle.lane] = true
+		for index: int in lanes:
+			if wanted[index] != under[index]:
+				wrong += 1
+			if index != lane and wanted[index]:
+				others += 1
+		if wanted[lane] and not was_up:
+			raised += 1
+		was_up = wanted[lane]
+		if wanted[lane]:
+			# What keeps him from the bar: the tail of a vehicle that was
+			# waved on, ahead of his nose and short of the bar.
+			var shielded: bool = false
+			for vehicle: TrafficSim.Vehicle in _sim.traffic.vehicles:
+				var tail: float = vehicle.s - vehicle.half_length
+				if vehicle.role == BossSim.WAVED_ON_ROLE and vehicle.lane == lane and tail >= car.s + nose and tail < bar:
+					shielded = true
+			if not shielded:
+				within_reach += 1
+			if bar - (car.s + nose) <= 0.000001:
+				held_open += 1
+	check(guard > 0 and met_at > _checkpoint_number("bump_kmh"), "(following the last vehicle of his lane under the bar he runs into the bar at %.1f km/h: for him it is down)" % met_at)
+	check(not _sim.boss.released, "(he was not let through)")
+	check_near(_sim.suspicion.value, _checkpoint_number("barrier_suspicion"), 0.000001, "(a touch of a barrier, as GDD 10.2 has it)")
+	check_eq(wrong, 0, "a lane's bar is wanted up exactly while the body of a vehicle that was waved on is under it")
+	check_eq(raised, GameData.as_int(queue.get("cars")), "(the bar of his lane goes up once for each vehicle that is waved on ahead of him)")
+	check(others > 0, "(and the other lanes' bars for theirs)")
+	check_eq(within_reach, 0, "at no tick is he within reach of a bar that is wanted up: the tail of the vehicle it is up for is between his nose and the bar")
+	check_eq(held_open, 0, "the bar that holds him is never wanted up")
+	# He stands at it from the Stow to the verdict: down all the while.
+	check_eq(_sim.boss.phase, BossSim.STOW, "(stopped at the bar he is first in line: the soldier sets out)")
+	var open_while_held: int = 0
+	_input.clear()
+	for _index: int in _ticks_in(_checkpoint_number("stow_s") * 0.5):
+		_tick()
+		if SetPieceView.bars_wanted(_sim.snapshot(), lanes, lane_width, half_lengths, settle)[lane]:
+			open_while_held += 1
+	check_eq(open_while_held, 0, "while he is held at the bar it is not wanted up")
+	# Let through: his own goes up.
+	_sim.boss.release()
+	_tick()
+	var shot: Dictionary = _sim.snapshot()
+	check(GameData.as_bool(shot["bar_up"]) and SetPieceView.bars_wanted(shot, lanes, lane_width, half_lengths, settle)[lane], "let through, his own bar is wanted up")
+	# And no bar is wanted where there is none.
+	_begin_quiet_boss(STORM)
+	_tick()
+	check(not SetPieceView.bars_wanted(_sim.snapshot(), _sim.car.lanes, lane_width, half_lengths, settle).has(true), "(on a road with no bar none is wanted up)")
+
+
+## A road with a checkpoint's barriers on it and nothing else: the Checkpoint
+## without its queue, or Dawn's road without its traffic.
+func _views_begin_barriers(boss_id: String) -> void:
+	if boss_id == CHECKPOINT:
+		_begin_checkpoint("", 1, false)
+	else:
+		_begin_quiet_boss(boss_id)
+
+
+## V-05. A checkpoint's barriers close in from the road's own limits: over
+## the taper the right barrier of the last lane runs from the guardrail to
+## that lane's corridor, and the left barrier of the first lane from the
+## road's left limit; between two lanes they close in from the line between
+## them, as before. So a car on the shoulder where the taper begins is
+## inside the outermost corridor and is squeezed in over the taper's length.
+## (The shoulder beside the barriers was a wall that nothing showed: a car
+## there was moved 3.2 m sideways in one tick.)
+func _check_views_barriers_from_the_limits(boss_id: String) -> void:
+	var where: String = "the Checkpoint" if boss_id == CHECKPOINT else "Dawn's last checkpoint"
+	_views_begin_barriers(boss_id)
+	var car: CarSim = _sim.car
+	var corridor: Vector3 = _sim.boss.corridor()
+	var gap: float = _sim.boss.corridor_gap()
+	var mouth: float = corridor.x
+	var taper: float = corridor.y - corridor.x
+	var last: int = car.lanes - 1
+	var half_width: float = car.half_width()
+	var lane_half: float = car.lane_width() * 0.5
+	var pushback: float = tuning.f("hit_pushback")
+	var second_ms: float = tuning.fi("gear_speeds", 1) * KMH_TO_MS
+	var shoulder_x: float = (car.road_right() + tuning.f("rumble_strip_width") + car.guardrail_x()) * 0.5
+	check(taper > 0.0 and last >= 2, "(%s: barriers that close in over a taper, on a road of three lanes)" % where)
+	check(shoulder_x - half_width > car.road_right() + tuning.f("rumble_strip_width") and shoulder_x + half_width < car.guardrail_x(), "(a car in the middle of the shoulder is wholly on it)")
+
+	# Where the barriers are, by the simulation.
+	var rightmost: Vector2 = _sim.boss.walls(mouth, car.lane_center(last))
+	check_near(rightmost.y, car.guardrail_x(), 0.000001, "%s: where the taper begins the right barrier of the last lane stands at the guardrail" % where)
+	check_near(rightmost.x, car.lane_center(last) - lane_half, 0.000001, "(and its left one at the lane's own line)")
+	var leftmost: Vector2 = _sim.boss.walls(mouth, car.lane_center(0))
+	check_near(leftmost.x, car.left_limit_x(), 0.000001, "the left barrier of the first lane stands at the road's left limit")
+	check_near(leftmost.y, car.lane_center(0) + lane_half, 0.000001, "(and its right one at the lane's own line)")
+	for lane: int in range(1, last):
+		check_eq(_sim.boss.walls(mouth, car.lane_center(lane)), Vector2(car.lane_center(lane) - lane_half, car.lane_center(lane) + lane_half), "lane %d: between two lanes the barriers begin at the lane's lines, as they did" % lane)
+	var half_way: Vector2 = _sim.boss.walls(mouth + taper * 0.5, car.lane_center(last))
+	check_near(half_way.y, (car.guardrail_x() + car.lane_center(last) + gap * 0.5) * 0.5, 0.000001, "from the guardrail the barrier closes in evenly")
+	check_near(_sim.boss.walls(mouth + taper * 0.5, car.lane_center(0)).x, (car.left_limit_x() + car.lane_center(0) - gap * 0.5) * 0.5, 0.000001, "(and from the left limit)")
+	for lane: int in car.lanes:
+		check_eq(_sim.boss.walls(corridor.y, car.lane_center(lane)), Vector2(car.lane_center(lane) - gap * 0.5, car.lane_center(lane) + gap * 0.5), "lane %d: at the narrowest point its barriers are corridor_gap apart about the lane's middle" % lane)
+	var beside: Vector2 = _sim.boss.walls(mouth, shoulder_x)
+	check(shoulder_x - half_width > beside.x and shoulder_x + half_width < beside.y, "a car on the shoulder where the taper begins is between the last lane's barriers: none stands where it is")
+	check_eq(_sim.boss.walls(mouth - 1.0, shoulder_x), Vector2(-INF, INF), "(before the taper there is none)")
+
+	# Through the mouth in second gear, on the shoulder and along the left
+	# limit, with nobody steering from a metre short of it.
+	for side: int in [1, -1]:
+		_views_begin_barriers(boss_id)
+		car = _sim.car
+		var lane: int = last if side > 0 else 0
+		var edge: String = "on the shoulder" if side > 0 else "along the left limit"
+		# Along the left limit: a tenth of a push-back clear of it.
+		var along: float = shoulder_x if side > 0 else car.left_limit_x() + half_width + pushback * 0.1
+		var limit: float = car.guardrail_x() if side > 0 else car.left_limit_x()
+		var inner: float = car.lane_center(lane) + float(side) * gap * 0.5
+		# What a tick may move him sideways: the push-back of a touch, what
+		# the slanted barrier comes in while he drives a tick's length, and
+		# the road's crown.
+		var per_tick: float = pushback + absf(limit - inner) / taper * second_ms * DT + tuning.f("crown_drift") * DT
+		_cruise(2, lane)
+		_keep_lane = false
+		car.s = mouth - taper * 0.5
+		car.x = along
+		_events = []
+		var most: float = 0.0
+		var touches: int = 0
+		var guard: int = _ticks_in(30.0)
+		while car.s < corridor.y and guard > 0:
+			guard -= 1
+			if car.s < mouth - 1.0:
+				car.x = along
+			var x_before: float = car.x
+			_tick()
+			most = maxf(most, absf(car.x - x_before))
+			if car.wall_touched:
+				touches += 1
+		_keep_lane = true
+		check(guard > 0, "(%s, %s: he comes to the narrowest point)" % [where, edge])
+		check(most <= per_tick + 0.000001, "%s, %s: driven through the taper's mouth with nobody steering he is at no tick moved sideways by more than a push-back and what the barrier closes in (%.3f m at the most; %.3f m allowed)" % [where, edge, most, per_tick])
+		check(touches > 0, "%s: the slanted barrier touches him" % edge)
+		var first_hit: Dictionary = _event_of(_events, "hit")
+		check(GameData.as_int(first_hit.get("kind")) == Collision.Hit.SCRAPE and GameData.as_int(first_hit.get("vehicle")) == 0, "which is a scrape of a barrier")
+		check(absf(car.x - car.lane_center(lane)) <= gap * 0.5 - half_width + 0.000001, "and at the narrowest point he is between the barriers of the %s lane (%.2f m off its middle)" % ["last" if side > 0 else "first", absf(car.x - car.lane_center(lane))])
+		if boss_id == CHECKPOINT:
+			check_near(_sim.suspicion.value, minf(_checkpoint_number("barrier_suspicion") * float(_count_events("hit")), _sim.suspicion.maximum()), 0.000001, "(at the Checkpoint each scrape of it is a touch of a barrier: +25, %d times)" % _count_events("hit"))
+
+	# In the middle of a lane he meets nothing new.
+	for lane: int in car.lanes:
+		_views_begin_barriers(boss_id)
+		_cruise(2, lane)
+		_sim.car.s = mouth - taper * 0.5
+		_events = []
+		var touched: bool = false
+		var guard: int = _ticks_in(30.0)
+		while _sim.car.s < corridor.y + taper * 0.5 and guard > 0:
+			guard -= 1
+			_tick()
+			touched = touched or _sim.car.wall_touched or _sim.car.edge_touched != CarSim.EDGE_NONE
+		check(guard > 0 and not touched and _count_events("hit") == 0, "%s, lane %d: in the middle of his lane he drives through the taper and in between the barriers and meets nothing" % [where, lane])

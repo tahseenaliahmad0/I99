@@ -447,6 +447,60 @@ func _check_broken_passenger_rules() -> void:
 	GameData.as_array(_record("rituals", "passenger_ask").get("on_complete"))[0] = "beg"
 	_expect("E_ENUM", "rituals[passenger_ask].on_complete[0]", "an op the shoulder does not know")
 
+	# What the review of M8 found (RULES-12): records that PassengerSim would
+	# stop on, do nothing with, or read otherwise than they say.
+	# What a passenger leaves him with: PassengerSim runs nerves, cash and
+	# add_effect, and no other op of a ritual.
+	for op: String in ["toggle:hazards", "remove_effect:blessing", "line:passenger.hajjiya.leave", "sfx:horn", "consume_supply"]:
+		_reset_fixture()
+		GameData.as_array(_record("passengers", "hajjiya").get("on_leave")).append(op)
+		_expect("E_ENUM", "passengers[hajjiya].on_leave[2]", "'%s' as she gets out: an op that only a ritual can run" % op)
+
+	_reset_fixture()
+	GameData.as_array(_record("passengers", "hajjiya").get("on_leave")).append("add_effect:awake")
+	_expect("E_RULE", "passengers[hajjiya].on_leave[2]", "a status left behind for no time (only the blessing lasts until it is used)")
+
+	_reset_fixture()
+	GameData.as_array(_record("passengers", "hajjiya").get("on_leave"))[1] = "add_effect:blessing:30"
+	_expect("E_RULE", "passengers[hajjiya].on_leave[1]", "a blessing with seconds that nothing counts")
+
+	_reset_fixture()
+	GameData.as_array(_record("passengers", "hajjiya").get("on_leave")).append_array(["add_effect:awake:20", "cash:5"])
+	check(_validate().is_empty(), "(a status with its seconds, and cash, are things she may leave him with; first: %s)" % _first(_validate()))
+
+	# A Weight weighs on Suspicion if and only if it is a drum under a Patrol:
+	# the other moments add to his Nerves whatever the record says, and the
+	# drum's is read only as Suspicion.
+	for misweighed: Array in [["student", 0, "a scrape"], ["student", 1, "fourth gear in the rain"], ["hajjiya", 0, "a cigarette"], ["conscript", 0, "a snore"]]:
+		_reset_fixture()
+		GameData.as_dict(GameData.as_array(_record("passengers", str(misweighed[0])).get("weights"))[GameData.as_int(misweighed[1])])["resource"] = "suspicion"
+		_expect("E_RULE", "passengers[%s].weights[%d].resource" % [str(misweighed[0]), GameData.as_int(misweighed[1])], "%s that weighs on Suspicion" % str(misweighed[2]))
+
+	_reset_fixture()
+	GameData.as_dict(GameData.as_array(_record("passengers", "drummer").get("weights"))[0])["resource"] = "nerves"
+	_expect("E_RULE", "passengers[drummer].weights[0].resource", "a drum under a Patrol that weighs on his Nerves, where nothing reads it")
+
+	# The lines a record makes the simulation ask for: the word of a Hand, the
+	# drum beginning again, the waking, the announcement of a repair.
+	for owed: Array in [["drummer", "hand"], ["drummer", "drum"], ["conscript", "hand"], ["conscript", "wake"],
+			["apprentice", "hand"], ["apprentice", "repair"], ["student", "hand"], ["hajjiya", "hand"]]:
+		_reset_fixture()
+		var line_id: String = "passenger.%s.%s" % [str(owed[0]), str(owed[1])]
+		var in_english: Dictionary = _lines["en"]
+		var in_arabic: Dictionary = _lines["ar"]
+		check(in_english.erase(line_id) and in_arabic.erase(line_id), "(the fixture has the line %s)" % line_id)
+		_expect("E_REF", "the line '%s' is missing" % line_id, "the %s with no line for \"%s\"" % [str(owed[0]), str(owed[1])])
+
+	# A Hand that holds the wheel at its current angle needs the time in which
+	# he can be asked for it; no other Hand has one.
+	_reset_fixture()
+	GameData.as_dict(_record("passengers", "apprentice").get("hand")).erase("catch_s")
+	_expect("E_RULE", "passengers[apprentice].hand", "a hand asked for the wheel's angle only when it is back at its centre")
+
+	_reset_fixture()
+	GameData.as_dict(_record("passengers", "hajjiya").get("hand"))["catch_s"] = 1.5
+	_expect("E_RULE", "passengers[hajjiya].hand", "a catch on a Hand that holds no angle")
+
 
 ## Props that show a cabin switch (the window's glass, the hazard lamp).
 func _check_broken_cabin_props() -> void:

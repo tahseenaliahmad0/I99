@@ -9,6 +9,8 @@ var type_id: StringName = &""
 
 var _signals_left: Array[Node3D] = []
 var _signals_right: Array[Node3D] = []
+var _tail_lights: Array[Node3D] = []
+var _light_scale: float = 1.0
 ## Snapshot time at which the signal now showing began, or -1.
 var _signal_since: float = -1.0
 var _beacon: Node3D = null
@@ -38,7 +40,7 @@ func setup(type_record: Dictionary, factory: PlaceholderFactory, light_height: f
 	for side: float in [-1.0, 1.0]:
 		var x: float = side * (half_w - inset)
 		# Tail lights and rear indicators face the driver behind (+Z).
-		_add_quad(factory, "veh_taillight", Vector3(x, light_height, half_l + proud), false)
+		_tail_lights.append(_add_quad(factory, "veh_taillight", Vector3(x, light_height, half_l + proud), false))
 		var rear: Node3D = _add_quad(factory, "veh_signal", Vector3(x, signal_height, half_l + proud), false)
 		# Headlights and front indicators face the way it drives (-Z).
 		_add_quad(factory, "veh_headlight", Vector3(x, light_height, -half_l - proud), true)
@@ -73,6 +75,26 @@ func reset() -> void:
 ## blinks at the same rate. `sign_text` is what the vehicle's sign says ("" for
 ## none) and `bend_shift` how far the bend of the road moves the vehicle
 ## sideways on screen, which a text does not follow by itself.
+## How many times its own size a light of `height` metres is drawn `ahead`
+## metres away, so that it is never smaller on screen than `least_per_m` of
+## height for each metre of distance, and never more than `cap` times its
+## size: "in thick dust the player follows tail lights" (GDD 10.3), and a
+## light a pixel high cannot be followed.
+static func light_scale(height: float, ahead: float, least_per_m: float, cap: float) -> float:
+	if height <= 0.0 or ahead <= 0.0:
+		return 1.0
+	return clampf(ahead * least_per_m / height, 1.0, maxf(cap, 1.0))
+
+
+## Draws the tail lights `scale` times their own size (1: as they are).
+func set_light_scale(scale: float) -> void:
+	if is_equal_approx(scale, _light_scale):
+		return
+	_light_scale = scale
+	for light: Node3D in _tail_lights:
+		light.scale = Vector3(scale, scale, 1.0)
+
+
 func apply(vehicle: Dictionary, local_position: Vector3, time: float, blink_hz: float,
 		beacon: bool, sign_text: String, bend_shift: float) -> void:
 	position = local_position

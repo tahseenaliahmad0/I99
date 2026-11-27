@@ -28,13 +28,17 @@ var _stand: Vector2 = Vector2.ZERO
 var _sign_offset: Vector2 = Vector2.ZERO
 var _text_height: float = 0.0
 var _stow_s: float = 0.0
-var _clear: float = 0.0
+## A vehicle that was waved on is at the bar within this much of it (m).
+var _at_bar: float = 0.0
 ## vehicle type id -> half its length (m).
 var _half_length: Dictionary = {}
 
 var _lanes: int = 0
 var _corridor: Vector3 = NO_CORRIDOR
 var _gap: float = 0.0
+## The road's own limits across it, as the snapshot gives them: the x of
+## what ends it on the left, and of the guardrail.
+var _limits: Vector2 = Vector2.ZERO
 var _barriers: Node3D
 var _bars: Node3D
 var _bar_pivots: Array[Node3D] = []
@@ -66,11 +70,10 @@ func setup(data: GameData, factory: PlaceholderFactory) -> void:
 	_text_height = tuning.f("street_text_height")
 	var checkpoint: Dictionary = GameData.as_dict(data.record("bosses", BossSim.CHECKPOINT).get("checkpoint"))
 	_stow_s = GameData.as_float(checkpoint.get("stow_s"))
-	_clear = GameData.as_float(GameData.as_dict(checkpoint.get("queue")).get("clear_m"))
+	_at_bar = GameData.as_float(GameData.as_dict(checkpoint.get("queue")).get("settle_m"))
+	# A vehicle is as long as the simulation has it, whatever it is drawn as.
 	for record: Dictionary in data.records("vehicles"):
-		var placeholder: String = GameData.as_string(record.get("placeholder"))
-		if factory.has(placeholder):
-			_half_length[StringName(GameData.as_string(record.get("id")))] = factory.size_of(placeholder).z * 0.5
+		_half_length[StringName(GameData.as_string(record.get("id")))] = GameData.as_float(record.get("length")) * 0.5
 
 	_soldier = factory.make_world("road_soldier")
 	_soldier.visible = false
@@ -89,10 +92,13 @@ func apply(snapshot: Dictionary, lanes: int, delta: float) -> void:
 	var car_x: float = snapshot["car_x"]
 	var corridor: Vector3 = snapshot["corridor"]
 	var gap: float = snapshot["corridor_gap"]
-	if corridor != _corridor or gap != _gap or lanes != _lanes:
+	var limits: Vector2 = snapshot["road_limits"]
+	var other_road: bool = limits != _limits or lanes != _lanes
+	if corridor != _corridor or gap != _gap or other_road:
 		_corridor = corridor
 		_gap = gap
 		_lanes = lanes
+		_limits = limits
 		_build_barriers()
 	if _barriers != null:
 		_barriers.position = Vector3(0.0, 0.0, -(_corridor.x - car_s))
@@ -109,15 +115,24 @@ func apply(snapshot: Dictionary, lanes: int, delta: float) -> void:
 
 
 func _lane_of(x: float) -> int:
-	return clampi(int(floorf(x / _lane_width)), 0, maxi(_lanes - 1, 0))
+	return lane_at(x, _lane_width, _lanes)
+
+
+## The lane of `lanes` (each `lane_width` wide, the first from x = 0) that a
+## point at `x` across the road is in, or the nearest lane to it.
+static func lane_at(x: float, lane_width: float, lanes: int) -> int:
+	return clampi(int(floorf(x / maxf(lane_width, 0.001))), 0, maxi(lanes - 1, 0))
 
 
 # --- Barriers ----------------------------------------------------------------
 
-## A checkpoint's barriers (GDD 10.2, 10.4): every lane has a corridor of its
-## own. From _corridor.x the barriers close in from the lane's own lines, at
-## _corridor.y they are _gap apart, and so they stay to _corridor.z. Built
-## with its start at this node's z = 0.
+## A checkpoint's barriers (GDD 10.2, 10.4), where the simulation has them
+## (BossSim.walls): every lane has a corridor of its own. From _corridor.x
+## the barriers close in, between two lanes from the line between them and
+## the outermost two from the road's own limits (the shoulder is closed off
+## by a barrier that runs in from the guardrail); at _corridor.y they are
+## _gap apart, and so they stay to _corridor.z. Built with its start at this
+## node's z = 0.
 func _build_barriers() -> void:
 	if _barriers != null:
 		_barriers.queue_free()
@@ -149,9 +164,14 @@ func _build_barriers() -> void:
 		var middle: float = _lane_width * (float(lane) + 0.5)
 		for side: float in [-1.0, 1.0]:
 			var from_x: float = middle + side * _lane_width * 0.5
+			if lane == 0 and side < 0.0:
+				from_x = _limits.x
+			elif lane == _lanes - 1 and side > 0.0:
+				from_x = _limits.y
 			var to_x: float = middle + side * _gap * 0.5
-			# The face toward the lane runs from the lane's line to the
-			# corridor's mouth; the wall itself lies outside that face.
+			# The face toward the lane runs from the lane's line (or the
+			# road's limit) to the corridor's mouth; the wall itself lies
+			# outside that face.
 			var length: float = Vector2(to_x - from_x, taper).length()
 			var at: Vector3 = Vector3((from_x + to_x) * 0.5 + side * size.x * 0.5, size.y * 0.5, -taper * 0.5)
 			var turn: float = atan2(from_x - to_x, taper)
@@ -192,8 +212,8 @@ func _add_flat(parent: Node3D, id: String, from: float, to: float, lift: float, 
 # --- The bar and the soldier -------------------------------------------------
 
 ## The Checkpoint's bars (GDD 10.2): one across each lane's corridor, hinged
-## on its left. A lane's bar is up while a vehicle that was waved on drives
-## under it, and his own once he is let through.
+## on its left. Each swings to where bars_wanted() has it; in his own lane a
+## bar that is not wanted up is down at once.
 func _show_bars(snapshot: Dictionary, car_s: float, car_x: float, delta: float) -> void:
 	var bar_at: float = snapshot["bar_at"]
 	if bar_at <= 0.0 or _lanes <= 0 or _gap <= 0.0:
@@ -205,25 +225,51 @@ func _show_bars(snapshot: Dictionary, car_s: float, car_x: float, delta: float) 
 	var to_bar: float = bar_at - car_s
 	_bars.visible = to_bar > -_behind and to_bar < _ahead
 	_bars.position = Vector3(0.0, _bar_height, -to_bar)
+	var up: Array[bool] = bars_wanted(snapshot, _lanes, _lane_width, _half_length, _at_bar)
+	var own: int = _lane_of(car_x)
+	for lane: int in _lanes:
+		var pivot: Node3D = _bar_pivots[lane]
+		if lane == own and not up[lane]:
+			# The simulation's bar holds him until he is let through: drawn on
+			# its way down, his own would stand open where he is stopped.
+			pivot.rotation.z = 0.0
+		else:
+			pivot.rotation.z = move_toward(pivot.rotation.z, _bar_raised if up[lane] else 0.0, _bar_speed * delta)
+
+
+## Which of the Checkpoint's bars are wanted up, lane by lane (GDD 10.2).
+## What is drawn is never more open than the simulation, whose bar holds
+## him until he is let through: his own lane's bar is wanted up once the
+## snapshot says it is (`bar_up`), and any lane's while the body of a vehicle
+## that was waved on is under it: from the moment it is waved on, standing
+## within `at_bar` metres of the bar, until its tail has passed the bar, and
+## not a metre longer. Behind that body he cannot come to the bar.
+## `lanes` is how many lanes the road is drawn with, each `lane_width` wide,
+## and `half_lengths` half the length of each type of vehicle, by its id.
+static func bars_wanted(snapshot: Dictionary, lanes: int, lane_width: float, half_lengths: Dictionary, at_bar: float) -> Array[bool]:
 	var up: Array[bool] = []
-	up.resize(_lanes)
+	up.resize(maxi(lanes, 0))
 	up.fill(false)
+	var bar_at: float = snapshot["bar_at"]
+	if bar_at <= 0.0 or lanes <= 0:
+		return up
+	var car_s: float = snapshot["car_s"]
+	var car_x: float = snapshot["car_x"]
+	var to_bar: float = bar_at - car_s
 	if snapshot["bar_up"]:
-		up[_lane_of(car_x)] = true
+		up[lane_at(car_x, lane_width, lanes)] = true
 	var vehicles: Array[Dictionary] = snapshot["vehicles"]
 	for vehicle: Dictionary in vehicles:
 		var role: StringName = vehicle["role"]
 		if role != BossSim.WAVED_ON_ROLE:
 			continue
 		var type_id: StringName = vehicle["type"]
-		var half: float = GameData.as_float(_half_length.get(type_id))
+		var half: float = GameData.as_float(half_lengths.get(type_id))
 		var ahead: float = vehicle["ahead"]
-		if ahead + half > to_bar - _clear and ahead - half < to_bar + _clear:
-			var x: float = vehicle["x"]
-			up[_lane_of(x)] = true
-	for lane: int in _lanes:
-		var pivot: Node3D = _bar_pivots[lane]
-		pivot.rotation.z = move_toward(pivot.rotation.z, _bar_raised if up[lane] else 0.0, _bar_speed * delta)
+		var x: float = vehicle["x"]
+		if ahead + half >= to_bar - at_bar and ahead - half < to_bar:
+			up[lane_at(x, lane_width, lanes)] = true
+	return up
 
 
 func _build_bars() -> void:
@@ -300,11 +346,15 @@ func _build_bay() -> void:
 	_bay_node.name = "Bay"
 	add_child(_bay_node)
 	var length: float = _bay.y - _bay.x
-	_add_flat(_bay_node, "road_bay", 0.0, _lane_width, LIFT_PAINT, length, -length * 0.5)
-	_add_flat(_bay_node, "road_line", 0.0, _line_width, LIFT_LINE, length, -length * 0.5)
-	_add_flat(_bay_node, "road_line", _lane_width - _line_width, _lane_width, LIFT_LINE, length, -length * 0.5)
-	_add_flat(_bay_node, "road_line", 0.0, _lane_width, LIFT_LINE, _line_width, -_line_width * 0.5)
-	_add_flat(_bay_node, "road_line", 0.0, _lane_width, LIFT_LINE, _line_width, -(length - _line_width * 0.5))
+	# Painted where the simulation has it (D-047): the street's last metres
+	# across its whole width, from what ends it on the left to the guardrail.
+	var left: float = _limits.x
+	var right: float = _limits.y if _limits.y > _limits.x else _lane_width
+	_add_flat(_bay_node, "road_bay", left, right, LIFT_PAINT, length, -length * 0.5)
+	_add_flat(_bay_node, "road_line", left, left + _line_width, LIFT_LINE, length, -length * 0.5)
+	_add_flat(_bay_node, "road_line", right - _line_width, right, LIFT_LINE, length, -length * 0.5)
+	_add_flat(_bay_node, "road_line", left, right, LIFT_LINE, _line_width, -_line_width * 0.5)
+	_add_flat(_bay_node, "road_line", left, right, LIFT_LINE, _line_width, -(length - _line_width * 0.5))
 	var end: Vector3 = _factory.size_of("road_street_end")
 	var house: Node3D = _factory.make_world("road_street_end")
 	house.position = Vector3(_lane_width * 0.5, end.y * 0.5, -(length + end.z * 0.5))
