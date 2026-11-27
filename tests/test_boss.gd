@@ -60,6 +60,7 @@ func test_boss_01() -> void:
 	_check_review_rolling_in_the_stop_zone()
 	_check_review_room_between_barriers()
 	_check_checkpoint_rows()
+	_check_views_bar_never_more_open()
 
 
 ## The road, its numbers, and who is watching.
@@ -4408,3 +4409,122 @@ func _check_review_room_between_barriers() -> void:
 		check_eq(_count_events("hit"), 0, "2 cm short of the %s barrier he touches nothing: all 2.34 m are his" % ("left" if side < 0.0 else "right"))
 		check_near(_sim.suspicion.value, 0.0, 0.000001, "(and no Suspicion)")
 	_keep_lane = true
+
+
+# --- Appended from the review of M7's views ---
+
+## Half the length of every type of vehicle, by its id (as the view has it).
+func _views_half_lengths() -> Dictionary:
+	var out: Dictionary = {}
+	for record: Dictionary in data.records("vehicles"):
+		out[StringName(GameData.as_string(record.get("id")))] = GameData.as_float(record.get("length")) * 0.5
+	return out
+
+
+## True when he must brake behind whatever is ahead of him in `lane`, as
+## _follow_the_queue has him brake: but with nothing for the bar.
+func _views_brakes_behind(lane: int) -> bool:
+	var car: CarSim = _sim.car
+	var room: float = INF
+	for vehicle: TrafficSim.Vehicle in _sim.traffic.vehicles:
+		if absf(vehicle.x - car.lane_center(lane)) < car.lane_width() * 0.5 and vehicle.s > car.s:
+			room = minf(room, vehicle.s - vehicle.half_length - car.s - car.length() * 0.5)
+	var speed_ms: float = car.speed * KMH_TO_MS
+	return room < 1.5 + speed_ms * speed_ms / (2.0 * tuning.f("brake_decel") * KMH_TO_MS) + speed_ms * 0.15
+
+
+## V-01. What is drawn is never more open than the simulation. Which bars the
+## view wants up is a function of the snapshot (SetPieceView.bars_wanted): a
+## lane's bar while the body of a vehicle that was waved on is under it, his
+## own once he is let through, and none at any other time. He follows the
+## last vehicle of his lane as closely as the queue lets him, on the brake
+## behind what is ahead and with nothing for the bar. The simulation's bar
+## stops him (GDD 10.2), and at no tick is he within reach of a bar that is
+## wanted up. (It was wanted up until the vehicle's tail was 4 m past it and
+## then drawn swinging down: 58 to 68 degrees up where it stopped him.)
+func _check_views_bar_never_more_open() -> void:
+	var queue: Dictionary = GameData.as_dict(_checkpoint().get("queue"))
+	var settle: float = GameData.as_float(queue.get("settle_m"))
+	var lane_width: float = tuning.f("lane_width")
+	var half_lengths: Dictionary = _views_half_lengths()
+	var lane: int = 1
+	_begin_checkpoint("", 1)
+	_sim.gate.reset(1)
+	_events = []
+	var car: CarSim = _sim.car
+	var lanes: int = car.lanes
+	var nose: float = car.length() * 0.5
+	var bar: float = _sim.boss.bar_at
+	# Ticks at which a bar is wanted otherwise than the rule has it; how
+	# often his lane's bar went up; ticks another lane's was up.
+	var wrong: int = 0
+	var raised: int = 0
+	var others: int = 0
+	var was_up: bool = false
+	# Ticks at which his lane's bar was wanted up with nothing between his
+	# nose and it (the bar within his reach); and as it held him.
+	var within_reach: int = 0
+	var held_open: int = 0
+	var met_at: float = 0.0
+	var guard: int = _ticks_in(240.0)
+	while met_at <= 0.0 and guard > 0:
+		guard -= 1
+		_input.clear()
+		_input.rmb = _views_brakes_behind(lane)
+		car.x = car.lane_center(lane)
+		_tick()
+		met_at = maxf(met_at, _sim.boss.bar_speed)
+		var wanted: Array[bool] = SetPieceView.bars_wanted(_sim.snapshot(), lanes, lane_width, half_lengths, settle)
+		# The rule, by the simulation's own vehicles.
+		var under: Array[bool] = []
+		under.resize(lanes)
+		under.fill(false)
+		for vehicle: TrafficSim.Vehicle in _sim.traffic.vehicles:
+			if vehicle.role == BossSim.WAVED_ON_ROLE and vehicle.s - vehicle.half_length < bar and vehicle.s + vehicle.half_length >= bar - settle:
+				under[vehicle.lane] = true
+		for index: int in lanes:
+			if wanted[index] != under[index]:
+				wrong += 1
+			if index != lane and wanted[index]:
+				others += 1
+		if wanted[lane] and not was_up:
+			raised += 1
+		was_up = wanted[lane]
+		if wanted[lane]:
+			# What keeps him from the bar: the tail of a vehicle that was
+			# waved on, ahead of his nose and short of the bar.
+			var shielded: bool = false
+			for vehicle: TrafficSim.Vehicle in _sim.traffic.vehicles:
+				var tail: float = vehicle.s - vehicle.half_length
+				if vehicle.role == BossSim.WAVED_ON_ROLE and vehicle.lane == lane and tail >= car.s + nose and tail < bar:
+					shielded = true
+			if not shielded:
+				within_reach += 1
+			if bar - (car.s + nose) <= 0.000001:
+				held_open += 1
+	check(guard > 0 and met_at > _checkpoint_number("bump_kmh"), "(following the last vehicle of his lane under the bar he runs into the bar at %.1f km/h: for him it is down)" % met_at)
+	check(not _sim.boss.released, "(he was not let through)")
+	check_near(_sim.suspicion.value, _checkpoint_number("barrier_suspicion"), 0.000001, "(a touch of a barrier, as GDD 10.2 has it)")
+	check_eq(wrong, 0, "a lane's bar is wanted up exactly while the body of a vehicle that was waved on is under it")
+	check_eq(raised, GameData.as_int(queue.get("cars")), "(the bar of his lane goes up once for each vehicle that is waved on ahead of him)")
+	check(others > 0, "(and the other lanes' bars for theirs)")
+	check_eq(within_reach, 0, "at no tick is he within reach of a bar that is wanted up: the tail of the vehicle it is up for is between his nose and the bar")
+	check_eq(held_open, 0, "the bar that holds him is never wanted up")
+	# He stands at it from the Stow to the verdict: down all the while.
+	check_eq(_sim.boss.phase, BossSim.STOW, "(stopped at the bar he is first in line: the soldier sets out)")
+	var open_while_held: int = 0
+	_input.clear()
+	for _index: int in _ticks_in(_checkpoint_number("stow_s") * 0.5):
+		_tick()
+		if SetPieceView.bars_wanted(_sim.snapshot(), lanes, lane_width, half_lengths, settle)[lane]:
+			open_while_held += 1
+	check_eq(open_while_held, 0, "while he is held at the bar it is not wanted up")
+	# Let through: his own goes up.
+	_sim.boss.release()
+	_tick()
+	var shot: Dictionary = _sim.snapshot()
+	check(GameData.as_bool(shot["bar_up"]) and SetPieceView.bars_wanted(shot, lanes, lane_width, half_lengths, settle)[lane], "let through, his own bar is wanted up")
+	# And no bar is wanted where there is none.
+	_begin_quiet_boss(STORM)
+	_tick()
+	check(not SetPieceView.bars_wanted(_sim.snapshot(), _sim.car.lanes, lane_width, half_lengths, settle).has(true), "(on a road with no bar none is wanted up)")
