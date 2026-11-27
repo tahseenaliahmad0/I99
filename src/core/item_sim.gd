@@ -883,6 +883,19 @@ func complete(ritual: Dictionary, direction: int) -> bool:
 	return true
 
 
+## Whether a ritual could be performed now (an Order names one, GDD 11.3):
+## what it is done with is in the cabin and not put away, and what it
+## requires holds.
+func can_perform(ritual_id: String) -> bool:
+	if not _data.has_record("rituals", ritual_id):
+		return false
+	var ritual: Dictionary = _data.record("rituals", ritual_id)
+	var owner: Item = owner_of(ritual)
+	if ritual.has("item") and (owner == null or is_stowed(owner)):
+		return false
+	return _requirements_hold(ritual, owner)
+
+
 ## One step of a DRAG ritual (the radio dial). `direction` is +1 right, -1 left.
 func drag_step(ritual: Dictionary, direction: int) -> void:
 	var owner: Item = owner_of(ritual)

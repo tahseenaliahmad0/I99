@@ -193,7 +193,8 @@ static func leg_seed(telling_seed: int, act: int, leg_index: int, branch: int) -
 	return Rng.derive(telling_seed, LEG_SALT + slot)
 
 
-## The plan of one branch of a fork.
-static func plan(data: GameData, branch: Dictionary, act: int) -> Dictionary:
+## The plan of one branch of a fork; `twist` is the Twist a guest throws
+## into it ({} for none: see LegGenerator.generate).
+static func plan(data: GameData, branch: Dictionary, act: int, twist: Dictionary = {}) -> Dictionary:
 	return LegGenerator.generate(data, GameData.as_string(branch.get("leg")), act,
-			GameData.as_int(branch.get("seed")), GameData.as_string(branch.get("modifier")))
+			GameData.as_int(branch.get("seed")), GameData.as_string(branch.get("modifier")), twist)

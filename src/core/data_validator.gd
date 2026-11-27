@@ -97,6 +97,18 @@ const STOP_TUNING_KEYS: Dictionary = {
 	"roadside_find": "find", "hitcher": "hitcher", "shady_guy": "shady",
 }
 const HECKLE_TYPES: PackedStringArray = ["TWIST", "DARE", "DOUBT", "QUESTION", "ORDER", "FIB"]
+const HECKLE_TWISTS: PackedStringArray = ["sheep", "wedding", "melon_truck", "shower"]
+## What a heckle of each type says besides its line, and nothing else
+## (GDD 11.3, D-061).
+const HECKLE_KEYS: Dictionary = {
+	"TWIST": ["twist"],
+	"DARE": ["window_s", "answer", "pass"],
+	"DOUBT": ["window_s", "answer", "pass", "fail"],
+	"QUESTION": ["window_s", "keep", "pass"],
+	"ORDER": ["window_s", "ritual", "pass", "fail"],
+	"FIB": ["window_s"],
+}
+const HECKLE_OWN_KEYS: PackedStringArray = ["window_s", "twist", "duration_s", "answer", "keep", "ritual", "pass", "fail"]
 const FLICK_DIRS: PackedStringArray = ["up", "down", "left", "right"]
 ## What a ritual may block of the view while it is performed (GDD 7.4).
 const VIEW_BLOCKS: PackedStringArray = ["lower_centre"]
@@ -729,11 +741,23 @@ func _heckle_schema() -> Dictionary:
 		"type": _enum(HECKLE_TYPES),
 		"tables": _list(_ref("tables"), 1),
 		"line_id": _ref("lines"),
-		"window_s": _opt(_num(0.0)),
-		"answer": _opt(_list(_str())),
-		"pass": _opt(_obj({}, true)),
-		"fail": _opt(_obj({}, true)),
-	}, true)
+		# The passenger who says it once carried to Basra (GDD 11.5).
+		"guest": _opt(_ref("passengers")),
+		"window_s": _opt(_above(0.0)),
+		# A Twist: a modifier with a stretch of its own, or a shower.
+		"twist": _opt(_enum(HECKLE_TWISTS)),
+		"duration_s": _opt(_above(0.0)),
+		"answer": _opt(_list(_str(), 1)),
+		"keep": _opt(_list(_str(), 1)),
+		"ritual": _opt(_ref("rituals")),
+		"pass": _opt(_heckle_effect()),
+		"fail": _opt(_heckle_effect()),
+	})
+
+
+## What answering a heckle, or not, does to him.
+func _heckle_effect() -> Dictionary:
+	return _obj({"nerves": _opt(_num()), "cash": _opt(_num())})
 
 
 func _fault_schema() -> Dictionary:
@@ -882,6 +906,8 @@ func _tuning_schema() -> Dictionary:
 		"spawn_ahead": pos, "spawn_ahead_oncoming": pos, "despawn_behind": pos,
 		"signal_time": pos, "late_signal_time": pos, "lane_change_time": pos,
 		"calm_length": pos, "first_event_within": pos, "heckle_lead": pos,
+		"heckles_per_leg": _list_n(_int(0.0), 3), "heckle_span": _list_n(_num(0.0, 1.0), 2),
+		"guest_heckle_weight": pos,
 		"stop_minutes": _obj({"fuel": pos, "fitter": pos, "tea": pos, "find": pos, "hitcher": pos, "shady": pos}),
 		"stop_weights": _obj({"fuel": pos, "fitter": pos, "tea": pos, "find": pos, "hitcher": pos}),
 		"rarity_by_act": _list_n(_list_n(pos, 3), 3),
@@ -1073,6 +1099,7 @@ func _check_cross_rules() -> void:
 			var supply: Dictionary = GameData.as_dict(_data.record("items", GameData.as_string(item_id)).get("supply"))
 			if _data.has_record("items", GameData.as_string(item_id)) and GameData.as_int(supply.get("uses")) <= 0:
 				_err("E_RULE", "tables.json", label + ".full_supplies", "'%s' has no supply to start full" % GameData.as_string(item_id))
+	_check_heckles()
 	for passenger: Dictionary in _data.records("passengers"):
 		var has_legs: bool = passenger.has("rides_legs")
 		var has_until: bool = passenger.has("rides_until")
@@ -1200,6 +1227,68 @@ func _check_required_records() -> void:
 		for id: Variant in required:
 			if not _data.has_record(set_id, str(id)):
 				_err("E_MISSING", "%s.json" % str(where[0]), "%s[%s]" % [str(where[1]), str(id)], "this row of the GDD is missing")
+
+
+## Heckles (GDD 11.3, 11.5; D-061): each type says what its row needs and
+## nothing of another type's; answers are written in words the director
+## knows; the Fib is the Children's; a Table that heckles has something to
+## say; each passenger brings two.
+func _check_heckles() -> void:
+	var by_guest: Dictionary = {}
+	var said_at: Dictionary = {}
+	for heckle: Dictionary in _data.records("heckles"):
+		var id: String = GameData.as_string(heckle.get("id"), "?")
+		var label: String = "heckles[%s]" % id
+		var type: String = GameData.as_string(heckle.get("type"))
+		if not HECKLE_KEYS.has(type):
+			continue
+		var needed: Array = HECKLE_KEYS[type]
+		for key: Variant in needed:
+			if not heckle.has(key):
+				_err("E_MISSING", "heckles.json", "%s.%s" % [label, str(key)], "a %s says its \"%s\"" % [type, str(key)])
+		var shower: bool = type == "TWIST" and GameData.as_string(heckle.get("twist")) == HeckleDirector.SHOWER
+		if shower and not heckle.has("duration_s"):
+			_err("E_MISSING", "heckles.json", label + ".duration_s", "a shower says how long it rains")
+		for key: String in HECKLE_OWN_KEYS:
+			if heckle.has(key) and not needed.has(key) and not (key == "duration_s" and shower):
+				_err("E_RULE", "heckles.json", "%s.%s" % [label, key], "a %s has no \"%s\"" % [type, key])
+		var answers: Array = GameData.as_array(heckle.get("answer"))
+		for index: int in answers.size():
+			if answers[index] is String and HeckleDirector.parse_answer(GameData.as_string(answers[index])).is_empty():
+				_err("E_ENUM", "heckles.json", "%s.answer[%d]" % [label, index],
+						"'%s' is no answer: close_call, close_call_x<n>, gear<g>_<s>s, hands_off_<s>s or pass_x<n>_<s>s" % GameData.as_string(answers[index]))
+		var keeps: Array = GameData.as_array(heckle.get("keep"))
+		for index: int in keeps.size():
+			if keeps[index] is String and HeckleDirector.parse_keep(GameData.as_string(keeps[index])).is_empty():
+				_err("E_ENUM", "heckles.json", "%s.keep[%d]" % [label, index],
+						"'%s' is nothing to keep: nerves_under_<n> or no_horn" % GameData.as_string(keeps[index]))
+		var tables: Array = GameData.as_array(heckle.get("tables"))
+		if type == "FIB" and (tables.size() != 1 or GameData.as_string(tables[0]) != "children"):
+			_err("E_RULE", "heckles.json", label + ".tables", "the Fib is the Children's only (GDD 11.3)")
+		var guest: String = GameData.as_string(heckle.get("guest"))
+		if guest.is_empty():
+			for table_id: Variant in tables:
+				said_at["%s %s" % [str(table_id), type]] = true
+		else:
+			by_guest[guest] = GameData.as_int(by_guest.get(guest)) + 1
+	if _data.records("heckles").is_empty():
+		return
+	for table: Dictionary in _data.records("tables"):
+		var table_id: String = GameData.as_string(table.get("id"), "?")
+		var weights: Dictionary = GameData.as_dict(table.get("heckle_weights"))
+		var heckled: bool = false
+		var can_say: bool = false
+		for type: Variant in weights:
+			if GameData.as_float(weights[type]) > 0.0:
+				heckled = true
+				can_say = can_say or said_at.has("%s %s" % [table_id, str(type)])
+		if heckled and not can_say:
+			_err("E_RULE", "tables.json", "tables[%s].heckle_weights" % table_id, "nobody at this Table has a heckle of these types to say")
+	for passenger: Dictionary in _data.records("passengers"):
+		var passenger_id: String = GameData.as_string(passenger.get("id"), "?")
+		if GameData.as_int(by_guest.get(passenger_id)) != 2:
+			_err("E_RULE", "heckles.json", "heckles[guest=%s]" % passenger_id,
+					"a passenger carried to Basra adds two heckles to the pool (GDD 11.5), found %d" % GameData.as_int(by_guest.get(passenger_id)))
 
 
 ## Beat templates: lengths, speeds below par, lane changes ahead of the vehicle.

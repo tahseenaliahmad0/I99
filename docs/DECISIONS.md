@@ -2290,3 +2290,98 @@ has the rules of its own Table and of no other.
   Children, Drivers, Uncles, In-laws, Aunts, Groom, Noor, in the order of
   the GDD's table. `TableRules.win` opens in a profile what a win on time
   opens; what calls it, and what a win is, belongs to the endings (M9c).
+
+## D-061 (M9, 2026-11-27) Heckles as built
+
+GDD 11.3 is two sentences and a table of six rows; GDD 14 gives one record.
+This is how they were read.
+
+- **Where they live.** `HeckleDirector` (the name GDD 13.1 gives the file)
+  is a pure class DriveSim steps at step 11 of the tick. The records are
+  `data/heckles.json`; the validator knows every key and which type may
+  carry it. A record says: `type`, `tables`, `line_id`; `window_s` (how
+  long he has; for the Fib, how long the hand holds); `twist` and, for a
+  shower, `duration_s`; `answer` (a Dare, a Doubt: any one answers);
+  `keep` (a Question: all, for the whole window); `ritual` (an Order);
+  `pass` and `fail` (`nerves`, `cash`); `guest` (below).
+- **The words.** GDD 14 writes answers as words with their numbers in
+  them: `"close_call"`, `"gear4_5s"`. The director reads that form and no
+  other: `close_call`, `close_call_x3`, `gear<g>_<s>s`, `hands_off_<s>s`,
+  `pass_x<n>_<s>s`; for a Question `nerves_under_<n>` and `no_horn`. A
+  word it cannot read is a validation error.
+- **How many.** `heckles_per_leg` ([1, 2, 2], the row of GDD 12.3) are
+  drawn when the leg is taken, from the `heckle` stream, each with a place
+  along the leg's beats (inside `heckle_span`, the first half of its own
+  slot). A heckle is said when the car reaches its place, the last one is
+  over, and one may begin. They are said one at a time.
+- **"Never during an encounter or a boss."** Read as: none *begins* then.
+  A window that is open when the Patrol's lights come on runs on. On a leg
+  "an encounter" is the time the leg's encounter is at him
+  (`EncounterSim.pressing()`): the Patrol from its lights until it leaves,
+  the Tailgater from its tell until he is gone, the Motorcade while its
+  spotlight is on his windscreen. Not the whole leg: the Motorcade is
+  there from the first metre to the last and Two-lane is nothing but its
+  encounter, and "two per leg after Act 1" would then never hold in Act 3.
+  Nor does one begin once the Exit's slip lane has opened: that stretch is
+  the Exit's and the fork's. Where the two rules cannot both hold (he
+  crowds the Motorcade for the whole leg), this one wins and the heckles
+  that found no room are dropped: the count is what the Table means to
+  say, the silence is what it owes him. A heckle still running at the
+  leg's end, or when he pulls in at a stall, lapses with no effect.
+- **The lead.** At the subtitle: the `heckle` ding, the line (asked for as
+  a tell, D-058) and `heckle_started`. For `heckle_lead` nothing else
+  happens and nothing he does counts; then the window opens or the change
+  comes. `heckle_resolved` says how it ended: `passed`, `failed`, `over`
+  (a Twist, the Fib: nothing to answer) or `lapsed`.
+- **Twist.** "Injects a modifier beat." A Twist of sheep, the wedding or
+  the melon truck is handed to the leg generator when the leg is laid out,
+  and takes a stretch of its own like the leg's own modifier would (never
+  the same one, clear of it by a CALM beat's length, and only on a leg
+  whose record allows that modifier; one stretch to a leg). So the
+  generator's rules hold with it on the road: there is a line through it
+  and nothing is put on top of anything. LegSim keeps everything of that
+  stretch off the road until the director says the lead is over; the
+  heckle falls due `heckle_lead` at top gear's speed before the car would
+  reach the point where the first thing of it shows, so that nothing has
+  been missed by then. If it is said late (the Table had to wait), what it
+  holds appears where the plan has it by now. On a leg where nobody says
+  it, the stretch stays empty. The shower is rain for `duration_s` of the
+  road's time, on a leg where it is not raining already. A Twist is over
+  when its stretch is behind him, or the rain has stopped. The save holds
+  the Twist of the leg he stands on, so that a continued Telling has the
+  road he drove.
+- **Dare.** Optional: `fail` is not allowed on one. "Chain three close
+  calls" is three in the window. "Hold fourth gear for 10 s" is 10 s in
+  one piece, begun in the window. "Hands-off on a straight" is no hand of
+  his on the wheel where the road has no bend (a hook or a boy's hand on
+  it is still hands-off: he paid for those). "Pass three vehicles in 10 s"
+  counts vehicles going his way that were ahead and are behind, any three
+  within 10 s of each other inside the 15 s.
+- **Doubt, Question, Order.** As their rows. A Doubt answered is -10 at
+  the answer and nothing at 15 s. A Question is lost in the tick his
+  Nerves are at 50 or the horn sounds, with nothing taken; kept to the
+  end it pays. An Order is obeyed by completing the ritual it names within
+  its window. An Order he cannot obey when it falls due (the thing is not
+  in the cabin, the glass is empty, the cigarette is already lit) is not
+  given: another Order he can obey takes its place, or else another
+  challenge of that Table's.
+- **The Fib.** Children only (a validation rule). For `window_s` after the
+  lead, whenever his own hand and wrist are off the wheel, the wheel is
+  held at the angle that keeps the car in its lane, bends included. His
+  own grip takes the wheel as always.
+- **Who says what.** A Table's `heckle_weights` weigh its types; a type's
+  weight is shared among the Table's records of that type. The Groom's
+  Doubts include the Uncle's first, as in GDD 14. The Children have the
+  sheep, the melons and the Fib; the wedding and the shower, which the
+  Twist's row also names, are a guest's each. GDD 11.5: "Each passenger
+  carried to Basra sits at a Table from then on and adds two heckles to
+  the pool": two records per passenger carry `guest`, are said at every
+  Table that heckles once that passenger is in the profile's guests, and
+  weigh `guest_heckle_weight` each beside the Table's own 100. Exactly two
+  per passenger is a validation rule. At Noor's Table nobody heckles,
+  guests included.
+- **Tests.** `DriveSim.heckling` turns the Table's voice off (the modes of
+  GDD 11.5 have no Table). The T-TABLE tests set it so: they compare a
+  night told to the Drivers with a night told to nobody, to the bit, and
+  the Drivers' Dares are the one difference that comparison is not about.
+  Every other test runs with the Table talking.

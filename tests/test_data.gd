@@ -83,6 +83,7 @@ func test_data_01() -> void:
 	_check_broken_cabin_props()
 	_check_broken_boss_rules()
 	_check_broken_table_rules()
+	_check_broken_heckle_rules()
 
 
 # --- 1. Shipped data ----------------------------------------------------------
@@ -98,6 +99,97 @@ func _check_shipped_data() -> void:
 	check(data.has_line("narrator.start"), "a line of GDD 3.6 exists by id")
 	note("%d tuning constants, %d anchors, %d lines" % [
 		data.tuning.keys().size(), data.records("anchors").size(), data.line_ids().size()])
+
+
+# --- 11. The heckles (M9) -------------------------------------------------------
+
+## What a heckle's record must say (GDD 11.3, 11.5; D-061): each broken once.
+func _check_broken_heckle_rules() -> void:
+	_reset_fixture()
+	_record("heckles", "dare_gear4")["goal"] = "gear4"
+	_expect("E_UNKNOWN_KEY", "heckles[dare_gear4].goal", "a key no heckle has")
+
+	_reset_fixture()
+	_record("heckles", "twist_sheep")["twist"] = "camels"
+	_expect("E_ENUM", "heckles[twist_sheep].twist", "a Twist that is no modifier with a stretch, nor a shower")
+
+	_reset_fixture()
+	_record("heckles", "twist_sheep").erase("twist")
+	_expect("E_MISSING", "heckles[twist_sheep].twist", "a Twist that twists nothing")
+
+	_reset_fixture()
+	_record("heckles", "guest_student_twist").erase("duration_s")
+	_expect("E_MISSING", "heckles[guest_student_twist].duration_s", "a shower with no length")
+
+	_reset_fixture()
+	_record("heckles", "twist_sheep")["duration_s"] = 20
+	_expect("E_RULE", "heckles[twist_sheep].duration_s", "sheep that last 20 s")
+
+	_reset_fixture()
+	_record("heckles", "dare_gear4").erase("answer")
+	_expect("E_MISSING", "heckles[dare_gear4].answer", "a Dare with nothing to do")
+
+	_reset_fixture()
+	_record("heckles", "dare_gear4").erase("window_s")
+	_expect("E_MISSING", "heckles[dare_gear4].window_s", "a Dare with no window")
+
+	_reset_fixture()
+	_record("heckles", "dare_gear4")["window_s"] = 0
+	_expect("E_RANGE", "heckles[dare_gear4].window_s", "a window of no seconds")
+
+	_reset_fixture()
+	_record("heckles", "dare_gear4")["answer"] = ["fourth_gear"]
+	_expect("E_ENUM", "heckles[dare_gear4].answer[0]", "an answer the Table cannot judge")
+
+	_reset_fixture()
+	_record("heckles", "dare_gear4")["fail"] = {"nerves": 5}
+	_expect("E_RULE", "heckles[dare_gear4].fail", "a Dare that costs something: it is optional")
+
+	_reset_fixture()
+	_record("heckles", "dare_gear4")["pass"] = {"respect": 5}
+	_expect("E_UNKNOWN_KEY", "heckles[dare_gear4].pass.respect", "a reward that is neither Nerves nor cash")
+
+	_reset_fixture()
+	_record("heckles", "doubt_one_hand").erase("fail")
+	_expect("E_MISSING", "heckles[doubt_one_hand].fail", "a Doubt that never bites")
+
+	_reset_fixture()
+	_record("heckles", "question_calm")["keep"] = ["nerves_under_50", "no_brakes"]
+	_expect("E_ENUM", "heckles[question_calm].keep[1]", "something to keep that nobody watches")
+
+	_reset_fixture()
+	_record("heckles", "question_calm")["answer"] = ["close_call"]
+	_expect("E_RULE", "heckles[question_calm].answer", "a Question with an answer: it is kept, not answered")
+
+	_reset_fixture()
+	_record("heckles", "order_tea")["ritual"] = "tea_gulp"
+	_expect("E_REF", "heckles[order_tea].ritual", "an Order for a ritual nobody knows")
+
+	_reset_fixture()
+	_record("heckles", "order_tea").erase("ritual")
+	_expect("E_MISSING", "heckles[order_tea].ritual", "an Order that orders nothing")
+
+	_reset_fixture()
+	_record("heckles", "fib_both_hands")["tables"] = ["children", "drivers"]
+	_expect("E_RULE", "heckles[fib_both_hands].tables", "the Fib told to the Drivers too")
+
+	_reset_fixture()
+	_record("heckles", "guest_drummer_dare")["guest"] = "poet"
+	_expect("E_REF", "heckles[guest_drummer_dare].guest", "a guest nobody carried")
+
+	_reset_fixture()
+	_record("heckles", "guest_drummer_dare").erase("guest")
+	_expect("E_RULE", "heckles[guest=drummer]", "a passenger who brings one heckle to the wedding, not two")
+
+	_reset_fixture()
+	_record("tables", "aunts")["heckle_weights"] = {"TWIST": 100}
+	_expect("E_RULE", "tables[aunts].heckle_weights", "a Table whose only type nobody there has a record for")
+
+	_reset_fixture()
+	var structure: Dictionary = GameData.as_dict(GameData.as_dict(_roots["tuning"])["structure"])
+	structure["heckles_per_leg"] = [1, 2]
+	_expect("E_RANGE", "heckles_per_leg", "heckles for two acts only")
+	_reset_fixture()
 
 
 # --- 10. The Tables' rules (M9) ------------------------------------------------

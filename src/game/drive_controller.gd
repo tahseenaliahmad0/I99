@@ -66,6 +66,7 @@ func _ready() -> void:
 	sim.rng.reseed(int(str(Game.args.get("seed", "1"))))
 	if Game.args.has("bot"):
 		_bot = StandInBot.new(sim, data)
+	_seat_the_guests()
 	if Game.args.has("continue") and not Game.saved_telling.is_empty() and sim.restore(Game.saved_telling):
 		print("[drive] continuing the Telling of %s" % sim.run.table)
 	elif Game.args.has("table"):
@@ -147,9 +148,11 @@ func _physics_process(_delta: float) -> void:
 			# The game saves at every stop and after every boss (GDD 11.1).
 			Game.write_save(sim.checkpoint)
 			print("[drive] stop %s, saved (frame %d, clock %s)" % [str(event.get("stop")), _frames, sim.clock.text()])
-		elif type == "boss_ended" or type == "pulled_over" or type == "call_resolved" or type == "wreck":
-			# What became of a set piece, for whoever reads the console.
-			print("[drive] %s at %.1f s: %s" % [type, sim.seconds(), JSON.stringify(event)])
+		elif type == "boss_ended" or type == "pulled_over" or type == "call_resolved" or type == "wreck" \
+				or type == "heckle_started" or type == "heckle_resolved":
+			# What became of a set piece, and what the Table said, for whoever
+			# reads the console.
+			print("[drive] %s at %.1f s (frame %d): %s" % [type, sim.seconds(), _frames, JSON.stringify(event)])
 		if type == "wreck" and sim.run.active and not GameData.as_bool(event.get("rewind")):
 			# After a Wreck there is no saved Telling to continue (GDD 11.4): the
 			# night is told again from Baghdad, and quitting during the cut must
@@ -168,7 +171,17 @@ func _physics_process(_delta: float) -> void:
 			# Until the wedding room exists (M9) the night simply begins again.
 			Game.write_save({})
 			_subtitles.clear()
+			_seat_the_guests()
 			sim.begin_telling(sim.run.table, sim.run.seed + 1)
+
+
+## Whoever he has carried to Basra sits at the Tables from then on, and
+## heckles with them (GDD 11.5).
+func _seat_the_guests() -> void:
+	var guests: PackedStringArray = []
+	for guest: Variant in GameData.as_array(Game.profile.get("guests")):
+		guests.append(GameData.as_string(guest))
+	sim.guests = guests
 
 
 func _process(delta: float) -> void:

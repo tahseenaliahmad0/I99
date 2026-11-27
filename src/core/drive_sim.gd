@@ -119,6 +119,20 @@ var rewinds_left: int = 0
 ## The Telling as it was when that leg or boss began ({} when no rewind is
 ## left to need it). It is kept in memory only: nothing is saved in a leg.
 var _leg_start: Dictionary = {}
+## What the Table says while he tells it (GDD 11.3).
+var heckles: HeckleDirector = HeckleDirector.new()
+## False: nobody heckles (a road told to no Table: the modes of GDD 11.5; a
+## test of something else).
+var heckling: bool = true
+## The passengers he has carried to Basra, who sit at the Tables now and
+## heckle too (GDD 11.5). It is the profile's, and is set before a Telling
+## begins.
+var guests: PackedStringArray = []
+## The Twist the leg he is on was laid out with ({} for none), for the save.
+var _leg_twist: Dictionary = {}
+## Which of the vehicles on the road were ahead of the car a tick ago, by id
+## (kept while a heckle counts the ones he passes).
+var _ahead_then: Dictionary = {}
 ## True while an encounter is on: an empty road does not calm him then.
 ## (The leg's own encounter counts as well; this one is for set pieces.)
 var in_encounter: bool = false
@@ -300,6 +314,7 @@ func _build() -> void:
 	run = RunState.new()
 	stop = StopSim.new()
 	passengers = PassengerSim.new()
+	heckles = HeckleDirector.new()
 	hand.configure(data, space)
 	wheel.configure(tuning)
 	gate.configure(tuning)
@@ -319,6 +334,9 @@ func _build() -> void:
 	run.configure(data)
 	stop.configure(data, items, faults, nerves, clock, rng)
 	passengers.configure(data, effects, nerves, items, faults)
+	heckles.configure(data, items)
+	_leg_twist = {}
+	_ahead_then = {}
 
 	cash = tuning.f("cash_start")
 	wrecked = false
@@ -412,6 +430,7 @@ func step(input: DriveInput) -> void:
 	suspicion.begin_tick()
 	suspicion.gain_mult = _suspicion_gain()
 	passengers.begin_tick()
+	heckles.begin_tick()
 
 	# Focus (GDD 7.4): the road runs slower, the hand does not.
 	_road_dt = DT * effects.product(ROAD_SPEED)
@@ -475,7 +494,7 @@ func step(input: DriveInput) -> void:
 			wheel.grip()
 		elif not hand.gripping:
 			wheel.release()
-	wheel.locked = effects.has_own(ItemSim.HOOK_SET) or passengers.holds_wheel()
+	wheel.locked = effects.has_own(ItemSim.HOOK_SET) or passengers.holds_wheel() or ghost_on_wheel()
 	if passengers.holds_straight():
 		# Held dead straight for him (GDD 8.2): against the road's crown and
 		# whatever else pulls steadily, so that on a straight the car keeps
@@ -484,6 +503,10 @@ func step(input: DriveInput) -> void:
 	elif passengers.holds_wheel():
 		# Held for him at an angle (GDD 8.2): the one he was asked for.
 		wheel.hold_at(passengers.held_angle)
+	elif ghost_on_wheel():
+		# The Fib (GDD 11.3): "A ghost left hand holds the lane", bends and
+		# all, while his own hand is elsewhere.
+		wheel.hold_at(_lane_keeping_angle())
 	elif wheel.locked and _hook_keeps_lane and curve_k == 0.0:
 		wheel.hold_at(_lane_keeping_angle())
 	wheel.tremor = nerves.tremor_offset
@@ -573,6 +596,7 @@ func step(input: DriveInput) -> void:
 	else:
 		effects.step(DT)
 		items.step(DT)
+		_step_heckles()
 		_step_passenger()
 		_feed_nerves()
 		nerves.step(DT)
@@ -719,6 +743,8 @@ func _end_leg() -> void:
 	_clear_weather()
 	curve_k = 0.0
 	encounter.stop()
+	heckles.end_leg()
+	_announce_heckles()
 	if suspicion.watching:
 		suspicion.end_watch()
 		_emit("suspicion_changed", {"value": 0.0, "watching": false})
@@ -831,7 +857,7 @@ func _take_fork() -> void:
 	_side = side
 	var branch: Dictionary = run.take_branch(side)
 	_keep_leg_start()
-	var plan: Dictionary = RunGenerator.plan(data, branch, run.act)
+	var plan: Dictionary = _plan_the_leg(branch)
 	if forked:
 		_emit("fork_taken", {
 			"act": run.act,
@@ -877,6 +903,8 @@ func exit_slip() -> Vector2:
 
 func _enter_stop() -> void:
 	run.enter_stop()
+	heckles.end_leg()
+	_announce_heckles()
 	var minutes: float = GameData.as_float(data.record("stops", run.stop).get("clock_min")) if data.has_record("stops", run.stop) else 0.0
 	clock.add_minutes(minutes)
 	# The shady guy is there after a leg that lit no lamp (GDD 9.6), unless
@@ -1055,7 +1083,7 @@ func _rewind() -> void:
 		items.set_telling_state(GameData.as_dict(from.get("item_state")))
 		_meet_the_boss()
 	else:
-		var plan: Dictionary = RunGenerator.plan(data, run.branch, run.act)
+		var plan: Dictionary = _plan_the_leg(run.branch)
 		_set_stretch(plan)
 		items.set_telling_state(GameData.as_dict(from.get("item_state")))
 		_arm_exit()
@@ -1391,6 +1419,7 @@ func capture() -> Dictionary:
 		"boss_sign": run.boss_on_sign,
 		"call_answered": run.call_answered,
 		"rewinds": rewinds_left,
+		"twist": _leg_twist,
 		# For people: rounded. What is loaded are the exact bits below.
 		"clock_min": snappedf(clock.minutes, 0.001),
 		"cash": snappedf(cash, 0.001),
@@ -1476,7 +1505,9 @@ func _stand_at_the_stop(telling: Dictionary) -> void:
 	var bits: Dictionary = GameData.as_dict(telling.get("exact"))
 	if run.stage == RunState.Stage.STOP:
 		# At the stall of the leg he is on.
-		_set_stretch(RunGenerator.plan(data, run.branch, run.act), false)
+		# (Laid out with the Twist it had: the same road he drove to here.)
+		_leg_twist = GameData.as_dict(telling.get("twist"))
+		_set_stretch(RunGenerator.plan(data, run.branch, run.act, _leg_twist), false)
 		_exit = EXIT_BEHIND
 		_exit_at = leg.length - tuning.f("leg_tail")
 		_stall_at = _exit_at + tuning.f("exit_slip_length")
@@ -1955,6 +1986,15 @@ func snapshot() -> Dictionary:
 		"passenger_legs": passengers.legs_ridden,
 		"passenger_asleep": passengers.asleep(),
 		"passenger_aloud": passengers.aloud(),
+		# The Table (GDD 11.3): the heckle being said ("lead") or running
+		# ("open"), how far he has come with it, and the Fib's ghost hand.
+		"heckle": GameData.as_string(heckles.record.get("id")),
+		"heckle_type": GameData.as_string(heckles.record.get("type")),
+		"heckle_phase": heckles.phase_name(),
+		"heckle_left": heckles.window_left if heckles.phase == HeckleDirector.OPEN and heckles.window_left != INF else 0.0,
+		"heckle_progress": heckles.progress(),
+		"ghost_hand": heckles.ghost_holds,
+		"ghost_on_wheel": ghost_on_wheel(),
 		"passenger_awake_left": passengers.awake_left,
 		"passenger_drumming": passengers.drumming,
 		"tea_passed": passengers.passes_tea(),
@@ -2271,6 +2311,81 @@ func _anchor_moves() -> Dictionary:
 	return moves
 
 
+## The leg of a Telling he is taking, laid out: with the Twist a guest will
+## throw in, if this leg's heckles hold one (GDD 11.3).
+func _plan_the_leg(branch: Dictionary) -> Dictionary:
+	_leg_twist = {}
+	_ahead_then = {}
+	if not heckling:
+		heckles.end_leg()
+		return RunGenerator.plan(data, branch, run.act)
+	_leg_twist = heckles.plan_leg(rng, table, guests, run.act, GameData.as_string(branch.get("leg")), GameData.as_string(branch.get("modifier")))
+	var plan: Dictionary = RunGenerator.plan(data, branch, run.act, _leg_twist)
+	heckles.begin_leg(plan)
+	return plan
+
+
+## The Fib's ghost hand has the wheel: while it holds (GDD 11.3) and his own
+## hand, or his wrist, does not.
+func ghost_on_wheel() -> bool:
+	return heckles.ghost_holds and not hand.gripping and not _wrist_on_wheel
+
+
+## A heckle may begin now (GDD 11.3: "Never during an encounter or a
+## boss"): on a leg of a Telling, before its Exit opens, while the leg's
+## encounter is not at him (D-061).
+func _heckle_free() -> bool:
+	return heckling and run.active and run.stage == RunState.Stage.LEG and leg.active and not boss.active \
+			and _exit == EXIT_AHEAD and not wrecked and not pulled_over and not encounter.pressing()
+
+
+## One tick of the Table (GDD 13.3, step 11), before the Nerves are stepped:
+## what it has seen him do, what it says, and what that does.
+func _step_heckles() -> void:
+	if not run.active or not leg.active or boss.active:
+		return
+	heckles.in_gear = gate.gear
+	heckles.in_gripping = hand.gripping
+	heckles.in_straight = curve_k == 0.0
+	heckles.in_nerves = nerves.value
+	heckles.in_close_calls = collision.close_calls
+	heckles.in_horn = items.horn_blown
+	heckles.in_passed = _count_passed()
+	heckles.step(DT, car.s, _heckle_free())
+	if heckles.twist_begins:
+		leg.twist_begins()
+	if heckles.shower_begins > 0.0:
+		leg.begin_shower(heckles.shower_begins)
+	if leg.weather_changed:
+		# A shower has begun or ended: the rain is on the glass and the road.
+		items.raining = leg.raining
+		car.lat_tau_mult = _rain_response if leg.raining else 1.0
+	nerves.add(heckles.nerves)
+	cash = maxf(cash + heckles.cash, 0.0)
+	_announce_heckles()
+
+
+func _announce_heckles() -> void:
+	for event: Dictionary in heckles.events:
+		_announce(event)
+	heckles.events = []
+
+
+## The vehicles going his way that the car has passed since the last tick.
+func _count_passed() -> int:
+	var passed: int = 0
+	var ahead_now: Dictionary = {}
+	for vehicle: TrafficSim.Vehicle in traffic.vehicles:
+		if vehicle.direction < 0:
+			continue
+		var ahead: bool = vehicle.s > car.s
+		ahead_now[vehicle.id] = ahead
+		if not ahead and GameData.as_bool(_ahead_then.get(vehicle.id)):
+			passed += 1
+	_ahead_then = ahead_now
+	return passed
+
+
 ## One tick of whoever rides with him (GDD 13.3, step 11), before the Nerves
 ## are stepped: what they make of what he has just done, and their own time.
 func _step_passenger() -> void:
@@ -2323,6 +2438,7 @@ func _step_wheel_keys(input: DriveInput) -> void:
 func _use_control(ritual_id: String, direction: int) -> void:
 	var ritual: Dictionary = data.record("rituals", ritual_id)
 	items.complete(ritual, direction)
+	heckles.in_ritual = StringName(ritual_id)
 	_emit("ritual_completed", {"ritual": ritual_id, "anchor": GameData.as_string(ritual.get("anchor")), "direction": direction, "keypad": true})
 
 
@@ -2652,6 +2768,7 @@ func _complete_ritual() -> void:
 			_hand_out(items.handed)
 		if ritual_id == ItemSim.UNSTOW:
 			items.unstow_to(String(hand.anchor_id(hand.at_index)))
+	heckles.in_ritual = StringName(ritual_id)
 	_emit("ritual_completed", {
 		"ritual": ritual_id,
 		"anchor": String(hand.anchor_id(_active_anchor)),

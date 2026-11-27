@@ -239,3 +239,41 @@ table.inlaws.name,,THE IN-LAWS,true
 table.aunts.name,,THE AUNTS,true
 table.groom.name,,THE GROOM,true
 table.noor.name,,NOOR,true
+speaker.in_law,,In-law,true
+speaker.groom,,Groom,true
+heckle.children.twist.melons,Child,And a truck full of MELONS! And they all fell off!,true
+heckle.children.fib.1,Child,Both hands! You have to drive with BOTH hands!,true
+heckle.drivers.dare.close,Driver,"Tell them how close you cut it. Three of them, one after the other!",true
+heckle.drivers.dare.hands_off,Driver,"And on the straight you let go of the wheel. Go on, tell them!",true
+heckle.drivers.dare.pass,Driver,You passed three of them before I could count to ten!,true
+heckle.uncles.doubt.2,Uncle,With one hand. On that road. And we are to believe it.,true
+heckle.inlaws.question.1,In-law,"And you stayed calm, of course? The whole way?",true
+heckle.inlaws.question.2,In-law,"You are not one of those drivers who lean on the horn, are you?",true
+heckle.aunts.order.seeds,Aunt,Eat something. You never eat. Have some seeds.,true
+heckle.aunts.order.window,Aunt,That window! You will catch your death. Wind it.,true
+heckle.aunts.order.wipers,Aunt,Look at the state of that glass. Wipe it.,true
+heckle.groom.dare.1,Groom,"They say that car has a fourth gear, uncle. I have never seen it.",true
+heckle.groom.dare.2,Groom,"I would have passed them. Three, at least.",true
+heckle.groom.doubt.1,Groom,"Forgive me, uncle. But were you not afraid?",true
+heckle.groom.order.1,Groom,"You are shaking, uncle. Light one. Please.",true
+heckle.groom.order.2,Groom,"Sound the horn for us, uncle. For the wedding.",true
+heckle.guest.hajjiya.1,Old woman,"He was gentle as a lamb, this one. Were you not, my son?",true
+heckle.guest.hajjiya.2,Old woman,"Drink, my son. I told him then and I tell him now.",true
+heckle.guest.conscript.1,Soldier,He drove like my sergeant was behind us. That close. Three times!,true
+heckle.guest.conscript.2,Soldier,I slept through most of it. Was it really so hard?,true
+heckle.guest.drummer.1,Drummer,There was a wedding on the road that night too! I played for them from the window!,true
+heckle.guest.drummer.2,Drummer,He kept time on the wheel with me. No hands!,true
+heckle.guest.student.1,Student,And then it rained. I remember: my notes were ruined.,true
+heckle.guest.student.2,Student,He never once raised his voice. Or the horn. Is that not so?,true
+heckle.guest.apprentice.1,Boy,"We passed everybody, ustadh! Three at a time!",true
+heckle.guest.apprentice.2,Boy,"The wipers, ustadh! Show them how you do the wipers!",true
+hud.heckle,,"Heckle: %s, %s, %s s left, %s%%",false
+hud.heckle.twist,,Twist,false
+hud.heckle.dare,,Dare,false
+hud.heckle.doubt,,Doubt,false
+hud.heckle.question,,Question,false
+hud.heckle.order,,Order,false
+hud.heckle.fib,,the Fib,false
+hud.heckle.lead,,being said,false
+hud.heckle.open,,running,false
+hud.ghost_hand,,A ghost left hand is on the wheel,false

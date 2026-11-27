@@ -22,6 +22,9 @@ func _tell(table_id: String, telling_seed: int) -> void:
 	_events = []
 	_keep_lane = true
 	_input.clear()
+	# These tests are about what a Table's rules do; what its guests say on
+	# the way is T-HECKLE-01's, and is left out here.
+	_sim.heckling = false
 	_sim.begin_telling(table_id, telling_seed)
 	for event: Dictionary in _sim.drain_events():
 		_events.append(event)
@@ -1020,3 +1023,16 @@ func test_table_noor() -> void:
 			check(held_out > 0, "(told to the Drivers a fuel station holds out %d things, the refill among them)" % held_out)
 		else:
 			check_eq(held_out, 0, "at Noor's Table even a fuel station sells nothing and refills nothing")
+	# "Its stock is not held out" is what naming the services means, whatever
+	# they are: a Table that named the shop itself would have its stall open
+	# and its tray empty, refills and all.
+	var shops_only: TableRules = TableRules.new()
+	shops_only.services = PackedStringArray(["shop"])
+	_tell(BASE, 1)
+	_item("cigarettes").supply = 1
+	_sim.stop.begin("fuel_station", 1, false, 1.0, shops_only)
+	var on_the_tray: int = 0
+	for offer: Dictionary in _sim.stop.offers_view():
+		if offer["kind"] == StopSim.ITEM or offer["kind"] == StopSim.RESTOCK:
+			on_the_tray += 1
+	check_eq(on_the_tray, 0, "(a Table that names its services has no stock held out, at a stop it allows either)")

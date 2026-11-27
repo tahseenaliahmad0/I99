@@ -29,6 +29,8 @@ var _ghost_arm: MeshInstance3D
 var _ghost_arm_mesh: CapsuleMesh
 var _ghost_hand: Node3D
 var _ghost_from: Vector3 = Vector3.ZERO
+## Nine o'clock on the wheel's rim: where the Fib's ghost hand holds it.
+var _wheel_left: Vector3 = Vector3.ZERO
 ## anchor id -> where it is.
 var _anchor_pos: Dictionary = {}
 
@@ -49,6 +51,7 @@ func setup(data: GameData, factory: PlaceholderFactory, space: CabinSpace) -> vo
 	for prop: Dictionary in data.records("props"):
 		if GameData.as_string(prop.get("id")) == "left_sleeve":
 			_ghost_from = GameData.as_vec3(prop.get("pos"))
+	_wheel_left = Vector3(-tuning.f("wheel_radius"), 0.0, 0.0)
 	_ghost_arm = factory.make("ghost_arm") as MeshInstance3D
 	_ghost_hand = factory.make("ghost_hand")
 	var faint: float = tuning.f("ghost_alpha")
@@ -108,6 +111,10 @@ func apply(snapshot: Dictionary) -> void:
 	var moves: Dictionary = snapshot["anchor_moves"]
 	var ghost_progress: float = snapshot["ghost_progress"]
 	_show_ghost(str(snapshot["ghost_at"]), ghost_progress, moves)
+	if snapshot["ghost_hand"] and str(snapshot["ghost_at"]).is_empty():
+		# The Fib (GDD 11.3): "Both hands!" The ghost of his left hand is on
+		# the wheel, at nine o'clock.
+		_place_ghost(_wheel_left, 1.0)
 
 
 ## What he carries goes with the hand: the item's own placeholder, or a
@@ -139,7 +146,15 @@ func _show_ghost(anchor: String, progress: float, moves: Dictionary) -> void:
 		return
 	var to: Vector3 = GameData.as_vec3(moves[anchor]) if moves.has(anchor) else _anchor_pos[anchor]
 	# It passes through the control: a little beyond it at the end.
-	var at: Vector3 = _ghost_from.lerp(to, progress * 1.15)
+	_place_ghost(to, progress * 1.15)
+
+
+## The ghost arm from the empty sleeve `share` of the way to `to`.
+func _place_ghost(to: Vector3, share: float) -> void:
+	_ghost_hand.visible = true
+	if _ghost_arm != null:
+		_ghost_arm.visible = true
+	var at: Vector3 = _ghost_from.lerp(to, share)
 	_place_capsule(_ghost_arm, _ghost_arm_mesh, _ghost_from, at)
 	var along: Vector3 = at - _ghost_from
 	if along.length_squared() > 0.0:
