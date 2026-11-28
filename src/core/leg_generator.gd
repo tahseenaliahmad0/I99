@@ -320,6 +320,49 @@ static func generate_road(data: GameData, road: Dictionary, act: int, road_seed:
 	return generator._generate(GameData.as_string(road.get("id")), road_seed)
 
 
+## Where a plan's vehicles are for a player who holds fourth gear from the
+## start, as rule 6 works it out (the plan itself carries only the line that
+## was kept open through them): { "sound": the traffic stands as worked out,
+## "blocks": for each of the plan's spawns, in their order, the stretches of
+## his progress during which it is beside him, [ [lane, from, to], ... ] }.
+## For tests and tools.
+static func skill_blocks(data: GameData, plan: Dictionary) -> Dictionary:
+	var generator: LegGenerator = LegGenerator.new()
+	generator._setup(data, data.record("legs", GameData.as_string(plan.get("leg"))), GameData.as_int(plan.get("act"), 1), GameData.as_string(plan.get("modifier")))
+	generator._skill = true
+	generator._melons = GameData.as_dict(plan.get("melons"))
+	for entry: Variant in GameData.as_array(plan.get("spawns")):
+		var spawn: Dictionary = GameData.as_dict(entry)
+		var planned: Planned = Planned.new()
+		var type: Dictionary = data.record("vehicles", GameData.as_string(spawn.get("vehicle")))
+		planned.vehicle = GameData.as_string(spawn.get("vehicle"))
+		planned.lane = GameData.as_int(spawn.get("lane"))
+		planned.change_to = GameData.as_int(spawn.get("change_to"), planned.lane)
+		planned.change_gap = GameData.as_float(spawn.get("change_gap"))
+		planned.late = GameData.as_bool(spawn.get("late"))
+		planned.direction = GameData.as_int(spawn.get("direction"), 1)
+		planned.role = GameData.as_string(spawn.get("role"))
+		planned.half_length = GameData.as_float(type.get("length")) * 0.5
+		planned.half_width = GameData.as_float(type.get("width")) * 0.5
+		planned.speed = GameData.as_float(spawn.get("speed"))
+		planned.closing = 1.0 - float(planned.direction) * planned.speed / generator._par
+		planned.trigger = GameData.as_float(spawn.get("trigger_s"))
+		planned.ahead = GameData.as_float(spawn.get("ahead"))
+		planned.placed = true
+		generator._refresh(planned)
+		generator._planned.append(planned)
+	generator._skill_all_stale()
+	generator._resolve_skill()
+	var blocks: Array = []
+	for planned: Planned in generator._planned:
+		var own: Array = []
+		if generator._skill_sound:
+			for block: Vector3 in generator._blocks_of(planned, true):
+				own.append([int(block.x), block.y, block.z])
+		blocks.append(own)
+	return {"sound": generator._skill_sound, "blocks": blocks}
+
+
 ## The plan as text, the same for the same plan on every machine (T-GEN-02).
 static func to_text(plan: Dictionary) -> String:
 	return JSON.stringify(plan, "", true)

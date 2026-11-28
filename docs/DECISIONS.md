@@ -3261,18 +3261,27 @@ GDD 4.1 (the Touch column), 17.4, and D-016.
 
 - **The owner:** "I was not aware the honk was meant to be used this
   way, the prologue only mentions 'honk for your friend'."
-- **Built.** (1) The guide (D-072) has two more rows. When the nearest
-  vehicle the horn reaches (ahead in his lane, within `horn_range`) is
-  slower than his gear drives: "sound the horn" if it would move over
-  now (it yields and a lane beside it is free), "change lane, or brake"
-  if it would not (a truck, a bus, or nothing free beside it). Nothing
-  once it has begun to move. `DriveSim.held_up()`; the horn's own rule
-  was split into `ItemSim.horn_reaches` and `horn_lane_for` so that the
-  guide and the horn cannot disagree. (2) The label under the pointer
-  says what the horn does, and what each of the other nine controls
-  that are always in the car does (`hint.effect.*`): D-072 had done
-  this for items only. (3) The prologue's fourth step adds: "On the
-  road, the horn moves cars and taxis out of your lane."
-- **Tests.** T-ITEM-BASE +50 checks: what holds him up by kind of
-  vehicle, range, speed and gear; the loud horn; the guide's rows; the
-  words under the pointer.
+- **Built.** (1) The guide (D-072) has two more rows, about the nearest
+  vehicle the horn reaches (ahead in his lane, within `horn_range`) that
+  is slower than his gear drives. If the horn would move it now (it
+  yields and a lane beside it is free): "sound the horn". If it would
+  not (a truck, a bus, or nothing free beside it) and he has come down
+  to its speed behind it, give or take `guide_stuck_kmh` 5: "the horn
+  will not move it: change lane, or brake". Nothing once the vehicle has
+  begun to move over. `DriveSim.held_up()`; the horn's own rule was split
+  into `ItemSim.horn_reaches` and `horn_lane_for` so that the guide and
+  the horn cannot disagree. (2) The label under the pointer says what
+  the horn does, and what each of the other nine controls that are
+  always in the car does (`hint.effect.*`): D-072 had done this for
+  items only. (3) The prologue's fourth step adds: "On the road, the
+  horn moves cars and taxis out of your lane."
+- **Kept short, by the owner's principle.** As first built, the rows
+  came up whenever anything slower was within 40 m: on a Rush hour that
+  was 19 of 25 frames sampled, a line that only repeats. Now the horn's
+  row is a lesson: it is shown until the horn has moved
+  `guide_horn_lessons` 2 vehicles for him that night, and then no more.
+  The other row is shown only while he is stuck (8 of 25 frames for a
+  novice bot boxed in on the same road, none while he is moving freely).
+- **Tests.** T-ITEM-BASE +64 checks: what holds him up by kind of
+  vehicle, range, speed and gear; stuck or only closing; the loud horn;
+  the lesson and its end; the guide's rows; the words under the pointer.

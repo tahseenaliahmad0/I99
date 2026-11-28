@@ -568,25 +568,63 @@ func _check_held_up() -> void:
 	check(not _guide_says("guide.held_up.around"), "and not to go around")
 	check(data.has_line("guide.held_up.horn") and data.has_line("guide.held_up.around"), "both of the guide's rows have their words")
 	# Once it is on its way out, the guide is quiet.
+	check_eq(_sim.items.horn_moved, 0, "(the horn has moved nobody yet)")
 	_complete("horn")
+	check_eq(_sim.items.horn_moved, 1, "the horn moved one vehicle, and that is counted")
 	check_eq(_sim.held_up(), DriveSim.HELD_NOT, "a car that has begun to move over no longer holds him up")
 	_run(tuning.f("horn_yield_time") + 0.1)
 	check(car.lane != 1, "(it moved over)")
 	check_eq(_sim.held_up(), DriveSim.HELD_NOT, "and nothing does once it is out of his lane")
 
-	# A truck does not move for the horn; nor does a car with nowhere to go.
+	# What the horn is for is said until it has moved guide_horn_lessons
+	# vehicles for him, and then no more: a line that came up at every car
+	# would be the routine the owner wants out of the game.
+	var lessons: int = tuning.i("guide_horn_lessons")
+	check(lessons >= 1 and lessons <= 3, "the lesson is a short one (%d)" % lessons)
 	_new_sim()
 	_cruise(3, 1)
+	for lesson: int in lessons:
+		var pupil: TrafficSim.Vehicle = _sim.traffic.spawn(&"car", 1, _sim.car.s + range_m * 0.5, third - 10.0)
+		check(_guide_says("guide.held_up.horn"), "behind car %d the guide still says to sound the horn" % (lesson + 1))
+		_complete("horn")
+		_run(tuning.f("horn_yield_time") + 0.1)
+		_sim.traffic.remove(pupil)
+	_sim.traffic.spawn(&"car", 1, _sim.car.s + range_m * 0.5, third - 10.0)
+	check_eq(_sim.held_up(), DriveSim.HELD_YIELDS, "after that a slower car ahead is still one the horn would move")
+	check(GameData.as_bool(_sim.snapshot()["horn_taught"]), "but he has been taught")
+	check(not _guide_says("guide.held_up"), "and the guide says nothing more of it")
+	# A honk that moves nobody teaches nothing.
+	_new_sim()
+	_cruise(3, 1)
+	_complete("horn")
 	_sim.traffic.spawn(&"truck", 1, _sim.car.s + range_m * 0.5, third - 30.0)
-	check_eq(_sim.held_up(), DriveSim.HELD_STAYS, "a truck ahead: the horn would not move it")
+	_complete("horn")
+	check_eq(_sim.items.horn_moved, 0, "a honk at an empty road or at a truck moves nobody")
+	check(not GameData.as_bool(_sim.snapshot()["horn_taught"]), "and teaches nothing")
+
+	# A truck does not move for the horn; nor does a car with nowhere to go.
+	# The guide says so only once he is stuck behind it: down to its speed,
+	# give or take guide_stuck_kmh. Coming up on it fast he needs no telling.
+	var stuck: float = tuning.f("guide_stuck_kmh")
+	_new_sim()
+	_cruise(3, 1)
+	var truck: TrafficSim.Vehicle = _sim.traffic.spawn(&"truck", 1, _sim.car.s + range_m * 0.5, third - 30.0)
+	check_eq(_sim.held_up(), DriveSim.HELD_NOT, "a truck he is coming up on at speed: not stuck yet, nothing said")
+	check(not _guide_says("guide.held_up"), "(the guide is quiet)")
+	_sim.car.speed = truck.speed + stuck + 0.5
+	check_eq(_sim.held_up(), DriveSim.HELD_NOT, "just over guide_stuck_kmh faster than it: not yet")
+	_sim.car.speed = truck.speed + stuck - 0.5
+	check_eq(_sim.held_up(), DriveSim.HELD_STAYS, "down to its speed behind it: stuck, and the horn would not move it")
 	check(_guide_says("guide.held_up.around"), "the guide says to go around or brake")
 	check(not _guide_says("guide.held_up.horn"), "and not to sound the horn")
 	_new_sim()
 	_cruise(3, 1)
-	_sim.traffic.spawn(&"car", 1, _sim.car.s + 20.0, third - 10.0)
+	var boxed: TrafficSim.Vehicle = _sim.traffic.spawn(&"car", 1, _sim.car.s + 20.0, third - 10.0)
 	_sim.traffic.spawn(&"truck", 0, _sim.car.s + 20.0, third - 10.0)
 	_sim.traffic.spawn(&"truck", 2, _sim.car.s + 20.0, third - 10.0)
-	check_eq(_sim.held_up(), DriveSim.HELD_STAYS, "a car with both next lanes taken would not move either")
+	check_eq(_sim.held_up(), DriveSim.HELD_NOT, "a car with both next lanes taken would not move: nothing said while he closes on it")
+	_sim.car.speed = boxed.speed
+	check_eq(_sim.held_up(), DriveSim.HELD_STAYS, "stuck behind it, the guide says the horn is no use")
 
 	# A loud horn moves the truck too (GDD 7.6).
 	_new_sim()

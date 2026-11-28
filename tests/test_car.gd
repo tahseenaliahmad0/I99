@@ -774,6 +774,8 @@ func _check_the_road_leans() -> void:
 	var seen_left: bool = false
 	var flat_share: float = 0.0
 	var roads: int = 0
+	var strengths: Dictionary = {}
+	var ways: Dictionary = {}
 	for leg: String in ["open_road", "rush", "rain"]:
 		for seed_value: int in range(1, 9):
 			var plan: Dictionary = LegGenerator.generate(data, leg, 1, seed_value, "")
@@ -797,13 +799,35 @@ func _check_the_road_leans() -> void:
 				sound = sound and not (signf(lean) == last and s - at < shortest * 0.5)
 				seen_right = seen_right or lean > 0.0
 				seen_left = seen_left or lean < 0.0
+				strengths[absf(lean)] = true
 				last = signf(lean)
 				at = s + long
 				leaning += long
 			check(sound, "%s, seed %d: its leaning stretches are in order, of the lengths and leans tuning allows, after a flat start" % [leg, seed_value])
 			flat_share += 1.0 - leaning / length
 			check_eq(JSON.stringify(LegGenerator.generate(data, leg, 1, seed_value, "")["cambers"]), JSON.stringify(plan["cambers"]), "the same seed gives the same leans")
+			ways[JSON.stringify(plan["cambers"])] = true
 	check(seen_right and seen_left, "among %d roads some stretches lean right and some left" % roads)
+	check(strengths.size() >= 2 and leans.size() >= 2, "and not every lean is as strong as every other (%d strengths of %d)" % [strengths.size(), leans.size()])
+	check(ways.size() >= 8, "another seed gives a road that leans another way (%d ways among 8 seeds)" % ways.size())
+	# What a boss has reserved is flat, whatever would have leaned there.
+	var kept_clear: int = 0
+	for road_seed: int in range(1, 13):
+		var open: Array = LegGenerator.lay_cambers(tuning, road_seed, 2500.0, 2500.0)
+		var held: Array = LegGenerator.lay_cambers(tuning, road_seed, 2500.0, 2500.0, [{"kind": "x", "s": 600.0, "length": 500.0, "lane": 1}])
+		var leaned_there: bool = false
+		for entry: Variant in open:
+			var stretch: Dictionary = entry
+			if GameData.as_float(stretch["s"]) < 1100.0 and GameData.as_float(stretch["s"]) + GameData.as_float(stretch["length"]) > 600.0:
+				leaned_there = true
+		if not leaned_there:
+			continue
+		kept_clear += 1
+		for entry: Variant in held:
+			var stretch: Dictionary = entry
+			check(GameData.as_float(stretch["s"]) >= 1100.0 or GameData.as_float(stretch["s"]) + GameData.as_float(stretch["length"]) <= 600.0,
+					"seed %d: no stretch leans where a boss has reserved the road" % road_seed)
+	check(kept_clear >= 4, "(on %d of 12 roads something would have leaned there)" % kept_clear)
 	check_between(flat_share / float(maxi(roads, 1)), 0.25, 0.75, "and a good part of the road is flat")
 	var set_piece: Dictionary = BossSim.plan(data, BossSim.STORM, "", 3)
 	check(set_piece.has("cambers") and GameData.as_array(set_piece["cambers"]).is_empty(), "the Storm's road is flat: the dust hides the horizon that tells a lean")
@@ -889,6 +913,18 @@ func _check_wake() -> void:
 		vehicle.x = sim.car.x + side * (vehicle.half_width + sim.car.half_width() + GameData.as_float(case[2]))
 		vehicle.s = sim.car.s + GameData.as_float(case[4]) + (vehicle.half_length + sim.car.length() * 0.5 if GameData.as_float(case[4]) > 0.0 else 0.0)
 		check_near(sim.wake_push(), GameData.as_float(case[5]), 0.000001, "wake: %s" % GameData.as_string(case[6]))
+	# Behind a truck in its own lane there is no wake to the side: it is the
+	# air beside it that pushes.
+	var following: DriveSim = DriveSim.new(fresh_data())
+	following.lean_everywhere = 0.0
+	following.gate.reset(3)
+	following.car.reset(1, 3)
+	var ahead: TrafficSim.Vehicle = following.traffic.spawn(&"truck", 1, 0.0, third - full)
+	ahead.s = following.car.s + ahead.half_length + following.car.length() * 0.5 + reach * 0.5
+	check_near(following.wake_push(), 0.0, 0.000001, "wake: straight behind a truck, none")
+	ahead.x = following.car.x + 0.5
+	check_near(following.wake_push(), 0.0, 0.000001, "wake: nor half a metre off its line, where a truck's tail is still in front of him")
+
 	# It is a drift like any other: it moves a car nobody steers, fades below
 	# drift_fade_speed, and is not felt from what has just hit him.
 	var road: DriveSim = DriveSim.new(fresh_data())

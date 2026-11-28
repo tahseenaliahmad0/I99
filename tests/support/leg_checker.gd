@@ -544,13 +544,47 @@ func drive(plan: Dictionary, dt: float) -> PackedStringArray:
 
 # --- The same leg in fourth gear (rule 6) ------------------------------------
 
+## Every vehicle that is level with the ghost, nose to tail, must be so
+## inside one of its blocks, in each lane where a car in that lane's middle
+## would touch it. One problem for each vehicle that is not.
+func _hold_to_blocks(traffic: TrafficSim, car: CarSim, blocks: Array, spawn_of: Dictionary, strays: Dictionary, a_tick: float) -> void:
+	for vehicle: TrafficSim.Vehicle in traffic.vehicles:
+		if vehicle.direction < 0 or strays.has(vehicle.id) or not spawn_of.has(vehicle.id):
+			continue
+		if absf(vehicle.s - car.s) >= vehicle.half_length + _car_half_length:
+			continue
+		var index: int = spawn_of[vehicle.id]
+		if index >= blocks.size():
+			continue
+		for lane: int in _lanes:
+			if absf(vehicle.x - _lane_x(lane)) >= vehicle.half_width + _car_half_width:
+				continue
+			var inside: bool = false
+			for entry: Variant in GameData.as_array(blocks[index]):
+				var block: Array = entry
+				if GameData.as_int(block[0]) == lane and car.s >= GameData.as_float(block[1]) - a_tick and car.s <= GameData.as_float(block[2]) + a_tick:
+					inside = true
+			if not inside:
+				strays[vehicle.id] = true
+				_problem("driven in fourth: a %s doing %s is beside him in lane %d at %s, where the plan's working-out does not have it (%s)" % [
+						vehicle.type_id, str(snappedf(vehicle.speed, 0.1)), lane, str(snappedf(car.s, 0.1)), str(blocks[index])])
+				break
+
+
 ## Runs the plan with the real LegSim, TrafficSim and Collision, a ghost car
 ## holding fourth gear's speed from the start along the plan's skill line.
 ## Problems: no skill line, a hit, a hazard run over, a vehicle that appears
-## on top of another, or a leg that does not end. A close call is no
-## problem: the skill line is the one that shaves them. The sheep's gap is timed for third gear (GDD 9.4), so a leg with a
+## on top of another or so close behind or ahead of one in its lane that
+## the two are a queue from the start (the plan has every vehicle appear
+## on open road), or a leg that does not end. A close call is no problem:
+## the skill line is the one that shaves them. The sheep's gap is timed for third gear (GDD 9.4), so a leg with a
 ## flock is driven as far as the point from which the sheep walk.
-func drive_skill(plan: Dictionary, dt: float) -> PackedStringArray:
+##
+## With `blocks` (LegGenerator.skill_blocks: where rule 6 has each vehicle
+## beside a player in fourth gear), every vehicle of the real traffic is
+## also held to them, wherever the ghost is: level with him in a lane only
+## where the working-out says it can be.
+func drive_skill(plan: Dictionary, dt: float, blocks: Array = []) -> PackedStringArray:
 	problems = []
 	_load_road(plan, true)
 	if _path_s.is_empty():
@@ -574,7 +608,10 @@ func drive_skill(plan: Dictionary, dt: float) -> PackedStringArray:
 	if not _flock.is_empty():
 		until = GameData.as_float(_flock.get("start_s"))
 	var seen: Dictionary = {}
-	var known: int = 0
+	# The place of each vehicle among the plan's spawns: they come onto the
+	# road in the plan's order.
+	var spawn_of: Dictionary = {}
+	var strays: Dictionary = {}
 	var guard: int = int(_length / (pace_ms * dt)) + 10
 	while car.s < until and guard > 0:
 		guard -= 1
@@ -584,18 +621,27 @@ func drive_skill(plan: Dictionary, dt: float) -> PackedStringArray:
 		car.x = _line_x(car.s)
 		car.speed = pace
 		leg.step_traffic(dt)
-		# Rule 4 holds in fourth too: nothing appears on top of anything.
-		if traffic.vehicles.size() != known:
-			known = traffic.vehicles.size()
-			for vehicle: TrafficSim.Vehicle in traffic.vehicles:
-				if seen.has(vehicle.id):
+		# Rule 4 holds in fourth too: nothing appears on top of anything, nor
+		# so near another that the two are a queue from the start. (Looked
+		# for on the tick a vehicle appears: one may appear on the tick
+		# another is taken off the road.)
+		for vehicle: TrafficSim.Vehicle in traffic.vehicles:
+			if seen.has(vehicle.id):
+				continue
+			seen[vehicle.id] = true
+			spawn_of[vehicle.id] = spawn_of.size()
+			for other: TrafficSim.Vehicle in traffic.vehicles:
+				if other == vehicle or other.direction != vehicle.direction \
+						or absf(other.x - vehicle.x) >= other.half_width + vehicle.half_width:
 					continue
-				seen[vehicle.id] = true
-				for other: TrafficSim.Vehicle in traffic.vehicles:
-					if other != vehicle and absf(other.s - vehicle.s) < other.half_length + vehicle.half_length \
-							and absf(other.x - vehicle.x) < other.half_width + vehicle.half_width:
-						_problem("driven in fourth: a %s appeared on top of a %s at %s" % [vehicle.type_id, other.type_id, str(snappedf(car.s, 0.1))])
+				var apart: float = absf(other.s - vehicle.s) - other.half_length - vehicle.half_length
+				if apart < 0.0:
+					_problem("driven in fourth: a %s appeared on top of a %s at %s" % [vehicle.type_id, other.type_id, str(snappedf(car.s, 0.1))])
+				elif apart < _tuning.f("traffic_follow_gap"):
+					_problem("driven in fourth: a %s appeared %s m from a %s in its lane at %s: a queue from the start" % [vehicle.type_id, str(snappedf(apart, 0.1)), other.type_id, str(snappedf(car.s, 0.1))])
 		traffic.step(dt, car.s, car.x, car.speed)
+		if not blocks.is_empty():
+			_hold_to_blocks(traffic, car, blocks, spawn_of, strays, pace_ms * dt)
 		collision.step(dt, car, traffic, _tuning.i("gen_skill_gear"))
 		if collision.hit != Collision.Hit.NONE:
 			var struck: String = "?"

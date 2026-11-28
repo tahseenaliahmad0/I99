@@ -2264,6 +2264,7 @@ func snapshot() -> Dictionary:
 		"wheel_held_left": passengers.hold_left,
 		"lever_blocked": passengers.blocks_lever(),
 		"held_up": held_up(),
+		"horn_taught": items.horn_moved >= tuning.i("guide_horn_lessons"),
 		"view_block_right": passengers.view_block_right(),
 		"blessed": passengers.blessed,
 		"hitcher": stop.hitcher if stopped else "",
@@ -2435,7 +2436,9 @@ func camber_now() -> float:
 ## What he is coming up behind, for the guide (D-074): the nearest vehicle
 ## the horn reaches (ahead in his lane, within horn_range) that is slower
 ## than his gear drives. HELD_YIELDS if the horn would move it out of his
-## way now, HELD_STAYS if not (a truck, a bus, or no free lane beside it).
+## way now. HELD_STAYS if it would not (a truck, a bus, or no free lane
+## beside it) and he has come down to its speed behind it: stuck, which is
+## when it is worth telling him why the horn is no use.
 func held_up() -> int:
 	if stopped:
 		return HELD_NOT
@@ -2448,7 +2451,9 @@ func held_up() -> int:
 	if nearest.changing or nearest.signalling != 0:
 		# Already on its way out.
 		return HELD_NOT
-	return HELD_YIELDS if items.horn_lane_for(nearest) != ItemSim.NO_LANE else HELD_STAYS
+	if items.horn_lane_for(nearest) != ItemSim.NO_LANE:
+		return HELD_YIELDS
+	return HELD_STAYS if car.speed <= nearest.speed + tuning.f("guide_stuck_kmh") else HELD_NOT
 
 
 func wake_push() -> float:

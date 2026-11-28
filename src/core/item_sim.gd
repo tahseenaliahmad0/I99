@@ -215,6 +215,9 @@ var indicator_left: float = 0.0
 var photo_used: bool = false
 ## True for the tick in which the horn was blown.
 var horn_blown: bool = false
+## Vehicles the horn has made move over since this cabin began: the guide
+## stops saying what the horn is for once he has seen it.
+var horn_moved: int = 0
 ## Cash earned or spent by ops this tick.
 var cash_delta: float = 0.0
 ## What he handed to the officer this tick: &"fine" (his licence) or
@@ -1396,6 +1399,7 @@ func _horn() -> void:
 		var target: int = horn_lane_for(vehicle)
 		if target != NO_LANE:
 			_traffic.begin_lane_change(vehicle, target, 0.0, _horn_yield_time)
+			horn_moved += 1
 
 
 ## True for a vehicle the horn is heard by: going his way, in his lane, its
