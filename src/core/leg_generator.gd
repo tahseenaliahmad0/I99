@@ -45,7 +45,7 @@ const MAX_CHANGES: int = 48
 const EPSILON: float = 0.0001
 ## For a search that may end in any lane.
 const ANY_LANE: int = -99
-## The two ways the traffic of fourth gear's frame is worked out (rule 5).
+## The two ways the traffic of fourth gear's frame is worked out (rule 6).
 const HELD: int = 0
 const FREE: int = 1
 
@@ -67,6 +67,7 @@ class Planned:
 	## Share of his own speed at which the player gains on it (0 or less: never).
 	var closing: float = 0.0
 	var half_length: float = 0.0
+	var half_width: float = 0.0
 	## Counts toward the leg's traffic density.
 	var counted: bool = true
 	## The stretches of the player's progress during which it is beside him:
@@ -81,7 +82,7 @@ class Planned:
 	var lanes_mask: int = 0
 	## The player's progress at which it is behind him for good.
 	var passed: float = 0.0
-	## The same three for a player who holds fourth gear (rule 5): the share
+	## The same three for a player who holds fourth gear (rule 6): the share
 	## of his speed at which he gains on it, its blocks, and where it is passed
 	## if nothing holds it up.
 	var skill_closing: float = 0.0
@@ -211,11 +212,11 @@ var _melons: Dictionary = {}
 var _motorcade: Dictionary = {}
 ## Blocks that are not vehicles (hazards, chicanes, the flock, melons): (lane, from, to).
 var _fixed: Array[Vector3] = []
-## The planned line of rule 3 (third gear) and the skill line of rule 5
+## The planned line of rule 3 (third gear) and the skill line of rule 6
 ## (fourth gear).
 var _line: Line = Line.new()
 var _skill_line: Line = Line.new()
-## Rule 5 holds on this road: never a sealed wall in fourth (D-074). Not on
+## Rule 6 holds on this road: never a sealed wall in fourth (D-074). Not on
 ## the two-lane road nor behind the Motorcade, whose hold-up is the leg.
 var _skill: bool = false
 var _skill_pace: float = 0.0
@@ -232,8 +233,10 @@ var _skill_sound: bool = true
 var _skill_stale: int = 0
 var _skill_lanes: Array[Array] = []
 var _skill_lane_sound: PackedByteArray = PackedByteArray()
-## Half the length of the longest vehicle there is.
+## Half the length of the longest vehicle there is, and half the width of
+## the widest.
 var _longest_half: float = 0.0
+var _widest_half: float = 0.0
 ## Blocks that are not vehicles and differ between the frames (the melons lie
 ## where the truck was when he came near it): those of third gear, and those
 ## of fourth, which are worked out with its traffic.
@@ -276,7 +279,7 @@ var _late_share: float = 0.0
 ##     "flock", "melons", "motorcade": {} or what that encounter needs,
 ##     "path":    [ [s, lane], ... ]  a line through the leg that meets nothing,
 ##     "skill_path": the same for a player who holds fourth gear from the
-##                   start (rule 5, D-074): it touches nothing, but passes
+##                   start (rule 6, D-074): it touches nothing, but passes
 ##                   closer and changes lane in less road. [] on a road
 ##                   where the rule does not hold (two-lane, the Motorcade) }
 ##
@@ -305,7 +308,7 @@ static func generate(data: GameData, leg_id: String, act: int, leg_seed: int, mo
 ## no beat is laid in one, no vehicle is beside him in one, and the planned
 ## line runs through it in `lane`.
 ##
-## Rule 5 is not kept on such a road, and its plan carries no skill line:
+## Rule 6 is not kept on such a road, and its plan carries no skill line:
 ## the boss does with the traffic what it will (Dawn thins it, and has it
 ## wait at the last checkpoint), and the traffic of fourth gear's frame
 ## does not survive that as the planned line of third gear does.
@@ -354,8 +357,10 @@ func _setup(data: GameData, leg: Dictionary, act: int, modifier_id: String) -> v
 	_skill_margin = _tuning.f("gen_skill_margin")
 	_follow_gap = _tuning.f("traffic_follow_gap")
 	_longest_half = 0.0
+	_widest_half = 0.0
 	for type: Dictionary in _data.records("vehicles"):
 		_longest_half = maxf(_longest_half, GameData.as_float(type.get("length")) * 0.5)
+		_widest_half = maxf(_widest_half, GameData.as_float(type.get("width")) * 0.5)
 	_line = Line.new()
 	_line.change = _change_length
 	_skill_line = Line.new()
@@ -382,7 +387,7 @@ func _generate(leg_id: String, leg_seed: int) -> Dictionary:
 	var kind: String = GameData.as_string(GameData.as_dict(_leg.get("special")).get("kind"))
 	# Two-lane and Motorcade take their traffic from their encounter (GDD 9.3).
 	_density_goal = 0 if kind == "two_lane" or kind == "motorcade" else _own_density()
-	# Rule 5 is about traffic he can be stuck in. On those two roads the
+	# Rule 6 is about traffic he can be stuck in. On those two roads the
 	# hold-up is the encounter itself (the gap in what comes the other way;
 	# the side road).
 	_skill = kind != "two_lane" and kind != "motorcade" and not _own_road
@@ -605,7 +610,7 @@ func _draw() -> bool:
 		_add_crosswind()
 		if not _match_density(kind):
 			return false
-	# The whole leg once more, from scratch: rule 3, and rule 5.
+	# The whole leg once more, from scratch: rule 3, and rule 6.
 	if not _whole_lines():
 		return false
 	if kind == "motorcade" and not _detour:
@@ -985,6 +990,7 @@ func _plan_vehicle(vehicle: String, lane: int, speed: float, meet: float, direct
 	planned.change_to = lane
 	planned.direction = direction
 	planned.half_length = GameData.as_float(_data.record("vehicles", vehicle).get("length")) * 0.5
+	planned.half_width = GameData.as_float(_data.record("vehicles", vehicle).get("width")) * 0.5
 	_set_speed(planned, speed, meet)
 	return planned
 
@@ -1030,6 +1036,7 @@ func _plan_fast(vehicle: String, lane: int, speed: float, trigger: float, ahead:
 	planned.lane = lane
 	planned.change_to = lane
 	planned.half_length = GameData.as_float(_data.record("vehicles", vehicle).get("length")) * 0.5
+	planned.half_width = GameData.as_float(_data.record("vehicles", vehicle).get("width")) * 0.5
 	planned.speed = speed
 	planned.closing = 1.0 - speed / _par
 	planned.trigger = trigger
@@ -1246,6 +1253,17 @@ func _blocks_of(planned: Planned, skill: bool = false) -> Array[Vector3]:
 	if planned.changes_lane():
 		var change_from: float = _change_start(planned, skill)
 		var change_to: float = _change_end(planned, skill)
+		if skill:
+			# The skill line may run where the vehicle is not: in the lane it
+			# leaves once it is clear of a car in that lane's middle, and in
+			# the lane it moves to until it is nearly beside one there. It
+			# signals, then moves across steadily (TrafficSim).
+			var signal_time: float = _late_signal_time if planned.late else _signal_time
+			var moves_from: float = change_from + signal_time * _skill_ms
+			var across: float = absf(_lane_center(planned.change_to) - _lane_center(planned.lane))
+			var beside: float = planned.half_width + _tuning.f("car_width") * 0.5 + _tuning.f("gen_skill_side_margin")
+			change_to = moves_from + clampf(beside / across, 0.0, 1.0) * _change_time * _skill_ms
+			change_from = moves_from + clampf((across - beside) / across, 0.0, 1.0) * _change_time * _skill_ms
 		if minf(to, change_to) > from:
 			out.append(Vector3(float(planned.lane), from, minf(to, change_to)))
 		out.append(Vector3(float(planned.change_to), maxf(from, change_from), to))
@@ -1788,7 +1806,7 @@ func _add_filler(planned: Planned) -> bool:
 		# It is on the planned line: keep it only if the line can go around it.
 		var span: Vector2 = _blocks_span(_planned.size() - 1, _fixed.size())
 		kept = _repair_path(_line, span.x, span.y, false)
-	# And only if fourth gear still has a way through (rule 5).
+	# And only if fourth gear still has a way through (rule 6).
 	if not kept or not _skill_holds(false):
 		_planned.pop_back()
 		planned.placed = false
@@ -1896,7 +1914,7 @@ func _draw_fast(types: Array[Dictionary]) -> Planned:
 # --- Rule 3: never a wall ----------------------------------------------------
 
 ## Both lines over the whole leg, from scratch. False if either has no way
-## through: a wall in third (rule 3) or a sealed wall in fourth (rule 5).
+## through: a wall in third (rule 3) or a sealed wall in fourth (rule 6).
 func _whole_lines() -> bool:
 	var path: Array = _search(_line, 0.0, _start_lane, _leg_length, ANY_LANE)
 	if path.is_empty():
@@ -1916,7 +1934,7 @@ func _whole_lines() -> bool:
 	return true
 
 
-# --- Rule 5: never a sealed wall in fourth (D-074) ---------------------------
+# --- Rule 6: never a sealed wall in fourth (D-074) ---------------------------
 #
 # A player who holds fourth gear meets the plan's vehicles at other places,
 # and meets some that third gear never reaches: the ones faster than third
@@ -1941,10 +1959,13 @@ func _whole_lines() -> bool:
 # its block runs from where he is level with it in the one to where he is
 # past it in the other.
 #
+# In the lane it moves into, such a vehicle joins the queue where it comes
+# across (HELD; in FREE it is not there): what is behind it there may be
+# held up by it.
+#
 # What that does not cover is kept from happening: no vehicle may appear
-# within the clearance of where another can be then; one that changes lane
-# must itself run free until he is past it, and must stay clear of every
-# vehicle of the lane it moves into.
+# within the clearance of where another can be then, nor move over into
+# one; and one that changes lane must itself run free until he is past it.
 
 ## True for a vehicle that keeps its lane, going his way.
 func _in_skill_lane(planned: Planned) -> bool:
@@ -1992,11 +2013,15 @@ func _skill_reaches(planned: Planned, gap: float, model: int) -> float:
 
 
 ## Where, from `from` on, `follower` comes up behind `leader`, the vehicle
-## ahead of it in its lane: the first point at which it is _held_back
-## behind where the leader is.
+## ahead of it in its lane.
 func _skill_catch_up(follower: Planned, leader: Planned, from: float, model: int) -> void:
-	follower.skill_catch[model] = INF
-	follower.skill_holder[model] = null
+	follower.skill_catch[model] = _skill_catch_at(follower, leader, from, model)
+	follower.skill_holder[model] = leader if follower.skill_catch[model] < INF else null
+
+
+## His progress, from `from` on, at which `follower` is first _held_back
+## behind where `leader` is (INF: never).
+func _skill_catch_at(follower: Planned, leader: Planned, from: float, model: int) -> float:
 	var offset: float = _held_back(follower, leader)
 	var vehicle: Planned = leader
 	var piece_from: float = maxf(from, maxf(follower.trigger, leader.trigger))
@@ -2010,20 +2035,39 @@ func _skill_catch_up(follower: Planned, leader: Planned, from: float, model: int
 					- follower.ahead - follower.skill_closing * follower.trigger) / gaining
 			at = maxf(at, piece_from)
 			if at < piece_to:
-				follower.skill_catch[model] = at
-				follower.skill_holder[model] = leader
-				return
+				return at
 		if vehicle.skill_holder[model] == null:
-			return
+			break
 		offset += _held_back(vehicle, vehicle.skill_holder[model])
 		piece_from = maxf(piece_from, piece_to)
 		vehicle = vehicle.skill_holder[model]
+	return INF
 
 
-static func _by_appearance(a: Planned, b: Planned) -> bool:
-	if a.trigger != b.trigger:
-		return a.trigger < b.trigger
-	return a.ahead > b.ahead
+## Entries of a lane's queue, [progress at which it is there, how far ahead
+## it is then, the vehicle, true if it comes in from the next lane]: in the
+## order they come.
+static func _by_entry(a: Array, b: Array) -> bool:
+	var a_at: float = a[0]
+	var b_at: float = b[0]
+	if a_at != b_at:
+		return a_at < b_at
+	var a_gap: float = a[1]
+	var b_gap: float = b[1]
+	return a_gap > b_gap
+
+
+## His progress in fourth gear from which a vehicle that changes lane is in
+## the way of the vehicles of the lane it moves into: when it has moved far
+## enough across to be in front of the widest of them (INF: it never moves).
+func _skill_joins_at(changer: Planned) -> float:
+	var change_from: float = _change_start(changer, true)
+	if change_from == INF:
+		return INF
+	var signal_time: float = _late_signal_time if changer.late else _signal_time
+	var across: float = absf(_lane_center(changer.change_to) - _lane_center(changer.lane))
+	var share: float = clampf((across - changer.half_width - _widest_half) / across, 0.0, 1.0)
+	return change_from + (signal_time + share * _change_time) * _skill_ms
 
 
 ## The traffic of the lanes a vehicle is ever in has changed.
@@ -2073,7 +2117,7 @@ func _resolve_skill() -> void:
 	_skill_sound = true
 	for lane: int in _lanes:
 		if (stale & (1 << lane)) != 0:
-			_skill_lane_sound[lane] = 1 if _resolve_skill_lane(_skill_lanes[lane]) and _skill_changers_clear(changers, lane) else 0
+			_skill_lane_sound[lane] = 1 if _resolve_skill_lane(lane, changers) else 0
 		if _skill_lane_sound[lane] == 0:
 			_skill_sound = false
 	_skill_fixed = []
@@ -2104,27 +2148,32 @@ func _resolve_skill() -> void:
 				_skill_fixed.append(Vector3(float(strewn), first - melon_reach, last + melon_reach))
 
 
-## One lane of fourth gear's frame: `members` are the vehicles that begin
-## in it. False if one would appear on top of where another can be then, or
-## too near it, or if one that changes lane would not run free until he is
-## past it or it has left.
-func _resolve_skill_lane(members: Array) -> bool:
-	members.sort_custom(_by_appearance)
+## One lane of fourth gear's frame: the vehicles that begin in it, and those
+## of `changers` that move into it. False if one would appear on top of
+## where another can be then, or too near it, or move over into one; or if
+## one that changes lane would not run free until he is past it.
+func _resolve_skill_lane(lane: int, changers: Array[Planned]) -> bool:
+	var members: Array = _skill_lanes[lane]
+	var joiners: Array[Planned] = []
+	for changer: Planned in changers:
+		if changer.change_to == lane and _skill_joins_at(changer) < changer.skill_passed:
+			joiners.append(changer)
 	var leaving: bool = false
 	for entry: Variant in members:
 		var member: Planned = entry
 		if member.changes_lane():
 			leaving = true
-	if not _skill_queue(members, FREE):
+	var nobody: Array[Planned] = []
+	if not _skill_queue(members, nobody, FREE):
 		return false
-	if not leaving:
-		# Nothing leaves this lane: there is one way it can stand.
+	if not leaving and joiners.is_empty():
+		# Nothing leaves this lane or comes into it: it can stand one way only.
 		for entry: Variant in members:
 			var member: Planned = entry
 			member.skill_catch[HELD] = member.skill_catch[FREE]
 			member.skill_holder[HELD] = member.skill_holder[FREE]
 		return true
-	if not _skill_queue(members, HELD):
+	if not _skill_queue(members, joiners, HELD):
 		return false
 	for entry: Variant in members:
 		var member: Planned = entry
@@ -2134,90 +2183,71 @@ func _resolve_skill_lane(members: Array) -> bool:
 	return true
 
 
-## Queues the vehicles of a lane behind one another as they appear. FREE
-## leaves out those that change lane; HELD takes them to stay.
-func _skill_queue(members: Array, model: int) -> bool:
-	# The vehicles of the lane as they stand, the one furthest ahead first.
-	var order: Array[Planned] = []
+## Queues the vehicles of a lane behind one another as they come into it.
+## FREE leaves out those that change lane; HELD takes those that leave it to
+## stay, and takes in the `joiners` where each comes across.
+func _skill_queue(members: Array, joiners: Array[Planned], model: int) -> bool:
+	var entries: Array[Array] = []
 	for entry: Variant in members:
-		var joining: Planned = entry
-		if model == FREE and joining.changes_lane():
-			continue
+		var member: Planned = entry
+		if model == HELD or not member.changes_lane():
+			entries.append([member.trigger, member.ahead, member, false])
+	for joiner: Planned in joiners:
+		var joins_at: float = _skill_joins_at(joiner)
+		entries.append([joins_at, joiner.gap_in(joins_at, true), joiner, true])
+	entries.sort_custom(_by_entry)
+	# The vehicles of the lane as they stand, the one furthest ahead first;
+	# and which of them came in from the next lane.
+	var order: Array[Planned] = []
+	var joined: Array[Planned] = []
+	for entry: Array in entries:
+		var since: float = entry[0]
+		var ahead: float = entry[1]
+		var joining: Planned = entry[2]
+		var joins: bool = entry[3]
 		var at: int = order.size()
 		for index: int in order.size():
 			var other: Planned = order[index]
-			var need: float = other.half_length + joining.half_length + _clearance
-			var gap: float = _skill_gap(other, joining.trigger, model)
+			# One that appears keeps the clearance of the plan; one that
+			# moves over must only not move over into another.
+			var need: float = other.half_length + joining.half_length + (_min_gap if joins else _clearance)
+			var gap: float = _skill_gap(other, since, model)
 			# (In HELD the other may be anywhere up to where FREE has it.)
-			var gap_free: float = gap if model == FREE else _skill_gap(other, joining.trigger, FREE)
-			if joining.ahead > gap - need and joining.ahead < gap_free + need:
+			var gap_free: float = gap if model == FREE else _skill_gap(other, since, FREE)
+			if ahead > gap - need and ahead < gap_free + need:
 				return false
-			if at == order.size() and gap < joining.ahead:
+			if at == order.size() and gap < ahead:
 				at = index
-			if gap_free < joining.ahead - (joining.half_length + _longest_half + _clearance):
+			if gap_free < ahead - (joining.half_length + _longest_half + _clearance):
 				# This one is well behind it, and the rest are behind this one.
 				break
 		order.insert(at, joining)
+		if joins:
+			joined.append(joining)
 		# It, and what is behind it and not yet held up, may now be held up
 		# sooner: front to back, each against the one ahead of it. One that
 		# never comes up behind the one ahead, before or now, moves as it
 		# did, and so does everything behind it.
 		for index: int in range(maxi(at, 1), order.size()):
 			var follower: Planned = order[index]
-			if follower.skill_catch[model] <= joining.trigger:
+			if joined.has(follower):
+				# One that has moved over must run free until he is past it:
+				# then it moves as it did, whatever is ahead of it.
+				if _skill_catch_at(follower, order[index - 1], since, model) < follower.skill_passed:
+					return false
+				if index > at:
+					break
+				continue
+			if follower.skill_catch[model] <= since:
 				continue
 			var held_before: bool = follower.skill_holder[model] != null
-			_skill_catch_up(follower, order[index - 1], joining.trigger, model)
+			_skill_catch_up(follower, order[index - 1], since, model)
 			if index > at and not held_before and follower.skill_holder[model] == null:
 				break
 	return true
 
 
-## A vehicle that changes lane keeps clear of the vehicles of the lane it
-## moves into: do those that move into `lane`?
-func _skill_changers_clear(changers: Array[Planned], lane: int) -> bool:
-	for changer: Planned in changers:
-		if changer.change_to != lane:
-			continue
-		for entry: Variant in _skill_lanes[lane]:
-			var member: Planned = entry
-			if not member.changes_lane() and not _skill_keeps_clear(changer, member, lane):
-				return false
-	return true
-
-
-## Does a vehicle that changes lane stay the clearance away from `member`,
-## wherever that one can be, from the moment it begins to move into `lane`
-## until a player in fourth gear has passed the nearer of the two? (After
-## that the one behind him may do as it likes.)
-func _skill_keeps_clear(changer: Planned, member: Planned, lane: int) -> bool:
-	var need: float = changer.half_length + member.half_length + _clearance
-	var from: float = maxf(_enters(changer, lane, true), member.trigger)
-	var passed: float = _skill_reaches(member, -_reach(member, true), FREE)
-	var to: float = minf(minf(changer.skill_passed, passed), _leg_length)
-	if from > to:
-		return true
-	# Ahead of where it can be at most, or behind where it can be at least.
-	var model: int = FREE
-	var side: float = 1.0
-	if changer.gap_in(from, true) < _skill_gap(member, from, HELD):
-		model = HELD
-		side = -1.0
-	# The member's way is straight between the points where it, or one that
-	# holds it, is held up: the two are nearest at one of those or at an end.
-	var moments: PackedFloat64Array = PackedFloat64Array([from, to])
-	var vehicle: Planned = member
-	while vehicle.skill_holder[model] != null:
-		if vehicle.skill_catch[model] > from and vehicle.skill_catch[model] < to:
-			moments.append(vehicle.skill_catch[model])
-		vehicle = vehicle.skill_holder[model]
-	for at: float in moments:
-		if (changer.gap_in(at, true) - _skill_gap(member, at, model)) * side < need:
-			return false
-	return true
-
-
-## Rule 5 after the traffic has changed: it stands as the model has it, and
+## Rule 6 after the traffic has changed: it stands as the model has it, and
 ## the skill line is clear of it, or can be led around what now stands on it.
 ## False, with the line untouched, if not.
 func _skill_holds(try_whole: bool) -> bool:

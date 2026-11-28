@@ -3109,3 +3109,170 @@ GDD 4.1 (the Touch column), 17.4, and D-016.
   the game knows. The menu and the panel are checked by a scripted walk
   under Xvfb, not by a test.
 
+
+## D-074 (the owner, 2026-11-28) Wipers, drift from the road, and never a sealed wall in fourth
+
+- **Context.** After a first evening with dev mode the owner raised three
+  things "to discuss before changing anything": the wipers are needed far
+  too often; the drift that is always to the right "doesn't feel great";
+  "being stuck in traffic is no fun at all, maybe there should always be
+  enough gaps in the cars to cut between if you are good enough?" Options
+  were laid out with what other games do; the owner then decided each. The
+  three decisions change sentences of the GDD. Those sentences are amended
+  in `docs/GDD.md`, each marked "(amended by the owner, D-074)" with what
+  it said before: 4.6 (wipers), 5.4 (the crown, the 3.4 s sentence), 6.3
+  (stuck wiper), 9.1 (rain), 9.2 (a sixth rule), 12.5 (hands-off measure),
+  18 (T-GEN-04). It is the first time the GDD's text has been changed.
+- **A principle of the owner's, to keep for every design question after
+  this.** "It makes much more sense to have the danger coming from the road
+  so attention is required, not just routine ... overly repetitive tasks
+  ruin immersion if not careful, something to keep in mind as we solve
+  further design problems." A task whose only cost is that it comes round
+  again is a chore; what asks for his hand should be something he can see
+  coming and choose how to meet.
+
+### 1. Wipers
+
+- **Decided.** "Lengthen by 12-18, but a random amount in between, and
+  interpolate non-linear so it gets blurrier slower at the start before
+  ramping up."
+- **Built.** A sweep clears the glass for `wiper_clear_time` 15 s plus or
+  minus `wiper_clear_spread` 3 s, drawn anew at every sweep. The blur is
+  (time since the sweep / that length) to the power `wiper_blur_power`
+  2.5: 6% a third of the way through, 18% at half, 57% at four fifths. The
+  draw comes from the Telling's seed and the count of sweeps, not from a
+  stream of the simulation, so nothing else of a seed moves. A stuck wiper
+  gives 7 s (it was 3 of 6: half; now a little under half of the mean).
+- **The bot** sweeps when the blur reaches `bot_wipe_at_blur` 0.15, as a
+  player who waits until he notices.
+- **Tests brought to the rule** (none loosened: each holds the new numbers
+  as tightly as it held the old): T-LEG-03, T-FAULT-02, T-ITEM-BASE,
+  T-ADAPT-*, T-BOT-01. T-LEG-03's registry text says 12 to 18 s.
+
+### 2. Drift from the road
+
+- **Decided.** Of the four alternatives the owner took the third and the
+  fourth: drift from the road and not from the car, and a crown that
+  varies. Not taken: drift only while the hand is off the wheel; a wander.
+- **Built: the road leans by stretches.** A leg begins flat for
+  `camber_lead_m` 200 m. After that come stretches of `camber_length_m`
+  250 to 500 m, each flat, leaning right or leaning left
+  (`camber_weights` 40 : 35 : 25), a leaning one by 60%, 80% or all of
+  `crown_drift` (`camber_leans`). Two stretches running never lean the
+  same way. A lean comes on over `camber_ramp_m` 90 m, and the camera
+  rolls with it (`camber_view_roll` 2.5 degrees at a full lean): that is
+  its tell. The plan carries them as `cambers`, drawn from the leg's seed
+  by itself, so the traffic of a seed is what it was.
+- **Built: wake.** Beside a truck or a tanker the air pushes him away
+  from it by up to 0.45 m/s, beside a bus by 0.25 (`wake_push` on the
+  vehicle): full with no air between them, nothing at `wake_gap_m` 1.8 m;
+  fading over `wake_reach_m` 8 m before and after it; scaled by how fast
+  the two pass each other, full from `wake_full_closing_kmh` 40. A
+  vehicle that has just hit him does not also push him with its wake.
+- **What 3.4 s now means.** GDD 5.4 and 12.5 call 3.4 s hands-off "the
+  number that sets the feel". It is kept as the number of a straight that
+  leans fully: T-CAR-01 is unchanged and still exact. On a flat stretch
+  the car holds its lane; that is the point of the decision.
+- **Where the road does not lean.** The Storm, the Checkpoint and the
+  Arrival are flat (their pushes are their own). Dawn takes the leans of
+  its generated road. The prologue and plans made by hand in tests have
+  no `cambers` and lean fully right, as every road once did
+  (`DriveSim.road_camber`), so what was measured on them still is.
+  `DriveSim.lean_everywhere` lets a test put a known lean under the car.
+- **Tests.** T-CAR-05 holds the new rules (328 checks: the stretches, the
+  ramp, the view's roll, the wake by gap, reach and closing speed). Six
+  tests that had assumed a crown always to the right were brought to the
+  new rule; in one the wake pushed the car toward a rail after a hit,
+  which is how "a vehicle that has just hit him" came to be excepted.
+
+### 3. Never a sealed wall in fourth
+
+- **Decided.** "I agree with your skill-gap rule solution": never a wall
+  in third (rule 3, as it was), never a sealed wall in fourth.
+- **What was wrong.** Rule 3 keeps one lane open for a driver in third
+  gear. It says nothing of fourth, and fourth is where the game pays
+  (close calls, time banked). Measured on 420 legs generated as before:
+  in 124 there was no way through in fourth at all; in 237 more the
+  traffic of fourth gear could not be vouched for (below); in 59 there
+  was a way.
+- **Why fourth gear is another road.** A vehicle appears 300 m ahead when
+  he passes its trigger and then moves by the clock. Driven faster, he
+  pulls the vehicles toward him sooner: each is met somewhere else, a
+  beat's cluster is spread over hundreds of metres, and the vehicles
+  "faster than third gear", which third gear never reaches, are caught
+  after all. Those do not stay where a plan of free-running vehicles has
+  them: gaining on them slowly, he finds most of them queued behind
+  something slower (TrafficSim: within `traffic_follow_gap` of the
+  vehicle ahead, a vehicle takes its speed).
+- **Built: rule 6, in the generator.** For every leg of ordinary traffic
+  the generator works out the traffic as a player who holds fourth gear
+  from the start meets it, lane by lane: each vehicle runs free until it
+  is `traffic_follow_gap` behind the one ahead of it, and from there
+  keeps that distance. A vehicle that changes lane is in the way of
+  those behind it only until it has left, so each lane is worked out
+  twice, with those vehicles taken to stay (HELD) and taken never to be
+  there (FREE); every vehicle is somewhere between the two, and its
+  block runs from the one to the other. Through that traffic a second
+  line is kept open, the **skill line** (`skill_path` in the plan): it
+  keeps `gen_skill_margin` 2 m from a vehicle's ends where the planned
+  line keeps 6, and changes lane in `gen_skill_lane_change` 27 m (0.75 s
+  in fourth) where the planned line takes 30 m (1.08 s in third). A beat
+  or a vehicle that would close it is not placed. Also refused, because
+  the working-out does not cover them: a vehicle that would appear
+  within `gen_spawn_clearance` of where another can be then; a merging
+  vehicle that would be held up before he is past it, or that would
+  come within the clearance of a vehicle of the lane it moves into.
+  The melons are laid, for this line, where the truck is when a player
+  in fourth comes within `shed_gap_m` of it.
+- **Where the rule does not hold, and why.** The two-lane road and the
+  Motorcade: there the hold-up is the leg (GDD 9.3: the gap in what
+  comes the other way; the side road). A boss's road: Dawn thins its
+  traffic and has it wait at the last checkpoint, and the traffic of
+  fourth gear does not survive that as the planned line does. The sheep:
+  their gap is timed to be in a lane for third gear (GDD 9.4); in fourth
+  he is there before it is. A leg with a flock has a skill line, and the
+  test drives it as far as the point from which the sheep walk.
+- **What it promises and what it does not.** It promises that the plan
+  holds no sealed wall for a driver who has held fourth from the start.
+  As rule 3 for third gear, it is exact only for that driver: one who
+  has braked meets the traffic elsewhere again. In play it means that
+  walls across all lanes at fourth-gear speeds are no longer drawn, not
+  that every gap he finds is the one that was checked. For the gaps
+  that are not, there is the horn.
+- **The measure.** With the rule: 1,400 of 1,400 legs (200 seeds of each
+  of the seven kinds, modifiers among them) carry a skill line, and a
+  ghost in fourth gear on it, through the real LegSim, TrafficSim and
+  Collision, touches nothing. The planned line of third gear driven in
+  fourth runs into traffic on 140 of 140.
+- **Cost.** A leg takes about four times as long to generate: 5 to 50 ms
+  for most kinds, about 170 ms for a Rush hour of Act 3 (2 to 3 draws).
+  No leg of 570 fell back to sparse traffic. `gen_filler_tries` stays 12.
+- **Tests.** T-GEN-04 (new, registered with this decision): the ghost in
+  fourth on 40 seeds of each of the seven kinds, every modifier among
+  them; no skill line on the two excepted legs; the planned line driven
+  in fourth is blocked; a skill line with a cone or a wreck on it, of
+  the wrong shape, or missing, is caught. T-GEN-01's checker holds the
+  skill line's shape and that it runs over no hazard on all 4,500 legs.
+  Whether it clears the traffic is left to the driven check on purpose:
+  arithmetic on the plan alone would be a second copy of the generator's
+  own working-out, and the real traffic is the better judge.
+
+### 4. The horn
+
+- **The owner:** "I was not aware the honk was meant to be used this
+  way, the prologue only mentions 'honk for your friend'."
+- **Built.** (1) The guide (D-072) has two more rows. When the nearest
+  vehicle the horn reaches (ahead in his lane, within `horn_range`) is
+  slower than his gear drives: "sound the horn" if it would move over
+  now (it yields and a lane beside it is free), "change lane, or brake"
+  if it would not (a truck, a bus, or nothing free beside it). Nothing
+  once it has begun to move. `DriveSim.held_up()`; the horn's own rule
+  was split into `ItemSim.horn_reaches` and `horn_lane_for` so that the
+  guide and the horn cannot disagree. (2) The label under the pointer
+  says what the horn does, and what each of the other nine controls
+  that are always in the car does (`hint.effect.*`): D-072 had done
+  this for items only. (3) The prologue's fourth step adds: "On the
+  road, the horn moves cars and taxis out of your lane."
+- **Tests.** T-ITEM-BASE +50 checks: what holds him up by kind of
+  vehicle, range, speed and gear; the loud horn; the guide's rows; the
+  words under the pointer.

@@ -4,12 +4,12 @@ extends RefCounted
 ## shares no code with LegGenerator, only the plan's format.
 ##
 ##   check(plan)  every rule, worked out from the plan's numbers in the frame
-##                of a player who holds third gear's speed; of rule 5 (the
+##                of a player who holds third gear's speed; of rule 6 (the
 ##                skill line), what does not move: its shape and the hazards
 ##   drive(plan)  the same leg run by the real LegSim, TrafficSim and
 ##                Collision, with a ghost car that follows the plan's line
 ##   drive_skill(plan)  the same in fourth gear along the plan's skill line
-##                (rule 5, DECISIONS D-074: never a sealed wall in fourth)
+##                (rule 6, DECISIONS D-074: never a sealed wall in fourth)
 ##
 ## Both return a list of problems; an empty list means the leg is good.
 
@@ -250,7 +250,7 @@ func _check_calm(plan: Dictionary) -> void:
 
 # --- Rule 3: never a wall ----------------------------------------------------
 
-## Rule 5 (DECISIONS D-074: never a sealed wall in fourth). Where the rule
+## Rule 6 (DECISIONS D-074: never a sealed wall in fourth). Where the rule
 ## holds the plan carries a skill line: a line for a player who holds fourth
 ## gear from the start. Checked here is what stands still: the line's shape
 ## (it begins at the start, stays on his side of the road, changes one lane
@@ -264,19 +264,19 @@ func _check_skill_line(plan: Dictionary, leg: Dictionary) -> void:
 	if kind == "two_lane" or kind == "motorcade":
 		# The hold-up is the leg (GDD 9.3): the rule does not hold there.
 		if not line.is_empty():
-			_problem("rule 5: a skill line on a road where the rule does not hold")
+			_problem("rule 6: a skill line on a road where the rule does not hold")
 		return
 	if line.is_empty():
-		_problem("rule 5: the plan has no skill line")
+		_problem("rule 6: the plan has no skill line")
 		return
 	_load_road(plan, true)
 	if _path_lane[0] != GameData.as_int(plan.get("start_lane")):
-		_problem("rule 5: the skill line does not begin in the lane he starts in")
+		_problem("rule 6: the skill line does not begin in the lane he starts in")
 	for index: int in _path_s.size():
 		if _path_lane[index] == ONCOMING_LANE:
-			_problem("rule 5: the skill line crosses to the oncoming side at %s" % str(_path_s[index]))
-	_check_line_shape("rule 5")
-	_check_line_hazards("rule 5")
+			_problem("rule 6: the skill line crosses to the oncoming side at %s" % str(_path_s[index]))
+	_check_line_shape("rule 6")
+	_check_line_hazards("rule 6")
 	_load_road(plan)
 
 
@@ -542,7 +542,7 @@ func drive(plan: Dictionary, dt: float) -> PackedStringArray:
 	return problems
 
 
-# --- The same leg in fourth gear (rule 5) ------------------------------------
+# --- The same leg in fourth gear (rule 6) ------------------------------------
 
 ## Runs the plan with the real LegSim, TrafficSim and Collision, a ghost car
 ## holding fourth gear's speed from the start along the plan's skill line.
@@ -554,7 +554,7 @@ func drive_skill(plan: Dictionary, dt: float) -> PackedStringArray:
 	problems = []
 	_load_road(plan, true)
 	if _path_s.is_empty():
-		_problem("rule 5: the plan has no skill line")
+		_problem("rule 6: the plan has no skill line")
 		return problems
 	var pace: float = _tuning.fi("gear_speeds", _tuning.i("gen_skill_gear") - 1)
 	var pace_ms: float = pace * KMH_TO_MS

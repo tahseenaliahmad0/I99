@@ -158,7 +158,9 @@ func _check_checker_catches() -> void:
 
 	# Rule 3: a hazard put on the line.
 	var strewn: Dictionary = plan.duplicate(true)
-	GameData.as_array(strewn["hazards"]).append({"kind": "cone", "s": 1000.0, "x": _line_x_at(plan, 1000.0)})
+	# (Where the line is at that point, in a lane or between two.)
+	_checker.load_plan(plan)
+	GameData.as_array(strewn["hazards"]).append({"kind": "cone", "s": 1000.0, "x": _checker.line_x(1000.0)})
 	check(_caught(strewn, "rule 3"), "a cone on the line is caught (rule 3)")
 
 	# Rule 4: a vehicle that appears on top of another.
@@ -182,16 +184,6 @@ func _caught(plan: Dictionary, word: String) -> bool:
 		if problem.contains(word):
 			return true
 	return false
-
-
-## The lane centre of the plan's line at `s` (away from its lane changes).
-func _line_x_at(plan: Dictionary, s: float) -> float:
-	var lane: int = GameData.as_int(plan["start_lane"])
-	for entry: Variant in GameData.as_array(plan["path"]):
-		var step: Array = entry
-		if GameData.as_float(step[0]) + tuning.f("gen_lane_change") <= s:
-			lane = GameData.as_int(step[1])
-	return tuning.f("lane_width") * (float(lane) + 0.5)
 
 
 func _first(problems: PackedStringArray) -> String:
@@ -275,16 +267,16 @@ func _check_skill_checker_catches() -> void:
 	# No skill line where the rule holds; one where it does not.
 	var bare: Dictionary = plan.duplicate(true)
 	bare["skill_path"] = []
-	check(_caught(bare, "rule 5"), "a leg of ordinary traffic without a skill line is caught (rule 5)")
+	check(_caught(bare, "rule 6"), "a leg of ordinary traffic without a skill line is caught (rule 6)")
 	check(not _checker.drive_skill(bare, DRIVE_DT).is_empty(), "and cannot be driven along one")
 	var two_lane: Dictionary = LegGenerator.generate(data, "two_lane", 3, _seed("two_lane", 77), "")
 	two_lane["skill_path"] = [[0.0, 0]]
-	check(_caught(two_lane, "rule 5"), "a skill line on the two-lane road is caught: the rule does not hold there")
+	check(_caught(two_lane, "rule 6"), "a skill line on the two-lane road is caught: the rule does not hold there")
 
 	# Its shape: a jump of two lanes, a start in another lane, a change that does not finish.
 	var jumping: Dictionary = plan.duplicate(true)
 	jumping["skill_path"] = [[0.0, 0], [400.0, 2]]
-	check(_caught(jumping, "rule 5"), "a skill line that jumps two lanes or starts elsewhere is caught")
+	check(_caught(jumping, "rule 6"), "a skill line that jumps two lanes or starts elsewhere is caught")
 	var late: Dictionary = plan.duplicate(true)
 	late["skill_path"] = [[0.0, GameData.as_int(plan["start_lane"])], [GameData.as_float(plan["length"]) - 5.0, GameData.as_int(plan["start_lane"]) - 1]]
 	check(_caught(late, "does not finish"), "a skill line whose last lane change runs past the end is caught")
@@ -295,11 +287,11 @@ func _check_skill_checker_catches() -> void:
 	GameData.as_array(strewn["hazards"]).append({"kind": "cone", "s": 1000.0, "x": _checker.line_x(1000.0)})
 	# (The road lays its hazards out in the order they come.)
 	GameData.as_array(strewn["hazards"]).sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return GameData.as_float(a["s"]) < GameData.as_float(b["s"]))
-	var caught_as_rule_5: bool = false
+	var caught_as_rule_6: bool = false
 	for problem: String in _checker.check(strewn):
-		if problem.begins_with("rule 5") and problem.contains("cone"):
-			caught_as_rule_5 = true
-	check(caught_as_rule_5, "a cone on the skill line is caught (rule 5)")
+		if problem.begins_with("rule 6") and problem.contains("cone"):
+			caught_as_rule_6 = true
+	check(caught_as_rule_6, "a cone on the skill line is caught (rule 6)")
 	check(not _checker.drive_skill(strewn, DRIVE_DT).is_empty(), "and the ghost in fourth runs over it")
 
 	# A wreck standing on it.

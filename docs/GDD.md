@@ -287,7 +287,7 @@ The gearbox is a four-speed H pattern, shifted by dragging the lever through its
 | Control | Anchor | Reach from the wheel | Gesture | Effect |
 |---|---|---|---|---|
 | Horn | `horn` | 0.13 s | TAP | Cars and taxis within 40 m ahead in his lane move over within 1 s if the next lane is free. Trucks and buses ignore it. -3 Nerves, at most once per 10 s. |
-| Wipers | `wiper_stalk` | 0.10 s | FLICK up | One sweep. Rain stays clear for 6 s. |
+| Wipers | `wiper_stalk` | 0.10 s | FLICK up | One sweep. The rain is back after 12 to 18 s, a length drawn anew at each sweep, and comes back slowly at first: a third of the way through, the glass is still nearly clear. (Amended by the owner, D-074; was "Rain stays clear for 6 s".) |
 | Hazard lights | `hazard_button` | 0.16 s | TAP | Toggle. Needed to stop safely on the shoulder. |
 | Radio | `radio` | 0.21 s | DRAG the dial | Section 6.2 lists station effects. The signal drifts to static every 40 s and must be retuned. |
 | Gear lever | `gear_lever` | 0.23 s | GATE | Section 4.5 |
@@ -356,17 +356,18 @@ The wheel angle that feeds this formula includes Tremor and is delayed by Lag (s
 
 ### 5.4 Drift
 
-Drift moves the car when nobody is steering. All drift is constant or announced.
+Drift moves the car when nobody is steering. All drift comes from the road or is announced. (Amended by the owner, D-074: the push that was always there and always to the right is gone. "It makes much more sense to have the danger coming from the road so attention is required, not just routine": a task that only repeats ruins the immersion, and that holds for every design question after this one.)
 
 | Source | Sideways push | Tell |
 |---|---|---|
-| Road crown | 0.25 m/s toward the right shoulder, always | None needed |
+| Road crown | Up to 0.25 m/s, by stretches of 250 to 500 m: a stretch is flat, or leans right, or leans left, by 60%, 80% or all of 0.25 m/s. A leg begins flat for 200 m; no two stretches running lean the same way; the lean comes on over 90 m. | The horizon tilts with the road |
+| Wake | Beside a truck or a tanker: up to 0.45 m/s away from it (a bus: 0.25), within 1.8 m of air beside it and 8 m before and after it; full when the two differ by 40 km/h or more, nothing when they keep pace | The vehicle itself |
 | Curve | k times (speed / 100) squared, outward, capped at 2.0 m/s; k is 0.5, 1.0 or 1.5 | A sign 3 s ahead, then the visible bend |
 | Gust | 1.5 m/s for 1 s | Dust or a flag moving 1 s ahead |
 | Pulling steering (fault) | 0.4 m/s to the left | Constant once it happens |
 | Sway (arak) | 0.3 m/s per Courage stack, swinging at 0.4 Hz | The horizon rocks |
 
-From the centre of a lane on a straight in third gear, the car edge reaches the lane line after 3.4 s hands-off. This number sets the feel of the game and has its own test.
+From the centre of a lane on a straight that leans fully in third gear, the car edge reaches the lane line after 3.4 s hands-off. This number sets the feel of the game and has its own test. (Amended, D-074: 3.4 s is now the shortest a straight gives him, not what every straight gives him; on a flat stretch the car holds its lane.)
 
 ### 5.5 Traffic
 
@@ -515,7 +516,7 @@ The car has no health bar. It has five warning lamps, and each lit lamp is a spe
 | Dead headlight | Night view cone halved; +10 Suspicion per second during a night Patrol |
 | Pulling steering | Constant 0.4 m/s drift to the left |
 | Slipping clutch | The lever moves at half pointer speed |
-| Stuck wiper | One sweep clears rain for 3 s instead of 6 |
+| Stuck wiper | One sweep clears rain for 7 s instead of 12 to 18 (amended with the wipers, D-074; was "3 s instead of 6") |
 | Cracked mirror | Mirror tells arrive 2 s later |
 
 ### 6.4 The Clock
@@ -708,7 +709,7 @@ A leg is one 2.5 km stretch with one rule that changes how the hand may be used.
 |---|---|---|---|---|
 | Open road | 1 to 3 | 3 lanes, light traffic, long empty stretches | Staying awake; reaching on straights | 90 |
 | Rush | 1 to 3 | Heavy traffic, frequent merges | Steering and close-call income | 90 |
-| Rain | 1 to 3 | The view blurs over 6 s without a wiper sweep. Sideways response is 30% slower. | Hand rhythm | 95 |
+| Rain | 1 to 3 | The view blurs over 12 to 18 s without a wiper sweep, slowly at first (amended, D-074; was "over 6 s"). Sideways response is 30% slower. | Hand rhythm | 95 |
 | Night blackout | 2 to 3 | Unlit road. The view is the headlight cone. Hazards appear late. | The eyes | 90 |
 | Roadworks | 2 to 3 | Three 150 m chicanes one lane wide (2.16 m) between cones | Precision under Tremor | 100 |
 | Tailgater | 2 to 3 | A driver sits on the bumper for 40 s | Nerves and lane discipline | 90 |
@@ -740,6 +741,7 @@ The generator must satisfy every rule below. Reject and redraw a leg that fails.
 3. At every point at least one lane is passable in gear 3 without a close call. The generator never builds a wall.
 4. No vehicle spawns overlapping another.
 5. The same seed gives the same leg.
+6. Never a sealed wall in fourth. (Added by the owner, D-074: "being stuck in traffic is no fun at all ... there should always be enough gaps to cut between if you are good enough".) On every leg of ordinary traffic there is also a line for a player who holds gear 4 from the start: it touches nothing, but it may pass closer than a close call and it changes lane in 0.75 s. The two-lane road and the Motorcade are excepted (their hold-up is the leg, section 9.3), and so are a boss's road and the sheep (their gap is timed for gear 3).
 
 ### 9.3 Encounters
 
@@ -985,7 +987,7 @@ A human tunes by feel. The bot gives the builder numbers before a human plays. I
 
 | Measure | Target |
 |---|---|
-| Hands-off time from lane centre, straight, gear 3 | 3.4 s (exact) |
+| Hands-off time from lane centre, straight that leans fully, gear 3 | 3.4 s (exact; amended, D-074) |
 | Hand off the wheel with a mid-game cabin | 25% to 40% of leg time |
 | Expert bot, Drivers' Table, no purchases | Wins 40% to 60% of seeds |
 | Competent bot, Drivers' Table, buying sensibly | Wins 15% to 30% |
@@ -1527,6 +1529,7 @@ Build in this order. Do not start a milestone until every test of the previous o
 | T-FAULT-01 | The fifth lamp is a Wreck; capacity changes apply |
 | T-GEN-01 | For 500 seeds and all nine leg types, every rule in section 9.2 holds |
 | T-GEN-02 | The same seed gives a byte-identical leg |
+| T-GEN-04 | Rule 6 of section 9.2 (added with it, D-074): a ghost in gear 4 on the plan's skill line, through the real traffic, touches nothing |
 | T-WALL-01 | A scripted ideal driver in gear 3 clears every generated leg with no contact |
 | T-REPLAY-01 | A recorded input log replays to the same final state hash |
 | T-CLOCK-01 | 90 real seconds of driving is 30 game minutes |
