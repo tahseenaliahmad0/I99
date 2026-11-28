@@ -3239,14 +3239,17 @@ GDD 4.1 (the Touch column), 17.4, and D-016.
   walls across all lanes at fourth-gear speeds are no longer drawn, not
   that every gap he finds is the one that was checked. For the gaps
   that are not, there is the horn.
-- **The measure.** With the rule: 1,400 of 1,400 legs (200 seeds of each
-  of the seven kinds, modifiers among them) carry a skill line, and a
-  ghost in fourth gear on it, through the real LegSim, TrafficSim and
-  Collision, touches nothing. The planned line of third gear driven in
+- **The measure.** With the rule: 840 of 840 legs (120 seeds of each of
+  the seven kinds) carry a skill line, and a ghost in fourth gear on it,
+  through the real LegSim, TrafficSim and Collision, touches nothing;
+  T-GEN-04 drives 376 more. The planned line of third gear driven in
   fourth runs into traffic on 140 of 140.
-- **Cost.** A leg takes about four times as long to generate: 5 to 50 ms
-  for most kinds, about 170 ms for a Rush hour of Act 3 (2 to 3 draws).
-  No leg of 570 fell back to sparse traffic. `gen_filler_tries` stays 12.
+- **Cost.** A leg takes about four times as long to generate: 5 to 45 ms
+  for most kinds, about 160 ms for a Rush hour of Act 3 (2 to 3 draws,
+  at most 10 in 30). T-GEN-01's 4,500 legs needed at most 9 draws for
+  one, where `gen_max_attempts` allows 60; none fell back to sparse
+  traffic. `gen_filler_tries` stays 12. The whole suite takes about
+  20 minutes where it took 11.
 - **Tests.** T-GEN-04 (new, registered with this decision). A ghost in
   fourth on the skill line through the real LegSim, TrafficSim and
   Collision: 40 seeds of each of the seven kinds, and 96 more legs with
@@ -3305,3 +3308,25 @@ GDD 4.1 (the Touch column), 17.4, and D-016.
 - **Tests.** T-ITEM-BASE +64 checks: what holds him up by kind of
   vehicle, range, speed and gear; stuck or only closing; the loud horn;
   the lesson and its end; the guide's rows; the words under the pointer.
+
+### 5. Whether the tests would notice
+
+- Two new mutant lists: `tools/mutants/fourth.py` (rule 6: 21) and
+  `tools/mutants/road.py` (the lean, the wake, the wipers, the horn and
+  its guide: 44). Twelve lived at first. Four of the road's got a check
+  each in T-CAR-05 (not every lean is a full one; another seed leans
+  another way; what a boss reserved stays flat; no wake straight behind
+  a truck). Of rule 6's, a ghost that touches nothing proved too coarse
+  a judge: six mutants that left a vehicle somewhere other than worked
+  out lived, because the line did not happen to pass there. Hence the
+  three additions to T-GEN-04 named above (every vehicle held to its
+  blocks; no queue from the start; more legs with a modifier's own
+  traffic), which killed four, and two plans made by hand for the last
+  two, a merger that would be held up, which no generated leg showed in
+  840. All 65 are now killed. Two entries of the car's list, stale since
+  the crown became the road's lean, were rewritten. 1,080 mutants in 24
+  lists apply to the code as it is.
+- Not listed, because equivalent: the generator keeps the skill line at
+  every beat and vehicle it places and once more over the whole leg, so
+  dropping either one of the two changes how many draws a leg takes and
+  not what comes out.
