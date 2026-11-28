@@ -3061,3 +3061,51 @@ GDD 4.1 (the Touch column), 17.4, and D-016.
   do not). The Arabic table has the new ids with no text, as every line
   has until a writer fills it.
 
+## D-073 (the owner, 2026-11-28) Dev mode
+
+- **Context.** The owner: "give me the option to run the game in dev mode,
+  where different parts of the game are accessible without having to go
+  through the whole thing each time." GDD 13.9 lists debug keys F1 to F8
+  and the command-line arguments; of the keys only F1 and F7 had been
+  built (PROGRESS: "Debug keys F3 to F8 ... left for M10").
+- **How it is started.** `--dev` after `--` (`godot --path . -- --dev`).
+  Without it nothing of this is there: no entry at the title, no keys.
+- **The dev menu** (`DevView`), an entry at the title. One click starts:
+  the prologue; the wedding room; a whole night at any of the seven Tables,
+  unlocked or not; one leg of any of the nine kinds, over and over; the
+  Checkpoint, the Storm, Dawn or the Arrival; a stop of any of the seven
+  kinds. Chosen once for whatever is started: the act, a leg's modifier, a
+  set piece's modifier, the seed, cash, items by id, a passenger, and who
+  drives (you, or the bot at one of its three skills). It hands the drive
+  scene a DriveContext, as the wedding room does: the scene now reads
+  `leg`, `boss`, `give`, `ride`, `bot` and the seed from the context it is
+  given, and from the command line only when started bare.
+- **A sandbox.** What the dev menu starts never writes the save file
+  (`Game.write_save` keeps it in memory there), and on the way out the
+  profile and the night in progress are read from the file again. Esc in
+  the drive offers "Back to the dev menu".
+- **The keys of GDD 13.9**, in the drive scene, in dev mode only: F2 the
+  tuning panel, F3 the end of the leg (`DriveSim.dev_skip_leg`: the road
+  cleared, the car 60 m short of the end; not at a checkpoint, which is a
+  bar and a soldier and no distance), F4 +50 cash, F5 an item by id, F6
+  Nerves, F8 half speed. F1 and F7 are as they were, with or without dev.
+- **The tuning panel** (`TuningPanel`; GDD 13.9: "Live tuning panel for
+  every value in tuning.json, with export"). Every constant by group with
+  its unit, typed as JSON, filtered by a word. A change is the session's:
+  it is in the game's data until the game quits and `data/tuning.json` is
+  never written. The simulation reads its numbers when it is built, so a
+  change made in the drive scene begins the scene again; made at the dev
+  menu it holds for whatever is started next. "Export" writes the table,
+  shaped as the file is, to `tuning_export.json` in the user folder.
+  "Live" is therefore "from the next start", not mid-tick: making every
+  system re-read its constants while it runs is a larger change than this
+  asked for.
+- **A stop on demand** (`DriveSim.dev_stop`): the night is put at a stop
+  and, the save point having put it back as generated, the stop is then
+  made the kind asked for.
+- **Tests.** T-STOP-01 +51 checks: a night put at each of the seven kinds
+  of stop, the refusals (no night, no such stop, already stopped), F3's
+  skip and that a checkpoint is not skipped, and that `--dev` is a flag
+  the game knows. The menu and the panel are checked by a scripted walk
+  under Xvfb, not by a test.
+

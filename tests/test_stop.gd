@@ -42,6 +42,7 @@ func test_stop_01() -> void:
 	_check_snap_at_a_stop()
 	_check_boss_pick_for_the_deck()
 	_check_rarity()
+	_check_dev_jumps()
 
 
 func _check_data() -> void:
@@ -911,3 +912,43 @@ func _event(type: String) -> Dictionary:
 
 func _has_event(type: String) -> bool:
 	return not _event(type).is_empty()
+
+
+## Dev mode (D-073): a night can be put at a stop of any kind, and a leg
+## skipped to its last metres. Neither is for a player; both are how the
+## dev menu and F3 get somewhere.
+func _check_dev_jumps() -> void:
+	for stop: Dictionary in data.records("stops"):
+		var id: String = GameData.as_string(stop.get("id"))
+		var sim: DriveSim = DriveSim.new(fresh_data())
+		sim.begin_telling("drivers", 5)
+		if not check(sim.dev_stop(id), "dev: a night is put at a %s" % id):
+			continue
+		check(sim.stopped, "dev: the car stands there (%s)" % id)
+		check_eq(sim.run.stop, id, "dev: the stop is the kind asked for")
+		check_eq(sim.run.stage_name(), "stop", "dev: the night is at a stop")
+		check(not sim.dev_stop(id), "dev: a car already at a stop is not put at another")
+		check(not sim.dev_skip_leg(60.0), "dev: nor skipped along a road it is not driving")
+	var nowhere: DriveSim = DriveSim.new(fresh_data())
+	check(not nowhere.dev_stop("fitter"), "dev: with no night under way there is no stop to be at")
+	var night: DriveSim = DriveSim.new(fresh_data())
+	night.begin_telling("drivers", 5)
+	check(not night.dev_stop("car_wash"), "dev: a stop that is not in stops.json is refused")
+	check(not night.stopped, "dev: and the night drives on")
+
+	# F3: the road cleared, the car 60 m short of the leg's end; driven on,
+	# the leg ends as any leg does.
+	night.traffic.spawn(&"truck", 1, night.car.s + 80.0, 60.0)
+	check(night.dev_skip_leg(60.0), "dev: a leg under way is skipped")
+	check_near(night.car.s, night.leg.length - 60.0, 0.000001, "dev: the car is 60 m short of the leg's end")
+	check_eq(night.traffic.vehicles.size(), 0, "dev: and nothing is on the road with it")
+	var before: float = night.car.s
+	check(night.dev_skip_leg(200.0), "dev: skipped again with a longer margin")
+	check_eq(night.car.s, before, "dev: the car is never put back")
+	var boss: DriveSim = DriveSim.new(fresh_data())
+	boss.gate.reset(3)
+	boss.begin_boss(BossSim.CHECKPOINT, "", 5)
+	check(not boss.dev_skip_leg(60.0), "dev: a checkpoint is not skipped by distance (a bar and a soldier are not a length of road)")
+	var problems: PackedStringArray = []
+	check(GameData.as_bool(Game.parse_user_args(["--dev"], problems).get("dev")) and problems.is_empty(), "dev: --dev is a flag the game knows")
+

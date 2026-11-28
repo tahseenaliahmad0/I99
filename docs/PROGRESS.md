@@ -116,7 +116,7 @@ Do not start a milestone until every test of the previous one passes (GDD 18).
 - [x] Wreck and restart (T-RUN-02)
 - [x] `Save`, save points at stops (T-SAVE-01); `InputLog` and `DriveSim.state_hash()` (T-REPLAY-01); DECISIONS D-038
 - [x] Views: fork sign and gore, Exit sign and slip lane, `StopView` (vendor, tray, offers with prices), dashboard clock, sky by the Clock; `--table=`, `--continue`; the game writes the save at stops; the smoke test runs a Telling through its first stop (DECISIONS D-039; `artifacts/m5_*.png`)
-- [ ] Debug keys F3 to F8 of GDD 13.9 (left for M10)
+- [x] Debug keys F2 to F8 of GDD 13.9: built with dev mode on 2026-11-28 (D-073)
 
 ### M6 All items: T-ITEM-* (32), T-SYN-* (9), T-PHANTOM-01
 - [x] `CabinSuite` (tests/support): the shared rig of the cabin suites; `DriveSim.give_item`
@@ -365,4 +365,6 @@ Two lines per slice, newest last.
   `artifacts/balance.json` made again with the fixed bot: 39 won, 44 late, 1 wrecked; every measure of GDD 12.5 on the side it was. `tools/check.sh` gives each step an hour (a tool that did not compile hung the check for ever) and prints CHECK OK on f40699d.
 - 2026-11-27 The owner's second look (D-072): what each of the 32 items does, in the label under the pointer (cabin and stop); an instruction at the top of the view for the prologue's steps (their lines had never been shown), the checkpoint's phases (the bar wants a car standing still: now said), a Patrol's stop, a stop, the Arrival and the Call; the gate's diagram draws the way to the gear the moment asks for (the prologue's second-to-third is a dog-leg).
   T-DATA-01 +158 checks (every ritual, gesture and item has its words), T-BOT-01 +5 (the guide's order through a checkpoint).
+- 2026-11-28 Dev mode (D-073): `--dev` adds a menu at the title that starts any part of the game (prologue, any Table, any leg, set piece or stop, with act, modifier, seed, cash, items, passenger and driver chosen), the debug keys F2 to F8 of GDD 13.9 in the drive scene, and a tuning panel whose changes last for the session and can be exported. What it starts never writes the save file. T-STOP-01 +51 checks.
+  Open with the owner, nothing changed yet: how often the wipers are needed, the constant drift to the right, and being boxed in by traffic.
 

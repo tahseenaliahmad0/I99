@@ -52,8 +52,13 @@ func _ready() -> void:
 	if seen:
 		_add_entry("title.prologue", Game.play_prologue, scale_by)
 	_add_entry("title.options", _open_options, scale_by)
+	if Game.dev:
+		_add_entry("dev.title", _open_dev, scale_by)
 	_add_entry("title.quit", _quit, scale_by)
 	print("[title] ready entries=%d first_launch=%s" % [_entries.get_child_count() - 3, str(not seen)])
+	if Game.dev and Game.dev_return:
+		# Back from something the dev menu started: the menu again.
+		_open_dev.call_deferred()
 
 
 func _add_entry(line_id: String, pressed: Callable, scale_by: float) -> void:
@@ -72,6 +77,14 @@ func _open_options() -> void:
 	add_child(options)
 	options.setup()
 	options.closed.connect(options.queue_free)
+
+
+## Dev mode's menu (D-073), over the title.
+func _open_dev() -> void:
+	var menu: DevView = DevView.new()
+	add_child(menu)
+	menu.setup()
+	menu.closed.connect(menu.queue_free)
 
 
 func _quit() -> void:

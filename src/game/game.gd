@@ -30,7 +30,9 @@ const VALUE_ARGS: PackedStringArray = ["table", "seed", "leg", "boss", "bot", "u
 ## `--continue` goes on from the save file (until the title screen offers it).
 ## `--hud` starts with the numeric HUD showing.
 ## `--prologue` plays the prologue in the drive scene, then `--table=`'s Telling.
-const FLAG_ARGS: PackedStringArray = ["skip-prologue", "continue", "hud", "prologue"]
+## `--dev` is dev mode (D-073): a menu at the title that starts any part of
+## the game, and the debug keys of GDD 13.9 in the drive scene.
+const FLAG_ARGS: PackedStringArray = ["skip-prologue", "continue", "hud", "prologue", "dev"]
 
 ## Tools and tests started with `--script` never touch the player's files:
 ## each such process writes under a folder of its own, named after its process
@@ -60,6 +62,13 @@ var context: Dictionary = {}
 ## ending (Save.apply_ending's result, with "table" and "clock") or a
 ## mode's run (Save.apply_mode's result). {} for nothing.
 var last_ending: Dictionary = {}
+## Dev mode (`--dev`, D-073). What the dev menu's choices are (kept while
+## the game runs), whether leaving the drive scene leads back to it, and
+## what the tuning panel has changed: key -> the value the file gave.
+var dev: bool = false
+var dev_options: Dictionary = {}
+var dev_return: bool = false
+var dev_tuning_original: Dictionary = {}
 
 
 func _ready() -> void:
@@ -73,6 +82,7 @@ func _ready() -> void:
 			push_error("Game: %s" % problem)
 		if args.has("user-dir"):
 			user_dir = str(args["user-dir"])
+		dev = args.has("dev")
 	if user_dir != "user://":
 		DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(user_dir))
 
@@ -127,6 +137,10 @@ func read_save() -> void:
 ## stop he has just come to ({} when no Telling is under way).
 func write_save(telling: Dictionary) -> bool:
 	saved_telling = telling
+	if context.has("dev"):
+		# What the dev menu starts is a sandbox (D-073): it leaves the
+		# player's file as it is. go() reads the file again on the way out.
+		return true
 	# The folder may have been cleared away since the game started.
 	if user_dir != "user://":
 		DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(user_dir))
@@ -195,8 +209,13 @@ const DRIVE_SCENE: String = "res://scenes/drive.tscn"
 
 ## Enters a state: its scene, with the DriveContext for the drive.
 func go(next: AppState, drive_context: Dictionary = {}) -> void:
+	var from_sandbox: bool = context.has("dev")
 	state = next
 	context = drive_context
+	if from_sandbox and not context.has("dev"):
+		# Out of the dev menu's sandbox: the profile and the night in
+		# progress are the file's again, whatever was unlocked in there.
+		read_save()
 	var scene: String = WEDDING_SCENE
 	match next:
 		AppState.BOOT, AppState.TITLE:

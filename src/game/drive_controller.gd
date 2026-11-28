@@ -103,10 +103,11 @@ func _ready() -> void:
 	_apply_settings()
 	_from_menu = not Game.context.is_empty()
 	_context = Game.context if _from_menu else Game.args
+	_from_dev = _from_menu and _context.has("dev")
 	var seed_asked: int = int(str(_context.get("seed", "1")))
 	sim.rng.reseed(seed_asked)
-	if Game.args.has("bot"):
-		_take_the_wheel(GameData.as_string(Game.args.get("bot")))
+	if _context.has("bot") or Game.args.has("bot"):
+		_take_the_wheel(GameData.as_string(_context.get("bot", Game.args.get("bot"))))
 	_seat_the_guests()
 	if _context.has("continue") and not Game.saved_telling.is_empty() and sim.restore(Game.saved_telling):
 		print("[drive] continuing the Telling of %s" % sim.run.table)
@@ -122,21 +123,26 @@ func _ready() -> void:
 		# A Telling (GDD 11.1), from Baghdad.
 		sim.begin_telling(str(_context["table"]), seed_asked)
 		print("[drive] a Telling for %s, seed %d" % [sim.run.table, sim.run.seed])
-	elif Game.args.has("leg"):
-		_leg_spec = str(Game.args["leg"])
+	elif _context.has("leg"):
+		_leg_spec = str(_context["leg"])
 		_begin_leg()
-	elif Game.args.has("boss"):
-		_boss_spec = str(Game.args["boss"])
+	elif _context.has("boss"):
+		_boss_spec = str(_context["boss"])
 		_begin_boss()
 	else:
 		sim.free_traffic_per_km = tuning.f("free_traffic_per_km")
 
-	if Game.args.has("give"):
-		for item_id: String in str(Game.args["give"]).split(",", false):
+	if _context.has("stop") and not sim.dev_stop(str(_context["stop"])):
+		push_error("Drive: no stop '%s' to begin at" % str(_context["stop"]))
+	if _context.has("cash"):
+		sim.cash = maxf(str(_context["cash"]).to_float(), 0.0)
+	if _context.has("give"):
+		for item_id: String in str(_context["give"]).split(",", false):
+			item_id = item_id.strip_edges()
 			if sim.give_item(StringName(item_id)) == null:
 				push_error("Drive: --give names an item that cannot be put in the cabin: '%s'" % item_id)
-	if Game.args.has("ride") and not sim.board(str(Game.args["ride"])):
-		push_error("Drive: --ride names nobody who can get in: '%s'" % str(Game.args["ride"]))
+	if _context.has("ride") and not sim.board(str(_context["ride"])):
+		push_error("Drive: --ride names nobody who can get in: '%s'" % str(_context["ride"]))
 	if Game.args.has("say"):
 		# `--say=<line id>[,<line id>...]`: lines to look at, asked for as the simulation asks.
 		for line_id: String in str(Game.args["say"]).split(",", false):
@@ -190,8 +196,97 @@ func _unhandled_input(event: InputEvent) -> void:
 		else:
 			_bot = null
 		print("[drive] the bot is %s the wheel" % ("at" if _bot != null else "off"))
+	elif Game.dev and _dev_key(event):
+		pass
 	elif event.is_action_pressed("pause") and _leave_in <= 0.0:
 		_open_pause()
+
+
+# --- Dev mode (D-073; the debug keys of GDD 13.9) ---------------------------------
+
+## True when the event was one of the dev keys, and done.
+func _dev_key(event: InputEvent) -> bool:
+	var tuning: Tuning = sim.tuning
+	if event.is_action_pressed("debug_tuning"):
+		_open_tuning()
+	elif event.is_action_pressed("debug_skip_leg"):
+		print("[dev] skip to the end of the leg: %s" % str(sim.dev_skip_leg(tuning.f("dev_skip_margin_m"))))
+	elif event.is_action_pressed("debug_cash"):
+		sim.cash += tuning.f("dev_cash_step")
+		print("[dev] cash %s" % str(sim.cash))
+	elif event.is_action_pressed("debug_give_item"):
+		_ask("dev.prompt.item", func(text: String) -> void:
+			for item_id: String in text.split(",", false):
+				print("[dev] give %s: %s" % [item_id.strip_edges(), str(sim.give_item(StringName(item_id.strip_edges())) != null)]))
+	elif event.is_action_pressed("debug_set_nerves"):
+		_ask("dev.prompt.nerves", func(text: String) -> void:
+			if text.is_valid_float():
+				sim.nerves.value = clampf(text.to_float(), 0.0, 100.0)
+				print("[dev] Nerves %s" % str(sim.nerves.value)))
+	elif event.is_action_pressed("debug_half_speed"):
+		_half_speed = not _half_speed
+		Engine.time_scale = Game.game_speed(Settings.get_value(SettingsSpec.GAME_SPEED)) * (tuning.f("dev_slow_share") if _half_speed else 1.0)
+		print("[dev] time scale %s" % str(Engine.time_scale))
+	else:
+		return false
+	return true
+
+
+## F2: the tuning panel, with the game held. Closed after a change, the
+## scene begins again: the simulation reads its numbers when it is built.
+func _open_tuning() -> void:
+	if _dev_panel != null or _pause != null:
+		return
+	var panel: TuningPanel = TuningPanel.new()
+	_dev_panel = panel
+	$Overlay.add_child(panel)
+	panel.setup()
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	get_tree().paused = true
+	panel.closed.connect(func() -> void:
+		var again: bool = panel.changed
+		panel.queue_free()
+		_dev_panel = null
+		get_tree().paused = false
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		if again:
+			print("[dev] tuning changed: the scene begins again")
+			get_tree().reload_current_scene.call_deferred())
+
+
+## A line of text asked for, with the game held (F5, F6).
+func _ask(line_id: String, answered: Callable) -> void:
+	if _dev_panel != null or _pause != null:
+		return
+	var box: PanelContainer = PanelContainer.new()
+	box.process_mode = Node.PROCESS_MODE_ALWAYS
+	box.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	box.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	box.grow_vertical = Control.GROW_DIRECTION_BOTH
+	var rows: VBoxContainer = VBoxContainer.new()
+	box.add_child(rows)
+	var label: Label = Label.new()
+	label.text = Lines.get_text(line_id)
+	rows.add_child(label)
+	var field: LineEdit = LineEdit.new()
+	field.custom_minimum_size = Vector2(420.0, 0.0)
+	rows.add_child(field)
+	_dev_panel = box
+	$Overlay.add_child(box)
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	get_tree().paused = true
+	field.grab_focus.call_deferred()
+	var done: Callable = func(text: String) -> void:
+		box.queue_free()
+		_dev_panel = null
+		get_tree().paused = false
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		if not text.strip_edges().is_empty():
+			answered.call(text.strip_edges())
+	field.text_submitted.connect(done)
+	field.gui_input.connect(func(event: InputEvent) -> void:
+		if event.is_action_pressed("pause"):
+			done.call(""))
 
 
 func _view_size() -> Vector2:
@@ -355,6 +450,10 @@ var _touch: TouchInput = null
 var _touch_view: TouchView = null
 ## Names, feedback and the gate's diagram (D-071), and what they show.
 var _hints: HintView = null
+## Started from the dev menu (D-073): leaving leads back to it.
+var _from_dev: bool = false
+var _half_speed: bool = false
+var _dev_panel: Control = null
 var _feedback: ActionFeedback = ActionFeedback.new()
 
 
@@ -368,7 +467,9 @@ func _open_pause() -> void:
 	_pause = SettingsView.new()
 	$Overlay.add_child(_pause)
 	_pause.setup("settings.resume")
-	if _from_menu:
+	if _from_dev:
+		_pause.add_entry("dev.leave", "leave")
+	elif _from_menu:
 		_pause.add_entry("settings.leave", "leave")
 	_pause.closed.connect(_close_pause)
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
@@ -384,7 +485,7 @@ func _close_pause() -> void:
 	# The press that closed it is no new hold.
 	_pause_hold.reset(Input.is_action_pressed("grip"))
 	if leave:
-		Game.go(Game.AppState.WEDDING)
+		Game.go(Game.AppState.TITLE if _from_dev else Game.AppState.WEDDING)
 
 
 ## The layer that shows the picture reversed (shaders/mirror.gdshader): after
@@ -490,7 +591,7 @@ func _begin_leg() -> void:
 	if not modifier.is_empty() and not data.has_record("modifiers", modifier):
 		push_error("Drive: --leg names an unknown modifier '%s'" % modifier)
 		modifier = ""
-	var leg_seed: int = int(str(Game.args.get("seed", "1"))) + _legs_begun
+	var leg_seed: int = int(str(_context.get("seed", "1"))) + _legs_begun
 	_legs_begun += 1
 	sim.gate.reset(3)
 	sim.begin_leg(LegGenerator.generate(data, leg_id, act, leg_seed, modifier))
@@ -504,7 +605,7 @@ func _begin_boss() -> void:
 	var data: GameData = Game.data
 	var parts: PackedStringArray = _boss_spec.split(",")
 	var boss_id: String = parts[0]
-	var boss_seed: int = int(str(Game.args.get("seed", "1"))) + _legs_begun
+	var boss_seed: int = int(str(_context.get("seed", "1"))) + _legs_begun
 	_legs_begun += 1
 	if boss_id == BossSim.ARRIVAL:
 		sim.gate.reset(data.tuning.i("start_gear"))

@@ -1074,6 +1074,31 @@ func exit_slip() -> Vector2:
 	return Vector2(_exit_at, _stall_at)
 
 
+## Dev mode (D-073): the night stands at a stop of this kind, now. False
+## when there is no night under way or no such stop.
+func dev_stop(stop_id: String) -> bool:
+	if not run.active or stopped or not data.has_record("stops", stop_id):
+		return false
+	_enter_stop()
+	# The save point has put the night back as it was generated: the stop is
+	# made the one asked for after it.
+	run.stop = stop_id
+	_open_stop(_shady_here)
+	return true
+
+
+## Dev mode, F3 (GDD 13.9: "Skip to the end of the leg"): the road is
+## cleared and the car put `margin` metres short of the leg's end. At a
+## checkpoint there is a bar and a soldier, not a distance: false there,
+## and wherever he is not driving.
+func dev_skip_leg(margin: float) -> bool:
+	if not leg.active or stopped or pulled_over or boss.kind == BossSim.CHECKPOINT:
+		return false
+	traffic.remove_all()
+	car.s = maxf(car.s, leg.length - margin)
+	return true
+
+
 func _enter_stop() -> void:
 	run.enter_stop()
 	heckles.end_leg()

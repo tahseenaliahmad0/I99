@@ -651,3 +651,39 @@ guide.lever.blocked,,Your passenger is leaning across the gear lever.,true
 guide.checkpoint.stow.open,,Something forbidden is in view (tagged pink). Press the glovebox to open it first.,true
 guide.checkpoint.stow.carry,,"Press on what is forbidden (tagged pink), carry it into the open glovebox, release.",true
 hint.item.effect,,%s: %s,true
+dev.title,,Dev menu,false
+dev.heading,,Dev menu: jump to any part,false
+dev.back,,Back to the title,false
+dev.options,,Applies to whatever you start below,false
+dev.option.act,,Act,false
+dev.option.bot,,Driver,false
+dev.option.bot.off,,you,false
+dev.option.seed,,Seed,false
+dev.option.give,,"Items (ids, comma)",false
+dev.option.ride,,Passenger,false
+dev.option.none,,none,false
+dev.option.cash,,Cash,false
+dev.option.modifier,,Leg modifier,false
+dev.option.boss_modifier,,Set-piece modifier,false
+dev.section.flow,,The game as a player meets it,false
+dev.section.tables,,A whole night at a Table (unlocked or not),false
+dev.section.legs,,"One leg of road, over and over",false
+dev.section.bosses,,Set pieces,false
+dev.section.stops,,Stops,false
+dev.section.tools,,Tools,false
+dev.go.prologue,,Prologue,false
+dev.go.wedding,,Wedding room,false
+dev.go.arrival,,arrival,false
+dev.tuning,,Tuning (try numbers for this session),false
+dev.keys,,"In the drive: F1 numbers, F2 tuning, F3 end of leg, F4 +50 cash, F5 give item, F6 set Nerves, F7 bot, F8 half speed. Esc: pause, and back here.",false
+dev.leave,,Back to the dev menu,false
+dev.prompt.item,,Item id to give (for example: cigarettes),false
+dev.prompt.nerves,,"Nerves, 0 to 100",false
+dev.tuning.heading,,Tuning: %s changed this session,false
+dev.tuning.filter,,"Filter, for example: wiper",false
+dev.tuning.note,,Edit a value and press Enter. Changes last until you quit and apply to what you start next; data/tuning.json is not touched.,false
+dev.tuning.export,,Export to %s,false
+dev.tuning.reset,,Reset all,false
+dev.tuning.close,,Close,false
+dev.tuning.exported,,Written: %s,false
+dev.tuning.bad,,Not a value: %s,false
