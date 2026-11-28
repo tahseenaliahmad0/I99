@@ -240,6 +240,15 @@ func test_gen_04() -> void:
 	check_eq(modifiers_driven.size(), data.records("modifiers").size(), "with every modifier among them")
 	check(flocks > 0, "(the legs with sheep as far as the flock: its gap is timed for third gear)")
 
+	# A boss's road keeps no skill line: the boss does with its traffic what
+	# it will (D-074).
+	var road: Dictionary = data.record("legs", "rain").duplicate(true)
+	road["length_m"] = tuning.f("leg_length")
+	road["tail_m"] = tuning.f("leg_tail")
+	var own: Dictionary = LegGenerator.generate_road(data, road, 3, _seed("rain", 4900))
+	check(GameData.as_array(own.get("skill_path")).is_empty(), "a road that is no leg carries no skill line")
+	check(not GameData.as_array(own.get("path")).is_empty() and not GameData.as_array(own.get("spawns")).is_empty(), "(it is a road with traffic and a planned line)")
+
 	_check_skill_line_is_needed()
 	_check_skill_checker_catches()
 

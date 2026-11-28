@@ -546,9 +546,9 @@ func drive(plan: Dictionary, dt: float) -> PackedStringArray:
 
 ## Runs the plan with the real LegSim, TrafficSim and Collision, a ghost car
 ## holding fourth gear's speed from the start along the plan's skill line.
-## Problems: no skill line, a hit, a hazard run over, or a leg that does not
-## end. A close call is no problem: the skill line is the one that shaves
-## them. The sheep's gap is timed for third gear (GDD 9.4), so a leg with a
+## Problems: no skill line, a hit, a hazard run over, a vehicle that appears
+## on top of another, or a leg that does not end. A close call is no
+## problem: the skill line is the one that shaves them. The sheep's gap is timed for third gear (GDD 9.4), so a leg with a
 ## flock is driven as far as the point from which the sheep walk.
 func drive_skill(plan: Dictionary, dt: float) -> PackedStringArray:
 	problems = []
@@ -573,6 +573,8 @@ func drive_skill(plan: Dictionary, dt: float) -> PackedStringArray:
 	var until: float = _length
 	if not _flock.is_empty():
 		until = GameData.as_float(_flock.get("start_s"))
+	var seen: Dictionary = {}
+	var known: int = 0
 	var guard: int = int(_length / (pace_ms * dt)) + 10
 	while car.s < until and guard > 0:
 		guard -= 1
@@ -582,6 +584,17 @@ func drive_skill(plan: Dictionary, dt: float) -> PackedStringArray:
 		car.x = _line_x(car.s)
 		car.speed = pace
 		leg.step_traffic(dt)
+		# Rule 4 holds in fourth too: nothing appears on top of anything.
+		if traffic.vehicles.size() != known:
+			known = traffic.vehicles.size()
+			for vehicle: TrafficSim.Vehicle in traffic.vehicles:
+				if seen.has(vehicle.id):
+					continue
+				seen[vehicle.id] = true
+				for other: TrafficSim.Vehicle in traffic.vehicles:
+					if other != vehicle and absf(other.s - vehicle.s) < other.half_length + vehicle.half_length \
+							and absf(other.x - vehicle.x) < other.half_width + vehicle.half_width:
+						_problem("driven in fourth: a %s appeared on top of a %s at %s" % [vehicle.type_id, other.type_id, str(snappedf(car.s, 0.1))])
 		traffic.step(dt, car.s, car.x, car.speed)
 		collision.step(dt, car, traffic, _tuning.i("gen_skill_gear"))
 		if collision.hit != Collision.Hit.NONE:
