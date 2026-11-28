@@ -27,6 +27,8 @@ extends RefCounted
 ## compared byte for byte, and run by LegSim.
 
 const EVENT_TYPES: PackedStringArray = ["HAZARD", "CLUSTER", "SLOWPOKE"]
+## Salt of the draws that lay a road's leans (D-074).
+const CAMBER_SALT: int = 7411
 ## Beats that put nothing beside the player.
 const QUIET_TYPES: PackedStringArray = ["CALM", "CURVE", "GUST"]
 const KMH_TO_MS: float = 1.0 / 3.6
@@ -360,6 +362,7 @@ func _plan_of(leg_id: String, leg_seed: int, attempts: int, spawns: Array[Dictio
 		"spawns": spawns,
 		"hazards": _hazards,
 		"curves": _curves,
+		"cambers": lay_cambers(_tuning, leg_seed, _leg_length, _leg_length, _reserved),
 		"gusts": _gusts,
 		"zones": _zones,
 		"flock": _flock,
@@ -367,6 +370,52 @@ func _plan_of(leg_id: String, leg_seed: int, attempts: int, spawns: Array[Dictio
 		"motorcade": _motorcade,
 		"path": path,
 	}
+
+
+## How a road leans, stretch by stretch (D-074): [ { "s", "length", "lean" } ],
+## lean the share of crown_drift it pushes with, + toward the right. It
+## begins flat for camber_lead_m; then stretches of camber_length_m follow
+## one another, each flat, leaning right or leaning left by camber_weights,
+## a leaning one by one of camber_leans; never two leans the same way in a
+## row without a flat between; the road past `leans_end` and whatever a
+## boss has reserved are flat.
+##
+## Drawn from the road's seed by itself, not from the generator's stream:
+## the traffic of a seed is the traffic it was before roads leaned.
+static func lay_cambers(tuning: Tuning, road_seed: int, length: float, leans_end: float, reserved: Array = []) -> Array:
+	var out: Array = []
+	var random: RandomNumberGenerator = Rng.seeded(Rng.derive(road_seed, CAMBER_SALT))
+	var shortest: float = tuning.fi("camber_length_m", 0)
+	var longest: float = tuning.fi("camber_length_m", 1)
+	var weights: PackedFloat64Array = tuning.floats("camber_weights")
+	var leans: PackedFloat64Array = tuning.floats("camber_leans")
+	var total: float = 0.0
+	for weight: float in weights:
+		total += weight
+	var at: float = tuning.f("camber_lead_m")
+	var end: float = minf(leans_end, length)
+	var last: float = 0.0
+	while at < end and total > 0.0 and not leans.is_empty():
+		var stretch: float = minf(random.randf_range(shortest, longest), end - at)
+		var draw: float = random.randf() * total
+		var side: float = 0.0
+		if draw >= weights[0]:
+			side = 1.0 if draw < weights[0] + weights[1] else -1.0
+		var lean: float = side * leans[random.randi_range(0, leans.size() - 1)]
+		if side != 0.0 and side == last:
+			# The same way twice running would be one long lean: a flat between.
+			lean = 0.0
+		var kept: bool = lean != 0.0 and stretch >= shortest * 0.5
+		for entry: Variant in reserved:
+			var zone: Dictionary = GameData.as_dict(entry)
+			var from: float = GameData.as_float(zone.get("s"))
+			if at < from + GameData.as_float(zone.get("length")) and at + stretch > from:
+				kept = false
+		if kept:
+			out.append({"s": snappedf(at, 0.001), "length": snappedf(stretch, 0.001), "lean": lean})
+		last = signf(lean) if kept else 0.0
+		at += stretch
+	return out
 
 
 static func _by_trigger(a: Dictionary, b: Dictionary) -> bool:

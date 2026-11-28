@@ -210,6 +210,8 @@ func test_car_05() -> void:
 	_check_drift_at_low_speed()
 	_check_cruise_is_never_passed()
 	_check_multipliers()
+	_check_the_road_leans()
+	_check_wake()
 
 
 func _check_speed_changes() -> void:
@@ -741,6 +743,167 @@ func _check_multipliers() -> void:
 	check_near(_car.steady_drift(0.3), (crown + 0.3) * 0.5, 0.000001, "at half of drift_fade_speed, half of both")
 	_car.speed = 0.0
 	check_eq(_car.steady_drift(0.3), 0.0, "and at rest nothing")
+
+
+## D-074 (the owner, 2026-11-28): "it makes much more sense to have the
+## danger coming from the road so attention is required not just routine."
+## The road leans by stretches: right, left, or not at all. A stretch that
+## leans fully pushes at crown_drift (the 3.4 s of T-CAR-01); a flat one
+## pushes nowhere.
+func _check_the_road_leans() -> void:
+	var crown: float = tuning.f("crown_drift")
+	var ramp: float = tuning.f("camber_ramp_m")
+	var lead: float = tuning.f("camber_lead_m")
+	var shortest: float = tuning.fi("camber_length_m", 0)
+	var longest: float = tuning.fi("camber_length_m", 1)
+	var leans: PackedFloat64Array = tuning.floats("camber_leans")
+
+	# The car: its sideways drift is the lean's share of crown_drift.
+	for lean: float in [1.0, 0.6, 0.0, -0.8, -1.0]:
+		_car.reset(1, 3)
+		_car.camber = lean
+		var before: float = _car.x
+		for _tick: int in int(1.0 / DT):
+			_car.step(DT, 0.0, 3, false, 0.0)
+		check_near(_car.x - before, crown * lean, 0.001, "on a road leaning %s, a car nobody steers moves %s m in a second" % [str(lean), str(crown * lean)])
+		check_near(_car.steady_drift(0.0), crown * lean, 0.000001, "and that is its steady drift")
+	_car.camber = 1.0
+
+	# The plan: every generated road says how it leans.
+	var seen_right: bool = false
+	var seen_left: bool = false
+	var flat_share: float = 0.0
+	var roads: int = 0
+	for leg: String in ["open_road", "rush", "rain"]:
+		for seed_value: int in range(1, 9):
+			var plan: Dictionary = LegGenerator.generate(data, leg, 1, seed_value, "")
+			if not check(plan.has("cambers"), "the plan of a %s leg says how its road leans" % leg):
+				continue
+			roads += 1
+			var length: float = GameData.as_float(plan["length"])
+			var at: float = 0.0
+			var last: float = 0.0
+			var leaning: float = 0.0
+			var sound: bool = true
+			for entry: Variant in GameData.as_array(plan["cambers"]):
+				var stretch: Dictionary = entry
+				var s: float = GameData.as_float(stretch["s"])
+				var long: float = GameData.as_float(stretch["length"])
+				var lean: float = GameData.as_float(stretch["lean"])
+				sound = sound and s >= maxf(at, lead) - 0.001 and s + long <= length + 0.001
+				sound = sound and long <= longest + 0.001 and long >= shortest * 0.5 - 0.001
+				sound = sound and leans.has(absf(lean))
+				# The same way twice running only with a flat stretch between.
+				sound = sound and not (signf(lean) == last and s - at < shortest * 0.5)
+				seen_right = seen_right or lean > 0.0
+				seen_left = seen_left or lean < 0.0
+				last = signf(lean)
+				at = s + long
+				leaning += long
+			check(sound, "%s, seed %d: its leaning stretches are in order, of the lengths and leans tuning allows, after a flat start" % [leg, seed_value])
+			flat_share += 1.0 - leaning / length
+			check_eq(JSON.stringify(LegGenerator.generate(data, leg, 1, seed_value, "")["cambers"]), JSON.stringify(plan["cambers"]), "the same seed gives the same leans")
+	check(seen_right and seen_left, "among %d roads some stretches lean right and some left" % roads)
+	check_between(flat_share / float(maxi(roads, 1)), 0.25, 0.75, "and a good part of the road is flat")
+	var set_piece: Dictionary = BossSim.plan(data, BossSim.STORM, "", 3)
+	check(set_piece.has("cambers") and GameData.as_array(set_piece["cambers"]).is_empty(), "the Storm's road is flat: the dust hides the horizon that tells a lean")
+
+	# The leg: a lean comes on and goes off over camber_ramp_m, and the car
+	# of a whole simulation is pushed by it.
+	var sim: DriveSim = DriveSim.new(fresh_data())
+	var road: Dictionary = RunGenerator.blank_plan(1, 3, true, 2000.0)
+	road["cambers"] = [{"s": 300.0, "length": 400.0, "lean": -0.8}, {"s": 900.0, "length": 300.0, "lean": 1.0}]
+	sim.gate.reset(3)
+	sim.begin_leg(road)
+	check_near(sim.leg.camber_at(100.0), 0.0, 0.000001, "before the first lean the road is flat")
+	check_near(sim.leg.camber_at(300.0 + ramp * 0.5), -0.4, 0.000001, "half-way up its ramp a lean is half there")
+	check_near(sim.leg.camber_at(300.0 + ramp), -0.8, 0.000001, "past the ramp it is whole")
+	check_near(sim.leg.camber_at(500.0), -0.8, 0.000001, "and stays so")
+	check_near(sim.leg.camber_at(700.0 - ramp * 0.25), -0.2, 0.000001, "it goes off as it came on")
+	check_near(sim.leg.camber_at(800.0), 0.0, 0.000001, "between two leans the road is flat")
+	check_near(sim.leg.camber_at(1050.0), 1.0, 0.000001, "the next one leans the other way")
+	var input: DriveInput = DriveInput.new()
+	var start_x: float = sim.car.x
+	while sim.car.s < 250.0:
+		sim.step(input)
+	check_near(sim.car.x, start_x, 0.000001, "250 m of flat road with nobody at the wheel: the car has not moved sideways")
+	check_near(GameData.as_float(sim.snapshot()["camber"]), 0.0, 0.000001, "and the snapshot says the road is flat")
+	while sim.car.s < 300.0 + ramp + 10.0:
+		sim.step(input)
+	check(sim.car.x < start_x - 0.05, "into the stretch that leans left, it goes left")
+	check_near(sim.car.camber, -0.8, 0.000001, "the car is told the lean")
+	check_near(GameData.as_float(sim.snapshot()["camber"]), -0.8, 0.000001, "and so is the view, for the horizon")
+	var x_then: float = sim.car.x
+	var ticks: int = 0
+	while ticks < int(1.0 / DT):
+		sim.step(input)
+		ticks += 1
+	check_near(sim.car.x - x_then, -0.8 * crown, 0.002, "at 0.8 of crown_drift")
+
+	# A plan that does not say (made by hand, before roads leaned) leans
+	# right all along; a test can ask for one lean everywhere.
+	var old_plan: Dictionary = RunGenerator.blank_plan(1, 3, true, 2000.0)
+	old_plan.erase("cambers")
+	sim = DriveSim.new(fresh_data())
+	sim.gate.reset(3)
+	sim.begin_leg(old_plan)
+	check_near(sim.camber_now(), 1.0, 0.000001, "a plan with no word on its leans is a road leaning fully right")
+	sim.lean_everywhere = 0.0
+	check_near(sim.camber_now(), 0.0, 0.000001, "lean_everywhere makes it what a test needs")
+
+
+## The wake of large vehicles (D-074): a truck, a tanker or a minibus that
+## he passes closely, or that passes him, pushes the car away from itself.
+func _check_wake() -> void:
+	var reach: float = tuning.f("wake_reach_m")
+	var within: float = tuning.f("wake_gap_m")
+	var full: float = tuning.f("wake_full_closing_kmh")
+	var third: float = tuning.fi("gear_speeds", 2)
+	var truck_wake: float = GameData.as_float(data.record("vehicles", "truck").get("wake_push"))
+	check(truck_wake > 0.0, "a truck has a wake")
+	check(GameData.as_float(data.record("vehicles", "tanker").get("wake_push")) > 0.0 and GameData.as_float(data.record("vehicles", "minibus").get("wake_push")) > 0.0, "so have a tanker and a minibus")
+	check(truck_wake > GameData.as_float(data.record("vehicles", "minibus").get("wake_push")), "a truck's is the stronger")
+	# Each case: the vehicle, which side of the car it is on (+1 its right),
+	# the air between them, how much slower it is, how far ahead its tail is
+	# of his nose (0: alongside), and the push expected, m/s toward the right.
+	var cases: Array[Array] = [
+		[&"truck", 1.0, 0.0, full, 0.0, -truck_wake, "alongside a truck on his right with no air between: its whole wake, to the left"],
+		[&"truck", -1.0, 0.0, full, 0.0, truck_wake, "a truck on his left pushes him right"],
+		[&"truck", 1.0, within * 0.5, full, 0.0, -truck_wake * 0.5, "with half of wake_gap_m of air, half of it"],
+		[&"truck", 1.0, within, full, 0.0, 0.0, "at wake_gap_m, none"],
+		[&"truck", 1.0, 0.0, full * 0.5, 0.0, -truck_wake * 0.5, "at half the speed between them, half"],
+		[&"truck", 1.0, 0.0, 0.0, 0.0, 0.0, "at the same speed, none: it is passing that pushes"],
+		[&"truck", 1.0, 0.0, full * 2.0, 0.0, -truck_wake, "at twice the speed, no more than the whole"],
+		[&"truck", 1.0, 0.0, -full, 0.0, -truck_wake, "a truck that passes him pushes as one he passes"],
+		[&"truck", 1.0, 0.0, full, reach * 0.5, -truck_wake * 0.5, "half of wake_reach_m short of its tail, half"],
+		[&"truck", 1.0, 0.0, full, reach, 0.0, "at wake_reach_m, none"],
+		[&"car", 1.0, 0.0, full, 0.0, 0.0, "a car has no wake"],
+	]
+	for case: Array in cases:
+		var sim: DriveSim = DriveSim.new(fresh_data())
+		sim.lean_everywhere = 0.0
+		sim.gate.reset(3)
+		sim.car.reset(1, 3)
+		var side: float = GameData.as_float(case[1])
+		var vehicle: TrafficSim.Vehicle = sim.traffic.spawn(StringName(str(case[0])), 1, 0.0, third - GameData.as_float(case[3]))
+		vehicle.x = sim.car.x + side * (vehicle.half_width + sim.car.half_width() + GameData.as_float(case[2]))
+		vehicle.s = sim.car.s + GameData.as_float(case[4]) + (vehicle.half_length + sim.car.length() * 0.5 if GameData.as_float(case[4]) > 0.0 else 0.0)
+		check_near(sim.wake_push(), GameData.as_float(case[5]), 0.000001, "wake: %s" % GameData.as_string(case[6]))
+	# It is a drift like any other: it moves a car nobody steers, fades below
+	# drift_fade_speed, and is not felt from what has just hit him.
+	var road: DriveSim = DriveSim.new(fresh_data())
+	road.lean_everywhere = 0.0
+	road.gate.reset(3)
+	road.car.reset(1, 3)
+	var beside: TrafficSim.Vehicle = road.traffic.spawn(&"truck", 2, road.car.s, third - full)
+	beside.x = road.car.x + beside.half_width + road.car.half_width() + 0.3
+	var x: float = road.car.x
+	var input: DriveInput = DriveInput.new()
+	road.step(input)
+	check(road.car.x < x, "beside a truck he is passing, the car is carried away from it")
+	check_near(road.car.drift, -truck_wake * (1.0 - 0.3 / within), 0.01, "by its wake at that much air")
+	road.collision.immunity_left = 0.5
+	check_near(road.wake_push(), 0.0, 0.000001, "while he cannot be hit again (he has just been), no wake is felt")
 
 
 ## Steering with the mouse (GDD 4.1, 4.3, 5.3): hold the left button with the

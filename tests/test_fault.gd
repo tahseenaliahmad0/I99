@@ -197,18 +197,25 @@ func _check_slipping_clutch() -> void:
 
 func _check_stuck_wiper() -> void:
 	_sim = DriveSim.new(fresh_data())
-	var clear: float = tuning.f("wiper_clear_time")
+	# (D-074, the owner: a sweep lasts 12 to 18 s and the blur comes back
+	# slowly at first. A stuck wiper's sweep is 7 s, about half a good one.)
+	var clear: float = _sim.items.wiper_clear_time()
+	var power: float = tuning.f("wiper_blur_power")
+	var good_least: float = tuning.f("wiper_clear_time") - tuning.f("wiper_clear_spread")
 	_sim.items.since_wipe = clear * 0.5
 	check_near(_sim.items.rain_blur(), 0.0, 0.000001, "in dry weather the wiper has nothing to clear")
 	_sim.items.raining = true
-	check_near(_sim.items.rain_blur(), 0.5, 0.000001, "in the rain, half-way through wiper_clear_time the rain has half come back")
+	check_near(_sim.items.rain_blur(), pow(0.5, power), 0.000001, "in the rain, half-way through the sweep's time the blur is a half to wiper_blur_power")
+	check(_sim.items.rain_blur() < 0.25, "which is under a quarter: it comes back slowly at first")
 	_light(&"stuck_wiper")
 	var stuck: float = _sim.faults.param_of(&"stuck_wiper", "wiper_clear_s", clear)
-	check_near(stuck, 3.0, 0.000001, "GDD 6.3: a sweep clears rain for 3 s instead of 6")
+	check_near(stuck, 7.0, 0.000001, "a stuck wiper's sweep clears rain for 7 s")
+	check(stuck <= good_least * 0.6, "which is well under the shortest good sweep (%s s)" % str(good_least))
+	check_near(_sim.items.wiper_clear_time(), stuck, 0.000001, "with the fault lit the sweep's time is the stuck wiper's")
 	_sim.items.since_wipe = stuck * 0.5
-	check_near(_sim.items.rain_blur(), 0.5, 0.000001, "with a stuck wiper that is half-way through 3 s")
+	check_near(_sim.items.rain_blur(), pow(0.5, power), 0.000001, "with a stuck wiper the same curve runs over 7 s")
 	_sim.items.since_wipe = stuck
-	check_near(_sim.items.rain_blur(), 1.0, 0.000001, "and at 3 s the view is fully blurred")
+	check_near(_sim.items.rain_blur(), 1.0, 0.000001, "and at 7 s the view is fully blurred")
 
 
 func _check_cracked_mirror() -> void:

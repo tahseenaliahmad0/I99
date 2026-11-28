@@ -112,19 +112,57 @@ func _check_horn() -> void:
 
 func _check_wipers() -> void:
 	_new_sim()
+	# (D-074, the owner: "lengthen by 12-18, but a random amount in between,
+	# and interpolate non-linear so it gets blurrier slower at the start
+	# before ramping up".)
 	var clear: float = tuning.f("wiper_clear_time")
-	check_near(clear, 6.0, 0.000001, "GDD 4.6: a sweep keeps the rain clear for 6 s")
-	_run(clear + 1.0)
+	var spread: float = tuning.f("wiper_clear_spread")
+	var power: float = tuning.f("wiper_blur_power")
+	check_near(clear - spread, 12.0, 0.000001, "a sweep keeps the rain off for 12 s at least")
+	check_near(clear + spread, 18.0, 0.000001, "and 18 s at most")
+	check(power > 1.5, "the blur's curve is well bent (wiper_blur_power %s)" % str(power))
+	_run(clear + spread + 1.0)
 	check_near(_sim.items.rain_blur(), 0.0, 0.000001, "in dry weather nothing blurs the view, sweep or no sweep")
 	check_near(GameData.as_float(_sim.snapshot()["rain_blur"]), 0.0, 0.000001, "and the snapshot says so")
 	_sim.items.raining = true
 	check_near(_sim.items.rain_blur(), 1.0, 0.000001, "in the rain, with no sweep the view is fully blurred")
 	_complete("wipers", Gesture.DIR_UP)
 	check_near(_sim.items.rain_blur(), 0.0, 0.000001, "one sweep clears it")
-	_run(clear * 0.5)
-	check_near(_sim.items.rain_blur(), 0.5, 0.01, "the blur comes back over wiper_clear_time: half at half")
-	_run(clear * 0.5)
+	var lasts: float = _sim.items.wiper_clear_time()
+	check_between(lasts, clear - spread, clear + spread, "the sweep lasts between 12 and 18 s")
+	_run(lasts * 0.25)
+	check_near(_sim.items.rain_blur(), pow(0.25, power), 0.01, "a quarter of the way through, hardly any blur is back")
+	check(_sim.items.rain_blur() < 0.05, "(under a twentieth)")
+	_run(lasts * 0.25)
+	check_near(_sim.items.rain_blur(), pow(0.5, power), 0.01, "half-way, under a quarter of it")
+	_run(lasts * 0.25)
+	check_near(_sim.items.rain_blur(), pow(0.75, power), 0.01, "three quarters through, about half")
+	_run(lasts * 0.25)
 	check_near(_sim.items.rain_blur(), 1.0, 0.01, "and whole at the end")
+	# No two sweeps in a row last the same, every one is in the range, and
+	# the same night gives the same sweeps.
+	var times: PackedFloat64Array = []
+	var twin: DriveSim = DriveSim.new(fresh_data())
+	twin.items.raining = true
+	var same: bool = true
+	var in_range: bool = true
+	var repeats: int = 0
+	for _sweep: int in 12:
+		_complete("wipers", Gesture.DIR_UP)
+		twin.items.complete(twin.data.record("rituals", "wipers"), Gesture.DIR_UP)
+		var now: float = _sim.items.wiper_clear_time()
+		in_range = in_range and now >= clear - spread and now <= clear + spread
+		if not times.is_empty() and is_equal_approx(times[times.size() - 1], now):
+			repeats += 1
+		times.append(now)
+	var widest: float = 0.0
+	for a: float in times:
+		for b: float in times:
+			widest = maxf(widest, absf(a - b))
+	check(in_range, "every one of twelve sweeps lasts between 12 and 18 s")
+	check_eq(repeats, 0, "no two in a row last the same")
+	check(widest > spread, "they are spread over the range (%s s between the shortest and the longest)" % str(snappedf(widest, 0.1)))
+	check_eq(_sim.items.wipes, 13, "(thirteen sweeps have been made)")
 	check_near(GameData.as_float(_sim.snapshot()["rain_blur"]), _sim.items.rain_blur(), 0.000001, "the snapshot carries it for the post effect")
 
 

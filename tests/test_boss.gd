@@ -1759,7 +1759,8 @@ func _check_storm_gusts(modifier: String) -> void:
 			tell_began.append(_sim.tick)
 			tell_way.append(GameData.as_int(shot["gust_dir"]))
 		telling = told
-		var sideways: float = _sim.car.drift - crown
+		# (What is not the road's own lean, where it has one: D-074.)
+		var sideways: float = _sim.car.drift - crown * _sim.car.camber
 		var pushed: bool = absf(sideways) > 0.001
 		if pushed and not pushing:
 			push_began.append(_sim.tick)

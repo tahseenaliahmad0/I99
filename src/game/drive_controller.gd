@@ -548,7 +548,10 @@ func _process(delta: float) -> void:
 	# Yaw toward the passenger (+X) is a negative turn about +Y. Sway rocks
 	# the horizon (GDD 5.8): the camera rolls with the push.
 	var sway: float = snapshot["sway"]
-	_camera.rotation = Vector3(deg_to_rad(cam_pitch), -deg_to_rad(cam_yaw), deg_to_rad(sway * sim.tuning.f("sway_view_roll") * _shake))
+	# A road that leans is seen to lean (D-074): the horizon tilts with it,
+	# whatever the shake setting (it is what the road says, not a shake).
+	var lean: float = GameData.as_float(snapshot["camber"]) * sim.tuning.f("camber_view_roll")
+	_camera.rotation = Vector3(deg_to_rad(cam_pitch), -deg_to_rad(cam_yaw), deg_to_rad(sway * sim.tuning.f("sway_view_roll") * _shake - lean))
 	_feedback.step(snapshot, delta)
 	_cabin.apply(snapshot)
 	_hand.apply(snapshot)

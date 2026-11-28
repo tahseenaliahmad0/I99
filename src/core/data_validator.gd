@@ -376,6 +376,8 @@ func _vehicle_schema() -> Dictionary:
 		"acts": _list(_int(1.0, 3.0), 1),
 		"placeholder": _ref("placeholders"),
 		"traffic": _opt(_bool()),
+		# m/s it pushes the car aside as the two pass closely (D-074).
+		"wake_push": _opt(_num(0.0)),
 	})
 
 

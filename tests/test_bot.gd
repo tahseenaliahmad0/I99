@@ -26,6 +26,9 @@ func _on_an_empty_road(skill: String, lane: int = 1) -> void:
 	_sim.in_encounter = true
 	_sim.gate.reset(3)
 	_sim.begin_leg(plan)
+	# The road leans right all along, as every road did when these checks
+	# were written (D-074: a generated road leans by stretches).
+	_sim.lean_everywhere = 1.0
 	_sim.car.reset(lane, 3)
 	_bot = DriverBot.new(_sim, data, skill, SEED)
 	_input = DriveInput.new()

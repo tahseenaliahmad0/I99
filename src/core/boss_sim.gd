@@ -330,7 +330,7 @@ static func _plan_dawn(data: GameData, out: Dictionary, dawn: Dictionary, modifi
 		"lane": GameData.as_int(out.get("lanes")) / 2,
 	}
 	var made: Dictionary = LegGenerator.generate_road(data, road, GameData.as_int(out.get("act")), Rng.derive(boss_seed, PLAN_SALT), [zone])
-	for key: String in ["beats_end", "start_lane", "attempts", "sparse", "beats", "hazards", "curves", "gusts", "zones", "path"]:
+	for key: String in ["beats_end", "start_lane", "attempts", "sparse", "beats", "hazards", "curves", "cambers", "gusts", "zones", "path"]:
 		out[key] = made[key]
 	var random: RandomNumberGenerator = Rng.seeded(Rng.derive(boss_seed, THIN_SALT))
 	var sunrise: float = GameData.as_float(dawn.get("sunrise_at_m"))

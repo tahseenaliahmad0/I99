@@ -170,6 +170,15 @@ var free_traffic_per_km: float = 0.0
 ## Settings the simulation reads (GDD 17.1).
 var steer_sensitivity: float = 1.0
 var sequential_shift: bool = false
+## Side by side and touching is still beside it, for its wake (rounding).
+const WAKE_TOUCH: float = 0.01
+## How a road leans whose plan does not say (D-074): the bare road outside
+## any leg, and a plan made by hand with no "cambers". Fully to the right,
+## as every road did; every road the game generates says for itself.
+var road_camber: float = 1.0
+## For a test that needs one road whatever was generated: when set, the road
+## leans this much everywhere (NAN: the road is as its plan says).
+var lean_everywhere: float = NAN
 ## The Phantom setting (GDD 17.1): off, there is no flinch and no cramp.
 var phantom_enabled: bool = true
 ## Brake assist (GDD 17.1): "Slows the car when a crash is certain."
@@ -586,6 +595,7 @@ func step(input: DriveInput) -> void:
 		car.edge_touched = CarSim.EDGE_NONE
 		car.wall_touched = false
 	elif not _standing():
+		car.camber = camber_now()
 		car.step(_road_dt, wheel.steer(), gate.gear, _braking, _extra_drift())
 	_step_set_piece()
 	if _auto_indicate:
@@ -2076,6 +2086,8 @@ func snapshot() -> Dictionary:
 		"gesture_kind": gesture.kind,
 		"gesture_progress": gesture.progress,
 		"gesture_anchor": hand.anchor_id(_active_anchor),
+		# How the road leans under him, for the horizon (D-074).
+		"camber": camber_now() if not _standing() else 0.0,
 		# For the label that names a control and says how it is worked: what
 		# a press where the pointer is would begin, and what is being made now.
 		"hint": hint_at(hand.snap_index),
@@ -2398,9 +2410,53 @@ func _item_snapshots() -> Array[Dictionary]:
 
 # --- Car ---------------------------------------------------------------------
 
-## Every sideways push but the road's crown (GDD 5.4), m/s toward the right.
+## How the road leans where the car is (D-074): what the leg's plan says, a
+## share of crown_drift, + toward the right; `road_camber` on a road whose
+## plan does not say.
+func camber_now() -> float:
+	if not is_nan(lean_everywhere):
+		return lean_everywhere
+	if leg.active and leg.says_camber:
+		return leg.camber_at(car.s)
+	return road_camber
+
+
+## The wake of large vehicles (D-074): one that he passes closely, or that
+## passes him, pushes the car away from itself. Its record's wake_push at
+## no air between them and the full speed between them; less with more air
+## (none at wake_gap_m), with less speed between them, and ahead of its
+## nose or behind its tail (none at wake_reach_m). m/s toward the right.
+func wake_push() -> float:
+	var reach: float = tuning.f("wake_reach_m")
+	var within: float = tuning.f("wake_gap_m")
+	var full: float = tuning.f("wake_full_closing_kmh")
+	var total: float = 0.0
+	for vehicle: TrafficSim.Vehicle in traffic.vehicles:
+		if vehicle.wake <= 0.0 or vehicle.cc_hit or collision.immunity_left > 0.0:
+			# What has just hit him pushes him as a hit does (GDD 5.6: clear,
+			# and no nearer a rail than a touch leaves him), not as air does.
+			continue
+		var along: float = absf(vehicle.s - car.s) - vehicle.half_length - car.length() * 0.5
+		if along >= reach:
+			continue
+		var gap: float = absf(vehicle.x - car.x) - vehicle.half_width - car.half_width()
+		if gap < -WAKE_TOUCH or gap >= within:
+			# Behind it or ahead of it in its own lane, or too far beside it.
+			continue
+		gap = maxf(gap, 0.0)
+		var strength: float = vehicle.wake * (1.0 - gap / within)
+		if full > 0.0:
+			strength *= clampf(absf(vehicle.closing_speed(car.speed)) / full, 0.0, 1.0)
+		if along > 0.0 and reach > 0.0:
+			strength *= 1.0 - along / reach
+		total += strength if car.x >= vehicle.x else -strength
+	return total
+
+
+## Every sideways push but the road's lean (GDD 5.4), m/s toward the right.
 func _extra_drift() -> float:
 	var push: float = car.curve_push(curve_k) - faults.param(FAULT_PULL, "drift_left", 0.0)
+	push += wake_push()
 	# A gust is the road's: it blows for gust_duration of the road's time, so
 	# under Focus it lasts longer by his clock and carries the car as far as
 	# ever (GDD 7.4). It pushes for a whole number of ticks: for this one while

@@ -247,6 +247,9 @@ func test_item_thumb_keypad() -> void:
 	_new_sim()
 	_cruise(3, 1)
 	_sim.items.raining = true
+	# (D-074: the blur comes back slowly at first. Well into a sweep's time
+	# there is blur to see whether a key clears.)
+	_sim.items.since_wipe = _sim.items.wiper_clear_time() * 0.6
 	_run(1.0)
 	_grip()
 	_ticks(SETTLE)
@@ -267,6 +270,7 @@ func test_item_thumb_keypad() -> void:
 	_cruise(3, 1)
 	_sim.items.raining = true
 	_run(1.0)
+	_sim.items.since_wipe = _sim.items.wiper_clear_time() * 0.6
 	var ahead: TrafficSim.Vehicle = _sim.traffic.spawn(&"car", 1, _sim.car.s + tuning.f("horn_range") * 0.5, tuning.fi("gear_speeds", 2))
 	_grip()
 	_ticks(SETTLE)
@@ -513,24 +517,31 @@ func test_item_fog_lamps() -> void:
 	_give("fog_lamps")
 	check_near(_sim.visibility(), dust * 1.4, 0.000001, "with fog lamps, 40% further")
 
-	# Rain: the view stays clear 40% longer after a sweep.
-	var clear: float = tuning.f("wiper_clear_time")
+	# Rain: the view stays clear 40% longer after a sweep. (D-074: a sweep
+	# lasts 12 to 18 s and the blur is bent; the lamps stretch the sweep.)
+	var power: float = tuning.f("wiper_blur_power")
 	_new_sim()
 	_sim.items.raining = true
 	_reach("wiper_stalk")
 	_flick(Vector2(0.0, -tuning.f("flick_min_distance") * 1.5))
-	_run(clear * 0.5)
+	var clear: float = _sim.items.wiper_clear_time()
+	check_between(clear, tuning.f("wiper_clear_time") - tuning.f("wiper_clear_spread"), tuning.f("wiper_clear_time") + tuning.f("wiper_clear_spread"), "(a sweep in rain lasts 12 to 18 s)")
+	var since: float = _sim.items.since_wipe
+	_run(clear * 0.5 - since)
 	var plain_blur: float = _sim.items.rain_blur()
-	check_near(plain_blur, 0.5, 0.02, "(in rain the view is half blurred 3 s after a sweep)")
+	check_near(plain_blur, pow(0.5, power), 0.02, "(half-way through the sweep the blur is a half to wiper_blur_power)")
 	_new_sim()
 	_give("fog_lamps")
 	_sim.items.raining = true
 	_reach("wiper_stalk")
 	_flick(Vector2(0.0, -tuning.f("flick_min_distance") * 1.5))
-	_run(clear * 0.5)
-	check_near(_sim.items.rain_blur(), plain_blur / 1.4, 0.02, "with fog lamps it blurs 40% more slowly")
+	check_near(_sim.items.wiper_clear_time(), clear * 1.4, 0.000001, "with fog lamps the same sweep lasts 40% longer")
+	since = _sim.items.since_wipe
+	_run(clear * 0.5 - since)
+	check_near(_sim.items.rain_blur(), pow(0.5 / 1.4, power), 0.02, "so at the same moment less of the blur is back")
+	check(_sim.items.rain_blur() < plain_blur, "(less than without them)")
 	_run(clear * 0.9)
-	check_near(_sim.items.rain_blur(), 1.0, 0.000001, "and is whole 8.4 s after the sweep")
+	check_near(_sim.items.rain_blur(), 1.0, 0.000001, "and it is whole 1.4 sweeps after the sweep")
 
 	# In clear daylight there is nothing to see further into.
 	_begin_quiet_leg("open_road", 1, 5)

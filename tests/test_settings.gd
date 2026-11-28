@@ -263,6 +263,9 @@ func _check_steady_start() -> void:
 		_sim.apply_settings({SettingsSpec.STEADY_START: steady})
 		_leave_stop()
 		_keep_lane = false
+		# (A stretch that leans right, whatever this night's road does here:
+		# D-074. On a flat one there is nothing for the wheel to hold against.)
+		_sim.lean_everywhere = 1.0
 		_sim.gate.reset(2)
 		_input.clear()
 		var x: float = _sim.car.x

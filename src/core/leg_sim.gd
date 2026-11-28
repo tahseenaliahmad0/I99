@@ -97,6 +97,11 @@ var _waiting: Array[Dictionary] = []
 ## Vehicles with a lane change still to come: [vehicle, to lane, gap, late].
 var _changers: Array[Array] = []
 var _curves: Array = []
+## The stretches that lean (D-074), and whether the plan says how its road
+## leans at all (a plan made by hand may not: DriveSim.road_camber).
+var _cambers: Array = []
+var says_camber: bool = false
+var _camber_ramp: float = 0.0
 var _gusts: Array = []
 var _next_gust: int = 0
 var _first_hazard: int = 0
@@ -140,6 +145,7 @@ func configure(data: GameData, car: CarSim, traffic: TrafficSim) -> void:
 	var tuning: Tuning = data.tuning
 	_par_ms = tuning.fi("gear_speeds", 2) * KMH_TO_MS
 	_curve_ramp = tuning.f("curve_ramp")
+	_camber_ramp = tuning.f("camber_ramp_m")
 	_gust_tell = tuning.f("gust_tell")
 	_signal_time = tuning.f("signal_time")
 	_late_signal_time = tuning.f("late_signal_time")
@@ -191,6 +197,8 @@ func begin(leg_plan: Dictionary) -> void:
 	_waiting = []
 	_changers = []
 	_curves = GameData.as_array(plan.get("curves"))
+	says_camber = plan.has("cambers")
+	_cambers = GameData.as_array(plan.get("cambers"))
 	_gusts = GameData.as_array(plan.get("gusts"))
 	_next_gust = 0
 	_first_hazard = 0
@@ -366,6 +374,23 @@ func step_road(dt: float, clock_dt: float = -1.0) -> void:
 			_next_gust += 1
 			gust_tell_left = _gust_tell
 			gust_tell_dir = GameData.as_int(gust.get("dir"))
+
+
+## How the road leans at `s` (D-074): the share of crown_drift it pushes
+## with, + toward the right. A lean comes on and goes off over camber_ramp
+## metres; between the leaning stretches the road is flat.
+func camber_at(s: float) -> float:
+	for entry: Variant in _cambers:
+		var stretch: Dictionary = GameData.as_dict(entry)
+		var start: float = GameData.as_float(stretch.get("s"))
+		var end: float = start + GameData.as_float(stretch.get("length"))
+		if s < start or s > end:
+			continue
+		var ramp: float = 1.0
+		if _camber_ramp > 0.0:
+			ramp = clampf(minf(s - start, end - s) / _camber_ramp, 0.0, 1.0)
+		return GameData.as_float(stretch.get("lean")) * ramp
+	return 0.0
 
 
 ## The curve strength at `s`: it comes on and goes off over curve_ramp metres.

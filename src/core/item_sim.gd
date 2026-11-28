@@ -24,6 +24,8 @@ extends RefCounted
 ## "synergy" rule: when that synergy's partner is there, its amount is used.
 
 const SLOT_ANCHOR: String = "@slot"
+## Salt of the wiper's draws (D-074).
+const WIPER_SALT: int = 8841
 ## A DRAG_TO's destination: any free slot the thing carried fits in.
 const HOME_ANCHOR: String = "@home"
 ## Slots whose id begins so are cells of the glovebox: what is in one is
@@ -192,6 +194,11 @@ var haze: float = 0.0
 var radio: StringName = STATIC
 ## Seconds since the last wiper sweep.
 var since_wipe: float = 0.0
+## How long the last sweep keeps the rain off the glass, and how many sweeps
+## there have been (D-074: each lasts wiper_clear_time less or more by up to
+## wiper_clear_spread, never the same beat twice running).
+var wiper_clear_now: float = 0.0
+var wipes: int = 0
 ## True while it rains (the leg says so): only then does the view blur.
 var raining: bool = false
 ## Dust in the air (the leg says so): haze per second while the window is open.
@@ -320,6 +327,8 @@ var _horn_nerves: float = 0.0
 var _horn_cooldown_s: float = 0.0
 var _horn_clearance: float = 0.0
 var _wiper_clear: float = 0.0
+var _wiper_spread: float = 0.0
+var _wiper_power: float = 1.0
 var _indicator_time: float = 0.0
 var _visor_time: float = 0.0
 var _visor_nerves: float = 0.0
@@ -350,6 +359,9 @@ func configure(data: GameData, effects: EffectSystem, nerves: NervesSim, traffic
 	_horn_cooldown_s = tuning.f("horn_cooldown")
 	_horn_clearance = tuning.f("traffic_follow_gap")
 	_wiper_clear = tuning.f("wiper_clear_time")
+	_wiper_spread = tuning.f("wiper_clear_spread")
+	_wiper_power = tuning.f("wiper_blur_power")
+	wiper_clear_now = _wiper_clear
 	_indicator_time = tuning.f("indicator_time")
 	_visor_time = tuning.f("visor_time")
 	_visor_nerves = tuning.f("visor_nerves")
@@ -393,6 +405,8 @@ func reset_cabin() -> void:
 	_radio_time = 0.0
 	_radio_held = STATIC
 	since_wipe = 0.0
+	wipes = 0
+	_draw_wiper_clear()
 	indicator = 0
 	indicator_left = 0.0
 	photo_used = false
@@ -1001,6 +1015,8 @@ func _run(op: String, owner: Item, direction: int) -> void:
 			_horn()
 		"wipe":
 			since_wipe = 0.0
+			wipes += 1
+			_draw_wiper_clear()
 			# In a dust storm the wipers smear what is on the glass (GDD 10.3).
 			if wipe_haze > 0.0:
 				haze = minf(haze + wipe_haze, _haze_cap)
@@ -1407,17 +1423,34 @@ func _radio_step(direction: int) -> void:
 	_radio_time = 0.0
 
 
-## How blurred the rain has made the view: 0 just after a sweep, 1 after the
-## wiper's clear time (GDD 4.6, 9.1; a stuck wiper clears for less). In dry
-## weather there is nothing to blur it.
+## How blurred the rain has made the view: 0 just after a sweep, 1 once the
+## sweep's time is up (GDD 4.6, 9.1, D-074). It comes back slowly at first
+## and then fast: the share of the time gone by, to wiper_blur_power. A
+## stuck wiper clears for less, fog lamps for longer. In dry weather there
+## is nothing to blur it.
 func rain_blur() -> float:
 	if not raining:
 		return 0.0
-	# Fog lamps: in the rain, what they add to his view is time before it blurs (GDD 7.6).
-	var clear_time: float = _faults.param(&"stuck_wiper", "wiper_clear_s", _wiper_clear) * passive("visibility_mult")
+	var clear_time: float = wiper_clear_time()
 	if clear_time <= 0.0:
 		return 1.0
-	return clampf(since_wipe / clear_time, 0.0, 1.0)
+	return pow(clampf(since_wipe / clear_time, 0.0, 1.0), _wiper_power)
+
+
+## Seconds the last sweep keeps the glass clear for: its own draw; a stuck
+## wiper's fixed time in its place (GDD 6.3); fog lamps stretch either
+## (GDD 7.6: what they add to his view in rain is time before it blurs).
+func wiper_clear_time() -> float:
+	return _faults.param(&"stuck_wiper", "wiper_clear_s", wiper_clear_now) * passive("visibility_mult")
+
+
+## The time the sweep just made lasts: wiper_clear_time less or more by up
+## to wiper_clear_spread. Drawn from the night's seed and the count of
+## sweeps, not from a stream: the same night gives the same sweeps, and
+## nothing else that is drawn moves.
+func _draw_wiper_clear() -> void:
+	var seed_value: int = Rng.derive(Rng.derive(_rng.telling_seed if _rng != null else 0, WIPER_SALT), wipes)
+	wiper_clear_now = _wiper_clear + (Rng.seeded(seed_value).randf() * 2.0 - 1.0) * _wiper_spread
 
 
 # --- Things that happen to the cabin -----------------------------------------

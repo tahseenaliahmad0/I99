@@ -29,6 +29,8 @@ class Vehicle:
 	var lane: int = 0
 	var yields_to_horn: bool = false
 	var honk_nerves: float = 0.0
+	## m/s it pushes the car aside as the two pass closely (a truck's wake).
+	var wake: float = 0.0
 	## Lane change in progress: -1 signalling left, +1 right, 0 none.
 	var signalling: int = 0
 	var signal_left: float = 0.0
@@ -154,6 +156,7 @@ func spawn(type_id: StringName, lane: int, s: float, speed_kmh: float, direction
 	vehicle.half_length = GameData.as_float(record.get("length")) * 0.5
 	vehicle.yields_to_horn = GameData.as_bool(record.get("yields_to_horn"))
 	vehicle.honk_nerves = GameData.as_float(record.get("honk_nerves"))
+	vehicle.wake = GameData.as_float(record.get("wake_push"))
 	vehicle.lane = lane
 	vehicle.x = lane_center(lane)
 	vehicle.s = s

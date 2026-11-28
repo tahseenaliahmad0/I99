@@ -389,11 +389,25 @@ func _check_the_cut_to_tonight() -> void:
 	plain.begin_telling(TABLE_TONIGHT, 5)
 	plain.tick = _sim.tick
 	check_eq(after_prologue, plain.state_hash(), "it is the night a Telling begun by itself would be, to the bit")
-	# And it drifts: nobody tells him to take the wheel.
-	var x: float = _sim.car.x
+	# And it goes where the road leans: nobody holds the wheel for him, and
+	# nobody tells him to take it. (D-074: the night's road begins flat and
+	# leans by stretches; he is driven to the first one that leans.)
 	_input.clear()
-	_steps(_ticks_in(4.0))
-	check(_sim.car.x > x + 0.05, "left alone it drifts right (%.2f m in 4 s)" % (_sim.car.x - x))
+	var patience: int = _ticks_in(120.0)
+	while absf(_sim.camber_now()) < 0.5 and patience > 0:
+		patience -= 1
+		_sim.traffic.remove_all()
+		_sim.car.x = _sim.car.lane_center(1)
+		_sim.car.v_lat = 0.0
+		_sim.step(_input)
+		_sim.drain_events()
+	var lean: float = _sim.camber_now()
+	if check(absf(lean) >= 0.5, "(the night's first leg comes to a stretch that leans)"):
+		var x: float = _sim.car.x
+		for _index: int in _ticks_in(1.5):
+			_sim.traffic.remove_all()
+			_sim.step(_input)
+		check((_sim.car.x - x) * signf(lean) > 0.05, "left alone it goes where the road leans (%.2f m in 1.5 s, the road leaning %s)" % [_sim.car.x - x, str(lean)])
 	# Every Telling begins with those words, the prologue before it or not.
 	_new_sim()
 	_lines = []

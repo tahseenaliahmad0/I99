@@ -190,13 +190,15 @@ func test_leg_02() -> void:
 	check_eq(LegGenerator.density_target(data, "rush", 3), 44, "and 20 per km, 44, in Act 3")
 
 
-## T-LEG-03: Rain: the view blurs over 6 s without a wiper sweep and sideways
-## response is 30% slower; par 95 s.
+## T-LEG-03: Rain: the view blurs over 12 to 18 s without a wiper sweep,
+## slowly at first, and sideways response is 30% slower; par 95 s. (The
+## owner made the 6 s of the first spec 12 to 18 on 2026-11-28: D-074.)
 func test_leg_03() -> void:
 	var leg: Dictionary = data.record("legs", "rain")
 	check_near(GameData.as_float(leg.get("par_s")), 95.0, 0.000001, "GDD 9.1: Rain has a par of 95 s")
 	check_eq(GameData.as_string(leg.get("condition")), "rain", "it rains on a Rain leg")
-	check_near(tuning.f("wiper_clear_time"), 6.0, 0.000001, "the view blurs over 6 s")
+	check_near(tuning.f("wiper_clear_time") - tuning.f("wiper_clear_spread"), 12.0, 0.000001, "the view blurs over 12 s at least")
+	check_near(tuning.f("wiper_clear_time") + tuning.f("wiper_clear_spread"), 18.0, 0.000001, "and 18 s at most")
 	check_near(tuning.f("rain_response_mult"), 1.3, 0.000001, "sideways response is 30% slower")
 
 	# Dry road first: no blur, the car's own response.
@@ -213,10 +215,13 @@ func test_leg_03() -> void:
 	var wipers: Dictionary = data.record("rituals", "wipers")
 	_sim.items.complete(wipers, Gesture.DIR_UP)
 	check_near(GameData.as_float(_sim.snapshot()["rain_blur"]), 0.0, 0.000001, "a sweep clears the view")
-	_drive_seconds(plan, 3.0)
-	check_near(GameData.as_float(_sim.snapshot()["rain_blur"]), 0.5, 0.01, "3 s later it is half blurred")
-	_drive_seconds(plan, 3.0)
-	check_near(GameData.as_float(_sim.snapshot()["rain_blur"]), 1.0, 0.01, "6 s after the sweep it is fully blurred")
+	var lasts: float = _sim.items.wiper_clear_time()
+	check_between(lasts, 12.0, 18.0, "the sweep lasts between 12 and 18 s")
+	_drive_seconds(plan, lasts * 0.5)
+	check_near(GameData.as_float(_sim.snapshot()["rain_blur"]), pow(0.5, tuning.f("wiper_blur_power")), 0.01, "half-way through it the blur is under a quarter: it comes back slowly at first")
+	check(GameData.as_float(_sim.snapshot()["rain_blur"]) < 0.25, "(under a quarter)")
+	_drive_seconds(plan, lasts * 0.5)
+	check_near(GameData.as_float(_sim.snapshot()["rain_blur"]), 1.0, 0.01, "at its end the view is fully blurred")
 	_drive_seconds(plan, 2.0)
 	check_near(GameData.as_float(_sim.snapshot()["rain_blur"]), 1.0, 0.000001, "and stays so until the next sweep")
 	_sim.items.complete(wipers, Gesture.DIR_UP)

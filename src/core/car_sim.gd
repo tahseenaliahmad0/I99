@@ -51,6 +51,11 @@ var brake_mult: float = 1.0
 var lat_speed_mult: float = 1.0
 ## Scales the time the car takes to respond sideways (Rain).
 var lat_tau_mult: float = 1.0
+## How the road leans where the car is (D-074): the share of crown_drift it
+## pushes with, + toward the right shoulder, - toward the left, 0 on a flat
+## stretch. Set by DriveSim from the leg's plan before step(). A car with
+## no road under it is on one that leans fully right, as every road once did.
+var camber: float = 1.0
 
 ## Barriers beside the car (a checkpoint's corridor, GDD 10.2): the x of the
 ## one on its left and of the one on its right; -INF and INF where there is
@@ -202,7 +207,7 @@ func drift_share() -> float:
 ## the road's crown and `extra` (a steering that pulls), as the car feels
 ## them at the speed it has.
 func steady_drift(extra: float) -> float:
-	return (_crown + extra) * drift_share()
+	return (_crown * camber + extra) * drift_share()
 
 
 # --- The tick ----------------------------------------------------------------
@@ -221,7 +226,7 @@ func step(dt: float, steer: float, gear: int, braking: bool, extra_drift: float)
 	if tau > 0.0:
 		blend = 1.0 - exp(-dt / tau)
 	v_lat += (command - v_lat) * blend
-	drift = (_crown + extra_drift) * drift_share()
+	drift = (_crown * camber + extra_drift) * drift_share()
 	x += (v_lat + drift) * dt
 	s += speed * KMH_TO_MS * dt
 

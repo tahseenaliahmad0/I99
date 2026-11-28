@@ -713,7 +713,7 @@ func _next_task() -> Array[Array]:
 			return [["go", "gear_lever"], ["shift", _ticks(_tuning.f("bot_shift_s")), _want_gear], ["up", 2]]
 		return none
 	# Rain: a sweep before the glass is blind.
-	if _sim.items.raining and _sim.items.since_wipe >= _tuning.f("bot_wipe_every_s") and calm >= _task_time("flick"):
+	if _sim.items.raining and _sim.items.rain_blur() >= _tuning.f("bot_wipe_at_blur") and calm >= _task_time("flick"):
 		_task = "wipers"
 		# Up the screen (y grows downward): the wipers are a FLICK up (GDD 4.6).
 		return [["go", "wiper_stalk"], _pause("bot_flick_s", 6), ["flick", 6, 0.0, -1.0], ["up", 2]]
