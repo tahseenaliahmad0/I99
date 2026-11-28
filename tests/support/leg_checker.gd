@@ -4,9 +4,12 @@ extends RefCounted
 ## shares no code with LegGenerator, only the plan's format.
 ##
 ##   check(plan)  every rule, worked out from the plan's numbers in the frame
-##                of a player who holds third gear's speed
+##                of a player who holds third gear's speed; of rule 5 (the
+##                skill line), what does not move: its shape and the hazards
 ##   drive(plan)  the same leg run by the real LegSim, TrafficSim and
 ##                Collision, with a ghost car that follows the plan's line
+##   drive_skill(plan)  the same in fourth gear along the plan's skill line
+##                (rule 5, DECISIONS D-074: never a sealed wall in fourth)
 ##
 ## Both return a list of problems; an empty list means the leg is good.
 
@@ -91,6 +94,7 @@ func check(plan: Dictionary) -> PackedStringArray:
 	_check_calm(plan)
 	_check_line()
 	_check_spawns()
+	_check_skill_line(plan, leg)
 	var motorcade: Dictionary = GameData.as_dict(plan.get("motorcade"))
 	if not motorcade.is_empty():
 		_load_road(GameData.as_dict(motorcade.get("detour")))
@@ -105,7 +109,8 @@ func _problem(text: String) -> void:
 		problems.append(text)
 
 
-func _load_road(road: Dictionary) -> void:
+func _load_road(road: Dictionary, skill: bool = false) -> void:
+	_change_length = _tuning.f("gen_skill_lane_change" if skill else "gen_lane_change")
 	_lanes = GameData.as_int(road.get("lanes"), 3)
 	_divided = GameData.as_bool(road.get("divided"), true)
 	_length = GameData.as_float(road.get("length"))
@@ -115,7 +120,7 @@ func _load_road(road: Dictionary) -> void:
 	_flock = GameData.as_dict(road.get("flock"))
 	_path_s = PackedFloat64Array()
 	_path_lane = PackedInt32Array()
-	for entry: Variant in GameData.as_array(road.get("path")):
+	for entry: Variant in GameData.as_array(road.get("skill_path" if skill else "path")):
 		var pair: Array = GameData.as_array(entry)
 		_path_s.append(GameData.as_float(pair[0]))
 		_path_lane.append(GameData.as_int(pair[1]))
@@ -245,6 +250,36 @@ func _check_calm(plan: Dictionary) -> void:
 
 # --- Rule 3: never a wall ----------------------------------------------------
 
+## Rule 5 (DECISIONS D-074: never a sealed wall in fourth). Where the rule
+## holds the plan carries a skill line: a line for a player who holds fourth
+## gear from the start. Checked here is what stands still: the line's shape
+## (it begins at the start, stays on his side of the road, changes one lane
+## at a time, each change in its own gen_skill_lane_change metres) and that
+## it runs over no hazard. Whether it clears the traffic is for the real
+## traffic to say (drive_skill): a vehicle faster than third gear is not, in
+## fourth, where arithmetic on the plan alone would have it.
+func _check_skill_line(plan: Dictionary, leg: Dictionary) -> void:
+	var kind: String = GameData.as_string(GameData.as_dict(leg.get("special")).get("kind"))
+	var line: Array = GameData.as_array(plan.get("skill_path"))
+	if kind == "two_lane" or kind == "motorcade":
+		# The hold-up is the leg (GDD 9.3): the rule does not hold there.
+		if not line.is_empty():
+			_problem("rule 5: a skill line on a road where the rule does not hold")
+		return
+	if line.is_empty():
+		_problem("rule 5: the plan has no skill line")
+		return
+	_load_road(plan, true)
+	if _path_lane[0] != GameData.as_int(plan.get("start_lane")):
+		_problem("rule 5: the skill line does not begin in the lane he starts in")
+	for index: int in _path_s.size():
+		if _path_lane[index] == ONCOMING_LANE:
+			_problem("rule 5: the skill line crosses to the oncoming side at %s" % str(_path_s[index]))
+	_check_line_shape("rule 5")
+	_check_line_hazards("rule 5")
+	_load_road(plan)
+
+
 ## The plan's line must be drivable at par: it stays on the road, changes one
 ## lane at a time with room to do it, and is never level with a vehicle or a
 ## hazard with less than close_call_gap of sideways room.
@@ -252,22 +287,31 @@ func _check_line() -> void:
 	if _path_s.is_empty():
 		_problem("rule 3: the plan has no line through the leg")
 		return
+	_check_line_shape("rule 3")
+	_check_line_vehicles()
+	_check_line_hazards("rule 3")
+	_check_line_flock()
+
+
+func _check_line_shape(rule: String) -> void:
 	if absf(_path_s[0]) > 0.001:
-		_problem("rule 3: the line does not begin at the start")
+		_problem("%s: the line does not begin at the start" % rule)
 	for index: int in _path_s.size():
 		var lane: int = _path_lane[index]
 		if lane >= _lanes or lane < ONCOMING_LANE or (lane == ONCOMING_LANE and _divided):
-			_problem("rule 3: the line leaves the road (lane %d) at %s" % [lane, str(_path_s[index])])
+			_problem("%s: the line leaves the road (lane %d) at %s" % [rule, lane, str(_path_s[index])])
 		if index == 0:
 			continue
 		if absi(lane - _path_lane[index - 1]) != 1:
-			_problem("rule 3: the line jumps from lane %d to lane %d at %s" % [_path_lane[index - 1], lane, str(_path_s[index])])
+			_problem("%s: the line jumps from lane %d to lane %d at %s" % [rule, _path_lane[index - 1], lane, str(_path_s[index])])
 		var room_before: float = _path_s[index] - _path_s[index - 1]
 		if index > 1 and room_before < _change_length - 0.001:
-			_problem("rule 3: lane changes at %s and %s overlap" % [str(_path_s[index - 1]), str(_path_s[index])])
+			_problem("%s: lane changes at %s and %s overlap" % [rule, str(_path_s[index - 1]), str(_path_s[index])])
 	if _path_s[_path_s.size() - 1] + _change_length > _length + 0.001 and _path_s.size() > 1:
-		_problem("rule 3: the last lane change does not finish before the leg ends")
+		_problem("%s: the last lane change does not finish before the leg ends" % rule)
 
+
+func _check_line_vehicles() -> void:
 	for index: int in _v_name.size():
 		if _v_lane[index] == SHOULDER_LANE and absf(_v_closing[index] - 1.0) > 0.000001:
 			_problem("a moving vehicle is planned on the shoulder")
@@ -284,6 +328,8 @@ func _check_line() -> void:
 		if worst < _close_gap - 0.001:
 			_problem("rule 3: the line passes a %s with %s m of room at %s" % [_v_name[index], str(snappedf(worst, 0.01)), str(snappedf(worst_at, 0.1))])
 
+
+func _check_line_hazards(rule: String) -> void:
 	var kinds: Dictionary = {}
 	for hazard: Variant in _hazards:
 		var record: Dictionary = GameData.as_dict(hazard)
@@ -296,9 +342,11 @@ func _check_line() -> void:
 		var x: float = GameData.as_float(record.get("x"))
 		for at: float in _moments(s - size.x, s + size.x, INF, INF):
 			if absf(_line_x(at) - x) - size.y - _car_half_width < -0.001:
-				_problem("rule 3: the line runs over a %s at %s" % [kind_id, str(s)])
+				_problem("%s: the line runs over a %s at %s" % [rule, kind_id, str(s)])
 				break
 
+
+func _check_line_flock() -> void:
 	if not _flock.is_empty():
 		var kind: Dictionary = _data.record("hazard_kinds", GameData.as_string(_flock.get("kind")))
 		var s: float = GameData.as_float(_flock.get("s"))
@@ -313,9 +361,10 @@ func _check_line() -> void:
 					_problem("rule 3: the line runs into the flock at %s" % str(at))
 
 
-## Takes a plan's road and line without checking anything, for line_x().
-func load_plan(plan: Dictionary) -> void:
-	_load_road(plan)
+## Takes a plan's road and line (with `skill`, its skill line) without
+## checking anything, for line_x().
+func load_plan(plan: Dictionary, skill: bool = false) -> void:
+	_load_road(plan, skill)
 
 
 ## Where across the road the plan's line is at `s` (after load_plan, check or drive).
@@ -491,3 +540,64 @@ func drive(plan: Dictionary, dt: float) -> PackedStringArray:
 				_problem("driven: a vehicle planned to be met at %s was met at %s" % [str(planned_meets[index]), str(snappedf(actual_meets[index], 0.1))])
 				break
 	return problems
+
+
+# --- The same leg in fourth gear (rule 5) ------------------------------------
+
+## Runs the plan with the real LegSim, TrafficSim and Collision, a ghost car
+## holding fourth gear's speed from the start along the plan's skill line.
+## Problems: no skill line, a hit, a hazard run over, or a leg that does not
+## end. A close call is no problem: the skill line is the one that shaves
+## them. The sheep's gap is timed for third gear (GDD 9.4), so a leg with a
+## flock is driven as far as the point from which the sheep walk.
+func drive_skill(plan: Dictionary, dt: float) -> PackedStringArray:
+	problems = []
+	_load_road(plan, true)
+	if _path_s.is_empty():
+		_problem("rule 5: the plan has no skill line")
+		return problems
+	var pace: float = _tuning.fi("gear_speeds", _tuning.i("gen_skill_gear") - 1)
+	var pace_ms: float = pace * KMH_TO_MS
+	var car: CarSim = CarSim.new()
+	car.configure(_tuning)
+	car.set_road(_lanes, _divided)
+	var traffic: TrafficSim = TrafficSim.new()
+	traffic.configure(_data)
+	var collision: Collision = Collision.new()
+	collision.configure(_tuning)
+	var leg: LegSim = LegSim.new()
+	leg.configure(_data, car, traffic)
+	car.reset(GameData.as_int(plan.get("start_lane")), _tuning.i("gen_skill_gear"))
+	car.speed = pace
+	leg.begin(plan)
+	var until: float = _length
+	if not _flock.is_empty():
+		until = GameData.as_float(_flock.get("start_s"))
+	var guard: int = int(_length / (pace_ms * dt)) + 10
+	while car.s < until and guard > 0:
+		guard -= 1
+		leg.begin_tick()
+		leg.step_road(dt)
+		car.s += pace_ms * dt
+		car.x = _line_x(car.s)
+		car.speed = pace
+		leg.step_traffic(dt)
+		traffic.step(dt, car.s, car.x, car.speed)
+		collision.step(dt, car, traffic, _tuning.i("gen_skill_gear"))
+		if collision.hit != Collision.Hit.NONE:
+			var struck: String = "?"
+			for vehicle: TrafficSim.Vehicle in traffic.vehicles:
+				if vehicle.id == collision.hit_vehicle_id:
+					struck = "%s doing %s in lane %d" % [vehicle.type_id, str(snappedf(vehicle.speed, 0.1)), vehicle.lane]
+			_problem("driven in fourth: the ghost hit a %s at %s" % [struck, str(snappedf(car.s, 0.1))])
+			break
+		leg.step_hazards(dt)
+		for kind: StringName in leg.hits:
+			_problem("driven in fourth: the ghost ran over a %s at %s" % [kind, str(snappedf(car.s, 0.1))])
+	if until >= _length:
+		leg.step_progress()
+		if not leg.finished and problems.is_empty():
+			_problem("driven in fourth: the leg did not end")
+	_load_road(plan)
+	return problems
+

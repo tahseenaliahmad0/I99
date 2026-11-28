@@ -26,6 +26,8 @@ extends RefCounted
 const SLOT_ANCHOR: String = "@slot"
 ## Salt of the wiper's draws (D-074).
 const WIPER_SALT: int = 8841
+## horn_lane_for: the horn does not move this vehicle.
+const NO_LANE: int = -1
 ## A DRAG_TO's destination: any free slot the thing carried fits in.
 const HOME_ANCHOR: String = "@home"
 ## Slots whose id begins so are cells of the glovebox: what is in one is
@@ -1388,26 +1390,37 @@ func _horn() -> void:
 	if _horn_cooldown <= 0.0:
 		_horn_cooldown = _horn_cooldown_s
 		_nerves.add(_horn_nerves + passive("horn_nerves_more"))
-	var lane: int = _car.lane_of(_car.x)
-	var lane_center: float = _car.lane_center(lane)
-	var half_lane: float = _car.lane_width() * 0.5
-	# A loud horn moves every vehicle (GDD 7.6), where there is a lane for it
-	# to move into.
-	var all_yield: bool = passive("horn_yields_all") > 0.0
 	for vehicle: TrafficSim.Vehicle in _traffic.vehicles:
-		if vehicle.direction < 0 or not (vehicle.yields_to_horn or all_yield):
+		if not horn_reaches(vehicle):
 			continue
-		if absf(vehicle.x - lane_center) >= half_lane:
+		var target: int = horn_lane_for(vehicle)
+		if target != NO_LANE:
+			_traffic.begin_lane_change(vehicle, target, 0.0, _horn_yield_time)
+
+
+## True for a vehicle the horn is heard by: going his way, in his lane, its
+## tail no more than horn_range ahead of his nose.
+func horn_reaches(vehicle: TrafficSim.Vehicle) -> bool:
+	if vehicle.direction < 0:
+		return false
+	if absf(vehicle.x - _car.lane_center(_car.lane_of(_car.x))) >= _car.lane_width() * 0.5:
+		return false
+	var gap: float = (vehicle.s - vehicle.half_length) - (_car.s + _car_half_length)
+	return gap >= 0.0 and gap <= _horn_range
+
+
+## The lane a vehicle would move to for the horn: the one on its right if
+## that is free, else the one on its left; NO_LANE if it does not yield (a
+## loud horn moves every vehicle, GDD 7.6) or has no free lane beside it.
+func horn_lane_for(vehicle: TrafficSim.Vehicle) -> int:
+	if not (vehicle.yields_to_horn or passive("horn_yields_all") > 0.0):
+		return NO_LANE
+	for target: int in [vehicle.lane + 1, vehicle.lane - 1]:
+		if target < 0 or target >= _car.lanes:
 			continue
-		var gap: float = (vehicle.s - vehicle.half_length) - (_car.s + _car_half_length)
-		if gap < 0.0 or gap > _horn_range:
-			continue
-		for target: int in [vehicle.lane + 1, vehicle.lane - 1]:
-			if target < 0 or target >= _car.lanes:
-				continue
-			if _traffic.lane_is_free(target, vehicle.s, _horn_clearance, vehicle):
-				_traffic.begin_lane_change(vehicle, target, 0.0, _horn_yield_time)
-				break
+		if _traffic.lane_is_free(target, vehicle.s, _horn_clearance, vehicle):
+			return target
+	return NO_LANE
 
 
 ## The dial: one station per step, in the order of radio_stations. From

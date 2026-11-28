@@ -280,7 +280,7 @@ hud.ghost_hand,,A ghost left hand is on the wheel,false
 prologue.step.1,,Tune the radio to music.,true
 prologue.step.2,,Sip the tea.,true
 prologue.step.3,,Shift from second to third.,true
-prologue.step.4,,Honk at a friend passing.,true
+prologue.step.4,,"Honk at a friend passing. On the road, the horn moves cars and taxis out of your lane.",true
 prologue.step.5,,It rains. Flick the wipers.,true
 prologue.step.6,,Tuck the new photo into the visor.,true
 finale.baba,Noor,Baba.,true
@@ -648,6 +648,18 @@ guide.arrival,,The end of the road. Stop inside the painted bay.,true
 guide.arrival.key,,"You are in the bay. Turn the key, by the wheel.",true
 guide.call,,"Your phone rings. Press your pocket to answer, carry it to your passenger, or let it ring.",true
 guide.lever.blocked,,Your passenger is leaning across the gear lever.,true
+guide.held_up.horn,,"Slower car ahead. Sound the horn, at the hub of the wheel: cars and taxis move over when a lane beside them is free.",true
+guide.held_up.around,,"Slower traffic ahead that the horn will not move: a truck, a bus, or nothing free beside it. Change lane, or brake with the right button.",true
+hint.effect.horn,,"Cars and taxis up to 40 m ahead in your lane move over if a lane beside them is free. Trucks and buses do not. Calms you a little (-3 Nerves), once every 10 s.",true
+hint.effect.wipers,,"One sweep clears the rain. It builds up again over 12 to 18 s, slowly at first.",true
+hint.effect.hazards,,On or off. Needed to stop safely on the shoulder.,true
+hint.effect.radio_tune,,"Music calms you. News rattles you, keeps you awake and tells what lies ahead. Every station drifts to static after 40 s.",true
+hint.effect.visor_photo,,"Calms a lot (-20 Nerves), once per leg. The visor stays down 3 s: no sun glare, and less of the view.",true
+hint.effect.slap,,Wakes you for 20 s and winds you up (+12 Nerves).,true
+hint.effect.glovebox_toggle,,"Opens or closes. Holds two things put away, and the papers.",true
+hint.effect.indicator,,Signals for 5 s or until you cross a lane line.,true
+hint.effect.headlights,,High beam: you see 100 m at night instead of 60. Each oncoming driver you meet on it rattles you a little.,true
+hint.effect.window_crank,,"Opens or closes. Opening wakes you for 30 s. While open: haze clears three times as fast, the radio does half as much, and dust comes in.",true
 guide.checkpoint.stow.open,,Something forbidden is in view (tagged pink). Press the glovebox to open it first.,true
 guide.checkpoint.stow.carry,,"Press on what is forbidden (tagged pink), carry it into the open glovebox, release.",true
 hint.item.effect,,%s: %s,true

@@ -354,6 +354,9 @@ static func effect_of(hint: Dictionary, snapshot: Dictionary) -> String:
 			var kind: StringName = offer["kind"]
 			if GameData.as_string(offer["anchor"]) == at and (kind == StopSim.ITEM or kind == StopSim.RESTOCK):
 				item = GameData.as_string(offer["id"])
+	if item.is_empty() and Lines.has_line("hint.effect." + ritual):
+		# A control that is always in the car and does more than its name says.
+		return Lines.get_text("hint.effect." + ritual)
 	if item.is_empty() or not Lines.has_line("item.%s.effect" % item):
 		return ""
 	var effect: String = Lines.get_text("item.%s.effect" % item)

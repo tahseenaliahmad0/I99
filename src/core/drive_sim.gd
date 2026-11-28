@@ -172,6 +172,11 @@ var steer_sensitivity: float = 1.0
 var sequential_shift: bool = false
 ## Side by side and touching is still beside it, for its wake (rounding).
 const WAKE_TOUCH: float = 0.01
+## held_up(): nothing slower is close ahead in his lane; a vehicle is, and the
+## horn would move it; one is, and the horn would not.
+const HELD_NOT: int = 0
+const HELD_YIELDS: int = 1
+const HELD_STAYS: int = 2
 ## How a road leans whose plan does not say (D-074): the bare road outside
 ## any leg, and a plan made by hand with no "cambers". Fully to the right,
 ## as every road did; every road the game generates says for itself.
@@ -2258,6 +2263,7 @@ func snapshot() -> Dictionary:
 		"wheel_held": passengers.hold,
 		"wheel_held_left": passengers.hold_left,
 		"lever_blocked": passengers.blocks_lever(),
+		"held_up": held_up(),
 		"view_block_right": passengers.view_block_right(),
 		"blessed": passengers.blessed,
 		"hitcher": stop.hitcher if stopped else "",
@@ -2426,6 +2432,25 @@ func camber_now() -> float:
 ## no air between them and the full speed between them; less with more air
 ## (none at wake_gap_m), with less speed between them, and ahead of its
 ## nose or behind its tail (none at wake_reach_m). m/s toward the right.
+## What he is coming up behind, for the guide (D-074): the nearest vehicle
+## the horn reaches (ahead in his lane, within horn_range) that is slower
+## than his gear drives. HELD_YIELDS if the horn would move it out of his
+## way now, HELD_STAYS if not (a truck, a bus, or no free lane beside it).
+func held_up() -> int:
+	if stopped:
+		return HELD_NOT
+	var nearest: TrafficSim.Vehicle = null
+	for vehicle: TrafficSim.Vehicle in traffic.vehicles:
+		if items.horn_reaches(vehicle) and (nearest == null or vehicle.s < nearest.s):
+			nearest = vehicle
+	if nearest == null or nearest.speed >= car.cruise_speed(gate.gear):
+		return HELD_NOT
+	if nearest.changing or nearest.signalling != 0:
+		# Already on its way out.
+		return HELD_NOT
+	return HELD_YIELDS if items.horn_lane_for(nearest) != ItemSim.NO_LANE else HELD_STAYS
+
+
 func wake_push() -> float:
 	var reach: float = tuning.f("wake_reach_m")
 	var within: float = tuning.f("wake_gap_m")

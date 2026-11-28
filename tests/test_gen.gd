@@ -7,6 +7,8 @@ const SEEDS: int = 500
 const DRIVE_DT: float = 1.0 / 30.0
 const TELLINGS: int = 400
 const PLANNED_TELLINGS: int = 40
+## Legs of each kind driven in fourth gear along their skill line (T-GEN-04).
+const SKILL_SEEDS: int = 40
 
 var _checker: LegChecker
 
@@ -198,6 +200,122 @@ func _first(problems: PackedStringArray) -> String:
 
 func _seed(id: String, index: int) -> int:
 	return index * 7919 + int(id.hash() % 100000)
+
+
+## T-GEN-04: never a sealed wall in fourth (the owner's rule, DECISIONS D-074).
+func test_gen_04() -> void:
+	var pace_gear: int = tuning.i("gen_skill_gear")
+	check_eq(pace_gear, 4, "the skill line is drawn for fourth gear")
+	check(tuning.f("gen_skill_margin") < tuning.f("gen_block_margin"), "it passes closer than the planned line does")
+	check(tuning.f("gen_skill_lane_change") < tuning.f("gen_lane_change"), "and changes lane in less road")
+	check_near(tuning.f("gen_skill_lane_change"), 0.75 * tuning.fi("gear_speeds", 3) / 3.6, 0.1, "in what fourth gear covers in 0.75 s")
+
+	# A ghost in fourth gear on the plan's skill line, through the real
+	# traffic: it touches nothing, on every kind of leg the rule holds on.
+	var driven: int = 0
+	var modifiers_driven: Dictionary = {}
+	var flocks: int = 0
+	for leg: Dictionary in data.records("legs"):
+		var id: String = GameData.as_string(leg.get("id"))
+		var kind: String = GameData.as_string(GameData.as_dict(leg.get("special")).get("kind"))
+		var acts: Array = GameData.as_array(leg.get("acts"))
+		var modifiers: Array = GameData.as_array(leg.get("modifiers_allowed"))
+		if kind == "two_lane" or kind == "motorcade":
+			# There the hold-up is the leg itself (GDD 9.3): no promise.
+			var encounter: Dictionary = LegGenerator.generate(data, id, GameData.as_int(acts[0]), _seed(id, 4001), "")
+			check(GameData.as_array(encounter.get("skill_path")).is_empty(), "%s: the rule does not hold, and the plan carries no skill line" % id)
+			check(_checker.check(encounter).is_empty(), "%s: and is a good leg without one: %s" % [id, _first(_checker.problems)])
+			continue
+		var bad: int = 0
+		for index: int in SKILL_SEEDS:
+			var act: int = GameData.as_int(acts[index % acts.size()])
+			var modifier: String = ""
+			if act >= 2 and index % 2 == 0 and not modifiers.is_empty():
+				modifier = GameData.as_string(modifiers[(index / 2) % modifiers.size()])
+			var plan: Dictionary = LegGenerator.generate(data, id, act, _seed(id, 4100 + index), modifier)
+			var problems: PackedStringArray = _checker.drive_skill(plan, DRIVE_DT)
+			driven += 1
+			if not modifier.is_empty():
+				modifiers_driven[modifier] = true
+			if not GameData.as_dict(plan.get("flock")).is_empty():
+				flocks += 1
+			if not problems.is_empty():
+				bad += 1
+				if bad <= 2:
+					fail("%s, seed %d, act %d, modifier '%s': %s" % [id, _seed(id, 4100 + index), act, modifier, problems[0]])
+		check_eq(bad, 0, "%s: a ghost in fourth gear on the skill line touches nothing, for %d seeds" % [id, SKILL_SEEDS])
+	check_eq(driven, SKILL_SEEDS * 7, "seven kinds of leg carry ordinary traffic, and each was driven")
+	check_eq(modifiers_driven.size(), data.records("modifiers").size(), "with every modifier among them")
+	check(flocks > 0, "(the legs with sheep as far as the flock: its gap is timed for third gear)")
+
+	_check_skill_line_is_needed()
+	_check_skill_checker_catches()
+
+
+## The check is one that can fail: the line of third gear, driven in fourth,
+## does not get through; nor does a skill line with something put on it.
+func _check_skill_line_is_needed() -> void:
+	var blocked: int = 0
+	var tried: int = 0
+	for id: String in ["open_road", "rush", "rain"]:
+		for index: int in 8:
+			var plan: Dictionary = LegGenerator.generate(data, id, 1 + index % 3, _seed(id, 4500 + index), "")
+			plan["skill_path"] = plan["path"]
+			tried += 1
+			if not _checker.drive_skill(plan, DRIVE_DT).is_empty():
+				blocked += 1
+	check(blocked >= tried - 2, "the line of third gear, driven in fourth, runs into traffic on nearly every leg (%d of %d)" % [blocked, tried])
+
+
+func _check_skill_checker_catches() -> void:
+	var plan: Dictionary = LegGenerator.generate(data, "rain", 2, _seed("rain", 77), "")
+	check(_checker.check(plan).is_empty(), "the leg used for the failure cases is good as generated")
+	check(_checker.drive_skill(plan, DRIVE_DT).is_empty(), "and its skill line is clear in fourth")
+
+	# No skill line where the rule holds; one where it does not.
+	var bare: Dictionary = plan.duplicate(true)
+	bare["skill_path"] = []
+	check(_caught(bare, "rule 5"), "a leg of ordinary traffic without a skill line is caught (rule 5)")
+	check(not _checker.drive_skill(bare, DRIVE_DT).is_empty(), "and cannot be driven along one")
+	var two_lane: Dictionary = LegGenerator.generate(data, "two_lane", 3, _seed("two_lane", 77), "")
+	two_lane["skill_path"] = [[0.0, 0]]
+	check(_caught(two_lane, "rule 5"), "a skill line on the two-lane road is caught: the rule does not hold there")
+
+	# Its shape: a jump of two lanes, a start in another lane, a change that does not finish.
+	var jumping: Dictionary = plan.duplicate(true)
+	jumping["skill_path"] = [[0.0, 0], [400.0, 2]]
+	check(_caught(jumping, "rule 5"), "a skill line that jumps two lanes or starts elsewhere is caught")
+	var late: Dictionary = plan.duplicate(true)
+	late["skill_path"] = [[0.0, GameData.as_int(plan["start_lane"])], [GameData.as_float(plan["length"]) - 5.0, GameData.as_int(plan["start_lane"]) - 1]]
+	check(_caught(late, "does not finish"), "a skill line whose last lane change runs past the end is caught")
+
+	# A cone on it.
+	var strewn: Dictionary = plan.duplicate(true)
+	_checker.load_plan(plan, true)
+	GameData.as_array(strewn["hazards"]).append({"kind": "cone", "s": 1000.0, "x": _checker.line_x(1000.0)})
+	# (The road lays its hazards out in the order they come.)
+	GameData.as_array(strewn["hazards"]).sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return GameData.as_float(a["s"]) < GameData.as_float(b["s"]))
+	var caught_as_rule_5: bool = false
+	for problem: String in _checker.check(strewn):
+		if problem.begins_with("rule 5") and problem.contains("cone"):
+			caught_as_rule_5 = true
+	check(caught_as_rule_5, "a cone on the skill line is caught (rule 5)")
+	check(not _checker.drive_skill(strewn, DRIVE_DT).is_empty(), "and the ghost in fourth runs over it")
+
+	# A wreck standing on it.
+	var walled: Dictionary = plan.duplicate(true)
+	var lane: int = GameData.as_int(plan["start_lane"])
+	for entry: Variant in GameData.as_array(plan["skill_path"]):
+		var step: Array = entry
+		if GameData.as_float(step[0]) <= 1500.0:
+			lane = GameData.as_int(step[1])
+	GameData.as_array(walled["spawns"]).append({
+		"vehicle": "hulk", "lane": lane, "speed": 0.0, "direction": 1, "role": "", "change_to": lane,
+		"change_gap": 0.0, "late": false, "trigger_s": 1500.0 - tuning.f("spawn_ahead"), "ahead": tuning.f("spawn_ahead"), "meet_s": 1500.0,
+	})
+	GameData.as_array(walled["spawns"]).sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return GameData.as_float(a["trigger_s"]) < GameData.as_float(b["trigger_s"]))
+	var struck: PackedStringArray = _checker.drive_skill(walled, DRIVE_DT)
+	check(not struck.is_empty() and struck[0].contains("hit"), "a wreck standing on the skill line is hit by the ghost in fourth: %s" % _first(struck))
 
 
 ## T-GEN-02: the same seed gives a byte-identical leg.

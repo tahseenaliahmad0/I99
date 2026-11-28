@@ -20,6 +20,7 @@ func before_each() -> void:
 func test_item_base() -> void:
 	_check_starting_cabin()
 	_check_horn()
+	_check_held_up()
 	_check_wipers()
 	_check_radio()
 	_check_cigarettes()
@@ -548,6 +549,91 @@ func _check_through_the_hand() -> void:
 
 
 # --- Helpers ------------------------------------------------------------------
+
+## What he is coming up behind, and what the guide then says the horn is for
+## (D-074: "i was not aware the honk was meant to be used this way").
+func _check_held_up() -> void:
+	var range_m: float = tuning.f("horn_range")
+	var third: float = tuning.fi("gear_speeds", 2)
+	_new_sim()
+	_cruise(3, 1)
+	check_eq(_sim.held_up(), DriveSim.HELD_NOT, "an empty road holds nobody up")
+	check(not _guide_says("guide.held_up"), "and the guide says nothing of the horn")
+
+	# A slower car close ahead in his lane: the horn would move it.
+	var car: TrafficSim.Vehicle = _sim.traffic.spawn(&"car", 1, _sim.car.s + range_m * 0.5, third - 10.0)
+	check_eq(_sim.held_up(), DriveSim.HELD_YIELDS, "a slower car within horn_range ahead in his lane: the horn would move it")
+	check_eq(GameData.as_int(_sim.snapshot()["held_up"]), DriveSim.HELD_YIELDS, "the snapshot says so")
+	check(_guide_says("guide.held_up.horn"), "the guide says to sound the horn")
+	check(not _guide_says("guide.held_up.around"), "and not to go around")
+	check(data.has_line("guide.held_up.horn") and data.has_line("guide.held_up.around"), "both of the guide's rows have their words")
+	# Once it is on its way out, the guide is quiet.
+	_complete("horn")
+	check_eq(_sim.held_up(), DriveSim.HELD_NOT, "a car that has begun to move over no longer holds him up")
+	_run(tuning.f("horn_yield_time") + 0.1)
+	check(car.lane != 1, "(it moved over)")
+	check_eq(_sim.held_up(), DriveSim.HELD_NOT, "and nothing does once it is out of his lane")
+
+	# A truck does not move for the horn; nor does a car with nowhere to go.
+	_new_sim()
+	_cruise(3, 1)
+	_sim.traffic.spawn(&"truck", 1, _sim.car.s + range_m * 0.5, third - 30.0)
+	check_eq(_sim.held_up(), DriveSim.HELD_STAYS, "a truck ahead: the horn would not move it")
+	check(_guide_says("guide.held_up.around"), "the guide says to go around or brake")
+	check(not _guide_says("guide.held_up.horn"), "and not to sound the horn")
+	_new_sim()
+	_cruise(3, 1)
+	_sim.traffic.spawn(&"car", 1, _sim.car.s + 20.0, third - 10.0)
+	_sim.traffic.spawn(&"truck", 0, _sim.car.s + 20.0, third - 10.0)
+	_sim.traffic.spawn(&"truck", 2, _sim.car.s + 20.0, third - 10.0)
+	check_eq(_sim.held_up(), DriveSim.HELD_STAYS, "a car with both next lanes taken would not move either")
+
+	# A loud horn moves the truck too (GDD 7.6).
+	_new_sim()
+	_cruise(3, 1)
+	_sim.give_item(&"loud_horn")
+	_sim.traffic.spawn(&"truck", 1, _sim.car.s + range_m * 0.5, third - 30.0)
+	check_eq(_sim.held_up(), DriveSim.HELD_YIELDS, "with the loud horn a truck ahead would move")
+
+	# Not what is as fast as his gear, beyond the horn's range, beside or behind him.
+	_new_sim()
+	_cruise(3, 1)
+	var fast: TrafficSim.Vehicle = _sim.traffic.spawn(&"car", 1, _sim.car.s + 20.0, third)
+	check_eq(_sim.held_up(), DriveSim.HELD_NOT, "a car as fast as third gear does not hold him up in third")
+	_sim.gate.reset(4)
+	check_eq(_sim.held_up(), DriveSim.HELD_YIELDS, "in fourth it does")
+	_sim.gate.reset(3)
+	fast.s = _sim.car.s + range_m + _sim.car.length() * 0.5 + fast.half_length + 0.5
+	fast.speed = third - 10.0
+	check_eq(_sim.held_up(), DriveSim.HELD_NOT, "a slower car just beyond horn_range does not yet")
+	fast.s -= 1.0
+	check_eq(_sim.held_up(), DriveSim.HELD_YIELDS, "and does just within it")
+	_new_sim()
+	_cruise(3, 1)
+	_sim.traffic.spawn(&"car", 0, _sim.car.s + 20.0, third - 10.0)
+	_sim.traffic.spawn(&"car", 1, _sim.car.s - 20.0, third - 10.0)
+	check_eq(_sim.held_up(), DriveSim.HELD_NOT, "nor one in the next lane, nor one behind him")
+
+	# The nearest one decides: a truck behind a car is not yet his trouble.
+	_new_sim()
+	_cruise(3, 1)
+	_sim.traffic.spawn(&"truck", 1, _sim.car.s + 34.0, third - 30.0)
+	_sim.traffic.spawn(&"car", 1, _sim.car.s + 12.0, third - 30.0)
+	check_eq(_sim.held_up(), DriveSim.HELD_YIELDS, "of two ahead, the nearer one is the one he is held up by")
+
+	# What the horn does is written where the pointer finds it.
+	check(not HintView.effect_of({"ritual": "horn"}, _sim.snapshot()).is_empty(), "the label under the pointer says what the horn does")
+	check(HintView.effect_of({"ritual": "horn"}, _sim.snapshot()).contains(str(roundi(range_m))), "and how far ahead it is heard (horn_range)")
+	for ritual: String in ["wipers", "hazards", "radio_tune", "visor_photo", "slap", "glovebox_toggle", "indicator", "headlights", "window_crank"]:
+		check(not HintView.effect_of({"ritual": ritual}, _sim.snapshot()).is_empty(), "and what %s does" % ritual)
+
+
+func _guide_says(prefix: String) -> bool:
+	for row: Array in Guide.rows(_sim.snapshot(), tuning.f("checkpoint_bribe")):
+		if str(row[0]).begins_with(prefix):
+			return true
+	return false
+
 
 func _new_sim() -> void:
 	_sim = DriveSim.new(fresh_data())

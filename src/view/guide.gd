@@ -41,6 +41,11 @@ static func rows(snapshot: Dictionary, bribe: float) -> Array[Array]:
 		out.append(["guide.arrival.key" if GameData.as_bool(snapshot["in_bay"]) else "guide.arrival", []])
 	elif GameData.as_bool(snapshot["lever_blocked"]) and str(snapshot["hand_snap"]) == ActionFeedback.GEAR_LEVER:
 		out.append(["guide.lever.blocked", []])
+	elif GameData.as_int(snapshot["held_up"]) == DriveSim.HELD_YIELDS:
+		# What the horn is for (D-074): nothing else in the game says so.
+		out.append(["guide.held_up.horn", []])
+	elif GameData.as_int(snapshot["held_up"]) == DriveSim.HELD_STAYS:
+		out.append(["guide.held_up.around", []])
 	return out
 
 
