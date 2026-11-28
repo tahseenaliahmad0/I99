@@ -183,7 +183,7 @@ static func blank_plan(act: int, lanes: int, divided: bool, length: float, par: 
 		"condition": "clear", "par_s": par, "length": length, "beats_end": length,
 		"start_lane": lanes / 2, "attempts": 0, "sparse": false,
 		"beats": [], "spawns": [], "hazards": [], "curves": [], "cambers": [], "gusts": [], "zones": [],
-		"flock": {}, "melons": {}, "motorcade": {}, "path": [[0.0, lanes / 2]],
+		"flock": {}, "melons": {}, "motorcade": {}, "path": [[0.0, lanes / 2]], "skill_path": [],
 	}
 
 

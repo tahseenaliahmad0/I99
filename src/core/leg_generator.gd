@@ -196,6 +196,8 @@ var _start_lane: int = 0
 var _sparse: bool = false
 ## True for the motorcade's side road: no beats, only the two-lane traffic.
 var _detour: bool = false
+## True for a road that is no leg (generate_road: a boss's).
+var _own_road: bool = false
 
 # --- One draw ----------------------------------------------------------------
 var _beats: Array[Dictionary] = []
@@ -302,10 +304,16 @@ static func generate(data: GameData, leg_id: String, act: int, leg_seed: int, mo
 ## are stretches { kind, s, length, lane } kept for what the boss puts there:
 ## no beat is laid in one, no vehicle is beside him in one, and the planned
 ## line runs through it in `lane`.
+##
+## Rule 5 is not kept on such a road, and its plan carries no skill line:
+## the boss does with the traffic what it will (Dawn thins it, and has it
+## wait at the last checkpoint), and the traffic of fourth gear's frame
+## does not survive that as the planned line of third gear does.
 static func generate_road(data: GameData, road: Dictionary, act: int, road_seed: int, reserved: Array = []) -> Dictionary:
 	var generator: LegGenerator = LegGenerator.new()
 	generator._setup(data, road, act, "")
 	generator._reserved = reserved
+	generator._own_road = true
 	return generator._generate(GameData.as_string(road.get("id")), road_seed)
 
 
@@ -377,7 +385,7 @@ func _generate(leg_id: String, leg_seed: int) -> Dictionary:
 	# Rule 5 is about traffic he can be stuck in. On those two roads the
 	# hold-up is the encounter itself (the gap in what comes the other way;
 	# the side road).
-	_skill = kind != "two_lane" and kind != "motorcade"
+	_skill = kind != "two_lane" and kind != "motorcade" and not _own_road
 	var attempts: int = _tuning.i("gen_max_attempts")
 	var total: int = attempts + _tuning.i("gen_sparse_attempts")
 	var attempt: int = 0
