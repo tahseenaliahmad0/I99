@@ -3326,6 +3326,20 @@ GDD 4.1 (the Touch column), 17.4, and D-016.
   840. All 65 are now killed. Two entries of the car's list, stale since
   the crown became the road's lean, were rewritten. 1,080 mutants in 24
   lists apply to the code as it is.
+- **The bot's numbers** (`artifacts/balance.json`, made again: 84
+  Tellings, 4 seeds a skill at each Table). 53 won, 26 late, 5 wrecked;
+  before these changes 39, 44 and 1. All three changes take time and
+  trouble off the night: fewer reaches for the wipers, no lean to hold
+  against on a flat stretch, fewer walls to wait behind. The expert at
+  the Drivers' Table now wins 4 of 4 (GDD 12.5 wants 40% to 60%), the
+  competent bot 4 of 4 (15% to 30%), and the hand is off the wheel 7% of
+  the time (25% to 40% wanted; it was 8%). The wins were above target
+  before; they are further above now. Four of the five wrecks are the
+  novice at Noor's Table in Act 3, on Tailgater legs, after 25 hits in
+  four nights: it used to arrive late there instead. No wreck came from
+  one event. Nothing was tuned in answer: how hard the night should be
+  after these changes is for the owner to say once it has been played
+  (NEEDS OWNER in PROGRESS).
 - Not listed, because equivalent: the generator keeps the skill line at
   every beat and vehicle it places and once more over the whole leg, so
   dropping either one of the two changes how many draws a leg takes and
