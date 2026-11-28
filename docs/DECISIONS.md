@@ -3103,7 +3103,7 @@ GDD 4.1 (the Touch column), 17.4, and D-016.
 - **A stop on demand** (`DriveSim.dev_stop`): the night is put at a stop
   and, the save point having put it back as generated, the stop is then
   made the kind asked for.
-- **Tests.** T-STOP-01 +51 checks: a night put at each of the seven kinds
+- **Tests.** T-STOP-01 +52 checks: a night put at each of the seven kinds
   of stop, the refusals (no night, no such stop, already stopped), F3's
   skip and that a checkpoint is not skipped, and that `--dev` is a flag
   the game knows. The menu and the panel are checked by a scripted walk
