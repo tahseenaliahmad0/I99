@@ -3247,15 +3247,35 @@ GDD 4.1 (the Touch column), 17.4, and D-016.
 - **Cost.** A leg takes about four times as long to generate: 5 to 50 ms
   for most kinds, about 170 ms for a Rush hour of Act 3 (2 to 3 draws).
   No leg of 570 fell back to sparse traffic. `gen_filler_tries` stays 12.
-- **Tests.** T-GEN-04 (new, registered with this decision): the ghost in
-  fourth on 40 seeds of each of the seven kinds, every modifier among
-  them; no skill line on the two excepted legs; the planned line driven
-  in fourth is blocked; a skill line with a cone or a wreck on it, of
-  the wrong shape, or missing, is caught. T-GEN-01's checker holds the
-  skill line's shape and that it runs over no hazard on all 4,500 legs.
-  Whether it clears the traffic is left to the driven check on purpose:
-  arithmetic on the plan alone would be a second copy of the generator's
-  own working-out, and the real traffic is the better judge.
+- **Tests.** T-GEN-04 (new, registered with this decision). A ghost in
+  fourth on the skill line through the real LegSim, TrafficSim and
+  Collision: 40 seeds of each of the seven kinds, and 96 more legs with
+  sheep, the wedding or the melon truck. It must touch nothing. Beyond
+  the ghost, every vehicle of that traffic is held to the generator's
+  working-out (`LegGenerator.skill_blocks` gives, for a plan, the
+  stretches in which rule 6 has each vehicle beside him): none may be
+  level with him in a lane outside its own blocks, wherever the ghost
+  is; and none may appear on top of another or within the follow gap of
+  one. So the working-out is checked for all of the traffic and not only
+  for what the line happens to pass. Failure cases: no skill line on the
+  two excepted legs nor on a boss's road; the planned line driven in
+  fourth is blocked; a skill line that is missing, of the wrong shape,
+  or has a cone or a wreck on it; a vehicle 60 m from where it was
+  worked out to be. T-GEN-01's checker holds the skill line's shape and
+  that it runs over no hazard on all 4,500 legs. Whether the line clears
+  the traffic is left to the driven check on purpose: arithmetic on the
+  plan alone would be a second copy of the generator's own working-out,
+  and the real traffic is the better judge.
+- **Two things the rule turned up.** Rush hour stopped having more
+  merges than other legs (T-LEG-02): as first built, a merging vehicle
+  closed both lanes for its whole 3 s and had to stay clear of all of
+  the lane it joined, and draws with many merges failed. Now it closes
+  each lane only while it is across it (`gen_skill_side_margin` 0.3 m
+  of air), and what is behind it in the lane it joins may queue behind
+  it, as in the simulation. Rush: 2.85 merges a leg against 2.4 for the
+  next (before the rule 3.55 against 2.4). And T-GEN-01's hand-made
+  "cone on the line" put its cone beside a line that was changing lane
+  there: it now asks the checker where the line is.
 
 ### 4. The horn
 

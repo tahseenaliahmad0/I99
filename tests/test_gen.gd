@@ -282,6 +282,7 @@ func test_gen_04() -> void:
 
 	_check_skill_line_is_needed()
 	_check_skill_checker_catches()
+	_check_mergers_run_free()
 
 
 ## The check is one that can fail: the line of third gear, driven in fourth,
@@ -369,6 +370,58 @@ func _check_skill_checker_catches() -> void:
 	for problem: String in _checker.drive_skill(walled, DRIVE_DT):
 		struck = struck or problem.contains("the ghost hit")
 	check(struck, "a wreck standing on the skill line ends the ghost's drive in a hit: the wreck, or what has stopped behind it")
+
+
+## A vehicle that changes lane must run free until he is past it: the
+## working-out has it where its own speed puts it. Two plans made by hand in
+## which it would not (too rare on generated legs to wait for: none in 840):
+## one where it comes up behind a slower vehicle before it has left its
+## lane, one where it does so in the lane it moves into. Each is refused,
+## and stands once the slower vehicle is out of the way.
+func _check_mergers_run_free() -> void:
+	var ahead: float = tuning.f("spawn_ahead")
+	var merger: Dictionary = {"vehicle": "pickup", "lane": 0, "speed": 80.0, "direction": 1, "role": "", "change_to": 1,
+			"change_gap": 40.0, "late": false, "trigger_s": 500.0, "ahead": ahead, "meet_s": -1.0}
+	var cases: Array[Array] = [
+		[0, 600.0, "before it has left its lane"],
+		[1, 756.0, "in the lane it moves into"],
+	]
+	for case: Array in cases:
+		var lane: int = case[0]
+		var slow: Dictionary = {"vehicle": "truck", "lane": lane, "speed": 60.0, "direction": 1, "role": "", "change_to": lane,
+				"change_gap": 0.0, "late": false, "trigger_s": GameData.as_float(case[1]), "ahead": ahead, "meet_s": -1.0}
+		var plan: Dictionary = {"leg": "open_road", "act": 1, "modifier": "", "melons": {}, "spawns": [merger, slow]}
+		check(not GameData.as_bool(LegGenerator.skill_blocks(data, plan)["sound"]),
+				"a merging pickup that would be held up behind a truck %s: the traffic does not stand in fourth" % str(case[2]))
+		# The same truck in the third lane, or far enough ahead never to be
+		# reached before he is past the pickup: nothing wrong with it.
+		var aside: Dictionary = slow.duplicate()
+		aside["lane"] = 2
+		aside["change_to"] = 2
+		plan["spawns"] = [merger, aside]
+		check(GameData.as_bool(LegGenerator.skill_blocks(data, plan)["sound"]), "with the truck in the third lane it stands")
+		var later: Dictionary = slow.duplicate()
+		later["trigger_s"] = 1400.0
+		plan["spawns"] = [merger, later]
+		check(GameData.as_bool(LegGenerator.skill_blocks(data, plan)["sound"]), "and with the truck appearing only after he is past the pickup")
+	# By itself, moving over 40 m ahead of him, the pickup is out of its
+	# lane before a car in fourth is level with it: one block, in the lane
+	# it moved into. Moving over at 25 m it has two: the lane it leaves,
+	# then the lane it moves into, one beginning before the other ends.
+	var bare: Dictionary = {"leg": "open_road", "act": 1, "modifier": "", "melons": {}, "spawns": [merger]}
+	var early: Array = GameData.as_array(GameData.as_array(LegGenerator.skill_blocks(data, bare)["blocks"])[0])
+	check(early.size() == 1 and GameData.as_int(GameData.as_array(early[0])[0]) == 1, "a vehicle that has moved over before he is level with it is in his way in its new lane only")
+	var close: Dictionary = merger.duplicate()
+	close["change_gap"] = 25.0
+	bare["spawns"] = [close]
+	var alone: Array = GameData.as_array(GameData.as_array(LegGenerator.skill_blocks(data, bare)["blocks"])[0])
+	if check_eq(alone.size(), 2, "one that moves over beside him has a block in the lane it leaves and one in the lane it moves into"):
+		var first: Array = alone[0]
+		var second: Array = alone[1]
+		check(GameData.as_int(first[0]) == 0 and GameData.as_int(second[0]) == 1, "in that order")
+		check(GameData.as_float(second[1]) < GameData.as_float(first[2]), "and for a while it is in the way in both")
+		check(GameData.as_float(second[1]) > GameData.as_float(first[1]) and GameData.as_float(second[2]) > GameData.as_float(first[2]),
+				"the lane it leaves is closed first and free again first")
 
 
 ## T-GEN-02: the same seed gives a byte-identical leg.

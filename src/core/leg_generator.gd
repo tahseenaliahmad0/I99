@@ -358,7 +358,8 @@ static func skill_blocks(data: GameData, plan: Dictionary) -> Dictionary:
 		var own: Array = []
 		if generator._skill_sound:
 			for block: Vector3 in generator._blocks_of(planned, true):
-				own.append([int(block.x), block.y, block.z])
+				if block.z > block.y:
+					own.append([int(block.x), block.y, block.z])
 		blocks.append(own)
 	return {"sound": generator._skill_sound, "blocks": blocks}
 
