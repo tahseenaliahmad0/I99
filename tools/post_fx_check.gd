@@ -145,7 +145,8 @@ func _initialize() -> void:
 	# The real simulation: a Night leg behind sunglasses, a Rain leg unwiped.
 	_check(shades > 0.0, "the sunglasses make the night darker")
 	_leg_shows("night", 2, &"sunglasses", &"darkness", 1.0 - (1.0 - night) * (1.0 - shades), 1.0)
-	_leg_shows("rain", 1, &"", &"rain_blur", 1.0, tuning.f("wiper_clear_time") + 1.0)
+	# (The longest a sweep can last, D-074: wiper_clear_time and its spread.)
+	_leg_shows("rain", 1, &"", &"rain_blur", 1.0, tuning.f("wiper_clear_time") + tuning.f("wiper_clear_spread") + 1.0)
 
 	# The bosses of the real simulation, and what they are made of.
 	_dawn_shows()
